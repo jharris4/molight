@@ -1,0 +1,13 @@
+{
+  "name": "limer",
+  "private": true,
+  "scripts": {
+    "up": "devcontainer up --workspace-folder .",
+    "shell": "devcontainer exec --workspace-folder . bash",
+    "test": "devcontainer exec --workspace-folder . pytest",
+    "hass": "devcontainer exec --workspace-folder . hass -c config"
+  },
+  "devDependencies": {
+    "@devcontainers/cli": "^0.75.0"
+  }
+}
