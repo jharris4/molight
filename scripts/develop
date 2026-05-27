@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")/.."
+
+VENV=/opt/limer-venv
+PYTHON="$VENV/bin/python"
+
+# Self-healing: run setup if venv is missing
+if [ ! -f "$PYTHON" ]; then
+    echo "▶ Virtual environment not found, running setup..."
+    bash scripts/setup
+fi
+
+# Kill any existing HA instance before starting
+pkill -f "python.*-m homeassistant" 2>/dev/null && sleep 1 || true
+
+# Init config dir if needed
+mkdir -p config
+"$PYTHON" -m homeassistant --config "${PWD}/config" --script ensure_config
+
+# Put our custom_components on the Python path so HA finds them
+export PYTHONPATH="${PWD}/custom_components:${PYTHONPATH}"
+
+"$PYTHON" -m homeassistant --config "${PWD}/config" -v

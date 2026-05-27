@@ -11,6 +11,7 @@ dist/
 build/
 .venv/
 venv/
+venv*/
 
 # pytest / coverage
 .pytest_cache/

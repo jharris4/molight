@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")/.."
+
+# Venv lives inside the container filesystem, not the mounted workspace
+# (macOS-mounted volumes don't support Python venv symlinks reliably)
+VENV=/opt/limer-venv
+
+echo "▶ Creating virtual environment at $VENV..."
+python3 -m venv "$VENV"
+
+echo "▶ Installing dependencies..."
+"$VENV/bin/pip" install -r requirements_test.txt
+
+echo "▶ Pre-installing Home Assistant frontend..."
+FRONTEND_VERSION=$(grep "^home-assistant-frontend==" \
+  "$("$VENV/bin/python" -c 'import homeassistant, os; print(os.path.dirname(homeassistant.__file__))')/package_constraints.txt" \
+  | cut -d= -f3)
+"$VENV/bin/pip" install "home-assistant-frontend==$FRONTEND_VERSION"
+echo "  home-assistant-frontend==$FRONTEND_VERSION"
+
+echo ""
+echo "✅ Dev environment ready!"
+echo ""

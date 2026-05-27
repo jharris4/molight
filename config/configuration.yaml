@@ -1,7 +1,18 @@
-# Limer development configuration
-default_config:
+# Minimal HA config for Limer development.
+# Avoids default_config which pulls in go2rtc, ffmpeg, bluetooth, etc.
+
+homeassistant:
+
+http:
+
+frontend:
+
+config:
+
+api:
 
 logger:
-  default: info
+  default: warning
   logs:
     custom_components.limer: debug
+    homeassistant.util.package: info
