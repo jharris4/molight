@@ -1,0 +1,62 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create a Limer virtual entity",
+        "data": {
+          "entity_type": "Entity type"
+        }
+      },
+      "occupancy": {
+        "title": "Virtual Occupancy Sensor",
+        "data": {
+          "name": "Name",
+          "trigger_sensors": "Trigger sensors",
+          "maintain_sensors": "Maintain sensors (optional)",
+          "occupancy_timeout": "Timeout (seconds)"
+        }
+      },
+      "illuminance": {
+        "title": "Virtual Illuminance Sensor",
+        "data": {
+          "name": "Name",
+          "illuminance_sensor": "Illuminance sensor",
+          "illuminance_threshold": "Threshold (lx)"
+        }
+      },
+      "schedule": {
+        "title": "Virtual Schedule Sensor",
+        "data": {
+          "name": "Name",
+          "window_start": "Window start",
+          "window_end": "Window end"
+        }
+      },
+      "light": {
+        "title": "Virtual Light",
+        "data": {
+          "name": "Name",
+          "lights": "Lights to control",
+          "light_timeout": "Turn-off timeout (seconds)",
+          "occupancy_entity": "Occupancy sensor (optional)",
+          "illuminance_entity": "Illuminance sensor (optional)",
+          "schedule_entity": "Schedule sensor (optional)"
+        }
+      }
+    },
+    "error": {
+      "trigger_sensors_required": "At least one trigger sensor is required.",
+      "lights_required": "At least one light is required."
+    }
+  },
+  "selector": {
+    "entity_type": {
+      "options": {
+        "occupancy": "Virtual Occupancy Sensor",
+        "illuminance": "Virtual Illuminance Sensor",
+        "schedule": "Virtual Schedule Sensor",
+        "light": "Virtual Light"
+      }
+    }
+  }
+}
