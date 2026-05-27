@@ -1,0 +1,7 @@
+# Limer development configuration
+default_config:
+
+logger:
+  default: info
+  logs:
+    custom_components.limer: debug
