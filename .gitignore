@@ -20,10 +20,11 @@ htmlcov/
 
 # Home Assistant runtime data (dev container config/ dir)
 config/.storage/
-config/home-assistant.log
+config/home-assistant.log*
 config/home-assistant_v2.db*
 config/tts/
 config/.HA_VERSION
+config/.ha_run.lock
 config/deps/
 
 # Ruff
