@@ -1,0 +1,11 @@
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: limer-ha
+    volumes:
+      - ./config:/config
+      - ./custom_components/limer:/config/custom_components/limer:ro
+    ports:
+      - "8123:8123"
+    privileged: true
+    restart: unless-stopped

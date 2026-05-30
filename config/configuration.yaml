@@ -1,18 +1,122 @@
-# Minimal HA config for Limer development.
-# Avoids default_config which pulls in go2rtc, ffmpeg, bluetooth, etc.
-
-homeassistant:
-
-http:
-
-frontend:
-
-config:
-
-api:
-
 logger:
   default: warning
   logs:
     custom_components.limer: debug
-    homeassistant.util.package: info
+
+# -------------------------------------------------------------------
+# Test fixtures for Limer development
+# -------------------------------------------------------------------
+
+# Input booleans — backing state for template lights and motion sensors
+input_boolean:
+  # Lights
+  light_living_room:
+    name: "Living Room Light State"
+  light_kitchen:
+    name: "Kitchen Light State"
+  light_bedroom:
+    name: "Bedroom Light State"
+  light_office:
+    name: "Office Light State"
+
+  # Motion sensors
+  motion_living_room:
+    name: "Living Room Motion"
+  motion_kitchen:
+    name: "Kitchen Motion"
+  motion_bedroom:
+    name: "Bedroom Motion"
+  motion_office:
+    name: "Office Motion"
+
+# Input number — backing state for illuminance sensor
+input_number:
+  illuminance_living_room:
+    name: "Living Room Illuminance"
+    min: 0
+    max: 1000
+    step: 1
+    unit_of_measurement: lx
+    icon: mdi:brightness-5
+
+# Template entities
+template:
+  # Test lights (light.test_*)
+  - light:
+      - name: "Test Living Room Light"
+        unique_id: test_light_living_room
+        state: "{{ states('input_boolean.light_living_room') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_living_room
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_living_room
+
+      - name: "Test Kitchen Light"
+        unique_id: test_light_kitchen
+        state: "{{ states('input_boolean.light_kitchen') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_kitchen
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_kitchen
+
+      - name: "Test Bedroom Light"
+        unique_id: test_light_bedroom
+        state: "{{ states('input_boolean.light_bedroom') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bedroom
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bedroom
+
+      - name: "Test Office Light"
+        unique_id: test_light_office
+        state: "{{ states('input_boolean.light_office') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_office
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_office
+
+  # Motion binary sensors (binary_sensor.test_motion_*)
+  - binary_sensor:
+      - name: "Test Living Room Motion"
+        unique_id: test_motion_living_room
+        device_class: motion
+        state: "{{ is_state('input_boolean.motion_living_room', 'on') }}"
+
+      - name: "Test Kitchen Motion"
+        unique_id: test_motion_kitchen
+        device_class: motion
+        state: "{{ is_state('input_boolean.motion_kitchen', 'on') }}"
+
+      - name: "Test Bedroom Motion"
+        unique_id: test_motion_bedroom
+        device_class: motion
+        state: "{{ is_state('input_boolean.motion_bedroom', 'on') }}"
+
+      - name: "Test Office Motion"
+        unique_id: test_motion_office
+        device_class: motion
+        state: "{{ is_state('input_boolean.motion_office', 'on') }}"
+
+  # Illuminance sensor (sensor.test_illuminance_living_room)
+  - sensor:
+      - name: "Test Living Room Illuminance"
+        unique_id: test_illuminance_living_room
+        device_class: illuminance
+        unit_of_measurement: lx
+        state: "{{ states('input_number.illuminance_living_room') | float(0) }}"

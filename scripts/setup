@@ -12,12 +12,25 @@ python3 -m venv "$VENV"
 echo "▶ Installing dependencies..."
 "$VENV/bin/pip" install -r requirements_test.txt
 
-echo "▶ Pre-installing Home Assistant frontend..."
-FRONTEND_VERSION=$(grep "^home-assistant-frontend==" \
-  "$("$VENV/bin/python" -c 'import homeassistant, os; print(os.path.dirname(homeassistant.__file__))')/package_constraints.txt" \
-  | cut -d= -f3)
-"$VENV/bin/pip" install "home-assistant-frontend==$FRONTEND_VERSION"
-echo "  home-assistant-frontend==$FRONTEND_VERSION"
+echo "▶ Pre-installing Home Assistant runtime dependencies..."
+CONSTRAINTS="$("$VENV/bin/python" -c 'import homeassistant, os; print(os.path.dirname(homeassistant.__file__))')/package_constraints.txt"
+
+# Packages HA lazily installs at runtime but we need upfront to avoid hangs/crashes
+RUNTIME_PACKAGES=(
+  home-assistant-frontend
+  hassil
+  home-assistant-intents
+)
+
+for PKG in "${RUNTIME_PACKAGES[@]}"; do
+  VERSION=$(grep "^${PKG}==" "$CONSTRAINTS" | cut -d= -f3)
+  if [ -n "$VERSION" ]; then
+    "$VENV/bin/pip" install "${PKG}==${VERSION}"
+    echo "  ${PKG}==${VERSION}"
+  else
+    echo "  WARNING: ${PKG} not found in constraints, skipping"
+  fi
+done
 
 echo ""
 echo "✅ Dev environment ready!"
