@@ -29,6 +29,10 @@ input_boolean:
   motion_office:
     name: "Office Motion"
 
+  # Presence sensors
+  presence_living_room:
+    name: "Living Room Presence"
+
 # Input number — backing state for illuminance sensor
 input_number:
   illuminance_living_room:
@@ -91,7 +95,7 @@ template:
           target:
             entity_id: input_boolean.light_office
 
-  # Motion binary sensors (binary_sensor.test_motion_*)
+  # Motion / Presencebinary sensors (binary_sensor.test_motion_*)
   - binary_sensor:
       - name: "Test Living Room Motion"
         unique_id: test_motion_living_room
@@ -112,6 +116,11 @@ template:
         unique_id: test_motion_office
         device_class: motion
         state: "{{ is_state('input_boolean.motion_office', 'on') }}"
+
+      - name: "Test Living Room Presence"
+        unique_id: test_presence_living_room
+        device_class: presence
+        state: "{{ is_state('input_boolean.presence_living_room', 'on') }}"
 
   # Illuminance sensor (sensor.test_illuminance_living_room)
   - sensor:
