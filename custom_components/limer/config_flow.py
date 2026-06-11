@@ -95,10 +95,14 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_NAME): str,
                     vol.Required(CONF_TRIGGER_SENSORS): selector.EntitySelector(
-                        selector.EntitySelectorConfig(multiple=True)
+                        selector.EntitySelectorConfig(
+                            domain="binary_sensor", multiple=True
+                        )
                     ),
                     vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
-                        selector.EntitySelectorConfig(multiple=True)
+                        selector.EntitySelectorConfig(
+                            domain="binary_sensor", multiple=True
+                        )
                     ),
                     vol.Required(
                         CONF_OCCUPANCY_TIMEOUT, default=120
