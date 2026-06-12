@@ -1,10 +1,14 @@
 """Virtual binary sensor platform for Limer.
 
-Provides three sensor types, all created via the config flow:
+Provides four sensor types, all created via the config flow:
 
-  VirtualOccupancySensor   — combines trigger + maintain sensors with a timeout
-  VirtualIlluminanceSensor — compares a real illuminance sensor to a threshold
-  VirtualScheduleSensor    — evaluates configurable time windows
+  VirtualOccupancySensor         — wraps one real sensor with a timeout;
+                                   exposes latest_occupied_time = last_off - timeout
+  VirtualCombinedOccupancySensor — combines VirtualOccupancySensors using
+                                   trigger/maintain logic; latest_occupied_time
+                                   is the max across all constituents
+  VirtualIlluminanceSensor       — compares a real illuminance sensor to a threshold
+  VirtualScheduleSensor          — evaluates configurable time windows
 """
 from __future__ import annotations
 
@@ -26,10 +30,12 @@ from .const import (
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_SENSOR_TIMEOUTS,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_TIMEOUT,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
@@ -48,6 +54,7 @@ async def async_setup_entry(
 
     entity_map = {
         ENTITY_TYPE_OCCUPANCY: VirtualOccupancySensor,
+        ENTITY_TYPE_COMBINED_OCCUPANCY: VirtualCombinedOccupancySensor,
         ENTITY_TYPE_ILLUMINANCE: VirtualIlluminanceSensor,
         ENTITY_TYPE_SCHEDULE: VirtualScheduleSensor,
     }
@@ -58,19 +65,16 @@ async def async_setup_entry(
 
 
 # ---------------------------------------------------------------------------
-# Virtual Occupancy Binary Sensor
+# Virtual Occupancy Binary Sensor (simple)
 # ---------------------------------------------------------------------------
 
 
 class VirtualOccupancySensor(BinarySensorEntity):
-    """Binary sensor that synthesises occupancy from N real sensors.
+    """Wraps a single real binary sensor with an occupancy timeout.
 
-    Logic:
-      • Any *trigger* sensor going ON starts occupancy (is_on → True).
-      • *Maintain* sensors can keep occupancy alive once started, but
-        cannot start it on their own.
-      • When ALL sensors (trigger + maintain) are OFF, a countdown begins.
-        If no new activity arrives before the timeout, occupancy ends.
+    is_on mirrors the real sensor directly (no countdown).
+    latest_occupied_time = last_turn_off - timeout, representing our best
+    estimate of when the person actually left.
     """
 
     _attr_device_class = "occupancy"
@@ -78,60 +82,115 @@ class VirtualOccupancySensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._entry = entry
         self._attr_name = entry.data[CONF_NAME]
         self._attr_unique_id = entry.entry_id
-
-        self._trigger_sensors: list[str] = entry.data.get(CONF_TRIGGER_SENSORS, [])
-        self._maintain_sensors: list[str] = entry.data.get(CONF_MAINTAIN_SENSORS, [])
-        self._sensor_timeouts: dict[str, int] = {
-            k: int(v)
-            for k, v in entry.data.get(CONF_SENSOR_TIMEOUTS, {}).items()
-        }
-
+        self._source_sensor: str = entry.data[CONF_OCCUPANCY_SENSOR]
+        self._timeout: int = int(entry.data.get(CONF_OCCUPANCY_TIMEOUT, 0))
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to state changes of all tracked sensors."""
-        all_sensors = self._trigger_sensors + self._maintain_sensors
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, all_sensors, self._handle_sensor_change
+                self.hass, [self._source_sensor], self._handle_sensor_change
             )
         )
+        state = self.hass.states.get(self._source_sensor)
+        if state:
+            self._attr_is_on = state.state == "on"
 
     @callback
     def _handle_sensor_change(self, event) -> None:
-        """React to a tracked sensor changing state."""
-        entity_id = event.data["entity_id"]
         new_state = event.data.get("new_state")
         if new_state is None:
             return
-
         if new_state.state == "on":
-            if entity_id in self._trigger_sensors:
-                self._attr_is_on = True
-            # maintain sensor: can't start occupancy, but presence is tracked
+            self._attr_is_on = True
         else:
-            timeout = self._sensor_timeouts.get(entity_id, 0)
-            candidate = datetime.now(timezone.utc) - timedelta(seconds=timeout)
+            candidate = datetime.now(timezone.utc) - timedelta(seconds=self._timeout)
             if (
                 self._latest_occupied_time is None
                 or candidate > self._latest_occupied_time
             ):
                 self._latest_occupied_time = candidate
-            if self._all_sensors_off():
-                self._attr_is_on = False
+            self._attr_is_on = False
+        self.async_write_ha_state()
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        lot = self._latest_occupied_time
+        return {
+            "latest_occupied_time": lot.isoformat() if lot else None,
+            "occupancy_timeout": self._timeout,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Virtual Combined Occupancy Binary Sensor
+# ---------------------------------------------------------------------------
+
+
+class VirtualCombinedOccupancySensor(BinarySensorEntity):
+    """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
+
+    Trigger sensors start occupancy; maintain sensors keep it alive once started.
+    latest_occupied_time is the max of all constituents' latest_occupied_time
+    attributes, propagated whenever a constituent turns off.
+    """
+
+    _attr_device_class = "occupancy"
+    _attr_should_poll = False
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.hass = hass
+        self._attr_name = entry.data[CONF_NAME]
+        self._attr_unique_id = entry.entry_id
+        self._trigger_sensors: list[str] = entry.data.get(CONF_TRIGGER_SENSORS, [])
+        self._maintain_sensors: list[str] = entry.data.get(CONF_MAINTAIN_SENSORS, [])
+        self._attr_is_on = False
+        self._latest_occupied_time: datetime | None = None
+
+    async def async_added_to_hass(self) -> None:
+        all_sensors = self._trigger_sensors + self._maintain_sensors
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, all_sensors, self._handle_occupancy_change
+            )
+        )
+
+    @callback
+    def _handle_occupancy_change(self, event) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+
+        if new_state.state != "on":
+            lot_str = new_state.attributes.get("latest_occupied_time")
+            if lot_str:
+                try:
+                    lot = datetime.fromisoformat(lot_str)
+                    if (
+                        self._latest_occupied_time is None
+                        or lot > self._latest_occupied_time
+                    ):
+                        self._latest_occupied_time = lot
+                except (ValueError, TypeError):
+                    pass
+
+        if self._any_on(self._trigger_sensors):
+            self._attr_is_on = True
+        elif self._attr_is_on and self._any_on(self._maintain_sensors):
+            pass
+        else:
+            self._attr_is_on = False
 
         self.async_write_ha_state()
 
-    def _all_sensors_off(self) -> bool:
-        for entity_id in self._trigger_sensors + self._maintain_sensors:
-            state = self.hass.states.get(entity_id)
-            if state and state.state == "on":
-                return False
-        return True
+    def _any_on(self, sensors: list[str]) -> bool:
+        return any(
+            (s := self.hass.states.get(e)) and s.state == "on"
+            for e in sensors
+        )
 
     @property
     def extra_state_attributes(self) -> dict:

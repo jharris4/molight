@@ -6,12 +6,14 @@ PLATFORMS = ["binary_sensor", "light"]
 
 # Entity type discriminator stored in config entry data
 ENTITY_TYPE_OCCUPANCY = "occupancy"
+ENTITY_TYPE_COMBINED_OCCUPANCY = "combined_occupancy"
 ENTITY_TYPE_ILLUMINANCE = "illuminance"
 ENTITY_TYPE_SCHEDULE = "schedule"
 ENTITY_TYPE_LIGHT = "light"
 
 ENTITY_TYPES = [
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_LIGHT,
@@ -21,15 +23,16 @@ ENTITY_TYPES = [
 CONF_ENTITY_TYPE = "entity_type"
 CONF_NAME = "name"
 
-# --- Virtual Occupancy Binary Sensor ---
+# --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
+CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor
+# latest_occupied_time = last_off - timeout
+CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
+
+# --- Virtual Combined Occupancy Binary Sensor ---
 # trigger_sensors: any one going ON starts occupancy
 CONF_TRIGGER_SENSORS = "trigger_sensors"
-# maintain_sensors: keep occupancy alive, but never start it
+# maintain_sensors: keep occupancy alive once started, but cannot start it
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
-# {entity_id: seconds} — used to compute latest_occupied_time per sensor
-CONF_SENSOR_TIMEOUTS = "sensor_timeouts"
-# form field key for the per-sensor timeout step in the config flow
-CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 
 # --- Virtual Illuminance Binary Sensor ---
 CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"   # entity_id of a real sensor

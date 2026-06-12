@@ -11,15 +11,16 @@
         "title": "Virtual Occupancy Sensor",
         "data": {
           "name": "Name",
-          "trigger_sensors": "Trigger sensors",
-          "maintain_sensors": "Maintain sensors (optional)"
+          "occupancy_sensor": "Sensor",
+          "occupancy_timeout": "Timeout (seconds)"
         }
       },
-      "occupancy_sensor_timeout": {
-        "title": "Sensor timeout ({sensor_index} of {sensor_total})",
-        "description": "Set the countdown timeout for **{sensor}** ({sensor_type} sensor). When this sensor turns off and all others are already off, occupancy will clear after this delay.",
+      "combined_occupancy": {
+        "title": "Virtual Combined Occupancy Sensor",
         "data": {
-          "occupancy_timeout": "Timeout (seconds)"
+          "name": "Name",
+          "trigger_sensors": "Trigger sensors",
+          "maintain_sensors": "Maintain sensors (optional)"
         }
       },
       "illuminance": {
@@ -59,6 +60,7 @@
     "entity_type": {
       "options": {
         "occupancy": "Virtual Occupancy Sensor",
+        "combined_occupancy": "Virtual Combined Occupancy Sensor",
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
         "light": "Virtual Light"
