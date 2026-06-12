@@ -38,7 +38,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from homeassistant.components.light import LightEntity
+from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -76,6 +76,8 @@ async def async_setup_entry(
 class VirtualLight(LightEntity):
     """A virtual light with occupancy/illuminance/schedule awareness."""
 
+    _attr_color_mode = ColorMode.ONOFF
+    _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
