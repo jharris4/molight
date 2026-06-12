@@ -26,7 +26,9 @@ CONF_NAME = "name"
 CONF_TRIGGER_SENSORS = "trigger_sensors"
 # maintain_sensors: keep occupancy alive, but never start it
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
-# timeout (seconds): countdown begins when all sensors are off
+# {entity_id: seconds} — used to compute latest_occupied_time per sensor
+CONF_SENSOR_TIMEOUTS = "sensor_timeouts"
+# form field key for the per-sensor timeout step in the config flow
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 
 # --- Virtual Illuminance Binary Sensor ---

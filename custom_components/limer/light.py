@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from homeassistant.components.light import LightEntity
 from homeassistant.config_entries import ConfigEntry
@@ -173,8 +174,30 @@ class VirtualLight(LightEntity):
         else:
             if self._machine_state == STATE_OCCUPIED:
                 self._machine_state = STATE_COUNTDOWN
-                self._start_timer()
+                self._start_timer(self._compute_occupancy_countdown())
                 self.async_write_ha_state()
+
+    def _compute_occupancy_countdown(self) -> int:
+        """Seconds to wait after occupancy clears before turning lights off.
+
+        Anchors to the occupancy sensor's latest_occupied_time so that each
+        sub-sensor's individual timeout is respected, then adds light_timeout
+        on top as an extra grace period.
+        """
+        base = self._light_timeout
+        if self._occupancy_entity:
+            occ_state = self.hass.states.get(self._occupancy_entity)
+            if occ_state:
+                lot_str = occ_state.attributes.get("latest_occupied_time")
+                if lot_str:
+                    try:
+                        lot = datetime.fromisoformat(lot_str)
+                        now = datetime.now(timezone.utc)
+                        remaining = (lot - now).total_seconds()
+                        return max(0, int(base + remaining))
+                    except (ValueError, TypeError):
+                        pass
+        return base
 
     def _transition_on(self, manual: bool = False) -> None:
         """Move to ACTIVE (or stay OCCUPIED) when lights come on."""
@@ -198,13 +221,15 @@ class VirtualLight(LightEntity):
     # Timer helpers
     # ------------------------------------------------------------------
 
-    def _start_timer(self) -> None:
+    def _start_timer(self, duration: int | None = None) -> None:
         self._cancel_timer()
-        self._timer_task = self.hass.async_create_task(self._run_timer())
+        self._timer_task = self.hass.async_create_task(
+            self._run_timer(duration if duration is not None else self._light_timeout)
+        )
 
-    async def _run_timer(self) -> None:
+    async def _run_timer(self, duration: int) -> None:
         try:
-            await asyncio.sleep(self._light_timeout)
+            await asyncio.sleep(duration)
         except asyncio.CancelledError:
             return
         # Timer expired — turn off lights and go idle.

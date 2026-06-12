@@ -12,7 +12,13 @@
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
-          "maintain_sensors": "Maintain sensors (optional)",
+          "maintain_sensors": "Maintain sensors (optional)"
+        }
+      },
+      "occupancy_sensor_timeout": {
+        "title": "Sensor timeout ({sensor_index} of {sensor_total})",
+        "description": "Set the countdown timeout for **{sensor}** ({sensor_type} sensor). When this sensor turns off and all others are already off, occupancy will clear after this delay.",
+        "data": {
           "occupancy_timeout": "Timeout (seconds)"
         }
       },

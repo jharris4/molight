@@ -8,9 +8,8 @@ Provides three sensor types, all created via the config flow:
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, timezone
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -27,7 +26,7 @@ from .const import (
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_TIMEOUT,
+    CONF_SENSOR_TIMEOUTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
@@ -85,10 +84,13 @@ class VirtualOccupancySensor(BinarySensorEntity):
 
         self._trigger_sensors: list[str] = entry.data.get(CONF_TRIGGER_SENSORS, [])
         self._maintain_sensors: list[str] = entry.data.get(CONF_MAINTAIN_SENSORS, [])
-        self._timeout: int = int(entry.data.get(CONF_OCCUPANCY_TIMEOUT, 120))
+        self._sensor_timeouts: dict[str, int] = {
+            k: int(v)
+            for k, v in entry.data.get(CONF_SENSOR_TIMEOUTS, {}).items()
+        }
 
         self._attr_is_on = False
-        self._countdown_task: asyncio.Task | None = None
+        self._latest_occupied_time: datetime | None = None
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to state changes of all tracked sensors."""
@@ -107,55 +109,34 @@ class VirtualOccupancySensor(BinarySensorEntity):
         if new_state is None:
             return
 
-        is_active = new_state.state == "on"
-
-        if is_active:
-            # Cancel any running countdown — something is on.
-            self._cancel_countdown()
-
+        if new_state.state == "on":
             if entity_id in self._trigger_sensors:
-                # A trigger sensor fired — start / maintain occupancy.
                 self._attr_is_on = True
-                self.async_write_ha_state()
-            elif self._attr_is_on:
-                # A maintain sensor fired while already occupied — keep going.
-                self.async_write_ha_state()
+            # maintain sensor: can't start occupancy, but presence is tracked
         else:
-            # A sensor turned off — check if everything is now quiet.
+            timeout = self._sensor_timeouts.get(entity_id, 0)
+            candidate = datetime.now(timezone.utc) - timedelta(seconds=timeout)
+            if (
+                self._latest_occupied_time is None
+                or candidate > self._latest_occupied_time
+            ):
+                self._latest_occupied_time = candidate
             if self._all_sensors_off():
-                self._start_countdown()
+                self._attr_is_on = False
+
+        self.async_write_ha_state()
 
     def _all_sensors_off(self) -> bool:
-        """Return True when every tracked sensor reports off/unavailable."""
         for entity_id in self._trigger_sensors + self._maintain_sensors:
             state = self.hass.states.get(entity_id)
             if state and state.state == "on":
                 return False
         return True
 
-    def _start_countdown(self) -> None:
-        """Begin the timeout countdown to clear occupancy."""
-        if not self._attr_is_on:
-            return
-        self._cancel_countdown()
-        self._countdown_task = self.hass.async_create_task(self._run_countdown())
-
-    async def _run_countdown(self) -> None:
-        """Sleep for the configured timeout, then clear occupancy."""
-        try:
-            await asyncio.sleep(self._timeout)
-        except asyncio.CancelledError:
-            return
-        self._attr_is_on = False
-        self.async_write_ha_state()
-
-    def _cancel_countdown(self) -> None:
-        if self._countdown_task and not self._countdown_task.done():
-            self._countdown_task.cancel()
-        self._countdown_task = None
-
-    async def async_will_remove_from_hass(self) -> None:
-        self._cancel_countdown()
+    @property
+    def extra_state_attributes(self) -> dict:
+        lot = self._latest_occupied_time
+        return {"latest_occupied_time": lot.isoformat() if lot else None}
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +218,6 @@ class VirtualScheduleSensor(BinarySensorEntity):
     async def async_added_to_hass(self) -> None:
         """Evaluate immediately, then re-evaluate every minute."""
         self._evaluate()
-        from datetime import timedelta
-
         self.async_on_remove(
             async_track_time_interval(
                 self.hass, self._tick, timedelta(minutes=1)
