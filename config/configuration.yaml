@@ -95,7 +95,7 @@ template:
           target:
             entity_id: input_boolean.light_office
 
-  # Motion / Presencebinary sensors (binary_sensor.test_motion_*)
+  # Motion / Presence binary sensors (binary_sensor.test_motion_*)
   - binary_sensor:
       - name: "Test Living Room Motion"
         unique_id: test_motion_living_room
