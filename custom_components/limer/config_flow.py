@@ -511,56 +511,41 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME], data=user_input
-                )
+                # Drop None values so absent optional entity fields are simply
+                # missing from entry.options rather than stored as None.
+                clean = {k: v for k, v in user_input.items() if v is not None}
+                return self.async_create_entry(title=clean[CONF_NAME], data=clean)
 
         cfg = self._cfg
+        schema: dict = {
+            vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+            vol.Required(
+                CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="light", multiple=True)
+            ),
+            vol.Required(
+                CONF_LIGHT_TIMEOUT,
+                default=cfg.get(CONF_LIGHT_TIMEOUT, 300),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1, max=3600, unit_of_measurement="s", mode="box"
+                )
+            ),
+        }
+        # Only pre-fill optional entity fields when a value actually exists;
+        # passing default=None to EntitySelector raises a validation error.
+        for key in (CONF_OCCUPANCY_ENTITY, CONF_ILLUMINANCE_ENTITY, CONF_SCHEDULE_ENTITY):
+            current = cfg.get(key)
+            marker = (
+                vol.Optional(key, default=current) if current else vol.Optional(key)
+            )
+            schema[marker] = selector.EntitySelector(
+                selector.EntitySelectorConfig(integration=DOMAIN, multiple=False)
+            )
+
         return self.async_show_form(
             step_id="light",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-                    vol.Required(
-                        CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="light", multiple=True
-                        )
-                    ),
-                    vol.Required(
-                        CONF_LIGHT_TIMEOUT,
-                        default=cfg.get(CONF_LIGHT_TIMEOUT, 300),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_OCCUPANCY_ENTITY,
-                        default=cfg.get(CONF_OCCUPANCY_ENTITY),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_ILLUMINANCE_ENTITY,
-                        default=cfg.get(CONF_ILLUMINANCE_ENTITY),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_SCHEDULE_ENTITY,
-                        default=cfg.get(CONF_SCHEDULE_ENTITY),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(schema),
             errors=errors,
         )
