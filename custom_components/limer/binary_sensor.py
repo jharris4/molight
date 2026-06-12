@@ -206,10 +206,10 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
 
 
 class VirtualIlluminanceSensor(BinarySensorEntity):
-    """Binary sensor that is ON when a real illuminance sensor is below a threshold.
+    """Binary sensor tracking whether illuminance meets a threshold.
 
-    ON  → dark enough to warrant lighting  (value < threshold)
-    OFF → bright enough, no lighting needed (value >= threshold)
+    ON  → bright enough; no artificial lighting needed (value >= threshold)
+    OFF → too dark; artificial lighting may be required (value < threshold)
     """
 
     _attr_device_class = "light"
@@ -248,7 +248,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
 
     def _update_from_state(self, state_value: str) -> None:
         try:
-            self._attr_is_on = float(state_value) < self._threshold
+            self._attr_is_on = float(state_value) >= self._threshold
         except (ValueError, TypeError):
             self._attr_is_on = False
 
