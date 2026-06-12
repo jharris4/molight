@@ -80,16 +80,16 @@ class VirtualLight(LightEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._entry = entry
-        self._attr_name = entry.data[CONF_NAME]
+        cfg = {**entry.data, **entry.options}
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
-        self._lights: list[str] = entry.data.get(CONF_LIGHTS, [])
-        self._light_timeout: int = int(entry.data.get(CONF_LIGHT_TIMEOUT, 300))
+        self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
+        self._light_timeout: int = int(cfg.get(CONF_LIGHT_TIMEOUT, 300))
 
-        self._occupancy_entity: str | None = entry.data.get(CONF_OCCUPANCY_ENTITY)
-        self._illuminance_entity: str | None = entry.data.get(CONF_ILLUMINANCE_ENTITY)
-        self._schedule_entity: str | None = entry.data.get(CONF_SCHEDULE_ENTITY)
+        self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
+        self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
+        self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
 
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False

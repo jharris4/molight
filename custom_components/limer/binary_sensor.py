@@ -82,10 +82,11 @@ class VirtualOccupancySensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._attr_name = entry.data[CONF_NAME]
+        cfg = {**entry.data, **entry.options}
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
-        self._source_sensor: str = entry.data[CONF_OCCUPANCY_SENSOR]
-        self._timeout: int = int(entry.data.get(CONF_OCCUPANCY_TIMEOUT, 0))
+        self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
+        self._timeout: int = int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
 
@@ -143,10 +144,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._attr_name = entry.data[CONF_NAME]
+        cfg = {**entry.data, **entry.options}
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
-        self._trigger_sensors: list[str] = entry.data.get(CONF_TRIGGER_SENSORS, [])
-        self._maintain_sensors: list[str] = entry.data.get(CONF_MAINTAIN_SENSORS, [])
+        self._trigger_sensors: list[str] = cfg.get(CONF_TRIGGER_SENSORS, [])
+        self._maintain_sensors: list[str] = cfg.get(CONF_MAINTAIN_SENSORS, [])
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
 
@@ -215,12 +217,12 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._entry = entry
-        self._attr_name = entry.data[CONF_NAME]
+        cfg = {**entry.data, **entry.options}
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
-        self._source_entity: str = entry.data[CONF_ILLUMINANCE_SENSOR]
-        self._threshold: float = float(entry.data.get(CONF_ILLUMINANCE_THRESHOLD, 10.0))
+        self._source_entity: str = cfg[CONF_ILLUMINANCE_SENSOR]
+        self._threshold: float = float(cfg.get(CONF_ILLUMINANCE_THRESHOLD, 10.0))
 
         self._attr_is_on = False
 
@@ -267,11 +269,11 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._entry = entry
-        self._attr_name = entry.data[CONF_NAME]
+        cfg = {**entry.data, **entry.options}
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
-        self._windows: list[dict[str, str]] = entry.data.get(CONF_TIME_WINDOWS, [])
+        self._windows: list[dict[str, str]] = cfg.get(CONF_TIME_WINDOWS, [])
         self._attr_is_on = False
 
     async def async_added_to_hass(self) -> None:
