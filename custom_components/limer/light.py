@@ -28,9 +28,13 @@ Transitions
   any + light turned off externally
        → IDLE
 
-Illuminance / schedule gating (TBD — see design notes in README):
-  Currently these are read but the gating behaviour (hands-off vs force-off
-  when state changes) is not yet implemented.
+Illuminance gating (when an illuminance entity is configured):
+  • Occupancy only turns lights ON when illuminance is OFF (dark).
+  • Illuminance OFF→ON (dark→bright): go IDLE, turn lights off.
+  • Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
+    else if recent occupancy (countdown > 0), enter COUNTDOWN with adjusted timer.
+
+Schedule gating (TBD).
 """
 from __future__ import annotations
 
@@ -150,7 +154,8 @@ class VirtualLight(LightEntity):
             self._on_light_state_change(new_state.state)
         elif entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
-        # Illuminance / schedule gating TBD
+        elif entity_id == self._illuminance_entity:
+            self._on_illuminance_change(new_state.state == "on")
 
     def _on_light_state_change(self, state: str) -> None:
         """Handle a real light being turned on/off externally."""
@@ -164,10 +169,20 @@ class VirtualLight(LightEntity):
             ):
                 self._go_idle()
 
+    def _is_illuminance_bright(self) -> bool:
+        """Return True when illuminance is bright enough to suppress lighting."""
+        if not self._illuminance_entity:
+            return False
+        state = self.hass.states.get(self._illuminance_entity)
+        return state is not None and state.state == "on"
+
     def _on_occupancy_change(self, occupied: bool) -> None:
         """Handle the virtual occupancy sensor changing."""
         if occupied:
-            # Lights on, cancel any timer.
+            if self._is_illuminance_bright():
+                # Bright enough — suppress lights; when illuminance turns off we
+                # re-evaluate occupancy from the sensor's current state.
+                return
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
             if not self._attr_is_on:
@@ -178,6 +193,45 @@ class VirtualLight(LightEntity):
                 self._machine_state = STATE_COUNTDOWN
                 self._start_timer(self._compute_occupancy_countdown())
                 self.async_write_ha_state()
+
+    def _on_illuminance_change(self, is_bright: bool) -> None:
+        """Handle the virtual illuminance sensor changing.
+
+        is_bright=True  (illuminance ON  = bright): natural light is sufficient
+                        → turn off artificial lights if they were on.
+        is_bright=False (illuminance OFF = dark):   need artificial light
+                        → turn on if currently occupied, or if the occupancy
+                          countdown still has time remaining.
+        """
+        if is_bright:
+            if self._machine_state != STATE_IDLE:
+                self.hass.async_create_task(self._set_lights(False))
+                self._cancel_timer()
+                self._machine_state = STATE_IDLE
+                self._attr_is_on = False
+                self.async_write_ha_state()
+        else:
+            if self._machine_state != STATE_IDLE:
+                return  # already running; no change needed
+
+            # Check whether we should activate due to occupancy or recent history.
+            occ_state = (
+                self.hass.states.get(self._occupancy_entity)
+                if self._occupancy_entity
+                else None
+            )
+            if occ_state and occ_state.state == "on":
+                self._machine_state = STATE_OCCUPIED
+                self._cancel_timer()
+                self.hass.async_create_task(self._set_lights(True))
+                self.async_write_ha_state()
+            else:
+                countdown = self._compute_occupancy_countdown()
+                if countdown > 0:
+                    self._machine_state = STATE_COUNTDOWN
+                    self.hass.async_create_task(self._set_lights(True))
+                    self._start_timer(countdown)
+                    self.async_write_ha_state()
 
     def _compute_occupancy_countdown(self) -> int:
         """Seconds to wait after occupancy clears before turning lights off.
