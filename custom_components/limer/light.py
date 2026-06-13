@@ -28,6 +28,21 @@ Transitions
   any + light turned off externally
        → IDLE
 
+Turn-on attribution
+  Four timestamps record the last time the virtual light was activated and why:
+    last_on_physical   — an underlying real light entity changed to ON from an
+                         external source (physical switch, another automation, HA
+                         UI acting on the real entity) while this virtual light
+                         was IDLE.
+    last_on_virtual    — the user toggled this virtual light entity ON via the HA UI
+                         (async_turn_on was called directly).
+    last_on_occupancy  — occupancy sensor triggered the lights.
+    last_on_illuminance— an illuminance→dark change triggered the lights.
+
+  All four are exposed as extra state attributes (ISO strings or null).
+  The most-recent value is used when computing the illuminance-dark countdown
+  in the absence of an occupancy sensor.
+
 Illuminance gating (when an illuminance entity is configured):
   • Occupancy only turns lights ON when illuminance is OFF (dark).
   • Illuminance OFF→ON (dark→bright): go IDLE, turn lights off.
@@ -101,6 +116,11 @@ class VirtualLight(LightEntity):
         self._attr_is_on = False
         self._timer_task: asyncio.Task | None = None
 
+        self._last_on_physical: datetime | None = None
+        self._last_on_virtual: datetime | None = None
+        self._last_on_occupancy: datetime | None = None
+        self._last_on_illuminance: datetime | None = None
+
     # ------------------------------------------------------------------
     # HA lifecycle
     # ------------------------------------------------------------------
@@ -130,6 +150,7 @@ class VirtualLight(LightEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on all real lights and transition the state machine."""
+        self._last_on_virtual = datetime.now(timezone.utc)
         await self._set_lights(True)
         self._transition_on(manual=True)
 
@@ -160,6 +181,8 @@ class VirtualLight(LightEntity):
     def _on_light_state_change(self, state: str) -> None:
         """Handle a real light being turned on/off externally."""
         if state == "on":
+            if self._machine_state == STATE_IDLE:
+                self._last_on_physical = datetime.now(timezone.utc)
             self._transition_on(manual=True)
         else:
             # Check if ALL real lights are now off.
@@ -183,6 +206,7 @@ class VirtualLight(LightEntity):
                 # Bright enough — suppress lights; when illuminance turns off we
                 # re-evaluate occupancy from the sensor's current state.
                 return
+            self._last_on_occupancy = datetime.now(timezone.utc)
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
             if not self._attr_is_on:
@@ -221,13 +245,15 @@ class VirtualLight(LightEntity):
                 else None
             )
             if occ_state and occ_state.state == "on":
+                self._last_on_illuminance = datetime.now(timezone.utc)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self.hass.async_create_task(self._set_lights(True))
                 self.async_write_ha_state()
             else:
-                countdown = self._compute_occupancy_countdown()
+                countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
+                    self._last_on_illuminance = datetime.now(timezone.utc)
                     self._machine_state = STATE_COUNTDOWN
                     self.hass.async_create_task(self._set_lights(True))
                     self._start_timer(countdown)
@@ -254,6 +280,37 @@ class VirtualLight(LightEntity):
                     except (ValueError, TypeError):
                         pass
         return base
+
+    def _most_recent_on_time(self) -> datetime | None:
+        """Return the latest recorded turn-on timestamp across all sources."""
+        candidates = [
+            t for t in (
+                self._last_on_physical,
+                self._last_on_virtual,
+                self._last_on_occupancy,
+            )
+            if t is not None
+        ]
+        return max(candidates) if candidates else None
+
+    def _compute_illuminance_countdown(self) -> int:
+        """Countdown (seconds) to use when illuminance going dark re-activates lights.
+
+        When an occupancy entity is configured, delegates to the occupancy-based
+        countdown which is already anchored to latest_occupied_time.
+
+        When there is no occupancy entity, subtracts elapsed time since the light
+        was last on from light_timeout, so the re-activation uses only the
+        remaining portion of the original on-period.
+        """
+        if self._occupancy_entity:
+            return self._compute_occupancy_countdown()
+
+        last_on = self._most_recent_on_time()
+        if last_on is not None:
+            elapsed = (datetime.now(timezone.utc) - last_on).total_seconds()
+            return max(0, int(self._light_timeout - elapsed))
+        return self._light_timeout
 
     def _transition_on(self, manual: bool = False) -> None:
         """Move to ACTIVE (or stay OCCUPIED) when lights come on."""
@@ -318,4 +375,13 @@ class VirtualLight(LightEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        return {"limer_state": self._machine_state}
+        def _fmt(t: datetime | None) -> str | None:
+            return t.isoformat() if t else None
+
+        return {
+            "limer_state": self._machine_state,
+            "last_on_physical": _fmt(self._last_on_physical),
+            "last_on_virtual": _fmt(self._last_on_virtual),
+            "last_on_occupancy": _fmt(self._last_on_occupancy),
+            "last_on_illuminance": _fmt(self._last_on_illuminance),
+        }
