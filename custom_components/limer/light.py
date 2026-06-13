@@ -59,7 +59,8 @@ from datetime import datetime, timezone
 
 from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
@@ -126,7 +127,13 @@ class VirtualLight(LightEntity):
     # ------------------------------------------------------------------
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to state changes for lights and optional virtual entities."""
+        """Defer state-change subscriptions until HA has fully started.
+
+        Subscribing immediately lets HA fire state-change events during the
+        startup phase, which can trigger timer tasks that sleep for the full
+        light_timeout (e.g. 300 s). HA tracks those tasks and waits for them
+        before declaring itself running — causing exactly a 5-minute delay.
+        """
         watch = list(self._lights)
         if self._occupancy_entity:
             watch.append(self._occupancy_entity)
@@ -135,11 +142,32 @@ class VirtualLight(LightEntity):
         if self._schedule_entity:
             watch.append(self._schedule_entity)
 
-        self.async_on_remove(
-            async_track_state_change_event(
-                self.hass, watch, self._handle_state_change
+        @callback
+        def _subscribe(_event=None) -> None:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, watch, self._handle_state_change
+                )
             )
-        )
+            self._seed_state()
+
+        if self.hass.state is CoreState.running:
+            _subscribe()
+        else:
+            self.async_on_remove(
+                self.hass.bus.async_listen_once(
+                    EVENT_HOMEASSISTANT_STARTED, _subscribe
+                )
+            )
+
+    def _seed_state(self) -> None:
+        """Initialise the machine state from current entity states after startup."""
+        if self._is_illuminance_bright():
+            return
+        if self._occupancy_entity:
+            occ_state = self.hass.states.get(self._occupancy_entity)
+            if occ_state and occ_state.state == "on":
+                self._on_occupancy_change(occupied=True)
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
