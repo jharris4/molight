@@ -310,7 +310,8 @@ class VirtualLight(LightEntity):
         return base
 
     def _most_recent_on_time(self) -> datetime | None:
-        """Return the latest recorded turn-on timestamp across all sources."""
+        """Return the latest recorded turn-on timestamp across all sources
+        except for illuminance (which is only relevant for gating, not attribution)."""
         candidates = [
             t for t in (
                 self._last_on_physical,
