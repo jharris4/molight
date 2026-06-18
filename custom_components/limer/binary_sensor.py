@@ -96,9 +96,13 @@ class VirtualOccupancySensor(BinarySensorEntity):
                 self.hass, [self._source_sensor], self._handle_sensor_change
             )
         )
+        self._seed_state()
+
+    def _seed_state(self) -> None:
         state = self.hass.states.get(self._source_sensor)
         if state:
             self._attr_is_on = state.state == "on"
+            self.async_write_ha_state()
 
     @callback
     def _handle_sensor_change(self, event) -> None:
@@ -159,6 +163,23 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
                 self.hass, all_sensors, self._handle_occupancy_change
             )
         )
+        self._seed_state()
+
+    def _seed_state(self) -> None:
+        if self._any_on(self._trigger_sensors):
+            self._attr_is_on = True
+        else:
+            now = datetime.now(timezone.utc)
+            for entity_id in self._maintain_sensors:
+                state = self.hass.states.get(entity_id)
+                if (
+                    state
+                    and state.state == "on"
+                    and (now - state.last_changed).total_seconds() > 5
+                ):
+                    self._attr_is_on = True
+                    break
+        self.async_write_ha_state()
 
     @callback
     def _handle_occupancy_change(self, event) -> None:
