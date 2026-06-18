@@ -248,16 +248,18 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
         self._attr_is_on = False
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to the source illuminance sensor and seed the initial state."""
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_entity], self._handle_illuminance_change
             )
         )
-        # Seed state from current value.
+        self._seed_state()
+
+    def _seed_state(self) -> None:
         state = self.hass.states.get(self._source_entity)
         if state:
             self._update_from_state(state.state)
+            self.async_write_ha_state()
 
     @callback
     def _handle_illuminance_change(self, event) -> None:
