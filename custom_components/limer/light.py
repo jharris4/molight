@@ -164,10 +164,22 @@ class VirtualLight(LightEntity):
         """Initialise the machine state from current entity states after startup."""
         if self._is_illuminance_bright():
             return
+
+        self._attr_is_on = any(
+            (s := self.hass.states.get(e)) and s.state == "on"
+            for e in self._lights
+        )
+
         if self._occupancy_entity:
             occ_state = self.hass.states.get(self._occupancy_entity)
             if occ_state and occ_state.state == "on":
                 self._on_occupancy_change(occupied=True)
+                return
+
+        if self._attr_is_on:
+            self._machine_state = STATE_ACTIVE
+            self._start_timer()
+            self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
