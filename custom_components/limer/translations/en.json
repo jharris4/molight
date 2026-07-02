@@ -40,7 +40,9 @@
           "start_combine": "Start: combine time and sun as",
           "end_time": "Window end time",
           "end_sun": "Window end sun event",
-          "end_combine": "End: combine time and sun as"
+          "end_combine": "End: combine time and sun as",
+          "start_offset": "Start sun offset (minutes, negative = before)",
+          "end_offset": "End sun offset (minutes, negative = before)"
         }
       },
       "light": {

@@ -29,6 +29,7 @@ from .const import (
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     EDGE_COMBINE,
+    EDGE_OFFSET,
     EDGE_SUN,
     EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -62,6 +63,9 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
         sun = user_input.get(f"{prefix}_sun")
         if sun and sun != "none":
             edge[EDGE_SUN] = sun
+            offset = int(user_input.get(f"{prefix}_offset") or 0)
+            if offset:
+                edge[EDGE_OFFSET] = offset
             edge[EDGE_COMBINE] = user_input.get(
                 f"{prefix}_combine", COMBINE_LATEST
             )
@@ -96,6 +100,15 @@ def _schedule_edge_fields(window: dict | None) -> dict:
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=_SUN_OPTIONS, translation_key="sun_event"
+            )
+        )
+        fields[
+            vol.Optional(
+                f"{prefix}_offset", default=edge.get(EDGE_OFFSET, 0)
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=-720, max=720, step=1, unit_of_measurement="min", mode="box"
             )
         )
         fields[

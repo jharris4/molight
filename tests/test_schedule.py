@@ -96,3 +96,36 @@ async def test_sun_anchored_edge(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == sunset.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_sun_edge_with_offset(hass: HomeAssistant, freezer) -> None:
+    """A sun offset shifts the resolved edge (sunset − 15 min)."""
+    day = date(2026, 7, 2)
+    sunset = get_astral_event_date(hass, "sunset", day)
+    assert sunset is not None
+    shifted = sunset - timedelta(minutes=15)
+
+    # 5 minutes after (sunset − 15) but still before plain sunset: only the
+    # offset edge puts us inside the window.
+    freezer.move_to(shifted + timedelta(minutes=5))
+    await _setup(
+        hass,
+        _schedule_entry(
+            [
+                {
+                    "start": {
+                        "time": "23:00",
+                        "sun": "sunset",
+                        "offset": -15,
+                        "combine": "earliest",
+                    },
+                    "end": {"time": "23:30"},
+                }
+            ]
+        ),
+    )
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == shifted.isoformat()

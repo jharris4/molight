@@ -41,6 +41,7 @@ from .const import (
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     EDGE_COMBINE,
+    EDGE_OFFSET,
     EDGE_SUN,
     EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -341,8 +342,9 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
     plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
-    "combine": "latest"|"earliest"} — e.g. start at the later of sunset and
-    21:00. Overnight windows (end before start) roll the end to the next day.
+    "offset": <minutes>, "combine": "latest"|"earliest"} — e.g. start at the
+    later of sunset−15min and 21:00. Overnight windows (end before start)
+    roll the end to the next day.
 
     Rather than polling, the sensor resolves concrete boundary datetimes and
     schedules a single callback for the next transition, so state flips at the
@@ -453,6 +455,11 @@ class VirtualScheduleSensor(BinarySensorEntity):
             # None on polar days when the event doesn't occur — the fixed
             # time (if any) then stands alone.
             sun = get_astral_event_date(self.hass, edge[EDGE_SUN], day)
+            if sun is not None:
+                try:
+                    sun += timedelta(minutes=int(edge.get(EDGE_OFFSET, 0)))
+                except (ValueError, TypeError):
+                    pass
 
         candidates = [d for d in (fixed, sun) if d is not None]
         if not candidates:

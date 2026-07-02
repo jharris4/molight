@@ -41,12 +41,15 @@ CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold 
 # --- Virtual Schedule Binary Sensor ---
 # List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain
 # "HH:MM" string (legacy) or a dict:
-#   {"time": "HH:MM", "sun": "sunset"|"sunrise", "combine": "latest"|"earliest"}
-# with at least one of time/sun present. When both are present, combine picks
-# which wins (e.g. start at the later of sunset and 21:00).
+#   {"time": "HH:MM", "sun": "sunset"|"sunrise", "offset": <minutes>,
+#    "combine": "latest"|"earliest"}
+# with at least one of time/sun present. offset shifts the sun event
+# (negative = before it). When both time and sun are present, combine picks
+# which wins (e.g. start at the later of sunset−15min and 21:00).
 CONF_TIME_WINDOWS = "time_windows"
 EDGE_TIME = "time"
 EDGE_SUN = "sun"
+EDGE_OFFSET = "offset"
 EDGE_COMBINE = "combine"
 COMBINE_LATEST = "latest"
 COMBINE_EARLIEST = "earliest"

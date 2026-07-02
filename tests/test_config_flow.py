@@ -69,17 +69,29 @@ async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
             CONF_NAME: "Night",
             "start_time": "21:00:00",
             "start_sun": "sunset",
+            "start_offset": -15,
             "start_combine": "latest",
             "end_time": "07:00:00",
             "end_sun": "sunrise",
+            "end_offset": 10,
             "end_combine": "earliest",
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TIME_WINDOWS] == [
         {
-            "start": {"time": "21:00:00", "sun": "sunset", "combine": "latest"},
-            "end": {"time": "07:00:00", "sun": "sunrise", "combine": "earliest"},
+            "start": {
+                "time": "21:00:00",
+                "sun": "sunset",
+                "offset": -15,
+                "combine": "latest",
+            },
+            "end": {
+                "time": "07:00:00",
+                "sun": "sunrise",
+                "offset": 10,
+                "combine": "earliest",
+            },
         }
     ]
 
