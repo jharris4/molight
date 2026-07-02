@@ -4,13 +4,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.sun import get_astral_event_date
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
-
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.sun import get_astral_event_date
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,

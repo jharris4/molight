@@ -1,15 +1,18 @@
 """Shared pytest fixtures for Limer tests."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
-    CONF_ILLUMINANCE_THRESHOLD,
     CONF_ILLUMINANCE_SENSOR,
-    CONF_LIGHTS,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
@@ -19,6 +22,18 @@ from custom_components.limer.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
 )
+
+
+async def settle(hass: HomeAssistant) -> None:
+    """Flush chained state-change dispatches.
+
+    async_track_state_change_event defers each dispatch by one event-loop
+    iteration (loop.call_soon), so a motion → virtual occupancy → virtual
+    light chain needs several iterations before downstream entities react.
+    """
+    for _ in range(4):
+        await asyncio.sleep(0)
+        await hass.async_block_till_done()
 
 
 @pytest.fixture(autouse=True)

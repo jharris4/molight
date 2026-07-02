@@ -2,26 +2,29 @@
 from __future__ import annotations
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
-    CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
+    CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TIME_WINDOWS,
+    CONF_TRIGGER_SENSORS,
     DOMAIN,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
 )
+from custom_components.limer.helpers import limer_config
 
 
 @pytest.mark.asyncio
@@ -207,6 +210,105 @@ async def test_occupancy_options_reject_timeout_above_light_timeout(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_validates_combined_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A combined sensor's effective timeout is its largest constituent's."""
+    occupancy2 = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Test Occupancy 2",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_TIMEOUT: 45,
+        },
+    )
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined Occupancy",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.test_occupancy_2"],
+        },
+    )
+    for entry in (occupancy_entry, occupancy2, combined):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+    # 40s beats the 30s trigger but not the 45s maintain constituent.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 40,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 45,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_options_can_clear_occupancy_reference(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Omitting an optional reference in the options flow actually removes it."""
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            # occupancy_entity intentionally omitted — the user cleared it.
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    assert CONF_OCCUPANCY_ENTITY not in limer_config(light)
 
 
 @pytest.mark.asyncio

@@ -1,23 +1,21 @@
 """Tests for the Limer Virtual Light."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from homeassistant.core import HomeAssistant, State
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
     mock_restore_cache,
 )
 
-from homeassistant.core import HomeAssistant, State
-
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
-    CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
@@ -34,6 +32,7 @@ from custom_components.limer.const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
+from tests.conftest import settle
 
 
 def _gated_light_entry() -> MockConfigEntry:
@@ -84,16 +83,7 @@ def _follow_light_entry() -> MockConfigEntry:
     )
 
 
-async def _settle(hass: HomeAssistant) -> None:
-    """Flush chained state-change dispatches.
-
-    async_track_state_change_event defers each dispatch by one event-loop
-    iteration (loop.call_soon), so a motion → virtual occupancy → virtual
-    light chain needs several iterations before the light has reacted.
-    """
-    for _ in range(4):
-        await asyncio.sleep(0)
-        await hass.async_block_till_done()
+_settle = settle
 
 
 @pytest.mark.asyncio
@@ -231,6 +221,80 @@ async def test_occupancy_turns_light_on_when_dark(
 
 
 @pytest.mark.asyncio
+async def test_external_light_adoption(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An externally switched real light is adopted and released."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("light.living_room", "on")
+    await _settle(hass)
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["last_on_physical"] is not None
+
+    hass.states.async_set("light.living_room", "off")
+    await _settle(hass)
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_illuminance_dark_resumes_remaining_time(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
+) -> None:
+    """Bright interrupts a manual on-period; dark resumes only the remaining time."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Kitchen Light",
+            CONF_LIGHTS: ["light.kitchen_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+        },
+    )
+    await _setup_entries(hass, illuminance_entry, light)
+
+    # Manual turn-on at T0 (dark by default) — ACTIVE with a 60s timer.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.kitchen_light"}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("light.kitchen_light").state == "on"
+
+    # T0+20: it gets bright — lights forced off.
+    freezer.tick(timedelta(seconds=20))
+    hass.states.async_set("sensor.lux_1", "500")
+    await _settle(hass)
+    assert hass.states.get("light.kitchen_light").state == "off"
+
+    # T0+30: dark again — resume with the remaining 30s of the on-period.
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("sensor.lux_1", "5")
+    await _settle(hass)
+
+    state = hass.states.get("light.kitchen_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_COUNTDOWN
+
+    # T0+61: the original 60s on-period is exhausted.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+
+    state = hass.states.get("light.kitchen_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     """Follow-mode light turns on at window start, ignores light_timeout, off at end."""
     await hass.config.async_set_time_zone("UTC")
@@ -310,6 +374,42 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
 
 
 @pytest.mark.asyncio
+async def test_follow_mode_manual_re_on_rejoins_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Turning the light back on mid-window rejoins SCHEDULED (no auto-off timer)."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 22:00:00+00:00")  # inside the window
+    await _setup_entries(hass, _night_schedule_entry(), _follow_light_entry())
+    await _settle(hass)
+    assert hass.states.get("light.porch_light").state == "on"
+
+    # Manual off mid-window — respected.
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.porch_light"}
+    )
+    await _settle(hass)
+    assert hass.states.get("light.porch_light").state == "off"
+
+    # Manual on again — must rejoin the window, not run the 60s timer.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.porch_light"}
+    )
+    await _settle(hass)
+
+    state = hass.states.get("light.porch_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_SCHEDULED
+
+    # Well past light_timeout, still before window end — must stay on.
+    t = datetime(2026, 7, 2, 23, 30, 0, tzinfo=timezone.utc)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await _settle(hass)
+    assert hass.states.get("light.porch_light").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_gate_mode_blocks_occupancy_outside_window(
     hass: HomeAssistant, freezer, occupancy_entry: MockConfigEntry
 ) -> None:
@@ -343,6 +443,16 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     state = hass.states.get("light.gate_light")
     assert state.state == "on"
     assert state.attributes["limer_state"] == STATE_OCCUPIED
+
+    # Window ends — lights forced off even though occupancy never cleared.
+    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=timezone.utc)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await _settle(hass)
+
+    state = hass.states.get("light.gate_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio

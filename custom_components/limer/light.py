@@ -96,7 +96,6 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
-    DOMAIN,
     ENTITY_TYPE_LIGHT,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -106,6 +105,7 @@ from .const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
+from .helpers import limer_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = {**entry.data, **entry.options}
+        cfg = limer_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
@@ -353,6 +353,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         state = self.hass.states.get(self._schedule_entity)
         return not (state is not None and state.state == "on")
 
+    def _follow_schedule_state(self):
+        """The schedule entity's state when in follow mode and ON, else None."""
+        if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
+            return None
+        state = self.hass.states.get(self._schedule_entity)
+        return state if state is not None and state.state == "on" else None
+
     # ------------------------------------------------------------------
     # Schedule handling
     # ------------------------------------------------------------------
@@ -537,6 +544,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
+
+        # Turned back on during an active follow-mode window (after a manual
+        # off): rejoin the window instead of running the auto-off timer, so
+        # the light stays on until the window ends.
+        sched = self._follow_schedule_state()
+        if sched is not None:
+            self._attr_is_on = True
+            self._apply_window_start(sched.attributes.get("current_window_start"))
+            return
 
         if self._machine_state != STATE_ACTIVE:
             self._machine_state = STATE_ACTIVE

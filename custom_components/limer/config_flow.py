@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er, selector
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import selector
 
 from .const import (
     COMBINE_EARLIEST,
@@ -16,8 +16,8 @@ from .const import (
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
-    CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
@@ -41,11 +41,7 @@ from .const import (
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
-
-
-def _limer_cfg(entry: config_entries.ConfigEntry) -> dict[str, Any]:
-    return {**entry.data, **entry.options}
-
+from .helpers import limer_config as _limer_cfg
 
 # "none" lets a previously chosen sun anchor be cleared in the options flow —
 # a bare SelectSelector can't be un-set once it has a value.
@@ -89,8 +85,13 @@ def _schedule_edge_fields(window: dict | None) -> dict:
     fields: dict = {}
     for prefix in ("start", "end"):
         edge = _edge_defaults(window.get(prefix))
+        # suggested_value (not default) so a previously set time can be
+        # cleared to make the edge sun-only.
         time_key = (
-            vol.Optional(f"{prefix}_time", default=edge[EDGE_TIME])
+            vol.Optional(
+                f"{prefix}_time",
+                description={"suggested_value": edge[EDGE_TIME]},
+            )
             if edge.get(EDGE_TIME)
             else vol.Optional(f"{prefix}_time")
         )
@@ -512,7 +513,7 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self._entry = entry
-        self._cfg = {**entry.data, **entry.options}
+        self._cfg = _limer_cfg(entry)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -744,12 +745,14 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                 )
             ),
         }
-        # Only pre-fill optional entity fields when a value actually exists;
-        # passing default=None to EntitySelector raises a validation error.
+        # Pre-fill via suggested_value (not default): a default can never be
+        # cleared in the UI, which would make sensor references permanent.
         for key, sel_config in _LIGHT_REF_SELECTORS.items():
             current = cfg.get(key)
             marker = (
-                vol.Optional(key, default=current) if current else vol.Optional(key)
+                vol.Optional(key, description={"suggested_value": current})
+                if current
+                else vol.Optional(key)
             )
             schema[marker] = selector.EntitySelector(sel_config)
 

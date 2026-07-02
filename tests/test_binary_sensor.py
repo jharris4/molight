@@ -4,12 +4,48 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from homeassistant.core import HomeAssistant, State
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     mock_restore_cache,
 )
 
-from homeassistant.core import HomeAssistant, State
+from custom_components.limer.const import (
+    CONF_ENTITY_TYPE,
+    CONF_MAINTAIN_SENSORS,
+    CONF_NAME,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_TIMEOUT,
+    CONF_TRIGGER_SENSORS,
+    DOMAIN,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_OCCUPANCY,
+)
+from tests.conftest import settle
+
+
+def _occupancy2_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Test Occupancy 2",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_TIMEOUT: 45,
+        },
+    )
+
+
+def _combined_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined Occupancy",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.test_occupancy_2"],
+        },
+    )
 
 
 @pytest.mark.asyncio
@@ -116,6 +152,47 @@ async def test_occupancy_ignores_attribute_only_updates(
         "latest_occupied_time"
     ]
     assert lot_after == lot_before
+
+
+@pytest.mark.asyncio
+async def test_combined_trigger_maintain_and_lot(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
+) -> None:
+    """Trigger starts, maintain sustains but never starts, lot is the max."""
+    for entry in (occupancy_entry, _occupancy2_entry(), _combined_entry()):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Maintain sensor alone must not start occupancy.
+    hass.states.async_set("binary_sensor.motion_2", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined_occupancy").state == "off"
+
+    # Trigger sensor starts it.
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
+
+    # Trigger clears — the maintain sensor keeps occupancy alive.
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
+
+    # Maintain clears — occupancy ends; latest_occupied_time is the max of
+    # the constituents': trigger cleared at T+10 with timeout 30 (→ T−20),
+    # maintain at T+20 with timeout 45 (→ T−25). The trigger's wins.
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("binary_sensor.motion_2", "off")
+    await settle(hass)
+
+    combined = hass.states.get("binary_sensor.combined_occupancy")
+    assert combined.state == "off"
+    trigger_lot = hass.states.get("binary_sensor.test_occupancy").attributes[
+        "latest_occupied_time"
+    ]
+    assert combined.attributes["latest_occupied_time"] == trigger_lot
 
 
 @pytest.mark.asyncio
