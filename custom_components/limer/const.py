@@ -36,7 +36,7 @@ CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
 # --- Virtual Illuminance Binary Sensor ---
 CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"   # entity_id of a real sensor
-CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = below threshold
+CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 
 # --- Virtual Schedule Binary Sensor ---
 # List of {"start": "HH:MM", "end": "HH:MM"} dicts

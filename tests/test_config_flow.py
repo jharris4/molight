@@ -11,8 +11,8 @@ from custom_components.limer.const import (
     CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
     CONF_NAME,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
-    CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
@@ -38,7 +38,7 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_NAME: "Hall Occupancy",
-            CONF_TRIGGER_SENSORS: ["binary_sensor.hall_motion"],
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
         },
     )

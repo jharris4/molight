@@ -1,10 +1,13 @@
 """Tests for the Limer Virtual Light."""
 from __future__ import annotations
 
-import asyncio
+from datetime import timedelta
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from homeassistant.core import HomeAssistant
 
@@ -39,7 +42,9 @@ async def test_virtual_light_turn_on(hass: HomeAssistant, light_entry: MockConfi
 
 
 @pytest.mark.asyncio
-async def test_virtual_light_auto_off(hass: HomeAssistant, light_entry: MockConfigEntry) -> None:
+async def test_virtual_light_auto_off(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer
+) -> None:
     """Virtual light turns off automatically after the configured timeout."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
@@ -47,9 +52,11 @@ async def test_virtual_light_auto_off(hass: HomeAssistant, light_entry: MockConf
 
     await hass.services.async_call("light", "turn_on", {"entity_id": "light.test_light"})
     await hass.async_block_till_done()
+    assert hass.states.get("light.test_light").state == "on"
 
     # Fast-forward past the timeout (60s in fixture)
-    await asyncio.sleep(61)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
     await hass.async_block_till_done()
 
     state = hass.states.get("light.test_light")

@@ -11,8 +11,8 @@ from custom_components.limer.const import (
     CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
     CONF_NAME,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
-    CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
@@ -34,7 +34,7 @@ def occupancy_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
             CONF_NAME: "Test Occupancy",
-            CONF_TRIGGER_SENSORS: ["binary_sensor.motion_1"],
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )

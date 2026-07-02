@@ -53,16 +53,18 @@ Schedule gating (TBD).
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
 from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+)
 
 from .const import (
     CONF_ENTITY_TYPE,
@@ -115,7 +117,7 @@ class VirtualLight(LightEntity):
 
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False
-        self._timer_task: asyncio.Task | None = None
+        self._timer_unsub: CALLBACK_TYPE | None = None
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -129,10 +131,9 @@ class VirtualLight(LightEntity):
     async def async_added_to_hass(self) -> None:
         """Defer state-change subscriptions until HA has fully started.
 
-        Subscribing immediately lets HA fire state-change events during the
-        startup phase, which can trigger timer tasks that sleep for the full
-        light_timeout (e.g. 300 s). HA tracks those tasks and waits for them
-        before declaring itself running — causing exactly a 5-minute delay.
+        During startup, entities are restored and integrations initialize in
+        arbitrary order, firing spurious state-change events; reacting to them
+        could toggle lights or start countdowns based on incomplete state.
         """
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -377,23 +378,21 @@ class VirtualLight(LightEntity):
 
     def _start_timer(self, duration: int | None = None) -> None:
         self._cancel_timer()
-        self._timer_task = self.hass.async_create_task(
-            self._run_timer(duration if duration is not None else self._light_timeout)
+        self._timer_unsub = async_call_later(
+            self.hass,
+            duration if duration is not None else self._light_timeout,
+            self._timer_expired,
         )
 
-    async def _run_timer(self, duration: int) -> None:
-        try:
-            await asyncio.sleep(duration)
-        except asyncio.CancelledError:
-            return
-        # Timer expired — turn off lights and go idle.
+    async def _timer_expired(self, _now: datetime) -> None:
+        self._timer_unsub = None
         await self._set_lights(False)
         self._go_idle()
 
     def _cancel_timer(self) -> None:
-        if self._timer_task and not self._timer_task.done():
-            self._timer_task.cancel()
-        self._timer_task = None
+        if self._timer_unsub is not None:
+            self._timer_unsub()
+            self._timer_unsub = None
 
     # ------------------------------------------------------------------
     # Real-light control
