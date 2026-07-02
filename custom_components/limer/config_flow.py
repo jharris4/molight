@@ -37,6 +37,28 @@ def _limer_cfg(entry: config_entries.ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
 
 
+# Pickers for a virtual light's optional sensor references. The schedule
+# sensor has no device_class (HA offers none that fits), so its picker can
+# only narrow to Limer binary sensors.
+_LIGHT_REF_SELECTORS = {
+    CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
+        integration=DOMAIN,
+        domain="binary_sensor",
+        device_class="occupancy",
+        multiple=False,
+    ),
+    CONF_ILLUMINANCE_ENTITY: selector.EntitySelectorConfig(
+        integration=DOMAIN,
+        domain="binary_sensor",
+        device_class="light",
+        multiple=False,
+    ),
+    CONF_SCHEDULE_ENTITY: selector.EntitySelectorConfig(
+        integration=DOMAIN, domain="binary_sensor", multiple=False
+    ),
+}
+
+
 def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | None:
     """Resolve the occupancy timeout (seconds) behind a Limer occupancy entity.
 
@@ -380,21 +402,10 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             min=1, max=3600, unit_of_measurement="s", mode="box"
                         )
                     ),
-                    vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
-                    vol.Optional(CONF_ILLUMINANCE_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
-                    vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN, multiple=False
-                        )
-                    ),
+                    **{
+                        vol.Optional(key): selector.EntitySelector(sel_config)
+                        for key, sel_config in _LIGHT_REF_SELECTORS.items()
+                    },
                 }
             ),
             errors=errors,
@@ -658,14 +669,12 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
         }
         # Only pre-fill optional entity fields when a value actually exists;
         # passing default=None to EntitySelector raises a validation error.
-        for key in (CONF_OCCUPANCY_ENTITY, CONF_ILLUMINANCE_ENTITY, CONF_SCHEDULE_ENTITY):
+        for key, sel_config in _LIGHT_REF_SELECTORS.items():
             current = cfg.get(key)
             marker = (
                 vol.Optional(key, default=current) if current else vol.Optional(key)
             )
-            schema[marker] = selector.EntitySelector(
-                selector.EntitySelectorConfig(integration=DOMAIN, multiple=False)
-            )
+            schema[marker] = selector.EntitySelector(sel_config)
 
         return self.async_show_form(
             step_id="light",
