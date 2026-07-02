@@ -346,6 +346,39 @@ async def test_light_options_can_clear_occupancy_reference(
 
 
 @pytest.mark.asyncio
+async def test_schedule_options_round_trip(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Editing a legacy string-edge schedule upgrades it to edge dicts."""
+    schedule_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(schedule_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Schedule",
+            "start_time": "20:00:00",
+            "start_sun": "sunset",
+            "start_combine": "latest",
+            "end_time": "06:00:00",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    assert limer_config(schedule_entry)[CONF_TIME_WINDOWS] == [
+        {
+            "start": {"time": "20:00:00", "sun": "sunset", "combine": "latest"},
+            "end": {"time": "06:00:00"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_config_flow_virtual_light_requires_lights(hass: HomeAssistant) -> None:
     """Virtual light config flow rejects an empty lights list."""
     result = await hass.config_entries.flow.async_init(

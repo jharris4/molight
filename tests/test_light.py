@@ -163,6 +163,31 @@ async def test_light_restores_last_on_timestamps(
 
 
 @pytest.mark.asyncio
+async def test_light_restores_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Virtual brightness survives a restart via RestoreEntity."""
+    mock_restore_cache(
+        hass,
+        [State("light.test_light", "on", {"brightness": 143})],
+    )
+
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Turn on without specifying brightness — the restored value must show.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.test_light"}
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 143
+
+
+@pytest.mark.asyncio
 async def test_occupancy_suppressed_when_bright(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, illuminance_entry: MockConfigEntry
 ) -> None:
@@ -484,6 +509,66 @@ async def test_false_detection_never_cuts_manual_lights(
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
 
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+
+    state = hass.states.get("light.fd_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
+async def test_stale_occupancy_ownership_never_cuts_user_lights(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
+) -> None:
+    """Occupancy ownership must not survive a force-off into a user on-period.
+
+    Regression: the illuminance force-off left the occupancy-ownership flag
+    set, so a later user-initiated on-period could be cut short by a false
+    occupancy clear.
+    """
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "FD Light",
+            CONF_LIGHTS: ["light.fd_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+        },
+    )
+    await _setup_entries(hass, _fd_occupancy_entry(), illuminance_entry, light)
+
+    # Occupancy lights the room (dark by default) — occupancy owns the lights.
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "on"
+
+    # False-blip clear, then bright forces everything off.
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+    hass.states.async_set("sensor.lux_1", "500")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "off"
+
+    # The user physically turns a light on; then it gets dark again.
+    hass.states.async_set("light.fd_real", "on")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "on"
+    hass.states.async_set("sensor.lux_1", "5")
+    await _settle(hass)
+
+    # A fresh occupancy blip arrives and false-clears over the user's lights.
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+
+    # The quick-off (5s) must NOT fire — the user owns this on-period.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)

@@ -224,6 +224,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                         setattr(self, field, datetime.fromisoformat(raw))
                     except (ValueError, TypeError):
                         pass
+            raw_brightness = last.attributes.get(ATTR_BRIGHTNESS)
+            if isinstance(raw_brightness, int):
+                self._attr_brightness = raw_brightness
 
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -379,6 +382,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if state == "on":
             if self._machine_state == STATE_IDLE:
                 self._last_on_physical = datetime.now(timezone.utc)
+                self._occupancy_lit_lights = False  # the user owns this on-period
             self._transition_on(manual=True)
         else:
             if self._all_lights_off():
@@ -464,20 +468,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 # Window ended — apply the off boundary.
                 self._schedule_window_applied = None
-                self._cancel_timer()
-                self._machine_state = STATE_IDLE
                 self.hass.async_create_task(self._set_lights(False))
-                self.async_write_ha_state()
+                self._go_idle()
             return
 
         # Gate mode: window end forces lights off; window start re-evaluates
         # occupancy the same way illuminance going dark does.
         if new_state.state != "on":
             if self._machine_state != STATE_IDLE:
-                self._cancel_timer()
-                self._machine_state = STATE_IDLE
                 self.hass.async_create_task(self._set_lights(False))
-                self.async_write_ha_state()
+                self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
                 return
@@ -567,10 +567,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
             if self._machine_state != STATE_IDLE:
                 self.hass.async_create_task(self._set_lights(False))
-                self._cancel_timer()
-                self._machine_state = STATE_IDLE
-                self._attr_is_on = False
-                self.async_write_ha_state()
+                self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
                 return  # already running; no change needed
