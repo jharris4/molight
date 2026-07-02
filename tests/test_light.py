@@ -319,7 +319,7 @@ async def test_brightness_change_resets_countdown(
     await _settle(hass)
 
     state = hass.states.get("light.test_light")
-    assert state.attributes["last_brightness_change"] is not None
+    assert state.attributes["last_brightness_change_physical"] is not None
     assert state.attributes["limer_state"] == STATE_ACTIVE
 
     # 55s after the dim (105s after turn-on): the original timer would have
@@ -355,7 +355,7 @@ async def test_brightness_zero_treated_as_off(
     state = hass.states.get("light.test_light")
     assert state.state == "off"
     assert state.attributes["limer_state"] == STATE_IDLE
-    assert state.attributes["last_brightness_change"] is not None
+    assert state.attributes["last_brightness_change_physical"] is not None
 
     # 0 → non-zero is a turn-on in disguise: back to ACTIVE with physical
     # attribution.
@@ -366,6 +366,48 @@ async def test_brightness_zero_treated_as_off(
     assert state.state == "on"
     assert state.attributes["limer_state"] == STATE_ACTIVE
     assert state.attributes["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_virtual_brightness_change(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer
+) -> None:
+    """Brightness set through the virtual entity is tracked and extends the timer."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.test_light"}
+    )
+    await hass.async_block_till_done()
+    state = hass.states.get("light.test_light")
+    assert state.attributes["last_brightness_change_virtual"] is None
+
+    # 50s into the 60s timer the user dims via the virtual entity.
+    freezer.tick(timedelta(seconds=50))
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.test_light", "brightness": 100},
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.test_light")
+    assert state.attributes["last_brightness_change_virtual"] is not None
+    assert state.attributes["last_brightness_change_physical"] is None
+    assert state.attributes["brightness"] == 100
+
+    # The timer was restarted: still on 55s later, off after the full 60s.
+    freezer.tick(timedelta(seconds=55))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "on"
+
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "off"
 
 
 def _fd_occupancy_entry() -> MockConfigEntry:

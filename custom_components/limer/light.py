@@ -43,6 +43,11 @@ Turn-on attribution
   The most-recent value is used when computing the illuminance-dark countdown
   in the absence of an occupancy sensor.
 
+  Brightness changes are tracked the same way: last_brightness_change_physical
+  records external changes on the real lights (and restarts a running
+  ACTIVE/COUNTDOWN timer; brightness 0 counts as off, leaving 0 as on), while
+  last_brightness_change_virtual records brightness set through this entity.
+
 Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
   • Occupancy only turns lights ON when illuminance is OFF (dark) — both modes.
@@ -72,7 +77,7 @@ import logging
 from collections import deque
 from datetime import datetime, timezone
 
-from homeassistant.components.light import ColorMode, LightEntity
+from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
@@ -133,8 +138,8 @@ async def async_setup_entry(
 class VirtualLight(LightEntity, RestoreEntity):
     """A virtual light with occupancy/illuminance/schedule awareness."""
 
-    _attr_color_mode = ColorMode.ONOFF
-    _attr_supported_color_modes = {ColorMode.ONOFF}
+    _attr_color_mode = ColorMode.BRIGHTNESS
+    _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -175,7 +180,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_virtual: datetime | None = None
         self._last_on_occupancy: datetime | None = None
         self._last_on_illuminance: datetime | None = None
-        self._last_brightness_change: datetime | None = None
+        self._last_brightness_change_physical: datetime | None = None
+        self._last_brightness_change_virtual: datetime | None = None
 
     # ------------------------------------------------------------------
     # HA lifecycle
@@ -205,12 +211,19 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._schedule_window_applied = last.attributes.get(
                 "schedule_window_start"
             )
-            raw = last.attributes.get("last_brightness_change")
-            if raw:
-                try:
-                    self._last_brightness_change = datetime.fromisoformat(raw)
-                except (ValueError, TypeError):
-                    pass
+            for attr, field in (
+                # Fall back to the pre-rename attribute name for restores
+                # from before the physical/virtual split.
+                ("last_brightness_change_physical", "_last_brightness_change_physical"),
+                ("last_brightness_change", "_last_brightness_change_physical"),
+                ("last_brightness_change_virtual", "_last_brightness_change_virtual"),
+            ):
+                raw = last.attributes.get(attr)
+                if raw and getattr(self, field) is None:
+                    try:
+                        setattr(self, field, datetime.fromisoformat(raw))
+                    except (ValueError, TypeError):
+                        pass
 
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -315,9 +328,14 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on all real lights and transition the state machine."""
-        self._last_on_virtual = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
-        await self._set_lights(True)
+        brightness = kwargs.get(ATTR_BRIGHTNESS)
+        if brightness is not None:
+            self._last_brightness_change_virtual = now
+            self._attr_brightness = brightness
+        await self._set_lights(True, brightness=brightness)
         self._transition_on(manual=True)
 
     async def async_turn_off(self, **kwargs) -> None:
@@ -377,7 +395,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         if new_b is None or new_b == old_b:
             return  # some other attribute changed
 
-        self._last_brightness_change = datetime.now(timezone.utc)
+        self._last_brightness_change_physical = datetime.now(timezone.utc)
+        if new_b:
+            self._attr_brightness = new_b
 
         if new_b == 0:
             if self._all_lights_off():
@@ -647,11 +667,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
 
-        if self._machine_state != STATE_ACTIVE:
-            self._machine_state = STATE_ACTIVE
-            self._attr_is_on = True
-            self._start_timer()
-            self.async_write_ha_state()
+        self._machine_state = STATE_ACTIVE
+        self._attr_is_on = True
+        # Restart even when already ACTIVE: turning on / dimming again is
+        # activity and extends the on-period.
+        self._start_timer()
+        self.async_write_ha_state()
 
     def _go_idle(self) -> None:
         """Cancel any timer and move to IDLE."""
@@ -687,13 +708,16 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Real-light control
     # ------------------------------------------------------------------
 
-    async def _set_lights(self, on: bool) -> None:
+    async def _set_lights(self, on: bool, brightness: int | None = None) -> None:
         context = Context()
         self._self_context_ids.append(context.id)
+        service_data: dict = {"entity_id": self._lights}
+        if on and brightness is not None:
+            service_data[ATTR_BRIGHTNESS] = brightness
         await self.hass.services.async_call(
             "light",
             "turn_on" if on else "turn_off",
-            {"entity_id": self._lights},
+            service_data,
             blocking=False,
             context=context,
         )
@@ -715,6 +739,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_on_virtual": _fmt(self._last_on_virtual),
             "last_on_occupancy": _fmt(self._last_on_occupancy),
             "last_on_illuminance": _fmt(self._last_on_illuminance),
-            "last_brightness_change": _fmt(self._last_brightness_change),
+            "last_brightness_change_physical": _fmt(
+                self._last_brightness_change_physical
+            ),
+            "last_brightness_change_virtual": _fmt(
+                self._last_brightness_change_virtual
+            ),
             "schedule_window_start": self._schedule_window_applied,
         }
