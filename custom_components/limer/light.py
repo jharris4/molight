@@ -76,6 +76,7 @@ from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
 )
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_ENTITY_TYPE,
@@ -106,7 +107,7 @@ async def async_setup_entry(
         async_add_entities([VirtualLight(hass, entry)])
 
 
-class VirtualLight(LightEntity):
+class VirtualLight(LightEntity, RestoreEntity):
     """A virtual light with occupancy/illuminance/schedule awareness."""
 
     _attr_color_mode = ColorMode.ONOFF
@@ -149,6 +150,21 @@ class VirtualLight(LightEntity):
         arbitrary order, firing spurious state-change events; reacting to them
         could toggle lights or start countdowns based on incomplete state.
         """
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None:
+            # Restore turn-on attribution so the illuminance re-activation
+            # countdown keeps working across a restart.
+            for source in ("physical", "virtual", "occupancy", "illuminance"):
+                raw = last.attributes.get(f"last_on_{source}")
+                if raw:
+                    try:
+                        setattr(
+                            self, f"_last_on_{source}", datetime.fromisoformat(raw)
+                        )
+                    except (ValueError, TypeError):
+                        pass
+
         watch = list(self._lights)
         if self._occupancy_entity:
             watch.append(self._occupancy_entity)

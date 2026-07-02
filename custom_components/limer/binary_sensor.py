@@ -24,6 +24,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_ENTITY_TYPE,
@@ -59,6 +60,19 @@ def _real_state_change(event) -> bool:
     return old_state is None or old_state.state != new_state.state
 
 
+def _restored_latest_occupied_time(last_state) -> datetime | None:
+    """Parse latest_occupied_time from a restored state, if present and valid."""
+    if last_state is None:
+        return None
+    raw = last_state.attributes.get("latest_occupied_time")
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return None
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -84,7 +98,7 @@ async def async_setup_entry(
 # ---------------------------------------------------------------------------
 
 
-class VirtualOccupancySensor(BinarySensorEntity):
+class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     """Wraps a single real binary sensor with an occupancy timeout.
 
     is_on mirrors the real sensor directly (no countdown).
@@ -106,6 +120,10 @@ class VirtualOccupancySensor(BinarySensorEntity):
         self._latest_occupied_time: datetime | None = None
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._latest_occupied_time = _restored_latest_occupied_time(
+            await self.async_get_last_state()
+        )
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_sensor], self._handle_sensor_change
@@ -117,7 +135,7 @@ class VirtualOccupancySensor(BinarySensorEntity):
         state = self.hass.states.get(self._source_sensor)
         if state:
             self._attr_is_on = state.state == "on"
-            self.async_write_ha_state()
+        self.async_write_ha_state()
 
     @callback
     def _handle_sensor_change(self, event) -> None:
@@ -150,7 +168,7 @@ class VirtualOccupancySensor(BinarySensorEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualCombinedOccupancySensor(BinarySensorEntity):
+class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
 
     Trigger sensors start occupancy; maintain sensors keep it alive once started.
@@ -172,7 +190,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
         self._latest_occupied_time: datetime | None = None
 
     async def async_added_to_hass(self) -> None:
-        all_sensors = self._trigger_sensors + self._maintain_sensors
+        await super().async_added_to_hass()
+        self._latest_occupied_time = _restored_latest_occupied_time(
+            await self.async_get_last_state()
+        )
+        all_sensors = list(dict.fromkeys(self._trigger_sensors + self._maintain_sensors))
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, all_sensors, self._handle_occupancy_change
@@ -248,7 +270,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualIlluminanceSensor(BinarySensorEntity):
+class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
     """Binary sensor tracking whether illuminance meets a threshold.
 
     ON  → bright enough; no artificial lighting needed (value >= threshold)
@@ -270,6 +292,10 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
         self._attr_is_on = False
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            self._attr_is_on = last.state == "on"
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_entity], self._handle_illuminance_change
@@ -281,7 +307,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
         state = self.hass.states.get(self._source_entity)
         if state:
             self._update_from_state(state.state)
-            self.async_write_ha_state()
+        self.async_write_ha_state()
 
     @callback
     def _handle_illuminance_change(self, event) -> None:

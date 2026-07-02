@@ -4,9 +4,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    mock_restore_cache,
+)
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 
 
 @pytest.mark.asyncio
@@ -113,6 +116,46 @@ async def test_occupancy_ignores_attribute_only_updates(
         "latest_occupied_time"
     ]
     assert lot_after == lot_before
+
+
+@pytest.mark.asyncio
+async def test_occupancy_restores_latest_occupied_time(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """latest_occupied_time survives a restart via RestoreEntity."""
+    lot = "2026-07-01T10:00:00+00:00"
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.test_occupancy",
+                "off",
+                {"latest_occupied_time": lot, "occupancy_timeout": 30},
+            )
+        ],
+    )
+
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.attributes["latest_occupied_time"] == lot
+
+
+@pytest.mark.asyncio
+async def test_illuminance_restores_state(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """A restored 'bright' reading survives a restart with the source missing."""
+    mock_restore_cache(hass, [State("binary_sensor.test_illuminance", "on")])
+
+    illuminance_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(illuminance_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # sensor.lux_1 does not exist yet — the restored value must hold.
+    assert hass.states.get("binary_sensor.test_illuminance").state == "on"
 
 
 @pytest.mark.asyncio

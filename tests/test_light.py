@@ -8,9 +8,10 @@ import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache,
 )
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
@@ -110,6 +111,26 @@ async def test_virtual_light_auto_off(
     state = hass.states.get("light.test_light")
     assert state.state == "off"
     assert state.attributes.get("limer_state") == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_light_restores_last_on_timestamps(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Turn-on attribution timestamps survive a restart via RestoreEntity."""
+    ts = "2026-07-01T10:00:00+00:00"
+    mock_restore_cache(
+        hass,
+        [State("light.test_light", "off", {"last_on_virtual": ts})],
+    )
+
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.test_light")
+    assert state.attributes["last_on_virtual"] == ts
+    assert state.attributes["last_on_physical"] is None
 
 
 @pytest.mark.asyncio
