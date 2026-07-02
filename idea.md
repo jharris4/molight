@@ -29,3 +29,15 @@ Light turned off externally → idle
 Config Flow Rules
 Virtual occupancy must exist before referencing it in a light group
 Light timeout validated against occupancy timeout at creation and edit (both directions)
+
+#General Description:
+
+this project is a home assistant integration that i'm building to control lights.
+
+The idea is that you can create virtual occupancy sensors to configure the timeouts for real occupancy sensors, so that you can tell how long occupancy has really been clear for. Like if a virtual occupancy sensor clears and has a timeout of 60 seconds, you know the real occupancy seensor cleared 60 seconds ago.
+
+Then, you can configure timeouts for virtual lights that are tied to real lights. Virtual lights can be configured to turn off after a set amount of time either after they were turned on manually, or after occupancy has cleared (using the virtual occupancy sensor timeout to make this more precise).
+
+Additionally, there are virtual illuminance sensors that can be used to control when lights turn on/off based on how dark it is.
+
+There are also virtual schedule sensors, which can be used to only turn lights on/off based on scheduled times, but this hasn't been implemented yet,
