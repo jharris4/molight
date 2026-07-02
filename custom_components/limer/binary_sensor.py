@@ -17,6 +17,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
@@ -42,6 +43,20 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _real_state_change(event) -> bool:
+    """Return True when the event is an actual state transition.
+
+    Filters out entities going unavailable/unknown (sensor blips must not be
+    read as occupancy or darkness changes) and attribute-only updates (many
+    real sensors push battery/lux attributes while their state is unchanged).
+    """
+    new_state = event.data.get("new_state")
+    old_state = event.data.get("old_state")
+    if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        return False
+    return old_state is None or old_state.state != new_state.state
 
 
 async def async_setup_entry(
@@ -106,9 +121,9 @@ class VirtualOccupancySensor(BinarySensorEntity):
 
     @callback
     def _handle_sensor_change(self, event) -> None:
-        new_state = event.data.get("new_state")
-        if new_state is None:
+        if not _real_state_change(event):
             return
+        new_state = event.data["new_state"]
         if new_state.state == "on":
             self._attr_is_on = True
         else:
@@ -169,6 +184,13 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
         else:
+            # Intentional startup exception to "maintain sensors never start
+            # occupancy": after a restart we can't know whether occupancy was
+            # already triggered before HA went down. A maintain sensor that has
+            # been on for more than 5 seconds is assumed to reflect ongoing
+            # occupancy from before the restart, so it seeds the sensor on
+            # (and thus can turn lights on). The 5-second minimum filters out
+            # sensors that merely flapped on during startup itself.
             now = datetime.now(timezone.utc)
             for entity_id in self._maintain_sensors:
                 state = self.hass.states.get(entity_id)
@@ -183,9 +205,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity):
 
     @callback
     def _handle_occupancy_change(self, event) -> None:
-        new_state = event.data.get("new_state")
-        if new_state is None:
+        if not _real_state_change(event):
             return
+        new_state = event.data["new_state"]
 
         if new_state.state != "on":
             lot_str = new_state.attributes.get("latest_occupied_time")
@@ -264,8 +286,8 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
     @callback
     def _handle_illuminance_change(self, event) -> None:
         new_state = event.data.get("new_state")
-        if new_state is None:
-            return
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return  # hold last known value while the source is unavailable
         self._update_from_state(new_state.state)
         self.async_write_ha_state()
 
@@ -273,7 +295,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity):
         try:
             self._attr_is_on = float(state_value) >= self._threshold
         except (ValueError, TypeError):
-            self._attr_is_on = False
+            pass  # unparsable reading — hold last known value
 
 
 # ---------------------------------------------------------------------------

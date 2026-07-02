@@ -7,7 +7,7 @@ Configurable timeout: countdown starts when all sensors are off
 Reusable across multiple light groups
 Virtual Illuminance Binary Sensor
 References a real illuminance sensor + configurable threshold
-on = below threshold (dark enough to warrant lighting)
+off = below threshold (dark enough to warrant lighting)
 Reusable across multiple light groups
 Virtual Schedule Binary Sensor
 Configurable time windows

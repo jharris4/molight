@@ -54,12 +54,23 @@ Schedule gating (TBD).
 from __future__ import annotations
 
 import logging
+from collections import deque
 from datetime import datetime, timezone
 
 from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
+from homeassistant.const import (
+    EVENT_HOMEASSISTANT_STARTED,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    Context,
+    CoreState,
+    HomeAssistant,
+    callback,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -118,6 +129,9 @@ class VirtualLight(LightEntity):
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False
         self._timer_unsub: CALLBACK_TYPE | None = None
+        # Context ids of our own light service calls, used to tell self-caused
+        # state echoes apart from genuinely external changes.
+        self._self_context_ids: deque[str] = deque(maxlen=16)
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -163,24 +177,26 @@ class VirtualLight(LightEntity):
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
-        if self._is_illuminance_bright():
-            return
-
         self._attr_is_on = any(
             (s := self.hass.states.get(e)) and s.state == "on"
             for e in self._lights
         )
 
-        if self._occupancy_entity:
+        # Occupancy only takes over when it's dark (or no illuminance is
+        # configured); when bright, lights must not be (re)activated.
+        if self._occupancy_entity and not self._is_illuminance_bright():
             occ_state = self.hass.states.get(self._occupancy_entity)
             if occ_state and occ_state.state == "on":
                 self._on_occupancy_change(occupied=True)
                 return
 
         if self._attr_is_on:
+            # Lights are already on (whatever the illuminance) — adopt them
+            # and run the normal timer so they still turn off eventually.
             self._machine_state = STATE_ACTIVE
             self._start_timer()
-            self.async_write_ha_state()
+
+        self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
@@ -209,10 +225,15 @@ class VirtualLight(LightEntity):
         """React to a tracked entity changing state."""
         entity_id: str = event.data["entity_id"]
         new_state = event.data.get("new_state")
-        if new_state is None:
+        old_state = event.data.get("old_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
+        if old_state is not None and old_state.state == new_state.state:
+            return  # attribute-only change (brightness, battery, ...)
 
         if entity_id in self._lights:
+            if event.context.id in self._self_context_ids:
+                return  # echo of our own service call; call sites manage state
             self._on_light_state_change(new_state.state)
         elif entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
@@ -399,15 +420,17 @@ class VirtualLight(LightEntity):
     # ------------------------------------------------------------------
 
     async def _set_lights(self, on: bool) -> None:
-        service = "turn_on" if on else "turn_off"
-        for light in self._lights:
-            await self.hass.services.async_call(
-                "light",
-                service,
-                {"entity_id": light},
-                blocking=False,
-            )
+        context = Context()
+        self._self_context_ids.append(context.id)
+        await self.hass.services.async_call(
+            "light",
+            "turn_on" if on else "turn_off",
+            {"entity_id": self._lights},
+            blocking=False,
+            context=context,
+        )
         self._attr_is_on = on
+        self.async_write_ha_state()
 
     # ------------------------------------------------------------------
     # Extra state attributes
