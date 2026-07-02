@@ -175,6 +175,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_virtual: datetime | None = None
         self._last_on_occupancy: datetime | None = None
         self._last_on_illuminance: datetime | None = None
+        self._last_brightness_change: datetime | None = None
 
     # ------------------------------------------------------------------
     # HA lifecycle
@@ -204,6 +205,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._schedule_window_applied = last.attributes.get(
                 "schedule_window_start"
             )
+            raw = last.attributes.get("last_brightness_change")
+            if raw:
+                try:
+                    self._last_brightness_change = datetime.fromisoformat(raw)
+                except (ValueError, TypeError):
+                    pass
 
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -330,13 +337,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         old_state = event.data.get("old_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
-        if old_state is not None and old_state.state == new_state.state:
-            return  # attribute-only change (brightness, battery, ...)
+        same_state = old_state is not None and old_state.state == new_state.state
 
         if entity_id in self._lights:
             if event.context.id in self._self_context_ids:
                 return  # echo of our own service call; call sites manage state
+            if same_state:
+                if new_state.state == "on":
+                    self._on_light_brightness_change(old_state, new_state)
+                return
             self._on_light_state_change(new_state.state)
+        elif same_state:
+            return  # attribute-only change (battery, ...)
         elif entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
         elif entity_id == self._illuminance_entity:
@@ -351,12 +363,43 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_physical = datetime.now(timezone.utc)
             self._transition_on(manual=True)
         else:
-            # Check if ALL real lights are now off.
-            if all(
-                (s := self.hass.states.get(e)) and s.state != "on"
-                for e in self._lights
-            ):
+            if self._all_lights_off():
                 self._go_idle()
+
+    def _on_light_brightness_change(self, old_state, new_state) -> None:
+        """Handle an external brightness change on a real light (state stays on).
+
+        Dimming is human activity: record it and restart any running
+        countdown with the full timeout. Brightness 0 means off in disguise.
+        """
+        old_b = old_state.attributes.get("brightness")
+        new_b = new_state.attributes.get("brightness")
+        if new_b is None or new_b == old_b:
+            return  # some other attribute changed
+
+        self._last_brightness_change = datetime.now(timezone.utc)
+
+        if new_b == 0:
+            if self._all_lights_off():
+                self._go_idle()
+            else:
+                self.async_write_ha_state()
+            return
+
+        if self._machine_state in (STATE_ACTIVE, STATE_COUNTDOWN):
+            self._machine_state = STATE_ACTIVE
+            self._start_timer()
+        self.async_write_ha_state()
+
+    def _all_lights_off(self) -> bool:
+        """True when every real light is off (brightness 0 counts as off)."""
+        for entity_id in self._lights:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                return False  # unknown entity — don't assume it's off
+            if state.state == "on" and state.attributes.get("brightness") != 0:
+                return False
+        return True
 
     def _is_illuminance_bright(self) -> bool:
         """Return True when illuminance is bright enough to suppress lighting."""
@@ -664,5 +707,6 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_on_virtual": _fmt(self._last_on_virtual),
             "last_on_occupancy": _fmt(self._last_on_occupancy),
             "last_on_illuminance": _fmt(self._last_on_illuminance),
+            "last_brightness_change": _fmt(self._last_brightness_change),
             "schedule_window_start": self._schedule_window_applied,
         }

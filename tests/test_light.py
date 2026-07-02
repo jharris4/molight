@@ -300,6 +300,64 @@ async def test_illuminance_dark_resumes_remaining_time(
     assert state.attributes["limer_state"] == STATE_IDLE
 
 
+@pytest.mark.asyncio
+async def test_brightness_change_resets_countdown(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer
+) -> None:
+    """An external brightness change is activity: timestamp + timer restart."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("light.living_room", "on")
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "on"
+
+    # 50s into the 60s timer someone dims the light.
+    freezer.tick(timedelta(seconds=50))
+    hass.states.async_set("light.living_room", "on", {"brightness": 128})
+    await _settle(hass)
+
+    state = hass.states.get("light.test_light")
+    assert state.attributes["last_brightness_change"] is not None
+    assert state.attributes["limer_state"] == STATE_ACTIVE
+
+    # 55s after the dim (105s after turn-on): the original timer would have
+    # fired at 60s — the reset one has 5s left.
+    freezer.tick(timedelta(seconds=55))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "on"
+
+    # 61s after the dim: the reset timer fires.
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_brightness_zero_treated_as_off(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Brightness 0 with state still 'on' is treated as the light being off."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("light.living_room", "on", {"brightness": 200})
+    await _settle(hass)
+    assert hass.states.get("light.test_light").state == "on"
+
+    hass.states.async_set("light.living_room", "on", {"brightness": 0})
+    await _settle(hass)
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["last_brightness_change"] is not None
+
+
 def _fd_occupancy_entry() -> MockConfigEntry:
     """Occupancy sensor with false-detection classification enabled."""
     return MockConfigEntry(
