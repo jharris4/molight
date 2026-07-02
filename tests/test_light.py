@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
@@ -24,6 +25,7 @@ from custom_components.limer.const import (
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULE,
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -290,6 +292,63 @@ async def test_illuminance_dark_resumes_remaining_time(
     await _settle(hass)
 
     state = hass.states.get("light.kitchen_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_illuminance_gate_mode_never_forces_off(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
+    freezer,
+) -> None:
+    """Gate mode: bright never turns lights off, but still gates turn-ons."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Gate Only Light",
+            CONF_LIGHTS: ["light.den_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        },
+    )
+    await _setup_entries(hass, occupancy_entry, illuminance_entry, light)
+
+    # Dark + occupancy → lights on.
+    hass.states.async_set("sensor.lux_1", "5")
+    await _settle(hass)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    assert hass.states.get("light.gate_only_light").state == "on"
+
+    # It reads bright (e.g. the lights themselves raised the lux) — the
+    # lights must stay on instead of oscillating.
+    hass.states.async_set("sensor.lux_1", "500")
+    await _settle(hass)
+
+    state = hass.states.get("light.gate_only_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_OCCUPIED
+
+    # Occupancy clears → normal precise countdown turns them off.
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+    assert hass.states.get("light.gate_only_light").state == "on"
+
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.gate_only_light").state == "off"
+
+    # Still bright: a new occupancy trigger stays gated.
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+
+    state = hass.states.get("light.gate_only_light")
     assert state.state == "off"
     assert state.attributes["limer_state"] == STATE_IDLE
 

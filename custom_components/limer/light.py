@@ -43,11 +43,17 @@ Turn-on attribution
   The most-recent value is used when computing the illuminance-dark countdown
   in the absence of an occupancy sensor.
 
-Illuminance gating (when an illuminance entity is configured):
-  • Occupancy only turns lights ON when illuminance is OFF (dark).
-  • Illuminance OFF→ON (dark→bright): go IDLE, turn lights off.
+Illuminance handling (when an illuminance entity is configured), per
+illuminance_mode:
+  • Occupancy only turns lights ON when illuminance is OFF (dark) — both modes.
   • Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
-    else if recent occupancy (countdown > 0), enter COUNTDOWN with adjusted timer.
+    else if recent occupancy (countdown > 0), enter COUNTDOWN with adjusted
+    timer — both modes.
+  • Illuminance OFF→ON (dark→bright):
+      control — go IDLE, turn lights off.
+      gate    — no effect; bright never turns lights off. Use when the lux
+                sensor can see the controlled lights, which would otherwise
+                oscillate (lights on → reads bright → forced off → dark → …).
 
 Schedule handling (when a schedule entity is configured), per schedule_mode:
   • follow — lights turn ON at window start (state SCHEDULED, no timer) and
@@ -90,6 +96,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
@@ -97,6 +104,8 @@ from .const import (
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     ENTITY_TYPE_LIGHT,
+    ILLUMINANCE_MODE_CONTROL,
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -138,6 +147,9 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
+        self._illuminance_mode: str = cfg.get(
+            CONF_ILLUMINANCE_MODE, ILLUMINANCE_MODE_CONTROL
+        )
         self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
         self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW)
         # Start marker (ISO string) of the follow-mode window we last turned
@@ -453,6 +465,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if is_bright:
+            if self._illuminance_mode == ILLUMINANCE_MODE_GATE:
+                # Gate-only: bright never forces the lights off (breaks the
+                # feedback loop when the lux sensor sees the controlled
+                # lights). Occupancy/timeout handle turning off.
+                return
             if self._machine_state != STATE_IDLE:
                 self.hass.async_create_task(self._set_lights(False))
                 self._cancel_timer()

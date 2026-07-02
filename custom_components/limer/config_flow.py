@@ -15,6 +15,7 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
+    CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
@@ -38,6 +39,8 @@ from .const import (
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    ILLUMINANCE_MODE_CONTROL,
+    ILLUMINANCE_MODES,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODES,
     SUN_EVENTS,
@@ -502,6 +505,14 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         for key, sel_config in _LIGHT_REF_SELECTORS.items()
                     },
                     vol.Required(
+                        CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=ILLUMINANCE_MODES,
+                            translation_key=CONF_ILLUMINANCE_MODE,
+                        )
+                    ),
+                    vol.Required(
                         CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
@@ -780,6 +791,16 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
             )
             schema[marker] = selector.EntitySelector(sel_config)
 
+        schema[
+            vol.Required(
+                CONF_ILLUMINANCE_MODE,
+                default=cfg.get(CONF_ILLUMINANCE_MODE, ILLUMINANCE_MODE_CONTROL),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=ILLUMINANCE_MODES, translation_key=CONF_ILLUMINANCE_MODE
+            )
+        )
         schema[
             vol.Required(
                 CONF_SCHEDULE_MODE,

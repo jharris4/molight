@@ -67,6 +67,17 @@ CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
 
+# How a referenced illuminance entity affects the light:
+#   control — dark gates turn-ons AND turning bright forces the lights off
+#   gate    — dark gates turn-ons only; bright never turns the lights off.
+#             Use when the lux sensor can see the controlled lights, which
+#             would otherwise oscillate (lights on → bright → forced off →
+#             dark → on ...).
+CONF_ILLUMINANCE_MODE = "illuminance_mode"
+ILLUMINANCE_MODE_CONTROL = "control"
+ILLUMINANCE_MODE_GATE = "gate"
+ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE]
+
 # How a referenced schedule entity affects the light:
 #   follow — lights turn on at window start and off at window end (porch lights)
 #   gate   — occupancy may only activate lights inside the window

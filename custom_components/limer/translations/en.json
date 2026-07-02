@@ -55,7 +55,8 @@
           "occupancy_entity": "Occupancy sensor (optional)",
           "illuminance_entity": "Illuminance sensor (optional)",
           "schedule_entity": "Schedule sensor (optional)",
-          "schedule_mode": "Schedule mode"
+          "schedule_mode": "Schedule mode",
+          "illuminance_mode": "Illuminance mode"
         }
       }
     },
@@ -93,6 +94,12 @@
       "options": {
         "latest": "Latest of the two",
         "earliest": "Earliest of the two"
+      }
+    },
+    "illuminance_mode": {
+      "options": {
+        "control": "Control — dark gates turn-on, bright turns lights off",
+        "gate": "Gate only — dark gates turn-on, bright never turns lights off"
       }
     }
   },
