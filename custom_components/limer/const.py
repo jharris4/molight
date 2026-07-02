@@ -37,6 +37,10 @@ CONF_MAINTAIN_SENSORS = "maintain_sensors"
 # --- Virtual Illuminance Binary Sensor ---
 CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"   # entity_id of a real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
+# Hysteresis band (lx) around the threshold: becomes bright at
+# threshold + hysteresis, dark below threshold - hysteresis; readings inside
+# the band hold the current state. 0 = plain comparator.
+CONF_ILLUMINANCE_HYSTERESIS = "illuminance_hysteresis"
 
 # --- Virtual Schedule Binary Sensor ---
 # List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain

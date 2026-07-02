@@ -31,6 +31,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     COMBINE_LATEST,
     CONF_ENTITY_TYPE,
+    CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
@@ -281,8 +282,13 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
     """Binary sensor tracking whether illuminance meets a threshold.
 
-    ON  → bright enough; no artificial lighting needed (value >= threshold)
-    OFF → too dark; artificial lighting may be required (value < threshold)
+    ON  → bright enough; no artificial lighting needed
+    OFF → too dark; artificial lighting may be required
+
+    An optional hysteresis band suppresses flapping when the reading hovers
+    around the threshold: the state only becomes bright at
+    threshold + hysteresis and only becomes dark below
+    threshold - hysteresis; readings inside the band hold the current state.
     """
 
     _attr_device_class = "light"
@@ -296,6 +302,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
 
         self._source_entity: str = cfg[CONF_ILLUMINANCE_SENSOR]
         self._threshold: float = float(cfg.get(CONF_ILLUMINANCE_THRESHOLD, 10.0))
+        self._hysteresis: float = float(cfg.get(CONF_ILLUMINANCE_HYSTERESIS, 0.0))
 
         self._attr_is_on = False
 
@@ -327,9 +334,14 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
 
     def _update_from_state(self, state_value: str) -> None:
         try:
-            self._attr_is_on = float(state_value) >= self._threshold
+            value = float(state_value)
         except (ValueError, TypeError):
-            pass  # unparsable reading — hold last known value
+            return  # unparsable reading — hold last known value
+        if self._attr_is_on:
+            if value < self._threshold - self._hysteresis:
+                self._attr_is_on = False
+        elif value >= self._threshold + self._hysteresis:
+            self._attr_is_on = True
 
 
 # ---------------------------------------------------------------------------

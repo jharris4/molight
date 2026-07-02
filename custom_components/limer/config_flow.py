@@ -14,6 +14,7 @@ from .const import (
     COMBINE_LATEST,
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
@@ -400,6 +401,17 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             mode="box",
                         )
                     ),
+                    vol.Required(
+                        CONF_ILLUMINANCE_HYSTERESIS, default=0.0
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0,
+                            max=10000,
+                            step=0.1,
+                            unit_of_measurement="lx",
+                            mode="box",
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -670,6 +682,18 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                         selector.NumberSelectorConfig(
                             min=0,
                             max=100000,
+                            step=0.1,
+                            unit_of_measurement="lx",
+                            mode="box",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_ILLUMINANCE_HYSTERESIS,
+                        default=cfg.get(CONF_ILLUMINANCE_HYSTERESIS, 0.0),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0,
+                            max=10000,
                             step=0.1,
                             unit_of_measurement="lx",
                             mode="box",

@@ -12,6 +12,9 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
+    CONF_ILLUMINANCE_HYSTERESIS,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
@@ -19,6 +22,7 @@ from custom_components.limer.const import (
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
 )
 from tests.conftest import settle
@@ -152,6 +156,48 @@ async def test_occupancy_ignores_attribute_only_updates(
         "latest_occupied_time"
     ]
     assert lot_after == lot_before
+
+
+@pytest.mark.asyncio
+async def test_illuminance_hysteresis_holds_state_in_band(
+    hass: HomeAssistant,
+) -> None:
+    """Readings inside the hysteresis band never flip the state."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Hyst Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.lux_1",
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 2.0,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    sensor = lambda: hass.states.get("binary_sensor.hyst_illuminance")  # noqa: E731
+
+    # Dark; a reading above the threshold but inside the band stays dark.
+    hass.states.async_set("sensor.lux_1", "11")
+    await hass.async_block_till_done()
+    assert sensor().state == "off"
+
+    # Crossing threshold + hysteresis flips to bright.
+    hass.states.async_set("sensor.lux_1", "12")
+    await hass.async_block_till_done()
+    assert sensor().state == "on"
+
+    # Below the threshold but inside the band stays bright.
+    hass.states.async_set("sensor.lux_1", "9")
+    await hass.async_block_till_done()
+    assert sensor().state == "on"
+
+    # Dropping below threshold - hysteresis flips to dark.
+    hass.states.async_set("sensor.lux_1", "7.9")
+    await hass.async_block_till_done()
+    assert sensor().state == "off"
 
 
 @pytest.mark.asyncio

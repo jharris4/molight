@@ -28,7 +28,8 @@
         "data": {
           "name": "Name",
           "illuminance_sensor": "Illuminance sensor",
-          "illuminance_threshold": "Threshold (lx)"
+          "illuminance_threshold": "Threshold (lx)",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
         }
       },
       "schedule": {
