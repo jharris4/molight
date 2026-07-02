@@ -27,6 +27,12 @@ CONF_NAME = "name"
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor
 # latest_occupied_time = last_off - timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
+# A cycle whose on-duration exceeds the timeout by no more than this many
+# seconds contained exactly one instantaneous detection (the sensor never
+# re-triggered during its hold time) — almost always a false detection.
+# Such cycles don't advance latest_occupied_time and are counted in the
+# false_detection_count attribute. 0 disables classification.
+CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
 
 # --- Virtual Combined Occupancy Binary Sensor ---
 # trigger_sensors: any one going ON starts occupancy
@@ -62,6 +68,10 @@ SUN_EVENTS = ["sunset", "sunrise"]
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"                             # list of real light entity_ids
 CONF_LIGHT_TIMEOUT = "light_timeout"              # seconds; must be >= occupancy_timeout
+# When occupancy clears and the sensor flags the cycle as a false detection,
+# lights that were lit BY that cycle turn off after this short delay instead
+# of the normal countdown. Lights turned on manually are never affected.
+CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 # Optional references to virtual entities (entity_ids)
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"

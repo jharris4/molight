@@ -95,6 +95,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_ENTITY_TYPE,
+    CONF_FALSE_OFF_DELAY,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
@@ -144,6 +145,11 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
         self._light_timeout: int = int(cfg.get(CONF_LIGHT_TIMEOUT, 300))
+        self._false_off_delay: int = int(cfg.get(CONF_FALSE_OFF_DELAY, 5))
+        # True while the current on-period was started by occupancy (not by
+        # the user) — the only case where a false-detection clear may cut the
+        # lights short.
+        self._occupancy_lit_lights: bool = False
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
@@ -303,6 +309,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on all real lights and transition the state machine."""
         self._last_on_virtual = datetime.now(timezone.utc)
+        self._occupancy_lit_lights = False  # the user owns this on-period now
         await self._set_lights(True)
         self._transition_on(manual=True)
 
@@ -416,6 +423,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_occupancy = datetime.now(timezone.utc)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
+                self._occupancy_lit_lights = True
                 self.hass.async_create_task(self._set_lights(True))
                 self.async_write_ha_state()
 
@@ -445,13 +453,29 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
             if not self._attr_is_on:
+                self._occupancy_lit_lights = True
                 self.hass.async_create_task(self._set_lights(True))
             self.async_write_ha_state()
         else:
             if self._machine_state == STATE_OCCUPIED:
                 self._machine_state = STATE_COUNTDOWN
-                self._start_timer(self._compute_occupancy_countdown())
+                if self._occupancy_lit_lights and self._occupancy_clear_was_false():
+                    # The whole cycle was a false detection and nobody else
+                    # asked for these lights — turn them off quickly.
+                    self._start_timer(self._false_off_delay)
+                else:
+                    self._start_timer(self._compute_occupancy_countdown())
                 self.async_write_ha_state()
+
+    def _occupancy_clear_was_false(self) -> bool:
+        """True when the occupancy sensor flagged its clear as a false detection."""
+        if not self._occupancy_entity:
+            return False
+        state = self.hass.states.get(self._occupancy_entity)
+        return bool(
+            state is not None
+            and state.attributes.get("last_clear_false_detection")
+        )
 
     def _on_illuminance_change(self, is_bright: bool) -> None:
         """Handle the virtual illuminance sensor changing.
@@ -492,6 +516,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_illuminance = datetime.now(timezone.utc)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
+                self._occupancy_lit_lights = True
                 self.hass.async_create_task(self._set_lights(True))
                 self.async_write_ha_state()
             else:
@@ -582,6 +607,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._cancel_timer()
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
+        self._occupancy_lit_lights = False
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------

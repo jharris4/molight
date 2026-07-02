@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
@@ -156,6 +157,96 @@ async def test_occupancy_ignores_attribute_only_updates(
         "latest_occupied_time"
     ]
     assert lot_after == lot_before
+
+
+@pytest.mark.asyncio
+async def test_false_detection_classification_and_count(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A single-blip cycle is counted and doesn't advance latest_occupied_time."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "FD Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    # The counter survives restarts.
+    mock_restore_cache(
+        hass,
+        [State("binary_sensor.fd_occupancy", "off", {"false_detection_count": 5})],
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # False cycle: one detection, cleared right after the 30s hold (31s on).
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.fd_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 6
+    assert state.attributes["latest_occupied_time"] is None  # not advanced
+
+    # Real cycle: re-triggered, on well past the hold time (45s).
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=45))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.fd_occupancy")
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 6
+    assert state.attributes["latest_occupied_time"] is not None
+
+
+@pytest.mark.asyncio
+async def test_combined_counts_false_cycles(hass: HomeAssistant, freezer) -> None:
+    """A combined cycle made up only of false constituent cycles is flagged."""
+    occupancy = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "FD Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "FD Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.fd_occupancy"],
+        },
+    )
+    for entry in (occupancy, combined):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.fd_combined").state == "on"
+
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.fd_combined")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
 
 
 @pytest.mark.asyncio

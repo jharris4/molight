@@ -13,6 +13,8 @@ from .const import (
     COMBINE_EARLIEST,
     COMBINE_LATEST,
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
+    CONF_FALSE_OFF_DELAY,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
@@ -316,6 +318,13 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             min=1, max=3600, unit_of_measurement="s", mode="box"
                         )
                     ),
+                    vol.Required(
+                        CONF_FALSE_DETECTION_GRACE, default=3
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=60, unit_of_measurement="s", mode="box"
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -500,6 +509,13 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             min=1, max=3600, unit_of_measurement="s", mode="box"
                         )
                     ),
+                    vol.Required(
+                        CONF_FALSE_OFF_DELAY, default=5
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=300, unit_of_measurement="s", mode="box"
+                        )
+                    ),
                     **{
                         vol.Optional(key): selector.EntitySelector(sel_config)
                         for key, sel_config in _LIGHT_REF_SELECTORS.items()
@@ -591,6 +607,14 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                     ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
                             min=1, max=3600, unit_of_measurement="s", mode="box"
+                        )
+                    ),
+                    vol.Required(
+                        CONF_FALSE_DETECTION_GRACE,
+                        default=cfg.get(CONF_FALSE_DETECTION_GRACE, 0),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=60, unit_of_measurement="s", mode="box"
                         )
                     ),
                 }
@@ -777,6 +801,14 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=1, max=3600, unit_of_measurement="s", mode="box"
+                )
+            ),
+            vol.Required(
+                CONF_FALSE_OFF_DELAY,
+                default=cfg.get(CONF_FALSE_OFF_DELAY, 5),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0, max=300, unit_of_measurement="s", mode="box"
                 )
             ),
         }

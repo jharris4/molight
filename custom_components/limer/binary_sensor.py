@@ -31,6 +31,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     COMBINE_LATEST,
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
@@ -113,6 +114,14 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     is_on mirrors the real sensor directly (no countdown).
     latest_occupied_time = last_turn_off - timeout, representing our best
     estimate of when the person actually left.
+
+    False-detection classification (when false_detection_grace > 0): a cycle
+    whose on-duration exceeds the timeout by no more than the grace contained
+    exactly one instantaneous detection — the sensor never re-triggered
+    during its hold time, so it was almost certainly a fly/heat blip, or a
+    brief pass-through. Such cycles don't advance latest_occupied_time, are
+    counted in false_detection_count, and flag the clear via
+    last_clear_false_detection so lights can turn off quickly.
     """
 
     _attr_device_class = "occupancy"
@@ -125,14 +134,30 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._attr_unique_id = entry.entry_id
         self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
         self._timeout: int = int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
+        self._grace: float = float(cfg.get(CONF_FALSE_DETECTION_GRACE, 0))
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
+        self._last_on_time: datetime | None = None
+        self._false_count: int = 0
+        self._last_clear_false: bool = False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._latest_occupied_time = _restored_latest_occupied_time(
-            await self.async_get_last_state()
-        )
+        last = await self.async_get_last_state()
+        self._latest_occupied_time = _restored_latest_occupied_time(last)
+        if last is not None:
+            try:
+                self._false_count = int(
+                    last.attributes.get("false_detection_count") or 0
+                )
+            except (ValueError, TypeError):
+                pass
+            raw = last.attributes.get("last_on_time")
+            if raw:
+                try:
+                    self._last_on_time = datetime.fromisoformat(raw)
+                except (ValueError, TypeError):
+                    pass
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_sensor], self._handle_sensor_change
@@ -144,6 +169,10 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         state = self.hass.states.get(self._source_sensor)
         if state:
             self._attr_is_on = state.state == "on"
+            if self._attr_is_on and self._last_on_time is None:
+                # Restart mid-cycle without a restored on-time: the source's
+                # last_changed is our best estimate.
+                self._last_on_time = state.last_changed
         self.async_write_ha_state()
 
     @callback
@@ -153,15 +182,27 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         new_state = event.data["new_state"]
         if new_state.state == "on":
             self._attr_is_on = True
+            self._last_on_time = datetime.now(timezone.utc)
         else:
-            candidate = datetime.now(timezone.utc) - timedelta(seconds=self._timeout)
-            if (
-                self._latest_occupied_time is None
-                or candidate > self._latest_occupied_time
-            ):
-                self._latest_occupied_time = candidate
+            now = datetime.now(timezone.utc)
+            self._last_clear_false = self._is_false_cycle(now)
+            if self._last_clear_false:
+                self._false_count += 1
+            else:
+                candidate = now - timedelta(seconds=self._timeout)
+                if (
+                    self._latest_occupied_time is None
+                    or candidate > self._latest_occupied_time
+                ):
+                    self._latest_occupied_time = candidate
             self._attr_is_on = False
         self.async_write_ha_state()
+
+    def _is_false_cycle(self, now: datetime) -> bool:
+        if self._grace <= 0 or self._last_on_time is None:
+            return False
+        on_duration = (now - self._last_on_time).total_seconds()
+        return on_duration - self._timeout <= self._grace
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -169,6 +210,11 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         return {
             "latest_occupied_time": lot.isoformat() if lot else None,
             "occupancy_timeout": self._timeout,
+            "last_on_time": (
+                self._last_on_time.isoformat() if self._last_on_time else None
+            ),
+            "last_clear_false_detection": self._last_clear_false,
+            "false_detection_count": self._false_count,
         }
 
 
@@ -183,6 +229,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     Trigger sensors start occupancy; maintain sensors keep it alive once started.
     latest_occupied_time is the max of all constituents' latest_occupied_time
     attributes, propagated whenever a constituent turns off.
+
+    False-detection classification: constituents that classify a clear as a
+    false detection don't advance their latest_occupied_time, so a combined
+    cycle during which our own latest_occupied_time never advanced was made
+    up entirely of false (or stale) cycles — count it and flag the clear.
     """
 
     _attr_device_class = "occupancy"
@@ -197,12 +248,21 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._maintain_sensors: list[str] = cfg.get(CONF_MAINTAIN_SENSORS, [])
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
+        self._cycle_start_lot: datetime | None = None
+        self._false_count: int = 0
+        self._last_clear_false: bool = False
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self._latest_occupied_time = _restored_latest_occupied_time(
-            await self.async_get_last_state()
-        )
+        last = await self.async_get_last_state()
+        self._latest_occupied_time = _restored_latest_occupied_time(last)
+        if last is not None:
+            try:
+                self._false_count = int(
+                    last.attributes.get("false_detection_count") or 0
+                )
+            except (ValueError, TypeError):
+                pass
         all_sensors = list(dict.fromkeys(self._trigger_sensors + self._maintain_sensors))
         self.async_on_remove(
             async_track_state_change_event(
@@ -232,6 +292,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 ):
                     self._attr_is_on = True
                     break
+        if self._attr_is_on:
+            self._cycle_start_lot = self._latest_occupied_time
         self.async_write_ha_state()
 
     @callback
@@ -253,12 +315,22 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 except (ValueError, TypeError):
                     pass
 
+        was_on = self._attr_is_on
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
         elif self._attr_is_on and self._any_on(self._maintain_sensors):
             pass
         else:
             self._attr_is_on = False
+
+        if not was_on and self._attr_is_on:
+            self._cycle_start_lot = self._latest_occupied_time
+        elif was_on and not self._attr_is_on:
+            self._last_clear_false = (
+                self._latest_occupied_time == self._cycle_start_lot
+            )
+            if self._last_clear_false:
+                self._false_count += 1
 
         self.async_write_ha_state()
 
@@ -271,7 +343,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         lot = self._latest_occupied_time
-        return {"latest_occupied_time": lot.isoformat() if lot else None}
+        return {
+            "latest_occupied_time": lot.isoformat() if lot else None,
+            "last_clear_false_detection": self._last_clear_false,
+            "false_detection_count": self._false_count,
+        }
 
 
 # ---------------------------------------------------------------------------

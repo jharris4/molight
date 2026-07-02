@@ -13,17 +13,21 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_TIME_WINDOWS,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
+    ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
@@ -294,6 +298,89 @@ async def test_illuminance_dark_resumes_remaining_time(
     state = hass.states.get("light.kitchen_light")
     assert state.state == "off"
     assert state.attributes["limer_state"] == STATE_IDLE
+
+
+def _fd_occupancy_entry() -> MockConfigEntry:
+    """Occupancy sensor with false-detection classification enabled."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "FD Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+
+
+def _fd_light_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "FD Light",
+            CONF_LIGHTS: ["light.fd_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_false_detection_quick_off(hass: HomeAssistant, freezer) -> None:
+    """Lights lit by a false-detection cycle turn off after the short delay."""
+    await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "on"
+
+    # Single-blip clear (31s on vs 30s hold) → false detection.
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "on"  # short countdown running
+
+    # The 5s quick-off fires instead of the normal 30s countdown.
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+
+    state = hass.states.get("light.fd_light")
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_false_detection_never_cuts_manual_lights(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A false clear must not shorten lights the user turned on themselves."""
+    await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
+
+    # User turns the light on; occupancy blips on afterwards.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.fd_light"}
+    )
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").attributes["limer_state"] == STATE_OCCUPIED
+
+    # False clear — but occupancy didn't light these lights, so the normal
+    # countdown (60s here, lot never advanced) applies, not the 5s quick-off.
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+
+    state = hass.states.get("light.fd_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_COUNTDOWN
 
 
 @pytest.mark.asyncio
