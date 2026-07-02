@@ -66,7 +66,8 @@
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
-      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor."
+      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty)."
     }
   },
   "selector": {
@@ -110,7 +111,8 @@
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
-      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor."
+      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty)."
     }
   }
 }

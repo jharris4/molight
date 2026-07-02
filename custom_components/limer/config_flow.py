@@ -79,6 +79,15 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
     return None
 
 
+def _window_input_provided(user_input: dict[str, Any]) -> bool:
+    """True when the user filled in any window edge field at all."""
+    return any(
+        user_input.get(f"{prefix}_time")
+        or user_input.get(f"{prefix}_sun") not in (None, "none")
+        for prefix in ("start", "end")
+    )
+
+
 def _schedule_edge_fields(window: dict | None) -> dict:
     """Form fields for a schedule window, prefilled from an existing window."""
 
@@ -447,14 +456,19 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             window = _window_from_input(user_input)
-            return self.async_create_entry(
-                title=user_input[CONF_NAME],
-                data={
-                    CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
-                    CONF_NAME: user_input[CONF_NAME],
-                    CONF_TIME_WINDOWS: [window] if window else [],
-                },
-            )
+            if window is None and _window_input_provided(user_input):
+                # Half-filled window: it would be silently dropped, leaving a
+                # sensor that is permanently off.
+                errors["base"] = "window_incomplete"
+            else:
+                return self.async_create_entry(
+                    title=user_input[CONF_NAME],
+                    data={
+                        CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                        CONF_NAME: user_input[CONF_NAME],
+                        CONF_TIME_WINDOWS: [window] if window else [],
+                    },
+                )
 
         return self.async_show_form(
             step_id="schedule",
@@ -745,15 +759,20 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        errors: dict[str, str] = {}
+
         if user_input is not None:
             window = _window_from_input(user_input)
-            return self.async_create_entry(
-                title=user_input[CONF_NAME],
-                data={
-                    CONF_NAME: user_input[CONF_NAME],
-                    CONF_TIME_WINDOWS: [window] if window else [],
-                },
-            )
+            if window is None and _window_input_provided(user_input):
+                errors["base"] = "window_incomplete"
+            else:
+                return self.async_create_entry(
+                    title=user_input[CONF_NAME],
+                    data={
+                        CONF_NAME: user_input[CONF_NAME],
+                        CONF_TIME_WINDOWS: [window] if window else [],
+                    },
+                )
 
         cfg = self._cfg
         first = (cfg.get(CONF_TIME_WINDOWS) or [None])[0]
@@ -765,6 +784,7 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                     **_schedule_edge_fields(first),
                 }
             ),
+            errors=errors,
         )
 
     # ------------------------------------------------------------------

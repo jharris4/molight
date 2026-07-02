@@ -100,6 +100,40 @@ async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_config_flow_schedule_rejects_incomplete_window(
+    hass: HomeAssistant,
+) -> None:
+    """A half-filled window is rejected instead of silently dropped."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+
+    # Start edge only — no end.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Night", "start_time": "21:00:00"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_incomplete"}
+
+    # Sun-only edges (no fixed times) are a complete window.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Night", "start_sun": "sunset", "end_sun": "sunrise"},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TIME_WINDOWS] == [
+        {
+            "start": {"sun": "sunset", "combine": "latest"},
+            "end": {"sun": "sunrise", "combine": "latest"},
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     """Full config flow creates a virtual light entry."""
     result = await hass.config_entries.flow.async_init(
