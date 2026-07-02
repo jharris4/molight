@@ -53,7 +53,9 @@
     },
     "error": {
       "trigger_sensors_required": "At least one trigger sensor is required.",
-      "lights_required": "At least one light is required."
+      "lights_required": "At least one light is required.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
+      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor."
     }
   },
   "selector": {
@@ -65,6 +67,14 @@
         "schedule": "Virtual Schedule Sensor",
         "light": "Virtual Light"
       }
+    }
+  },
+  "options": {
+    "error": {
+      "trigger_sensors_required": "At least one trigger sensor is required.",
+      "lights_required": "At least one light is required.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
+      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor."
     }
   }
 }

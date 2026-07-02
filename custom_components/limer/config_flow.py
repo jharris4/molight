@@ -6,7 +6,8 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.helpers import selector
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
     CONF_ENTITY_TYPE,
@@ -30,6 +31,94 @@ from .const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
 )
+
+
+def _limer_cfg(entry: config_entries.ConfigEntry) -> dict[str, Any]:
+    return {**entry.data, **entry.options}
+
+
+def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | None:
+    """Resolve the occupancy timeout (seconds) behind a Limer occupancy entity.
+
+    For a simple occupancy sensor this is its configured timeout; for a
+    combined sensor it is the max across all constituent sensors (the
+    countdown math anchors to the constituent that clears last).
+    """
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    if reg_entry is None or reg_entry.config_entry_id is None:
+        return None
+    entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+    if entry is None or entry.domain != DOMAIN:
+        return None
+
+    cfg = _limer_cfg(entry)
+    entity_type = cfg.get(CONF_ENTITY_TYPE)
+    if entity_type == ENTITY_TYPE_OCCUPANCY:
+        return int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
+    if entity_type == ENTITY_TYPE_COMBINED_OCCUPANCY:
+        constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
+            CONF_MAINTAIN_SENSORS, []
+        )
+        timeouts = [
+            t
+            for e in constituents
+            if (t := _effective_occupancy_timeout(hass, e)) is not None
+        ]
+        return max(timeouts, default=None)
+    return None
+
+
+def _min_dependent_light_timeout(
+    hass: HomeAssistant, occupancy_entry_id: str
+) -> int | None:
+    """Smallest light_timeout among virtual lights depending on an occupancy entry.
+
+    A light depends on the entry when it references the entry's entity
+    directly, or references a combined sensor that includes it.
+    """
+    registry = er.async_get(hass)
+    dependent_ids = {
+        e.entity_id
+        for e in er.async_entries_for_config_entry(registry, occupancy_entry_id)
+    }
+    if not dependent_ids:
+        return None
+
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        cfg = _limer_cfg(entry)
+        if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+            continue
+        constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
+            CONF_MAINTAIN_SENSORS, []
+        )
+        if dependent_ids.intersection(constituents):
+            dependent_ids.update(
+                e.entity_id
+                for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+            )
+
+    timeouts = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        cfg = _limer_cfg(entry)
+        if (
+            cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT
+            and cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
+        ):
+            timeouts.append(int(cfg.get(CONF_LIGHT_TIMEOUT, 0)))
+    return min(timeouts, default=None)
+
+
+def _validate_light_timeout(
+    hass: HomeAssistant, user_input: dict[str, Any]
+) -> dict[str, str]:
+    """Check light_timeout >= the referenced occupancy entity's timeout."""
+    occupancy_entity = user_input.get(CONF_OCCUPANCY_ENTITY)
+    if not occupancy_entity:
+        return {}
+    occ_timeout = _effective_occupancy_timeout(hass, occupancy_entity)
+    if occ_timeout is not None and int(user_input[CONF_LIGHT_TIMEOUT]) < occ_timeout:
+        return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+    return {}
 
 
 class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -267,7 +356,8 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                # TODO: validate light_timeout >= referenced occupancy timeout
+                errors = _validate_light_timeout(self.hass, user_input)
+            if not errors:
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
                     data={CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **user_input},
@@ -320,6 +410,7 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
     """Allow editing a Limer entity's settings after creation."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
+        self._entry = entry
         self._cfg = {**entry.data, **entry.options}
 
     async def async_step_init(
@@ -340,8 +431,21 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        errors: dict[str, str] = {}
+
         if user_input is not None:
-            return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+            # Raising this sensor's timeout must not outgrow any virtual light
+            # that depends on it (directly or through a combined sensor).
+            min_light = _min_dependent_light_timeout(self.hass, self._entry.entry_id)
+            if (
+                min_light is not None
+                and int(user_input[CONF_OCCUPANCY_TIMEOUT]) > min_light
+            ):
+                errors[CONF_OCCUPANCY_TIMEOUT] = "occupancy_timeout_too_long"
+            else:
+                return self.async_create_entry(
+                    title=user_input[CONF_NAME], data=user_input
+                )
 
         cfg = self._cfg
         return self.async_show_form(
@@ -366,6 +470,7 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                     ),
                 }
             ),
+            errors=errors,
         )
 
     # ------------------------------------------------------------------
@@ -381,9 +486,25 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
             if not user_input.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME], data=user_input
+                # The new constituent set must not outgrow any dependent light:
+                # the combined sensor's effective timeout is its max constituent.
+                constituents = user_input.get(CONF_TRIGGER_SENSORS, []) + user_input.get(
+                    CONF_MAINTAIN_SENSORS, []
                 )
+                timeouts = [
+                    t
+                    for e in constituents
+                    if (t := _effective_occupancy_timeout(self.hass, e)) is not None
+                ]
+                min_light = _min_dependent_light_timeout(
+                    self.hass, self._entry.entry_id
+                )
+                if timeouts and min_light is not None and max(timeouts) > min_light:
+                    errors["base"] = "occupancy_timeout_too_long"
+                else:
+                    return self.async_create_entry(
+                        title=user_input[CONF_NAME], data=user_input
+                    )
 
         cfg = self._cfg
         return self.async_show_form(
@@ -511,6 +632,8 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
+                errors = _validate_light_timeout(self.hass, user_input)
+            if not errors:
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.
                 clean = {k: v for k, v in user_input.items() if v is not None}

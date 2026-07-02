@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -11,6 +13,7 @@ from custom_components.limer.const import (
     CONF_LIGHTS,
     CONF_LIGHT_TIMEOUT,
     CONF_NAME,
+    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     DOMAIN,
@@ -69,6 +72,95 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Living Room"
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_timeout_below_occupancy_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """light_timeout < the referenced occupancy sensor's timeout is rejected."""
+    # Occupancy sensor with a 30s timeout (fixture) must be set up so its
+    # entity exists in the registry.
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 20,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+
+    # A timeout >= 30s is accepted.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_occupancy_options_reject_timeout_above_light_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Raising an occupancy timeout past a dependent light's timeout is rejected."""
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+        },
+    )
+    light.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 120,  # > the light's 60s timeout
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_OCCUPANCY_TIMEOUT: "occupancy_timeout_too_long"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.asyncio
