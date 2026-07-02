@@ -13,7 +13,7 @@ Provides four sensor types, all created via the config flow:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,12 +21,15 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
+    async_track_point_in_time,
     async_track_state_change_event,
-    async_track_time_interval,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.sun import get_astral_event_date
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    COMBINE_LATEST,
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
@@ -37,10 +40,14 @@ from .const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
+    EDGE_COMBINE,
+    EDGE_SUN,
+    EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    SUN_EVENTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -332,8 +339,15 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
 class VirtualScheduleSensor(BinarySensorEntity):
     """Binary sensor that is ON when the current time falls in any configured window.
 
-    Each window is a dict: {"start": "HH:MM", "end": "HH:MM"}.
-    Overnight windows (start > end) are supported.
+    Each window is {"start": <edge>, "end": <edge>} where an edge is either a
+    plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
+    "combine": "latest"|"earliest"} — e.g. start at the later of sunset and
+    21:00. Overnight windows (end before start) roll the end to the next day.
+
+    Rather than polling, the sensor resolves concrete boundary datetimes and
+    schedules a single callback for the next transition, so state flips at the
+    exact boundary. current_window_start identifies the active window; virtual
+    lights in follow mode use it as a marker for restart catch-up.
     """
 
     _attr_should_poll = False
@@ -344,36 +358,117 @@ class VirtualScheduleSensor(BinarySensorEntity):
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
-        self._windows: list[dict[str, str]] = cfg.get(CONF_TIME_WINDOWS, [])
+        self._windows: list[dict] = cfg.get(CONF_TIME_WINDOWS, [])
         self._attr_is_on = False
+        self._current_window_start: datetime | None = None
+        self._next_transition: datetime | None = None
+        self._unsub_transition = None
 
     async def async_added_to_hass(self) -> None:
-        """Evaluate immediately, then re-evaluate every minute."""
-        self._evaluate()
-        self.async_on_remove(
-            async_track_time_interval(
-                self.hass, self._tick, timedelta(minutes=1)
-            )
-        )
+        self.async_on_remove(self._cancel_transition_timer)
+        self._refresh()
 
     @callback
-    def _tick(self, _now) -> None:
-        self._evaluate()
+    def _cancel_transition_timer(self) -> None:
+        if self._unsub_transition is not None:
+            self._unsub_transition()
+            self._unsub_transition = None
+
+    @callback
+    def _refresh(self, _now: datetime | None = None) -> None:
+        """Evaluate the current window state and schedule the next transition."""
+        now = dt_util.utcnow()
+        active_start, next_transition = self._evaluate(now)
+        self._attr_is_on = active_start is not None
+        self._current_window_start = active_start
+        self._next_transition = next_transition
+
+        self._cancel_transition_timer()
+        if next_transition is None:
+            # No boundaries in sight (no valid windows) — re-check tomorrow in
+            # case sun events become resolvable again (polar day/night).
+            next_transition = dt_util.start_of_local_day() + timedelta(days=1)
+        self._unsub_transition = async_track_point_in_time(
+            self.hass, self._refresh, next_transition + timedelta(seconds=1)
+        )
         self.async_write_ha_state()
 
-    def _evaluate(self) -> None:
-        now = datetime.now().time().replace(second=0, microsecond=0)
-        self._attr_is_on = any(self._in_window(now, w) for w in self._windows)
+    def _evaluate(
+        self, now: datetime
+    ) -> tuple[datetime | None, datetime | None]:
+        """Return (active window start, next boundary after now).
 
-    @staticmethod
-    def _in_window(now: time, window: dict[str, str]) -> bool:
-        try:
-            start = time.fromisoformat(window["start"])
-            end = time.fromisoformat(window["end"])
-        except (KeyError, ValueError):
-            return False
+        Windows are resolved for yesterday, today, and tomorrow so overnight
+        windows and day-to-day sun drift are handled correctly.
+        """
+        today = dt_util.as_local(now).date()
+        intervals = []
+        for offset in (-1, 0, 1):
+            day = today + timedelta(days=offset)
+            for window in self._windows:
+                interval = self._resolve_window(window, day)
+                if interval is not None:
+                    intervals.append(interval)
 
-        if start <= end:
-            return start <= now < end
-        # Overnight window: e.g. 22:00 → 06:00
-        return now >= start or now < end
+        active = [iv for iv in intervals if iv[0] <= now < iv[1]]
+        future = sorted(t for iv in intervals for t in iv if t > now)
+
+        active_start = max(iv[0] for iv in active) if active else None
+        return active_start, (future[0] if future else None)
+
+    def _resolve_window(
+        self, window: dict, day: date
+    ) -> tuple[datetime, datetime] | None:
+        start = self._resolve_edge(window.get("start"), day)
+        if start is None:
+            return None
+        end = self._resolve_edge(window.get("end"), day)
+        if end is not None and end <= start:
+            # Overnight window — the end belongs to the next day.
+            end = self._resolve_edge(window.get("end"), day + timedelta(days=1))
+        if end is None:
+            return None
+        return (start, end)
+
+    def _resolve_edge(self, edge, day: date) -> datetime | None:
+        """Resolve an edge spec to a concrete datetime on the given day."""
+        if isinstance(edge, str):
+            edge = {EDGE_TIME: edge}
+        if not isinstance(edge, dict):
+            return None
+
+        fixed: datetime | None = None
+        if edge.get(EDGE_TIME):
+            try:
+                fixed = datetime.combine(
+                    day,
+                    time.fromisoformat(edge[EDGE_TIME]),
+                    tzinfo=dt_util.DEFAULT_TIME_ZONE,
+                )
+            except ValueError:
+                pass
+
+        sun: datetime | None = None
+        if edge.get(EDGE_SUN) in SUN_EVENTS:
+            # None on polar days when the event doesn't occur — the fixed
+            # time (if any) then stands alone.
+            sun = get_astral_event_date(self.hass, edge[EDGE_SUN], day)
+
+        candidates = [d for d in (fixed, sun) if d is not None]
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+        if edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST:
+            return max(candidates)
+        return min(candidates)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        def _fmt(t: datetime | None) -> str | None:
+            return t.isoformat() if t else None
+
+        return {
+            "current_window_start": _fmt(self._current_window_start),
+            "next_transition": _fmt(self._next_transition),
+        }

@@ -35,8 +35,12 @@
         "title": "Virtual Schedule Sensor",
         "data": {
           "name": "Name",
-          "window_start": "Window start",
-          "window_end": "Window end"
+          "start_time": "Window start time",
+          "start_sun": "Window start sun event",
+          "start_combine": "Start: combine time and sun as",
+          "end_time": "Window end time",
+          "end_sun": "Window end sun event",
+          "end_combine": "End: combine time and sun as"
         }
       },
       "light": {
@@ -47,7 +51,8 @@
           "light_timeout": "Turn-off timeout (seconds)",
           "occupancy_entity": "Occupancy sensor (optional)",
           "illuminance_entity": "Illuminance sensor (optional)",
-          "schedule_entity": "Schedule sensor (optional)"
+          "schedule_entity": "Schedule sensor (optional)",
+          "schedule_mode": "Schedule mode"
         }
       }
     },
@@ -66,6 +71,25 @@
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
         "light": "Virtual Light"
+      }
+    },
+    "schedule_mode": {
+      "options": {
+        "follow": "Follow — turn on at window start, off at window end",
+        "gate": "Gate — occupancy only works inside the window"
+      }
+    },
+    "sun_event": {
+      "options": {
+        "none": "None",
+        "sunset": "Sunset",
+        "sunrise": "Sunrise"
+      }
+    },
+    "combine_mode": {
+      "options": {
+        "latest": "Latest of the two",
+        "earliest": "Earliest of the two"
       }
     }
   },

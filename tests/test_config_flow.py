@@ -16,9 +16,11 @@ from custom_components.limer.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_TIME_WINDOWS,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_SCHEDULE,
 )
 
 
@@ -48,6 +50,38 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Hall Occupancy"
     assert result["data"][CONF_ENTITY_TYPE] == ENTITY_TYPE_OCCUPANCY
+
+
+@pytest.mark.asyncio
+async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
+    """Schedule flow builds a window with sun-anchored edges."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    assert result["step_id"] == "schedule"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Night",
+            "start_time": "21:00:00",
+            "start_sun": "sunset",
+            "start_combine": "latest",
+            "end_time": "07:00:00",
+            "end_sun": "sunrise",
+            "end_combine": "earliest",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TIME_WINDOWS] == [
+        {
+            "start": {"time": "21:00:00", "sun": "sunset", "combine": "latest"},
+            "end": {"time": "07:00:00", "sun": "sunrise", "combine": "earliest"},
+        }
+    ]
 
 
 @pytest.mark.asyncio

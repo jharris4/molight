@@ -10,6 +10,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er, selector
 
 from .const import (
+    COMBINE_EARLIEST,
+    COMBINE_LATEST,
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
@@ -22,19 +24,91 @@ from .const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_MODE,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
+    EDGE_COMBINE,
+    EDGE_SUN,
+    EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODES,
+    SUN_EVENTS,
 )
 
 
 def _limer_cfg(entry: config_entries.ConfigEntry) -> dict[str, Any]:
     return {**entry.data, **entry.options}
+
+
+# "none" lets a previously chosen sun anchor be cleared in the options flow —
+# a bare SelectSelector can't be un-set once it has a value.
+_SUN_OPTIONS = ["none", *SUN_EVENTS]
+_COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
+
+
+def _window_from_input(user_input: dict[str, Any]) -> dict | None:
+    """Build a schedule window dict from the flat form fields, or None."""
+
+    def _edge(prefix: str) -> dict | None:
+        edge: dict = {}
+        if user_input.get(f"{prefix}_time"):
+            edge[EDGE_TIME] = user_input[f"{prefix}_time"]
+        sun = user_input.get(f"{prefix}_sun")
+        if sun and sun != "none":
+            edge[EDGE_SUN] = sun
+            edge[EDGE_COMBINE] = user_input.get(
+                f"{prefix}_combine", COMBINE_LATEST
+            )
+        return edge or None
+
+    start, end = _edge("start"), _edge("end")
+    if start and end:
+        return {"start": start, "end": end}
+    return None
+
+
+def _schedule_edge_fields(window: dict | None) -> dict:
+    """Form fields for a schedule window, prefilled from an existing window."""
+
+    def _edge_defaults(edge) -> dict:
+        if isinstance(edge, str):
+            return {EDGE_TIME: edge}
+        return edge if isinstance(edge, dict) else {}
+
+    window = window or {}
+    fields: dict = {}
+    for prefix in ("start", "end"):
+        edge = _edge_defaults(window.get(prefix))
+        time_key = (
+            vol.Optional(f"{prefix}_time", default=edge[EDGE_TIME])
+            if edge.get(EDGE_TIME)
+            else vol.Optional(f"{prefix}_time")
+        )
+        fields[time_key] = selector.TimeSelector()
+        fields[
+            vol.Optional(f"{prefix}_sun", default=edge.get(EDGE_SUN, "none"))
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=_SUN_OPTIONS, translation_key="sun_event"
+            )
+        )
+        fields[
+            vol.Optional(
+                f"{prefix}_combine",
+                default=edge.get(EDGE_COMBINE, COMBINE_LATEST),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=_COMBINE_OPTIONS, translation_key="combine_mode"
+            )
+        )
+    return fields
 
 
 # Pickers for a virtual light's optional sensor references. The schedule
@@ -326,26 +400,22 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.FlowResult:
         """Configure a Virtual Schedule Binary Sensor.
 
-        Time windows are a list of {"start": "HH:MM", "end": "HH:MM"} dicts.
-        The HA frontend doesn't have a native multi-window time selector, so
-        for now we accept a single window in the config flow and plan to add
-        an options flow for additional windows later.
+        Each window edge combines an optional fixed time with an optional sun
+        event (e.g. start at the later of sunset and 21:00). The HA frontend
+        doesn't have a native multi-window editor, so the flow accepts a
+        single window for now.
         """
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            windows = []
-            if user_input.get("window_start") and user_input.get("window_end"):
-                windows.append(
-                    {
-                        "start": user_input.pop("window_start"),
-                        "end": user_input.pop("window_end"),
-                    }
-                )
-            user_input[CONF_TIME_WINDOWS] = windows
+            window = _window_from_input(user_input)
             return self.async_create_entry(
                 title=user_input[CONF_NAME],
-                data={CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE, **user_input},
+                data={
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_TIME_WINDOWS: [window] if window else [],
+                },
             )
 
         return self.async_show_form(
@@ -353,8 +423,7 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NAME): str,
-                    vol.Optional("window_start"): selector.TimeSelector(),
-                    vol.Optional("window_end"): selector.TimeSelector(),
+                    **_schedule_edge_fields(None),
                 }
             ),
             errors=errors,
@@ -406,6 +475,14 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         vol.Optional(key): selector.EntitySelector(sel_config)
                         for key, sel_config in _LIGHT_REF_SELECTORS.items()
                     },
+                    vol.Required(
+                        CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=SCHEDULE_MODES,
+                            translation_key=CONF_SCHEDULE_MODE,
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -596,38 +673,25 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         if user_input is not None:
-            windows = []
-            if user_input.get("window_start") and user_input.get("window_end"):
-                windows.append(
-                    {
-                        "start": user_input.pop("window_start"),
-                        "end": user_input.pop("window_end"),
-                    }
-                )
-            user_input[CONF_TIME_WINDOWS] = windows
-            return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+            window = _window_from_input(user_input)
+            return self.async_create_entry(
+                title=user_input[CONF_NAME],
+                data={
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_TIME_WINDOWS: [window] if window else [],
+                },
+            )
 
         cfg = self._cfg
-        first = (cfg.get(CONF_TIME_WINDOWS) or [{}])[0]
-        schema_fields: dict = {
-            vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-        }
-        if first.get("start"):
-            schema_fields[vol.Optional("window_start", default=first["start"])] = (
-                selector.TimeSelector()
-            )
-        else:
-            schema_fields[vol.Optional("window_start")] = selector.TimeSelector()
-        if first.get("end"):
-            schema_fields[vol.Optional("window_end", default=first["end"])] = (
-                selector.TimeSelector()
-            )
-        else:
-            schema_fields[vol.Optional("window_end")] = selector.TimeSelector()
-
+        first = (cfg.get(CONF_TIME_WINDOWS) or [None])[0]
         return self.async_show_form(
             step_id="schedule",
-            data_schema=vol.Schema(schema_fields),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                    **_schedule_edge_fields(first),
+                }
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -675,6 +739,17 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(key, default=current) if current else vol.Optional(key)
             )
             schema[marker] = selector.EntitySelector(sel_config)
+
+        schema[
+            vol.Required(
+                CONF_SCHEDULE_MODE,
+                default=cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
+            )
+        )
 
         return self.async_show_form(
             step_id="light",

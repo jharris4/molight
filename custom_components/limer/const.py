@@ -39,8 +39,18 @@ CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"   # entity_id of a real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 
 # --- Virtual Schedule Binary Sensor ---
-# List of {"start": "HH:MM", "end": "HH:MM"} dicts
+# List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain
+# "HH:MM" string (legacy) or a dict:
+#   {"time": "HH:MM", "sun": "sunset"|"sunrise", "combine": "latest"|"earliest"}
+# with at least one of time/sun present. When both are present, combine picks
+# which wins (e.g. start at the later of sunset and 21:00).
 CONF_TIME_WINDOWS = "time_windows"
+EDGE_TIME = "time"
+EDGE_SUN = "sun"
+EDGE_COMBINE = "combine"
+COMBINE_LATEST = "latest"
+COMBINE_EARLIEST = "earliest"
+SUN_EVENTS = ["sunset", "sunrise"]
 
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"                             # list of real light entity_ids
@@ -50,8 +60,17 @@ CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
 
+# How a referenced schedule entity affects the light:
+#   follow — lights turn on at window start and off at window end (porch lights)
+#   gate   — occupancy may only activate lights inside the window
+CONF_SCHEDULE_MODE = "schedule_mode"
+SCHEDULE_MODE_FOLLOW = "follow"
+SCHEDULE_MODE_GATE = "gate"
+SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
+
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"        # lights on, timer running (no occupancy sensor / not occupied)
 STATE_OCCUPIED = "occupied"    # lights on, occupancy active — no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
+STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode schedule window — no timer
