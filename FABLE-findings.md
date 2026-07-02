@@ -30,3 +30,9 @@ The schedule sensor polls every minute; computing the next window boundary and s
 Dedupe trigger + maintain before subscribing in the combined sensor (a sensor listed in both gets double events).
 hass.data[DOMAIN][entry.entry_id] is written in init.py:13 but never read — drop it or use it.
 The highest-value fixes are #1–#4: together they cover the "lights turn on in an empty room" and "UI shows wrong state" failure modes that would actually annoy you day-to-day. Want me to fix any of these?
+
+
+
+Minor findings:
+
+Two minor observations from the review, neither worth changing without your say-so: VirtualScheduleSensor.async_added_to_hass (binary_sensor.py:457) skips the await super().async_added_to_hass() call (harmless today since the base is a no-op, but it's the one entity that deviates from convention), and the light's _seed_state (light.py:259) counts a light at brightness 0 as "on" while _all_lights_off treats it as off — an inconsistency that only matters in an unusual startup state.
