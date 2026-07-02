@@ -357,6 +357,16 @@ async def test_brightness_zero_treated_as_off(
     assert state.attributes["limer_state"] == STATE_IDLE
     assert state.attributes["last_brightness_change"] is not None
 
+    # 0 → non-zero is a turn-on in disguise: back to ACTIVE with physical
+    # attribution.
+    hass.states.async_set("light.living_room", "on", {"brightness": 150})
+    await _settle(hass)
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["last_on_physical"] is not None
+
 
 def _fd_occupancy_entry() -> MockConfigEntry:
     """Occupancy sensor with false-detection classification enabled."""

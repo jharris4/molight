@@ -386,6 +386,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self.async_write_ha_state()
             return
 
+        if self._machine_state == STATE_IDLE:
+            # 0 → non-zero while we're idle is a turn-on in disguise: run the
+            # normal external turn-on logic (last_on_physical, ACTIVE/timer
+            # or rejoining an active follow window).
+            self._on_light_state_change("on")
+            self.async_write_ha_state()
+            return
+
         if self._machine_state in (STATE_ACTIVE, STATE_COUNTDOWN):
             self._machine_state = STATE_ACTIVE
             self._start_timer()
