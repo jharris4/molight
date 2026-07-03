@@ -24,22 +24,13 @@ echo "▶ Installing dependencies..."
 echo "▶ Pre-installing Home Assistant runtime dependencies..."
 CONSTRAINTS="$("$VENV/bin/python" -c 'import homeassistant, os; print(os.path.dirname(homeassistant.__file__))')/package_constraints.txt"
 
-# Packages HA lazily installs at runtime but we need upfront to avoid hangs/crashes
-RUNTIME_PACKAGES=(
-  home-assistant-frontend
-  hassil
-  home-assistant-intents
-)
-
-for PKG in "${RUNTIME_PACKAGES[@]}"; do
-  VERSION=$(grep "^${PKG}==" "$CONSTRAINTS" | cut -d= -f3)
-  if [ -n "$VERSION" ]; then
-    "$VENV/bin/pip" install "${PKG}==${VERSION}"
-    echo "  ${PKG}==${VERSION}"
-  else
-    echo "  WARNING: ${PKG} not found in constraints, skipping"
-  fi
-done
+# HA lazily pip-installs each integration's requirements at runtime, which
+# hangs/crashes in this container. Derive the full list from the integration
+# manifests (the authoritative source) and install it upfront.
+RUNTIME_REQS="$(mktemp)"
+"$VENV/bin/python" scripts/gather_ha_requirements.py default_config onboarding > "$RUNTIME_REQS"
+"$VENV/bin/pip" install -r "$RUNTIME_REQS" -c "$CONSTRAINTS"
+rm -f "$RUNTIME_REQS"
 
 echo ""
 echo "✅ Dev environment ready!"
