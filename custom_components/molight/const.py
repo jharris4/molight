@@ -82,6 +82,11 @@ CONF_LIGHT_TIMEOUT = "light_timeout"              # seconds; must be >= occupanc
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 # Optional references to virtual entities (entity_ids)
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
+# Maintain occupancy entity: keeps an already-on light on while it is on, but
+# never turns the light on. Unlike the combined sensor's maintain_sensors
+# (which only extend occupancy started by a trigger sensor), this holds the
+# light regardless of how it was lit — manual, physical, or occupancy.
+CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
 # Keep-on entities: while ANY of these entities is "on", every automatic

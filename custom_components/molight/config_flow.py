@@ -24,6 +24,7 @@ from .const import (
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
@@ -155,6 +156,12 @@ _LIGHT_REF_SELECTORS = {
         device_class="occupancy",
         multiple=False,
     ),
+    CONF_MAINTAIN_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
+        integration=DOMAIN,
+        domain="binary_sensor",
+        device_class="occupancy",
+        multiple=False,
+    ),
     CONF_ILLUMINANCE_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
         domain="binary_sensor",
@@ -241,9 +248,9 @@ def _min_dependent_light_timeout(
     timeouts = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         cfg = _molight_cfg(entry)
-        if (
-            cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT
-            and cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
+        if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and (
+            cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
+            or cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in dependent_ids
         ):
             timeouts.append(int(cfg.get(CONF_LIGHT_TIMEOUT, 0)))
     return min(timeouts, default=None)
@@ -252,13 +259,21 @@ def _min_dependent_light_timeout(
 def _validate_light_timeout(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
-    """Check light_timeout >= the referenced occupancy entity's timeout."""
-    occupancy_entity = user_input.get(CONF_OCCUPANCY_ENTITY)
-    if not occupancy_entity:
-        return {}
-    occ_timeout = _effective_occupancy_timeout(hass, occupancy_entity)
-    if occ_timeout is not None and int(user_input[CONF_LIGHT_TIMEOUT]) < occ_timeout:
-        return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+    """Check light_timeout >= any referenced occupancy entity's timeout.
+
+    The maintain entity's latest_occupied_time feeds the countdown the same
+    way the regular occupancy entity's does, so both are checked.
+    """
+    for key in (CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY):
+        entity_id = user_input.get(key)
+        if not entity_id:
+            continue
+        occ_timeout = _effective_occupancy_timeout(hass, entity_id)
+        if (
+            occ_timeout is not None
+            and int(user_input[CONF_LIGHT_TIMEOUT]) < occ_timeout
+        ):
+            return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
     return {}
 
 

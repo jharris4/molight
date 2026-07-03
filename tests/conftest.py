@@ -16,6 +16,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
@@ -48,6 +49,7 @@ def make_light_entry(
     lights: list[str] | None = None,
     timeout: int = 60,
     occupancy: str | None = None,
+    maintain: str | None = None,
     illuminance: str | None = None,
     illuminance_mode: str | None = None,
     schedule: str | None = None,
@@ -68,6 +70,8 @@ def make_light_entry(
     }
     if occupancy:
         data[CONF_OCCUPANCY_ENTITY] = occupancy
+    if maintain:
+        data[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain
     if illuminance:
         data[CONF_ILLUMINANCE_ENTITY] = illuminance
     if illuminance_mode:

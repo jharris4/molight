@@ -165,6 +165,7 @@ Controls N real lights with an occupancy-aware state machine.
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
+| **Maintain occupancy sensor** *(optional)* | A MoLight occupancy sensor that keeps an already-on light on while occupied but never turns it on (see below) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
@@ -189,6 +190,15 @@ SCHEDULED  lights on inside a follow-mode window — no timer
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window.
+
+#### Maintain occupancy sensor
+
+The maintain occupancy sensor holds an already-on light on while it shows presence — it never turns the light on. Unlike a combined sensor's *maintain sensors* (which only extend occupancy started by a trigger sensor), it holds the light regardless of how it was lit: manual, wall switch, or occupancy. Typical use: an over-sensitive presence sensor (mmWave) that would false-trigger as an occupancy source but is perfect for keeping a room lit while someone sits still.
+
+- The light being on with the maintain sensor on means `OCCUPIED` — whether the sensor turns on later, was already on at turn-on time, or both were already on at startup. Illuminance/schedule gating doesn't apply, since this is not a turn-on.
+- The countdown starts only when the regular occupancy sensor *and* the maintain sensor are both clear, anchored to the latest `latest_occupied_time` of the two.
+- Forced offs still win, exactly as they do over regular occupancy: bright in `control` mode, a gate-mode window ending, and a manual off all turn the light off immediately; a follow-mode window owns the light entirely.
+- The false-detection quick off fires on a maintain clear only when *both* sensors flagged their clears false — genuine presence on either side earns the normal countdown.
 
 #### Holding auto-off
 

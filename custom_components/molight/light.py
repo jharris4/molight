@@ -48,6 +48,27 @@ Turn-on attribution
   ACTIVE/COUNTDOWN timer; brightness 0 counts as off, leaving 0 as on), while
   last_brightness_change_virtual records brightness set through this entity.
 
+Maintain occupancy (when a maintain occupancy entity is configured)
+  The maintain entity holds an already-on light on while it is on; it never
+  turns the light on and is ignored while the light is off. Unlike the
+  combined sensor's maintain_sensors (which only extend occupancy started by
+  a trigger sensor), it holds the light regardless of how it was lit —
+  manual, physical, or occupancy.
+
+  • Maintain ON while the light is on (ACTIVE/COUNTDOWN) → OCCUPIED, timer
+    cancelled. Illuminance/schedule gating does not apply: it is not a
+    turn-on. Forced offs (bright in control mode, gate window end) still win,
+    exactly as they do over regular occupancy.
+  • Occupancy clearing while maintain is on keeps the light OCCUPIED.
+  • The countdown starts only when both the regular occupancy entity and the
+    maintain entity are clear, anchored to the max of their
+    latest_occupied_time attributes.
+  • The false-detection quick off applies on a maintain clear only when both
+    sensors flagged their clears false (a genuine presence on either side
+    means the light earns its normal countdown).
+  • Startup: a light that is already on with the maintain entity on is
+    adopted as OCCUPIED (no timer).
+
 Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
   • Occupancy only turns lights ON when illuminance is OFF (dark) — both modes.
@@ -126,6 +147,7 @@ from .const import (
     CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
@@ -182,6 +204,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._occupancy_lit_lights: bool = False
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
+        self._maintain_entity: str | None = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
         self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
         self._illuminance_mode: str = cfg.get(
             CONF_ILLUMINANCE_MODE, ILLUMINANCE_MODE_CONTROL
@@ -262,6 +285,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         watch = list(self._lights)
         if self._occupancy_entity:
             watch.append(self._occupancy_entity)
+        if self._maintain_entity and self._maintain_entity not in watch:
+            watch.append(self._maintain_entity)
         if self._illuminance_entity:
             watch.append(self._illuminance_entity)
         if self._schedule_entity:
@@ -321,6 +346,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             if occ_state and occ_state.state == "on":
                 self._on_occupancy_change(occupied=True)
                 return
+
+        if self._attr_is_on and self._maintain_active():
+            # Adopt an already-on light as maintained — no gating, since this
+            # is not a turn-on; the maintain entity clearing starts the
+            # countdown as usual.
+            self._machine_state = STATE_OCCUPIED
+            self.async_write_ha_state()
+            return
 
         if self._attr_is_on:
             # Lights are already on (whatever the illuminance) — adopt them
@@ -424,6 +457,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             return  # attribute-only change (battery, ...)
         elif entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
+        elif entity_id == self._maintain_entity:
+            self._on_maintain_change(new_state.state == "on")
         elif entity_id == self._illuminance_entity:
             self._on_illuminance_change(new_state.state == "on")
         elif entity_id == self._schedule_entity:
@@ -574,12 +609,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._go_idle()
             return
 
-        occ_state = (
-            self.hass.states.get(self._occupancy_entity)
-            if self._occupancy_entity
-            else None
-        )
-        if occ_state is not None and occ_state.state == "on":
+        if self._occupancy_active() or self._maintain_active():
             self._machine_state = STATE_OCCUPIED
             return
 
@@ -673,6 +703,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
         else:
             if self._machine_state == STATE_OCCUPIED:
+                if self._maintain_active():
+                    return  # maintain entity holds the light on
                 self._machine_state = STATE_COUNTDOWN
                 if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                     # The whole cycle was a false detection and nobody else
@@ -682,11 +714,62 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._start_timer(self._compute_occupancy_countdown())
                 self.async_write_ha_state()
 
-    def _occupancy_clear_was_false(self) -> bool:
-        """True when the occupancy sensor flagged its clear as a false detection."""
+    def _on_maintain_change(self, maintained: bool) -> None:
+        """Handle the maintain occupancy entity changing.
+
+        Holds an already-on light on while occupied; never turns lights on.
+        """
+        if self._machine_state == STATE_SCHEDULED:
+            return  # follow-mode window owns the lights
+        if maintained:
+            # Not a turn-on, so no illuminance/schedule gating: an on light
+            # is simply adopted; an off light stays off.
+            if self._machine_state in (STATE_ACTIVE, STATE_COUNTDOWN):
+                self._machine_state = STATE_OCCUPIED
+                self._cancel_timer()
+                self.async_write_ha_state()
+        else:
+            if self._machine_state != STATE_OCCUPIED:
+                return
+            if self._occupancy_active():
+                return  # regular occupancy still holds the light on
+            self._machine_state = STATE_COUNTDOWN
+            if (
+                self._occupancy_lit_lights
+                and self._occupancy_clear_was_false()
+                and self._clear_was_false(self._maintain_entity)
+            ):
+                # Both sensors flagged their clears false — the whole episode
+                # was a false detection; a genuine presence on either side
+                # earns the normal countdown instead.
+                self._start_timer(self._false_off_delay)
+            else:
+                self._start_timer(self._compute_occupancy_countdown())
+            self.async_write_ha_state()
+
+    def _occupancy_active(self) -> bool:
+        """True when the regular occupancy entity is configured and on."""
         if not self._occupancy_entity:
             return False
         state = self.hass.states.get(self._occupancy_entity)
+        return state is not None and state.state == "on"
+
+    def _maintain_active(self) -> bool:
+        """True when the maintain occupancy entity is configured and on."""
+        if not self._maintain_entity:
+            return False
+        state = self.hass.states.get(self._maintain_entity)
+        return state is not None and state.state == "on"
+
+    def _occupancy_clear_was_false(self) -> bool:
+        """True when the occupancy sensor flagged its clear as a false detection."""
+        return self._clear_was_false(self._occupancy_entity)
+
+    def _clear_was_false(self, entity_id: str | None) -> bool:
+        """True when the given sensor flagged its clear as a false detection."""
+        if not entity_id:
+            return False
+        state = self.hass.states.get(entity_id)
         return bool(
             state is not None
             and state.attributes.get("last_clear_false_detection")
@@ -738,31 +821,43 @@ class VirtualLight(LightEntity, RestoreEntity):
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
                     self._last_on_illuminance = datetime.now(timezone.utc)
-                    self._machine_state = STATE_COUNTDOWN
                     self.hass.async_create_task(self._set_lights(True))
-                    self._start_timer(countdown)
+                    if self._maintain_active():
+                        # Recent history justified the turn-on; the maintain
+                        # entity now holds the re-lit light.
+                        self._machine_state = STATE_OCCUPIED
+                        self._cancel_timer()
+                    else:
+                        self._machine_state = STATE_COUNTDOWN
+                        self._start_timer(countdown)
                     self.async_write_ha_state()
 
     def _compute_occupancy_countdown(self) -> int:
         """Seconds to wait after occupancy clears before turning lights off.
 
-        Anchors to the occupancy sensor's latest_occupied_time so that each
-        sub-sensor's individual timeout is respected, then adds light_timeout
-        on top as an extra grace period.
+        Anchors to the latest_occupied_time across the occupancy and maintain
+        entities (whichever saw the person last) so that each sub-sensor's
+        individual timeout is respected, then adds light_timeout on top as an
+        extra grace period.
         """
         base = self._light_timeout
-        if self._occupancy_entity:
-            occ_state = self.hass.states.get(self._occupancy_entity)
-            if occ_state:
-                lot_str = occ_state.attributes.get("latest_occupied_time")
-                if lot_str:
-                    try:
-                        lot = datetime.fromisoformat(lot_str)
-                        now = datetime.now(timezone.utc)
-                        remaining = (lot - now).total_seconds()
-                        return max(0, int(base + remaining))
-                    except (ValueError, TypeError):
-                        pass
+        lots: list[datetime] = []
+        for entity_id in (self._occupancy_entity, self._maintain_entity):
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            lot_str = state.attributes.get("latest_occupied_time")
+            if lot_str:
+                try:
+                    lots.append(datetime.fromisoformat(lot_str))
+                except (ValueError, TypeError):
+                    pass
+        if lots:
+            now = datetime.now(timezone.utc)
+            remaining = (max(lots) - now).total_seconds()
+            return max(0, int(base + remaining))
         return base
 
     def _most_recent_on_time(self) -> datetime | None:
@@ -809,6 +904,16 @@ class VirtualLight(LightEntity, RestoreEntity):
         if sched is not None:
             self._attr_is_on = True
             self._apply_window_start(sched.attributes.get("current_window_start"))
+            return
+
+        # Turned on while the maintain entity is already occupied: hold the
+        # light immediately instead of running a timer that would expire
+        # despite presence.
+        if self._maintain_active():
+            self._machine_state = STATE_OCCUPIED
+            self._attr_is_on = True
+            self._cancel_timer()
+            self.async_write_ha_state()
             return
 
         self._machine_state = STATE_ACTIVE
