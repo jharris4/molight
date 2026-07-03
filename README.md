@@ -63,11 +63,11 @@ Everything below is covered by the automated test suite.
 Once installed (see [Installation](#installation)), everything is configured from the UI — no YAML required.
 
 1. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**. Each time you add the integration you create one config entry for one virtual entity, and you pick which kind to create.
-2. Create the sensors your lights will depend on first:
+2. Create whichever virtual sensors you want your lights to react to — all of them are optional:
    - a **Virtual Occupancy Binary Sensor** for each real motion/presence sensor you want to use,
-   - optionally a **Virtual Combined Occupancy Binary Sensor** to merge several of them,
-   - optionally a **Virtual Illuminance Binary Sensor** (dark/bright) and/or a **Virtual Schedule Binary Sensor** (time/sun windows).
-3. Then create a **Virtual Light** for each room or light group, pointing it at the real `light` entities and referencing the virtual sensors from step 2.
+   - a **Virtual Combined Occupancy Binary Sensor** to merge several of them,
+   - a **Virtual Illuminance Binary Sensor** (dark/bright) and/or a **Virtual Schedule Binary Sensor** (time/sun windows).
+3. Then create a **Virtual Light** for each room or light group, pointing it at the real `light` entities and optionally referencing any of the virtual sensors from step 2. A virtual light with no sensors at all is still useful — it turns its real lights off on a timer.
 
 The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
 
