@@ -58,6 +58,23 @@ Everything below is covered by the automated test suite.
 - `unavailable`/`unknown` is never misread as a state change at any layer: an occupancy, illuminance, schedule, or real-light blip recovers cleanly, and an unavailable lux sensor never reads as "it got dark".
 - A motion sensor that dies while occupancy is active can't hold the lights on forever — the *clear after unavailable* timeout releases them via the normal gentle countdown.
 
+## How To Use This Integration
+
+Once installed (see [Installation](#installation)), everything is configured from the UI — no YAML required.
+
+1. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**. Each time you add the integration you create one config entry for one virtual entity, and you pick which kind to create.
+2. Create the sensors your lights will depend on first:
+   - a **Virtual Occupancy Binary Sensor** for each real motion/presence sensor you want to use,
+   - optionally a **Virtual Combined Occupancy Binary Sensor** to merge several of them,
+   - optionally a **Virtual Illuminance Binary Sensor** (dark/bright) and/or a **Virtual Schedule Binary Sensor** (time/sun windows).
+3. Then create a **Virtual Light** for each room or light group, pointing it at the real `light` entities and referencing the virtual sensors from step 2.
+
+The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
+
+Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each entry can be edited or removed independently later via its **Configure** button.
+
+See [Entities](#entities) below for the full description of each entity type and its configuration options.
+
 ## Entities
 
 ### Virtual Occupancy Binary Sensor
