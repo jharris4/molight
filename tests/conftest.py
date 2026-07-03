@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for Limer tests."""
+"""Shared pytest fixtures for MoLight tests."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +7,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,

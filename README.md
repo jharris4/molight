@@ -1,4 +1,4 @@
-# Limer — Smart Virtual Entities for Home Assistant
+# MoLight — Smart Virtual Light Control Entities for Home Assistant
 
 A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation.
 
@@ -85,10 +85,10 @@ Controls N real lights with an occupancy-aware state machine.
 | **Lights** | Real `light` entities to control |
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
-| **Occupancy sensor** *(optional)* | A Limer occupancy sensor (simple or combined) |
-| **Illuminance sensor** *(optional)* | A Limer Virtual Illuminance Binary Sensor |
+| **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
+| **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
-| **Schedule sensor** *(optional)* | A Limer Virtual Schedule Binary Sensor |
+| **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
 | **Schedule mode** | `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
 
 #### State machine
@@ -122,7 +122,7 @@ The virtual light supports brightness. External brightness changes on the real l
 
 #### Attribution
 
-`last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` record when and why the light last activated (exposed as attributes, restored across restarts). The current machine state is exposed as `limer_state`.
+`last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` record when and why the light last activated (exposed as attributes, restored across restarts). The current machine state is exposed as `molight_state`.
 
 #### Restarts and unavailability
 
@@ -135,13 +135,13 @@ The virtual light supports brightness. External brightness changes on the real l
 ### HACS (recommended)
 
 1. Add this repository as a custom repository in HACS.
-2. Install **Limer**.
+2. Install **MoLight**.
 3. Restart Home Assistant.
-4. Go to **Settings → Devices & Services → Add Integration** and search for **Limer**.
+4. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**.
 
 ### Manual
 
-Copy `custom_components/limer/` into your HA config `custom_components/` directory and restart.
+Copy `custom_components/molight/` into your HA config `custom_components/` directory and restart.
 
 ## Development
 

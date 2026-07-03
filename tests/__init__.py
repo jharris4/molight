@@ -1,1 +1,1 @@
-# Tests for the Limer HA integration
+# Tests for the MoLight HA integration

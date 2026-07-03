@@ -1,4 +1,4 @@
-"""Unavailability tests for the Limer Virtual Light.
+"""Unavailability tests for the MoLight Virtual Light.
 
 Each entity the light watches (real lights, occupancy, illuminance,
 schedule) can drop to unavailable/unknown at any time — e.g. a Zigbee
@@ -17,7 +17,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
@@ -60,12 +60,12 @@ async def test_real_light_blip_and_recovery(hass: HomeAssistant, bad: str) -> No
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     # Recovery to on is treated like an external turn-on (still ACTIVE).
     hass.states.async_set(REAL, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     # A real off afterwards releases the light as usual.
     hass.states.async_set(REAL, "off")
@@ -88,7 +88,7 @@ async def test_real_light_recovers_directly_to_off(hass: HomeAssistant) -> None:
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -98,11 +98,11 @@ async def test_occupancy_blip_keeps_occupied(hass: HomeAssistant, freezer) -> No
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     hass.states.async_set(OCC, "unavailable")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # No timer was started by the blip.
     freezer.tick(timedelta(seconds=300))
@@ -113,7 +113,7 @@ async def test_occupancy_blip_keeps_occupied(hass: HomeAssistant, freezer) -> No
     # Recovery straight to off starts the countdown as a real clear.
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_COUNTDOWN
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -132,7 +132,7 @@ async def test_occupancy_recovers_directly_to_on(hass: HomeAssistant) -> None:
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio
@@ -143,20 +143,20 @@ async def test_illuminance_blip_holds_state(hass: HomeAssistant) -> None:
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     hass.states.async_set(ILLUM, "unavailable")
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
     # Recovery straight to bright forces the lights off (control mode).
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -167,20 +167,20 @@ async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
         hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
     )
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_SCHEDULED
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
 
     # Recovery straight to off applies the window-end boundary.
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -210,12 +210,12 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
 
     hass.states.async_set("binary_sensor.motion_1", "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # The motion sensor falls off the network — nothing happens yet.
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # 61s later the virtual occupancy clears itself; the light starts the
     # normal countdown: light_timeout (300s) anchored to the dropout, so
@@ -225,7 +225,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_COUNTDOWN
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
     # Not the 5s quick-off, and not off yet halfway through the countdown.
     freezer.tick(timedelta(seconds=120))
@@ -238,7 +238,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -264,4 +264,4 @@ async def test_unavailable_real_light_counts_as_off(hass: HomeAssistant) -> None
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE

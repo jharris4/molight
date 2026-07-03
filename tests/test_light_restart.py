@@ -1,4 +1,4 @@
-"""Restart (seed-state) tests for the Limer Virtual Light.
+"""Restart (seed-state) tests for the MoLight Virtual Light.
 
 Covers every _seed_state / _follow_schedule_seed path: what the light does
 right after a Home Assistant restart for each combination of restored
@@ -17,7 +17,7 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -55,7 +55,7 @@ async def test_restart_adopts_burning_lights_with_timer(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -63,7 +63,7 @@ async def test_restart_adopts_burning_lights_with_timer(
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -74,7 +74,7 @@ async def test_restart_with_lights_off_stays_idle(hass: HomeAssistant) -> None:
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ async def test_restart_occupied_and_dark_lights_the_room(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
     # The rest of the cycle works normally after the seed.
     hass.states.async_set(OCC, "off")
@@ -119,7 +119,7 @@ async def test_restart_occupied_but_bright_adopts_active(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -142,7 +142,7 @@ async def test_restart_occupied_with_illuminance_state_missing(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio
@@ -161,7 +161,7 @@ async def test_restart_occupied_outside_gate_window_adopts_active(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
@@ -178,7 +178,7 @@ async def test_restart_occupied_inside_gate_window_goes_occupied(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio
@@ -193,7 +193,7 @@ async def test_restart_occupancy_unavailable_adopts_active(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
@@ -214,7 +214,7 @@ async def test_restart_mid_countdown_adopts_active_with_full_timer(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -244,7 +244,7 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
 
 
@@ -263,7 +263,7 @@ async def test_restart_missed_window_end_with_lights_already_off(
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
 
 
@@ -279,7 +279,7 @@ async def test_restart_outside_window_no_marker_adopts_active(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -302,7 +302,7 @@ async def test_restart_readopts_window_already_applied(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_SCHEDULED
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
 
     # No auto-off timer in SCHEDULED.
     freezer.tick(timedelta(seconds=120))
@@ -322,4 +322,4 @@ async def test_restart_schedule_state_missing_falls_through(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE

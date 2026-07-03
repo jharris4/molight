@@ -1,5 +1,5 @@
 {
-  "name": "limer",
+  "name": "molight",
   "private": true,
   "scripts": {
     "hass": "docker compose up",
@@ -7,7 +7,7 @@
     "up": "devcontainer up --workspace-folder .",
     "rebuild": "devcontainer up --workspace-folder . --remove-existing-container",
     "shell": "devcontainer exec --workspace-folder . bash",
-    "test": "devcontainer exec --workspace-folder . /opt/limer-venv/bin/pytest"
+    "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.75.0"

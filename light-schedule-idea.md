@@ -30,7 +30,7 @@ The subtle design decision in follow mode is manual override policy: if you turn
 
 I'd disallow or ignore occupancy/illuminance on a follow-mode light initially — mixing "on all night" with "off when bright" and occupancy countdowns creates precedence questions you don't need to answer for the porch-light case. Gate mode is where those combine naturally.
 
-Worth acknowledging: stock HA can do your example with two automations and a Schedule helper. The reason to build it into Limer anyway is that your lights then have one owner — the same state machine handles schedule, occupancy, illuminance, and manual events without three automations racing each other, and the limer_state attribute tells you why a light is on.
+Worth acknowledging: stock HA can do your example with two automations and a Schedule helper. The reason to build it into MoLight anyway is that your lights then have one owner — the same state machine handles schedule, occupancy, illuminance, and manual events without three automations racing each other, and the molight_state attribute tells you why a light is on.
 
 If you want, I can implement it in that order — sun-aware edges + exact-transition scheduling on the sensor first (independently testable), then follow mode on the light.
 

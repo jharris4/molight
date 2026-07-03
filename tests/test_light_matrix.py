@@ -1,4 +1,4 @@
-"""Combination-matrix tests for the Limer Virtual Light.
+"""Combination-matrix tests for the MoLight Virtual Light.
 
 test_light.py covers the main end-to-end scenarios; this file sweeps the
 remaining occupancy × illuminance × schedule × light-state combinations so
@@ -15,7 +15,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -81,7 +81,7 @@ async def test_occupancy_trigger_gating(
     state = _state(hass)
     assert (state.state == "on") is expect_on
     expected = STATE_OCCUPIED if expect_on else STATE_IDLE
-    assert state.attributes["limer_state"] == expected
+    assert state.attributes["molight_state"] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ async def test_illuminance_dark_activation(
     await settle(hass)
 
     state = _state(hass)
-    assert state.attributes["limer_state"] == expect_state
+    assert state.attributes["molight_state"] == expect_state
     assert (state.state == "on") is (expect_state != STATE_IDLE)
 
 
@@ -147,11 +147,11 @@ async def test_illuminance_dark_is_noop_while_running(hass: HomeAssistant, freez
     # Manual turn-on is never gated by illuminance.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -182,28 +182,28 @@ async def test_scheduled_ignores_occupancy_and_illuminance(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_SCHEDULED
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
 
     # Occupancy on/off must not take over or start a countdown.
     hass.states.async_set(OCC, "on")
     await settle(hass)
     state = _state(hass)
-    assert state.attributes["limer_state"] == STATE_SCHEDULED
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["last_on_occupancy"] is None
 
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     # Bright must not force the lights off; dark again must not re-trigger.
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).state == "on"
-    assert _state(hass).attributes["limer_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     # No timer runs while SCHEDULED.
     freezer.tick(timedelta(seconds=120))
@@ -227,18 +227,18 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(hass, entry)
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
-    assert _state(hass).attributes["limer_state"] == STATE_IDLE
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 # ---------------------------------------------------------------------------
@@ -257,22 +257,22 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
     if origin == "manual":
         await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
         await hass.async_block_till_done()
-        assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+        assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
     else:
         hass.states.async_set(OCC, "on")
         await settle(hass)
-        assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
         if origin == "countdown":
             hass.states.async_set(OCC, "off")
             await settle(hass)
-            assert _state(hass).attributes["limer_state"] == STATE_COUNTDOWN
+            assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
     hass.states.async_set(SCHED, "off")
     await settle(hass)
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -287,7 +287,7 @@ async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio
@@ -307,14 +307,14 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
     hass.states.async_set(SCHED, "on")
     await settle(hass)
     assert _state(hass).state == "off"
-    assert _state(hass).attributes["limer_state"] == STATE_IDLE
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
     # It gets dark inside the window with occupancy still active → lights on.
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio
@@ -327,11 +327,11 @@ async def test_gate_window_start_keeps_running_state(hass: HomeAssistant, freeze
     # Manual turn-on works outside the window (gating only applies to sensors).
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     hass.states.async_set(SCHED, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     # The original 60s timer still fires.
     freezer.tick(timedelta(seconds=61))
@@ -364,7 +364,7 @@ async def test_manual_turn_on_never_gated(
 
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -389,11 +389,11 @@ async def test_reoccupancy_during_countdown_cancels_timer(
     await settle(hass)
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_COUNTDOWN
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # Way past any timer — occupied lights never time out.
     freezer.tick(timedelta(seconds=300))
@@ -413,7 +413,7 @@ async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # The manual 60s timer was cancelled.
     freezer.tick(timedelta(seconds=120))
@@ -424,7 +424,7 @@ async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -
     # Clearing starts the countdown (no latest_occupied_time → full timeout).
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_COUNTDOWN
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -446,7 +446,7 @@ async def test_occupancy_clear_is_noop_when_not_occupied(
 
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_ACTIVE
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -464,14 +464,14 @@ async def test_external_off_during_occupied_goes_idle(hass: HomeAssistant) -> No
     await settle(hass)
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     hass.states.async_set(REAL, "off")
     await settle(hass)
 
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE
 
     # Occupancy is still on but fires no new event — the lights stay off.
     await settle(hass)
@@ -499,10 +499,10 @@ async def test_stays_on_until_all_real_lights_off(hass: HomeAssistant) -> None:
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["limer_state"] == STATE_ACTIVE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
     hass.states.async_set(REAL2, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
-    assert state.attributes["limer_state"] == STATE_IDLE
+    assert state.attributes["molight_state"] == STATE_IDLE

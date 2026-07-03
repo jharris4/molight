@@ -2,9 +2,18 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# Prefer IPv4: this container has no working IPv6 egress, and pip/Python
+# (unlike curl) don't do Happy Eyeballs — they block on the dead IPv6 route
+# until it times out on every connection, throttling downloads to a crawl.
+# Making getaddrinfo return IPv4 first avoids the stall.
+GAI_RULE='precedence ::ffff:0:0/96  100'
+if ! grep -qF "$GAI_RULE" /etc/gai.conf 2>/dev/null; then
+  echo "$GAI_RULE" >> /etc/gai.conf
+fi
+
 # Venv lives inside the container filesystem, not the mounted workspace
 # (macOS-mounted volumes don't support Python venv symlinks reliably)
-VENV=/opt/limer-venv
+VENV=/opt/molight-venv
 
 echo "▶ Creating virtual environment at $VENV..."
 python3 -m venv "$VENV"

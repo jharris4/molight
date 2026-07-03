@@ -1,5 +1,5 @@
 {
-    "name": "Limer Dev",
+    "name": "MoLight Dev",
     "image": "mcr.microsoft.com/devcontainers/base:debian",
     "postCreateCommand": "bash scripts/setup",
     "remoteUser": "root",

@@ -2,7 +2,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-VENV=/opt/limer-venv
+VENV=/opt/molight-venv
 PYTHON="$VENV/bin/python"
 
 # Self-healing: run setup if venv is missing

@@ -1,4 +1,4 @@
-"""Virtual binary sensor platform for Limer.
+"""Virtual binary sensor platform for MoLight.
 
 Provides four sensor types, all created via the config flow:
 
@@ -54,7 +54,7 @@ from .const import (
     ENTITY_TYPE_SCHEDULE,
     SUN_EVENTS,
 )
-from .helpers import limer_config
+from .helpers import molight_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Limer binary sensor entities from a config entry."""
+    """Set up MoLight binary sensor entities from a config entry."""
     entity_type = entry.data[CONF_ENTITY_TYPE]
 
     entity_map = {
@@ -143,7 +143,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = limer_config(entry)
+        cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
@@ -303,7 +303,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = limer_config(entry)
+        cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._trigger_sensors: list[str] = cfg.get(CONF_TRIGGER_SENSORS, [])
@@ -434,7 +434,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = limer_config(entry)
+        cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
@@ -506,7 +506,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = limer_config(entry)
+        cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 

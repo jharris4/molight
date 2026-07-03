@@ -13,7 +13,7 @@ Bugs, most impactful first
 
 6. The core config-flow validation is still a TODO. config_flow.py:270 never enforces light_timeout ≥ occupancy_timeout, which the countdown math depends on — at the moment occupancy clears, the countdown is light_timeout − occupancy_timeout, so a violation means lights snap off instantly. idea.md calls for enforcement in both directions (also when editing an occupancy sensor's timeout upward after lights reference it), and neither direction exists.
 
-7. Entity pickers are too permissive. The light's occupancy/illuminance/schedule selectors (config_flow.py:293-307) filter only on integration=DOMAIN, so you can select a Limer light as your occupancy entity, or an occupancy sensor as your illuminance entity. Add device_class filters (and domain="binary_sensor").
+7. Entity pickers are too permissive. The light's occupancy/illuminance/schedule selectors (config_flow.py:293-307) filter only on integration=DOMAIN, so you can select a MoLight light as your occupancy entity, or an occupancy sensor as your illuminance entity. Add device_class filters (and domain="binary_sensor").
 
 Smaller issues
 Bright-at-startup seeding gap: _seed_state returns immediately when illuminance is bright, so if real lights are on at startup they're never adopted — no timer, virtual light shows off, and per your gating rules they arguably should be turned off.

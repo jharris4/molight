@@ -1,4 +1,4 @@
-"""Config flow for Limer."""
+"""Config flow for MoLight."""
 from __future__ import annotations
 
 from typing import Any
@@ -49,7 +49,7 @@ from .const import (
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
-from .helpers import limer_config as _limer_cfg
+from .helpers import molight_config as _molight_cfg
 
 # "none" lets a previously chosen sun anchor be cleared in the options flow —
 # a bare SelectSelector can't be un-set once it has a value.
@@ -144,7 +144,7 @@ def _schedule_edge_fields(window: dict | None) -> dict:
 
 # Pickers for a virtual light's optional sensor references. The schedule
 # sensor has no device_class (HA offers none that fits), so its picker can
-# only narrow to Limer binary sensors.
+# only narrow to MoLight binary sensors.
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -165,7 +165,7 @@ _LIGHT_REF_SELECTORS = {
 
 
 def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | None:
-    """Resolve the occupancy timeout (seconds) behind a Limer occupancy entity.
+    """Resolve the occupancy timeout (seconds) behind a MoLight occupancy entity.
 
     For a simple occupancy sensor this is its configured timeout; for a
     combined sensor it is the max across all constituent sensors (the
@@ -178,7 +178,7 @@ def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | N
     if entry is None or entry.domain != DOMAIN:
         return None
 
-    cfg = _limer_cfg(entry)
+    cfg = _molight_cfg(entry)
     entity_type = cfg.get(CONF_ENTITY_TYPE)
     if entity_type == ENTITY_TYPE_OCCUPANCY:
         return int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
@@ -212,7 +212,7 @@ def _min_dependent_light_timeout(
         return None
 
     for entry in hass.config_entries.async_entries(DOMAIN):
-        cfg = _limer_cfg(entry)
+        cfg = _molight_cfg(entry)
         if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
             continue
         constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
@@ -226,7 +226,7 @@ def _min_dependent_light_timeout(
 
     timeouts = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        cfg = _limer_cfg(entry)
+        cfg = _molight_cfg(entry)
         if (
             cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT
             and cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
@@ -248,8 +248,8 @@ def _validate_light_timeout(
     return {}
 
 
-class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Limer."""
+class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for MoLight."""
 
     VERSION = 1
 
@@ -259,8 +259,8 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(
         entry: config_entries.ConfigEntry,
-    ) -> "LimerOptionsFlow":
-        return LimerOptionsFlow(entry)
+    ) -> "MoLightOptionsFlow":
+        return MoLightOptionsFlow(entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -567,16 +567,16 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 # ---------------------------------------------------------------------------
-# Options flow — edit an existing Limer entity
+# Options flow — edit an existing MoLight entity
 # ---------------------------------------------------------------------------
 
 
-class LimerOptionsFlow(config_entries.OptionsFlow):
-    """Allow editing a Limer entity's settings after creation."""
+class MoLightOptionsFlow(config_entries.OptionsFlow):
+    """Allow editing a MoLight entity's settings after creation."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self._entry = entry
-        self._cfg = _limer_cfg(entry)
+        self._cfg = _molight_cfg(entry)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

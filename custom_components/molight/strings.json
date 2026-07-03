@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Create a Limer virtual entity",
+        "title": "Create a MoLight virtual entity",
         "data": {
           "entity_type": "Entity type"
         }

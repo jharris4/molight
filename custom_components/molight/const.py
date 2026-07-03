@@ -1,6 +1,6 @@
-"""Constants for the Limer integration."""
+"""Constants for the MoLight integration."""
 
-DOMAIN = "limer"
+DOMAIN = "molight"
 
 PLATFORMS = ["binary_sensor", "light"]
 

@@ -1,4 +1,4 @@
-"""Shared helpers for the Limer integration."""
+"""Shared helpers for the MoLight integration."""
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -6,8 +6,8 @@ from homeassistant.config_entries import ConfigEntry
 from .const import CONF_ENTITY_TYPE
 
 
-def limer_config(entry: ConfigEntry) -> dict:
-    """Return the effective configuration for a Limer entry.
+def molight_config(entry: ConfigEntry) -> dict:
+    """Return the effective configuration for a MoLight entry.
 
     Options flows store the complete edited form, so once options exist they
     fully replace the original data — merging the two would resurrect

@@ -1,4 +1,4 @@
-"""Tests for the Limer Virtual Schedule Sensor."""
+"""Tests for the MoLight Virtual Schedule Sensor."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -11,7 +11,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
     CONF_TIME_WINDOWS,

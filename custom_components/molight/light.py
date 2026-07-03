@@ -1,4 +1,4 @@
-"""Virtual Light platform for Limer.
+"""Virtual Light platform for MoLight.
 
 A VirtualLight controls N real light entities and manages a state machine
 that integrates optional occupancy, illuminance, and schedule virtual sensors.
@@ -120,7 +120,7 @@ from .const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
-from .helpers import limer_config
+from .helpers import molight_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Limer light entities from a config entry."""
+    """Set up MoLight light entities from a config entry."""
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
         async_add_entities([VirtualLight(hass, entry)])
 
@@ -144,7 +144,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        cfg = limer_config(entry)
+        cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
@@ -731,7 +731,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return t.isoformat() if t else None
 
         return {
-            "limer_state": self._machine_state,
+            "molight_state": self._machine_state,
             "last_on_physical": _fmt(self._last_on_physical),
             "last_on_virtual": _fmt(self._last_on_virtual),
             "last_on_occupancy": _fmt(self._last_on_occupancy),

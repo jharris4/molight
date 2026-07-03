@@ -1,4 +1,4 @@
-"""Tests for the Limer config flow."""
+"""Tests for the MoLight config flow."""
 from __future__ import annotations
 
 import pytest
@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_LIGHT_TIMEOUT,
@@ -25,7 +25,7 @@ from custom_components.limer.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
 )
-from custom_components.limer.helpers import limer_config
+from custom_components.molight.helpers import molight_config
 
 
 @pytest.mark.asyncio
@@ -345,7 +345,7 @@ async def test_light_options_can_clear_occupancy_reference(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert CONF_OCCUPANCY_ENTITY not in limer_config(light)
+    assert CONF_OCCUPANCY_ENTITY not in molight_config(light)
 
 
 @pytest.mark.asyncio
@@ -373,7 +373,7 @@ async def test_schedule_options_round_trip(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert limer_config(schedule_entry)[CONF_TIME_WINDOWS] == [
+    assert molight_config(schedule_entry)[CONF_TIME_WINDOWS] == [
         {
             "start": {"time": "20:00:00", "sun": "sunset", "combine": "latest"},
             "end": {"time": "06:00:00"},

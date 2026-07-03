@@ -1,4 +1,4 @@
-"""Tests for Limer binary sensor entities."""
+"""Tests for MoLight binary sensor entities."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -11,7 +11,7 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
-from custom_components.limer.const import (
+from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,

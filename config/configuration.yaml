@@ -1,10 +1,10 @@
 logger:
   default: warning
   logs:
-    custom_components.limer: debug
+    custom_components.molight: debug
 
 # -------------------------------------------------------------------
-# Test fixtures for Limer development
+# Test fixtures for MoLight development
 # -------------------------------------------------------------------
 
 # Input booleans — backing state for template lights and motion sensors
