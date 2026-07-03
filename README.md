@@ -2,6 +2,62 @@
 
 A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation.
 
+## Motivation and Use Cases
+
+### Motivation
+
+Writing Home Assistant automations that turn lights on and off based on timers, occupancy, illumination, or a schedule involves a lot of tedious manual work — and the complexity grows fast.
+
+It gets drastically worse once you account for real-world sensor behavior: occupancy sensors have varying hold timeouts, and some are better suited to *triggering* occupancy while others are only reliable for *maintaining* it. Combining several occupancy sensors into one coherent signal is especially painful to do by hand.
+
+Schedules bring their own headaches — lights that should follow windows mixing fixed times and sun state ("the later of sunset − 15 min and 21:00"), or lights that should only turn on when it's actually dark outside.
+
+And on top of all that, it's genuinely hard to write custom automations that gracefully restore correct light state after a brief or prolonged Home Assistant restart, or that don't misbehave when a sensor drops to `unavailable`.
+
+MoLight solves all of these problems with a small set of composable virtual entities and a simple, easy-to-use interface.
+
+### Use cases
+
+Everything below is covered by the automated test suite.
+
+**Occupancy-driven lighting**
+
+- Turn lights on when a room becomes occupied, and off a configurable timeout after the person actually left — the countdown is anchored to the sensor's own hold time (`latest_occupied_time`), not the moment it happens to clear.
+- Renewed occupancy during the off-countdown cancels the timer.
+- Occupancy takes over a manually turned-on light, so it still turns off after the room empties.
+- False detections (a fly or heat blip) are classified and counted; lights lit by a false cycle turn off after a short delay instead of the full countdown — but lights the user turned on manually are never cut short.
+
+**Combining multiple occupancy sensors**
+
+- Merge several motion/presence sensors into one occupancy signal, with each constituent's individual timeout respected.
+- Distinguish *trigger* sensors (can start occupancy) from *maintain* sensors (keep it alive but can't start it) — e.g. a PIR triggers while a sensitive mmWave sensor maintains.
+- Reuse one occupancy sensor (simple or combined) across multiple virtual lights.
+
+**Only when it's dark**
+
+- Gate turn-ons on ambient light: occupancy only lights the room when the lux sensor says it's dark.
+- Getting dark while the room is occupied turns the lights on; getting dark mid-countdown re-lights them for only the remaining portion of the on-period.
+- Getting bright can force lights off (`control` mode) or leave turn-off to occupancy/timeout (`gate` mode — for lux sensors that can see the controlled lights and would otherwise oscillate).
+- Hysteresis suppresses flapping when the light level hovers around the threshold.
+
+**Schedules**
+
+- Follow mode: porch-light behavior — on at window start, off at window end, with edges defined by fixed times, sun events with offsets, or a combination of both. Overnight windows work.
+- Gate mode: occupancy may only activate lights inside the window, and window end forces them off.
+- A manual off mid-window is respected; turning the light back on rejoins the window instead of starting a timer.
+
+**Manual control always works**
+
+- The user can always turn the virtual light on — even when it's bright or outside a schedule window.
+- External changes to the real lights (wall switch, another automation) are adopted; the virtual light stays on until *all* of its real lights are off.
+- Brightness changes count as human activity and restart a running timer; brightness `0` is treated as off.
+
+**Restarts and unavailable sources**
+
+- After a restart, lights that were left on are adopted with a fresh timer, active occupancy is re-claimed, and a follow-mode window boundary missed while HA was down is applied exactly once — while a manual off from before the restart is respected.
+- `unavailable`/`unknown` is never misread as a state change at any layer: an occupancy, illuminance, schedule, or real-light blip recovers cleanly, and an unavailable lux sensor never reads as "it got dark".
+- A motion sensor that dies while occupancy is active can't hold the lights on forever — the *clear after unavailable* timeout releases them via the normal gentle countdown.
+
 ## Entities
 
 ### Virtual Occupancy Binary Sensor
