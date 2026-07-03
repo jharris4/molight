@@ -257,6 +257,31 @@ async def test_manual_off_works_while_held(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_external_off_works_while_held(hass: HomeAssistant, freezer) -> None:
+    """A wall-switch off is respected while held; releasing while off is a no-op."""
+    await setup_entries(hass, make_light_entry())
+    await _switch(hass, on=False)
+
+    # External turn-on while held: adopted as ACTIVE but no timer arms.
+    hass.states.async_set("light.real_1", "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 3600)
+    assert _state(hass).state == "on"
+
+    # Wall switch off — never suppressed by the hold.
+    hass.states.async_set("light.real_1", "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    # Releasing the hold with the lights off changes nothing.
+    await _switch(hass, on=True)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_occupancy_clear_while_held_then_release(
     hass: HomeAssistant, freezer
 ) -> None:
