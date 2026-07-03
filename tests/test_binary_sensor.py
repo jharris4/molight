@@ -332,6 +332,103 @@ async def test_combined_trigger_maintain_and_lot(
     assert combined.attributes["latest_occupied_time"] == trigger_lot
 
 
+def _raw_combined_entry() -> MockConfigEntry:
+    """Combined sensor over raw entity ids (no virtual constituents needed)."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Seed Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.m1"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.m2"],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_combined_seeds_on_from_trigger_at_startup(hass: HomeAssistant) -> None:
+    """A trigger sensor already on at startup seeds the combined sensor on."""
+    hass.states.async_set("binary_sensor.m1", "on")
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_combined_seeds_on_from_long_held_maintain(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A maintain sensor on for >5s at startup counts as pre-restart occupancy."""
+    hass.states.async_set("binary_sensor.m2", "on")
+    freezer.tick(timedelta(seconds=10))
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_combined_ignores_maintain_flap_at_startup(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A maintain sensor that just flapped on (<5s) must not seed occupancy."""
+    hass.states.async_set("binary_sensor.m2", "on")
+    freezer.tick(timedelta(seconds=2))
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_holds_through_unavailable_constituent(
+    hass: HomeAssistant,
+) -> None:
+    """A constituent dropping out must not end combined occupancy."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m1", "unavailable")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    # Recovery straight to off is a real clear.
+    hass.states.async_set("binary_sensor.m1", "off")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_seeds_last_on_time_from_source(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
+) -> None:
+    """Restart mid-cycle without a restored on-time uses the source's last_changed."""
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    freezer.tick(timedelta(seconds=10))
+
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "on"
+    source_changed = hass.states.get("binary_sensor.motion_1").last_changed
+    assert state.attributes["last_on_time"] == source_changed.isoformat()
+
+
 @pytest.mark.asyncio
 async def test_occupancy_restores_latest_occupied_time(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry

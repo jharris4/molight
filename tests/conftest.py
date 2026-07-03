@@ -9,13 +9,18 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.limer.const import (
     CONF_ENTITY_TYPE,
+    CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
+    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_MODE,
     DOMAIN,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
@@ -34,6 +39,49 @@ async def settle(hass: HomeAssistant) -> None:
     for _ in range(4):
         await asyncio.sleep(0)
         await hass.async_block_till_done()
+
+
+def make_light_entry(
+    *,
+    name: str = "Matrix Light",
+    lights: list[str] | None = None,
+    timeout: int = 60,
+    occupancy: str | None = None,
+    illuminance: str | None = None,
+    illuminance_mode: str | None = None,
+    schedule: str | None = None,
+    schedule_mode: str | None = None,
+) -> MockConfigEntry:
+    """Build a virtual-light entry wired to arbitrary entity ids.
+
+    The light only reads states/attributes of the entities it watches, so
+    tests can drive it with plain states set via hass.states.async_set
+    instead of full virtual-sensor entries.
+    """
+    data = {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+        CONF_NAME: name,
+        CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
+        CONF_LIGHT_TIMEOUT: timeout,
+    }
+    if occupancy:
+        data[CONF_OCCUPANCY_ENTITY] = occupancy
+    if illuminance:
+        data[CONF_ILLUMINANCE_ENTITY] = illuminance
+    if illuminance_mode:
+        data[CONF_ILLUMINANCE_MODE] = illuminance_mode
+    if schedule:
+        data[CONF_SCHEDULE_ENTITY] = schedule
+    if schedule_mode:
+        data[CONF_SCHEDULE_MODE] = schedule_mode
+    return MockConfigEntry(domain=DOMAIN, data=data)
+
+
+async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
+    for entry in entries:
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
 
 
 @pytest.fixture(autouse=True)
