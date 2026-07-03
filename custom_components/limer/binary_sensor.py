@@ -18,9 +18,10 @@ from datetime import date, datetime, time, timedelta, timezone
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
+    async_call_later,
     async_track_point_in_time,
     async_track_state_change_event,
 )
@@ -30,6 +31,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     COMBINE_LATEST,
+    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
@@ -41,6 +43,7 @@ from .const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     EDGE_COMBINE,
     EDGE_OFFSET,
     EDGE_SUN,
@@ -122,6 +125,17 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     brief pass-through. Such cycles don't advance latest_occupied_time, are
     counted in false_detection_count, and flag the clear via
     last_clear_false_detection so lights can turn off quickly.
+
+    Clear-on-unavailable (when clear_on_unavailable_timeout > 0): a source
+    that stays unavailable/unknown while occupancy is active would otherwise
+    hold occupancy — and any lights it lit — on forever. Instead, the person
+    is assumed present right up to the dropout: latest_occupied_time advances
+    to that moment immediately, and if the source hasn't recovered after the
+    timeout the occupancy is cleared, flagged via last_clear_unavailable.
+    Such clears are never classified as false detections (the room may well
+    still be occupied), so dependent lights run their normal gentle countdown.
+    A recovery cancels the pending clear: straight to "off" is processed as a
+    real clear, straight to "on" simply continues the occupancy.
     """
 
     _attr_device_class = "occupancy"
@@ -135,11 +149,19 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
         self._timeout: int = int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
         self._grace: float = float(cfg.get(CONF_FALSE_DETECTION_GRACE, 0))
+        self._unavailable_timeout: int = int(
+            cfg.get(
+                CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+            )
+        )
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
         self._last_on_time: datetime | None = None
         self._false_count: int = 0
         self._last_clear_false: bool = False
+        self._last_clear_unavailable: bool = False
+        self._unavailable_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -163,6 +185,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self.hass, [self._source_sensor], self._handle_sensor_change
             )
         )
+        self.async_on_remove(self._cancel_unavailable_timer)
         self._seed_state()
 
     def _seed_state(self) -> None:
@@ -177,15 +200,20 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     @callback
     def _handle_sensor_change(self, event) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self._on_source_unavailable()
+            return
         if not _real_state_change(event):
             return
-        new_state = event.data["new_state"]
+        self._cancel_unavailable_timer()
         if new_state.state == "on":
             self._attr_is_on = True
             self._last_on_time = datetime.now(timezone.utc)
         else:
             now = datetime.now(timezone.utc)
             self._last_clear_false = self._is_false_cycle(now)
+            self._last_clear_unavailable = False
             if self._last_clear_false:
                 self._false_count += 1
             else:
@@ -197,6 +225,39 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                     self._latest_occupied_time = candidate
             self._attr_is_on = False
         self.async_write_ha_state()
+
+    @callback
+    def _on_source_unavailable(self) -> None:
+        """Start the clear-on-unavailable countdown for an occupied dropout."""
+        if (
+            self._unavailable_timeout <= 0
+            or not self._attr_is_on
+            or self._unavailable_unsub is not None
+        ):
+            return
+        # The person may have been present right up to the dropout — advance
+        # latest_occupied_time now, whether or not the source recovers.
+        now = datetime.now(timezone.utc)
+        if self._latest_occupied_time is None or now > self._latest_occupied_time:
+            self._latest_occupied_time = now
+        self._unavailable_unsub = async_call_later(
+            self.hass, self._unavailable_timeout, self._unavailable_expired
+        )
+        self.async_write_ha_state()
+
+    @callback
+    def _unavailable_expired(self, _now: datetime) -> None:
+        self._unavailable_unsub = None
+        self._attr_is_on = False
+        self._last_clear_false = False
+        self._last_clear_unavailable = True
+        self.async_write_ha_state()
+
+    @callback
+    def _cancel_unavailable_timer(self) -> None:
+        if self._unavailable_unsub is not None:
+            self._unavailable_unsub()
+            self._unavailable_unsub = None
 
     def _is_false_cycle(self, now: datetime) -> bool:
         if self._grace <= 0 or self._last_on_time is None:
@@ -215,6 +276,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             ),
             "last_clear_false_detection": self._last_clear_false,
             "false_detection_count": self._false_count,
+            "last_clear_unavailable": self._last_clear_unavailable,
         }
 
 

@@ -12,9 +12,18 @@ from datetime import timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.limer.const import (
+    CONF_ENTITY_TYPE,
+    CONF_NAME,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_TIMEOUT,
+    DOMAIN,
+    ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -168,6 +177,64 @@ async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
 
     # Recovery straight to off applies the window-end boundary.
     hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["limer_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_source_dropout_releases_light_via_virtual_occupancy(
+    hass: HomeAssistant, freezer
+) -> None:
+    """End-to-end: a dead motion sensor no longer holds the lights on forever.
+
+    The virtual occupancy sensor clears itself after its clear-on-unavailable
+    timeout (default 60s), and because the clear is not flagged as a false
+    detection, the light runs its normal countdown — anchored to the dropout
+    moment — instead of the quick-off.
+    """
+    occupancy = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Chain Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    light = make_light_entry(
+        occupancy="binary_sensor.chain_occupancy", timeout=300
+    )
+    await setup_entries(hass, occupancy, light)
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+
+    # The motion sensor falls off the network — nothing happens yet.
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    await settle(hass)
+    assert _state(hass).attributes["limer_state"] == STATE_OCCUPIED
+
+    # 61s later the virtual occupancy clears itself; the light starts the
+    # normal countdown: light_timeout (300s) anchored to the dropout, so
+    # ~239s remain.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["limer_state"] == STATE_COUNTDOWN
+
+    # Not the 5s quick-off, and not off yet halfway through the countdown.
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"

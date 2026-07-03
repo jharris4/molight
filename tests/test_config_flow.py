@@ -8,6 +8,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.limer.const import (
+    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
@@ -53,6 +54,8 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Hall Occupancy"
     assert result["data"][CONF_ENTITY_TYPE] == ENTITY_TYPE_OCCUPANCY
+    # Unsubmitted fields fall back to their schema defaults.
+    assert result["data"][CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT] == 60
 
 
 @pytest.mark.asyncio

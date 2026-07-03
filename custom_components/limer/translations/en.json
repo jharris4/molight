@@ -13,7 +13,8 @@
           "name": "Name",
           "occupancy_sensor": "Sensor",
           "occupancy_timeout": "Timeout (seconds)",
-          "false_detection_grace": "False-detection grace (s, 0 = disabled)"
+          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
         }
       },
       "combined_occupancy": {

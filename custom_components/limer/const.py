@@ -33,6 +33,14 @@ CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 # Such cycles don't advance latest_occupied_time and are counted in the
 # false_detection_count attribute. 0 disables classification.
 CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
+# When the source sensor is unavailable/unknown for this many seconds while
+# occupancy is active, treat it as occupancy having cleared (the room may
+# still be occupied, so the clear is flagged via last_clear_unavailable and
+# never classified as a false detection). latest_occupied_time is advanced
+# to the dropout moment immediately. 0 disables — occupancy then holds its
+# last value for as long as the source is unavailable.
+CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT = "clear_on_unavailable_timeout"
+DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT = 60
 
 # --- Virtual Combined Occupancy Binary Sensor ---
 # trigger_sensors: any one going ON starts occupancy

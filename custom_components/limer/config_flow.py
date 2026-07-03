@@ -12,6 +12,7 @@ from homeassistant.helpers import selector
 from .const import (
     COMBINE_EARLIEST,
     COMBINE_LATEST,
+    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_FALSE_OFF_DELAY,
@@ -31,6 +32,7 @@ from .const import (
     CONF_SCHEDULE_MODE,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     DOMAIN,
     EDGE_COMBINE,
     EDGE_OFFSET,
@@ -334,6 +336,14 @@ class LimerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             min=0, max=60, unit_of_measurement="s", mode="box"
                         )
                     ),
+                    vol.Required(
+                        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                        default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=3600, unit_of_measurement="s", mode="box"
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -629,6 +639,17 @@ class LimerOptionsFlow(config_entries.OptionsFlow):
                     ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
                             min=0, max=60, unit_of_measurement="s", mode="box"
+                        )
+                    ),
+                    vol.Required(
+                        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                        default=cfg.get(
+                            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                            DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0, max=3600, unit_of_measurement="s", mode="box"
                         )
                     ),
                 }
