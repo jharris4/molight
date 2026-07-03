@@ -1,3 +1,0 @@
-While debugging the new tests I found that modern HA delivers tracked state-change events one event-loop iteration late by design (loop.call_soon in async_track_state_change_event). Your motion → virtual occupancy → virtual light chain takes a few iterations to propagate. Harmless in production (milliseconds), but tests must flush the loop between steps — that's the _settle() helper in test_light.py:53-62. If you write more chained-entity tests, use it.
-
-Remaining from the original review, if you want them later: config-flow validation of light_timeout ≥ occupancy_timeout, tighter entity pickers (device-class filters), and RestoreEntity so occupancy timestamps survive restarts.
