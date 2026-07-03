@@ -57,6 +57,7 @@
           "occupancy_entity": "Occupancy sensor (optional)",
           "illuminance_entity": "Illuminance sensor (optional)",
           "schedule_entity": "Schedule sensor (optional)",
+          "hold_entities": "Keep-on entities (optional) — auto-off is suspended while any of these is on",
           "schedule_mode": "Schedule mode",
           "illuminance_mode": "Illuminance mode",
           "false_detection_off_delay": "Turn-off delay after a false detection (s)"

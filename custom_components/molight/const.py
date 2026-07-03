@@ -2,7 +2,7 @@
 
 DOMAIN = "molight"
 
-PLATFORMS = ["binary_sensor", "light"]
+PLATFORMS = ["binary_sensor", "light", "switch"]
 
 # Entity type discriminator stored in config entry data
 ENTITY_TYPE_OCCUPANCY = "occupancy"
@@ -84,6 +84,18 @@ CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
+# Keep-on entities: while ANY of these entities is "on", every automatic
+# turn-off (timer expiry, false-detection quick off, bright-forces-off,
+# schedule window end) is suspended. Turn-ons and manual control are never
+# affected. When the last hold releases the light re-evaluates its rules.
+CONF_HOLD_ENTITIES = "hold_entities"
+
+# Each Virtual Light entry also creates a companion "<name> Auto-off" switch;
+# turning it OFF holds the light the same way a keep-on entity does. The
+# switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies the
+# light via this dispatcher signal (formatted with the entry_id).
+DATA_AUTO_OFF_ENABLED = "auto_off_enabled"
+SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
 # How a referenced illuminance entity affects the light:
 #   control — dark gates turn-ons AND turning bright forces the lights off

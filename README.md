@@ -46,6 +46,12 @@ Everything below is covered by the automated test suite.
 - Gate mode: occupancy may only activate lights inside the window, and window end forces them off.
 - A manual off mid-window is respected; turning the light back on rejoins the window instead of starting a timer.
 
+**Keeping lights on (guest mode, parties, movie night)**
+
+- Every virtual light comes with a companion **Auto-off** switch — flip it off from a dashboard or voice assistant and the light stays on until you flip it back.
+- Point one or more *keep-on entities* (an `input_boolean`, a guest-mode switch, anything with an on/off state) at any number of virtual lights: while any of them is on, those lights won't turn off automatically. One shared toggle can hold the whole house; a per-room toggle holds just that room.
+- Releasing the hold returns the light to normal behavior: a schedule window that ended or brightness that arrived in the meantime turns it off, active occupancy keeps it on, and otherwise a fresh countdown starts.
+
 **Manual control always works**
 
 - The user can always turn the virtual light on — even when it's bright or outside a schedule window.
@@ -71,7 +77,7 @@ Once installed (see [Installation](#installation)), everything is configured fro
 
 The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
 
-Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each entry can be edited or removed independently later via its **Configure** button.
+Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each virtual light also comes with a companion **Auto-off** switch: flip it off to keep the lights on (movie night, guests) and back on to resume normal behavior. Each entry can be edited or removed independently later via its **Configure** button.
 
 See [Entities](#entities) below for the full description of each entity type and its configuration options.
 
@@ -163,6 +169,7 @@ Controls N real lights with an occupancy-aware state machine.
 | **Illuminance mode** | `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
 | **Schedule mode** | `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
+| **Keep-on entities** *(optional)* | Any entities with an on/off state. While any of them is `on`, auto-off is held (see below) |
 
 #### State machine
 
@@ -182,6 +189,17 @@ SCHEDULED  lights on inside a follow-mode window — no timer
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window.
+
+#### Holding auto-off
+
+Each virtual light also creates a companion **`<name> Auto-off` switch** entity. Auto-off is *held* while that switch is off **or** any configured keep-on entity is on:
+
+- Every automatic turn-off is suspended — the timer, the false-detection quick off, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
+- Turn-ons are unaffected (occupancy, going dark, and window starts still light the room), and a manual off always works.
+- When the last hold releases, the light re-evaluates its rules: a follow window that ended while held turns it off now, as does being outside a gate window or bright in `control` mode; active occupancy keeps it on; an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
+- A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The switch state survives restarts, and a held light adopted at startup won't start a timer.
+
+Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
 
 #### Illuminance interplay
 

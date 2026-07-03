@@ -16,6 +16,7 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_FALSE_OFF_DELAY,
+    CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
@@ -142,9 +143,11 @@ def _schedule_edge_fields(window: dict | None) -> dict:
     return fields
 
 
-# Pickers for a virtual light's optional sensor references. The schedule
+# Pickers for a virtual light's optional entity references. The schedule
 # sensor has no device_class (HA offers none that fits), so its picker can
-# only narrow to MoLight binary sensors.
+# only narrow to MoLight binary sensors. Keep-on entities can be anything
+# with an on/off state (input_boolean, switch, binary_sensor, ...), so that
+# picker is not narrowed at all.
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -161,6 +164,7 @@ _LIGHT_REF_SELECTORS = {
     CONF_SCHEDULE_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN, domain="binary_sensor", multiple=False
     ),
+    CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(multiple=True),
 }
 
 

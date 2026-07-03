@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
@@ -51,6 +52,7 @@ def make_light_entry(
     illuminance_mode: str | None = None,
     schedule: str | None = None,
     schedule_mode: str | None = None,
+    hold_entities: list[str] | None = None,
 ) -> MockConfigEntry:
     """Build a virtual-light entry wired to arbitrary entity ids.
 
@@ -74,6 +76,8 @@ def make_light_entry(
         data[CONF_SCHEDULE_ENTITY] = schedule
     if schedule_mode:
         data[CONF_SCHEDULE_MODE] = schedule_mode
+    if hold_entities:
+        data[CONF_HOLD_ENTITIES] = hold_entities
     return MockConfigEntry(domain=DOMAIN, data=data)
 
 

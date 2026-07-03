@@ -60,6 +60,25 @@ illuminance_mode:
                 sensor can see the controlled lights, which would otherwise
                 oscillate (lights on → reads bright → forced off → dark → …).
 
+Holding auto-off
+  Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
+  any configured keep-on entity (hold_entities) is on. While held, every
+  automatic turn-off is suspended — timer expiry, the false-detection quick
+  off, bright-forces-off, and schedule window ends — but turn-ons and manual
+  control work exactly as usual (a manual off still turns the lights off).
+  State-machine transitions keep happening; they just never arm a timer.
+
+  When the last hold releases, the light re-evaluates its rules from current
+  conditions: a follow-mode window that ended while held turns it off now
+  (the window marker is kept while held for exactly this), as does being
+  outside a gate-mode window or bright in illuminance control mode; active
+  occupancy keeps it on (OCCUPIED); an active follow window keeps it
+  SCHEDULED; otherwise a fresh full timer starts (ACTIVE).
+
+  A keep-on entity going unavailable/unknown holds its last known value, as
+  everywhere else in the integration; at startup an unavailable keep-on
+  entity counts as not holding.
+
 Schedule handling (when a schedule entity is configured), per schedule_mode:
   • follow — lights turn ON at window start (state SCHEDULED, no timer) and
     OFF at window end. Boundaries are edge-triggered: manual changes between
@@ -91,6 +110,7 @@ from homeassistant.core import (
     HomeAssistant,
     callback,
 )
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -101,6 +121,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_OFF_DELAY,
+    CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
@@ -109,7 +130,10 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    DATA_AUTO_OFF_ENABLED,
+    DOMAIN,
     ENTITY_TYPE_LIGHT,
+    SIGNAL_AUTO_OFF_TOGGLED,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
@@ -147,6 +171,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
+        self._entry_id = entry.entry_id
 
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
         self._light_timeout: int = int(cfg.get(CONF_LIGHT_TIMEOUT, 300))
@@ -163,6 +188,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
         self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW)
+        self._hold_entities: list[str] = cfg.get(CONF_HOLD_ENTITIES, [])
+        # Last known on/off of each keep-on entity — kept ourselves so an
+        # unavailable entity holds its last value instead of reading as off.
+        self._hold_states: dict[str, bool] = {}
+        # Effective hold: companion switch off OR any keep-on entity on.
+        self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
         # lights on for and whose end we have not yet applied. Survives
         # restarts so missed boundaries are caught up exactly once while
@@ -235,12 +266,20 @@ class VirtualLight(LightEntity, RestoreEntity):
             watch.append(self._illuminance_entity)
         if self._schedule_entity:
             watch.append(self._schedule_entity)
+        watch.extend(self._hold_entities)
 
         @callback
         def _subscribe(_event=None) -> None:
             self.async_on_remove(
                 async_track_state_change_event(
                     self.hass, watch, self._handle_state_change
+                )
+            )
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    SIGNAL_AUTO_OFF_TOGGLED.format(self._entry_id),
+                    self._on_auto_off_toggled,
                 )
             )
             self._seed_state()
@@ -256,6 +295,13 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
+        # Unavailable/unknown/missing keep-on entities count as not holding.
+        self._hold_states = {
+            e: (s := self.hass.states.get(e)) is not None and s.state == "on"
+            for e in self._hold_entities
+        }
+        self._held = self._compute_held()
+
         self._attr_is_on = any(
             (s := self.hass.states.get(e)) and s.state == "on"
             for e in self._lights
@@ -312,6 +358,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             return True
 
         if self._schedule_window_applied is not None:
+            if self._held and self._attr_is_on:
+                # Auto-off is held — keep the marker so releasing the hold
+                # applies the missed off boundary.
+                self._machine_state = STATE_SCHEDULED
+                self.async_write_ha_state()
+                return True
             # Window ended while HA was down — apply the off boundary.
             self._schedule_window_applied = None
             self._machine_state = STATE_IDLE
@@ -376,6 +428,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._on_illuminance_change(new_state.state == "on")
         elif entity_id == self._schedule_entity:
             self._on_schedule_change(new_state)
+        elif entity_id in self._hold_entities:
+            self._hold_states[entity_id] = new_state.state == "on"
+            self._refresh_hold()
 
     def _on_light_state_change(self, state: str) -> None:
         """Handle a real light being turned on/off externally."""
@@ -455,6 +510,83 @@ class VirtualLight(LightEntity, RestoreEntity):
         return state if state is not None and state.state == "on" else None
 
     # ------------------------------------------------------------------
+    # Auto-off hold
+    # ------------------------------------------------------------------
+
+    def _auto_off_enabled(self) -> bool:
+        """State of the companion Auto-off switch (mirrored via hass.data)."""
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id, {})
+        return entry_data.get(DATA_AUTO_OFF_ENABLED, True)
+
+    def _compute_held(self) -> bool:
+        return not self._auto_off_enabled() or any(self._hold_states.values())
+
+    @callback
+    def _on_auto_off_toggled(self) -> None:
+        self._refresh_hold()
+
+    def _refresh_hold(self) -> None:
+        """Re-derive the effective hold and act on engage/release edges."""
+        held = self._compute_held()
+        if held == self._held:
+            return
+        self._held = held
+        if held:
+            # Suspend any pending automatic off; the machine state stays put.
+            self._cancel_timer()
+        else:
+            self._resume_after_hold_release()
+        self.async_write_ha_state()
+
+    def _resume_after_hold_release(self) -> None:
+        """Return to normal behaviour when the last hold releases.
+
+        Automatic turn-offs suppressed while held are applied from current
+        conditions: a follow window that ended, being outside a gate window,
+        or bright in control mode turn the lights off now; an active follow
+        window or active occupancy keeps them on without a timer; otherwise
+        a fresh full timer starts.
+        """
+        if not self._attr_is_on:
+            return  # lights-off transitions were never suppressed
+
+        sched = self._follow_schedule_state()
+        if sched is not None:
+            # Active follow window owns the lights — no timer.
+            self._apply_window_start(sched.attributes.get("current_window_start"))
+            return
+        if (
+            self._schedule_entity
+            and self._schedule_mode == SCHEDULE_MODE_FOLLOW
+            and self._schedule_window_applied is not None
+        ):
+            # The follow window we turned on for ended while held.
+            self._schedule_window_applied = None
+            self.hass.async_create_task(self._set_lights(False))
+            self._go_idle()
+            return
+
+        if self._gate_schedule_inactive() or (
+            self._is_illuminance_bright()
+            and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
+        ):
+            self.hass.async_create_task(self._set_lights(False))
+            self._go_idle()
+            return
+
+        occ_state = (
+            self.hass.states.get(self._occupancy_entity)
+            if self._occupancy_entity
+            else None
+        )
+        if occ_state is not None and occ_state.state == "on":
+            self._machine_state = STATE_OCCUPIED
+            return
+
+        self._machine_state = STATE_ACTIVE
+        self._start_timer()
+
+    # ------------------------------------------------------------------
     # Schedule handling
     # ------------------------------------------------------------------
 
@@ -465,6 +597,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._apply_window_start(
                     new_state.attributes.get("current_window_start")
                 )
+            elif self._held:
+                # Auto-off held — keep the window marker so releasing the
+                # hold applies this off boundary.
+                pass
             else:
                 # Window ended — apply the off boundary.
                 self._schedule_window_applied = None
@@ -475,7 +611,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Gate mode: window end forces lights off; window start re-evaluates
         # occupancy the same way illuminance going dark does.
         if new_state.state != "on":
-            if self._machine_state != STATE_IDLE:
+            if self._machine_state != STATE_IDLE and not self._held:
                 self.hass.async_create_task(self._set_lights(False))
                 self._go_idle()
         else:
@@ -564,6 +700,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Gate-only: bright never forces the lights off (breaks the
                 # feedback loop when the lux sensor sees the controlled
                 # lights). Occupancy/timeout handle turning off.
+                return
+            if self._held:
+                # Auto-off held — releasing the hold re-checks brightness.
                 return
             if self._machine_state != STATE_IDLE:
                 self.hass.async_create_task(self._set_lights(False))
@@ -685,6 +824,10 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _start_timer(self, duration: int | None = None) -> None:
         self._cancel_timer()
+        if self._held:
+            # Auto-off held — the state machine transitions normally but no
+            # timer is armed; releasing the hold starts a fresh one.
+            return
         self._timer_unsub = async_call_later(
             self.hass,
             duration if duration is not None else self._light_timeout,
@@ -693,6 +836,8 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     async def _timer_expired(self, _now: datetime) -> None:
         self._timer_unsub = None
+        if self._held:
+            return  # engaged in the same loop iteration the timer fired
         await self._set_lights(False)
         self._go_idle()
 
@@ -732,6 +877,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         return {
             "molight_state": self._machine_state,
+            "auto_off_held": self._held,
             "last_on_physical": _fmt(self._last_on_physical),
             "last_on_virtual": _fmt(self._last_on_virtual),
             "last_on_occupancy": _fmt(self._last_on_occupancy),

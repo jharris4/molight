@@ -10,6 +10,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
+    CONF_HOLD_ENTITIES,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
@@ -154,10 +155,12 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
             CONF_NAME: "Living Room",
             CONF_LIGHTS: ["light.living_room_1", "light.living_room_2"],
             CONF_LIGHT_TIMEOUT: 300,
+            CONF_HOLD_ENTITIES: ["input_boolean.guest_mode"],
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Living Room"
+    assert result["data"][CONF_HOLD_ENTITIES] == ["input_boolean.guest_mode"]
 
 
 @pytest.mark.asyncio
