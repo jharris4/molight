@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 # until it times out on every connection, throttling downloads to a crawl.
 # Making getaddrinfo return IPv4 first avoids the stall.
 GAI_RULE='precedence ::ffff:0:0/96  100'
-if ! grep -qF "$GAI_RULE" /etc/gai.conf 2>/dev/null; then
+if ! grep -qxF "$GAI_RULE" /etc/gai.conf 2>/dev/null; then
   echo "$GAI_RULE" >> /etc/gai.conf
 fi
 

@@ -10,6 +10,6 @@
     "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest"
   },
   "devDependencies": {
-    "@devcontainers/cli": "^0.75.0"
+    "@devcontainers/cli": "^0.87.0"
   }
 }
