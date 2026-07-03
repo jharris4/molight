@@ -352,6 +352,57 @@ async def test_false_detection_classification_and_count(
 
 
 @pytest.mark.asyncio
+async def test_recovery_to_on_preserves_false_detection_clock(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An unavailable→on recovery mid-cycle must not restart the on-duration clock.
+
+    Otherwise a long, genuine occupancy whose source blips just before the
+    clear measures its duration from the recovery moment and gets
+    misclassified as a false detection (skipping the latest_occupied_time
+    advance and quick-off'ing dependent lights).
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Blip Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Long, genuine occupancy...
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=100))
+
+    # ...with a brief source dropout near the end...
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+
+    # ...clearing 31s after the recovery (within timeout+grace of it).
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.blip_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+    # latest_occupied_time advanced to clear − timeout, past the dropout mark.
+    expected = datetime.now(timezone.utc) - timedelta(seconds=30)
+    assert state.attributes["latest_occupied_time"] == expected.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_combined_counts_false_cycles(hass: HomeAssistant, freezer) -> None:
     """A combined cycle made up only of false constituent cycles is flagged."""
     occupancy = MockConfigEntry(

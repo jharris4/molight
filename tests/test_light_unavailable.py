@@ -184,6 +184,37 @@ async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
+    """A schedule blip mid-window must not re-light a manually turned-off light.
+
+    The window was already applied; recovering to 'on' with the same
+    current_window_start is not a new window start, so a manual off in
+    between stands (mirroring the restart-seed behavior).
+    """
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    # Manual off mid-window — respected.
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    # The schedule entity blips and recovers inside the same window.
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_source_dropout_releases_light_via_virtual_occupancy(
     hass: HomeAssistant, freezer
 ) -> None:

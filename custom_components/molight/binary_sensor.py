@@ -208,8 +208,13 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             return
         self._cancel_unavailable_timer()
         if new_state.state == "on":
+            # A recovery from unavailable while already occupied continues the
+            # running cycle — restamping last_on_time here would make a later
+            # clear measure the on-duration from the recovery moment and
+            # misclassify a long occupancy as a false detection.
+            if not self._attr_is_on:
+                self._last_on_time = datetime.now(timezone.utc)
             self._attr_is_on = True
-            self._last_on_time = datetime.now(timezone.utc)
         else:
             now = datetime.now(timezone.utc)
             self._last_clear_false = self._is_false_cycle(now)

@@ -594,9 +594,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Handle the virtual schedule sensor changing."""
         if self._schedule_mode == SCHEDULE_MODE_FOLLOW:
             if new_state.state == "on":
-                self._apply_window_start(
-                    new_state.attributes.get("current_window_start")
-                )
+                marker = new_state.attributes.get("current_window_start")
+                if marker and marker == self._schedule_window_applied:
+                    # Same window we already applied — the schedule entity
+                    # blipped unavailable and recovered mid-window. A manual
+                    # off in between stands, mirroring the restart seed.
+                    if self._attr_is_on:
+                        self._machine_state = STATE_SCHEDULED
+                        self._cancel_timer()
+                        self.async_write_ha_state()
+                    return
+                self._apply_window_start(marker)
             elif self._held:
                 # Auto-off held — keep the window marker so releasing the
                 # hold applies this off boundary.

@@ -215,18 +215,28 @@ def _min_dependent_light_timeout(
     if not dependent_ids:
         return None
 
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        cfg = _molight_cfg(entry)
-        if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
-            continue
-        constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
-            CONF_MAINTAIN_SENSORS, []
-        )
-        if dependent_ids.intersection(constituents):
-            dependent_ids.update(
-                e.entity_id
-                for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+    # Combined sensors may nest other combined sensors, so expand to a
+    # fixpoint rather than in a single pass.
+    changed = True
+    while changed:
+        changed = False
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            cfg = _molight_cfg(entry)
+            if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+                continue
+            constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
+                CONF_MAINTAIN_SENSORS, []
             )
+            if dependent_ids.intersection(constituents):
+                entry_ids = {
+                    e.entity_id
+                    for e in er.async_entries_for_config_entry(
+                        registry, entry.entry_id
+                    )
+                }
+                if not entry_ids <= dependent_ids:
+                    dependent_ids.update(entry_ids)
+                    changed = True
 
     timeouts = []
     for entry in hass.config_entries.async_entries(DOMAIN):
