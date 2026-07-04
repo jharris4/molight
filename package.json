@@ -11,7 +11,9 @@
     "rebuild": "devcontainer up --workspace-folder . --remove-existing-container",
     "shell": "devcontainer exec --workspace-folder . bash",
     "develop": "devcontainer exec --workspace-folder . bash scripts/develop",
-    "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest"
+    "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest",
+    "lint": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check custom_components tests",
+    "format": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff format custom_components tests"
   },
   "devDependencies": {
     "@devcontainers/cli": "^0.87.0"
