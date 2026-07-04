@@ -19,6 +19,68 @@ input_boolean:
   light_office:
     name: "Office Light State"
 
+  # Bulk test lights (light.test_bulk_*)
+  light_bulk_01:
+    name: "Bulk Light 01 State"
+  light_bulk_02:
+    name: "Bulk Light 02 State"
+  light_bulk_03:
+    name: "Bulk Light 03 State"
+  light_bulk_04:
+    name: "Bulk Light 04 State"
+  light_bulk_05:
+    name: "Bulk Light 05 State"
+  light_bulk_06:
+    name: "Bulk Light 06 State"
+  light_bulk_07:
+    name: "Bulk Light 07 State"
+  light_bulk_08:
+    name: "Bulk Light 08 State"
+  light_bulk_09:
+    name: "Bulk Light 09 State"
+  light_bulk_10:
+    name: "Bulk Light 10 State"
+  light_bulk_11:
+    name: "Bulk Light 11 State"
+  light_bulk_12:
+    name: "Bulk Light 12 State"
+  light_bulk_13:
+    name: "Bulk Light 13 State"
+  light_bulk_14:
+    name: "Bulk Light 14 State"
+  light_bulk_15:
+    name: "Bulk Light 15 State"
+  light_bulk_16:
+    name: "Bulk Light 16 State"
+  light_bulk_17:
+    name: "Bulk Light 17 State"
+  light_bulk_18:
+    name: "Bulk Light 18 State"
+  light_bulk_19:
+    name: "Bulk Light 19 State"
+  light_bulk_20:
+    name: "Bulk Light 20 State"
+  light_bulk_21:
+    name: "Bulk Light 21 State"
+  light_bulk_22:
+    name: "Bulk Light 22 State"
+  light_bulk_23:
+    name: "Bulk Light 23 State"
+  light_bulk_24:
+    name: "Bulk Light 24 State"
+  light_bulk_25:
+    name: "Bulk Light 25 State"
+  light_bulk_26:
+    name: "Bulk Light 26 State"
+  light_bulk_27:
+    name: "Bulk Light 27 State"
+  light_bulk_28:
+    name: "Bulk Light 28 State"
+  light_bulk_29:
+    name: "Bulk Light 29 State"
+  light_bulk_30:
+    name: "Bulk Light 30 State"
+
   # Motion sensors
   motion_living_room:
     name: "Living Room Motion"
@@ -98,6 +160,366 @@ template:
           action: input_boolean.turn_off
           target:
             entity_id: input_boolean.light_office
+
+      - name: "Test Bulk Light 01"
+        unique_id: test_light_bulk_01
+        state: "{{ states('input_boolean.light_bulk_01') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_01
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_01
+
+      - name: "Test Bulk Light 02"
+        unique_id: test_light_bulk_02
+        state: "{{ states('input_boolean.light_bulk_02') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_02
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_02
+
+      - name: "Test Bulk Light 03"
+        unique_id: test_light_bulk_03
+        state: "{{ states('input_boolean.light_bulk_03') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_03
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_03
+
+      - name: "Test Bulk Light 04"
+        unique_id: test_light_bulk_04
+        state: "{{ states('input_boolean.light_bulk_04') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_04
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_04
+
+      - name: "Test Bulk Light 05"
+        unique_id: test_light_bulk_05
+        state: "{{ states('input_boolean.light_bulk_05') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_05
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_05
+
+      - name: "Test Bulk Light 06"
+        unique_id: test_light_bulk_06
+        state: "{{ states('input_boolean.light_bulk_06') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_06
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_06
+
+      - name: "Test Bulk Light 07"
+        unique_id: test_light_bulk_07
+        state: "{{ states('input_boolean.light_bulk_07') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_07
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_07
+
+      - name: "Test Bulk Light 08"
+        unique_id: test_light_bulk_08
+        state: "{{ states('input_boolean.light_bulk_08') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_08
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_08
+
+      - name: "Test Bulk Light 09"
+        unique_id: test_light_bulk_09
+        state: "{{ states('input_boolean.light_bulk_09') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_09
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_09
+
+      - name: "Test Bulk Light 10"
+        unique_id: test_light_bulk_10
+        state: "{{ states('input_boolean.light_bulk_10') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_10
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_10
+
+      - name: "Test Bulk Light 11"
+        unique_id: test_light_bulk_11
+        state: "{{ states('input_boolean.light_bulk_11') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_11
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_11
+
+      - name: "Test Bulk Light 12"
+        unique_id: test_light_bulk_12
+        state: "{{ states('input_boolean.light_bulk_12') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_12
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_12
+
+      - name: "Test Bulk Light 13"
+        unique_id: test_light_bulk_13
+        state: "{{ states('input_boolean.light_bulk_13') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_13
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_13
+
+      - name: "Test Bulk Light 14"
+        unique_id: test_light_bulk_14
+        state: "{{ states('input_boolean.light_bulk_14') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_14
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_14
+
+      - name: "Test Bulk Light 15"
+        unique_id: test_light_bulk_15
+        state: "{{ states('input_boolean.light_bulk_15') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_15
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_15
+
+      - name: "Test Bulk Light 16"
+        unique_id: test_light_bulk_16
+        state: "{{ states('input_boolean.light_bulk_16') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_16
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_16
+
+      - name: "Test Bulk Light 17"
+        unique_id: test_light_bulk_17
+        state: "{{ states('input_boolean.light_bulk_17') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_17
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_17
+
+      - name: "Test Bulk Light 18"
+        unique_id: test_light_bulk_18
+        state: "{{ states('input_boolean.light_bulk_18') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_18
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_18
+
+      - name: "Test Bulk Light 19"
+        unique_id: test_light_bulk_19
+        state: "{{ states('input_boolean.light_bulk_19') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_19
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_19
+
+      - name: "Test Bulk Light 20"
+        unique_id: test_light_bulk_20
+        state: "{{ states('input_boolean.light_bulk_20') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_20
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_20
+
+      - name: "Test Bulk Light 21"
+        unique_id: test_light_bulk_21
+        state: "{{ states('input_boolean.light_bulk_21') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_21
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_21
+
+      - name: "Test Bulk Light 22"
+        unique_id: test_light_bulk_22
+        state: "{{ states('input_boolean.light_bulk_22') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_22
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_22
+
+      - name: "Test Bulk Light 23"
+        unique_id: test_light_bulk_23
+        state: "{{ states('input_boolean.light_bulk_23') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_23
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_23
+
+      - name: "Test Bulk Light 24"
+        unique_id: test_light_bulk_24
+        state: "{{ states('input_boolean.light_bulk_24') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_24
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_24
+
+      - name: "Test Bulk Light 25"
+        unique_id: test_light_bulk_25
+        state: "{{ states('input_boolean.light_bulk_25') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_25
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_25
+
+      - name: "Test Bulk Light 26"
+        unique_id: test_light_bulk_26
+        state: "{{ states('input_boolean.light_bulk_26') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_26
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_26
+
+      - name: "Test Bulk Light 27"
+        unique_id: test_light_bulk_27
+        state: "{{ states('input_boolean.light_bulk_27') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_27
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_27
+
+      - name: "Test Bulk Light 28"
+        unique_id: test_light_bulk_28
+        state: "{{ states('input_boolean.light_bulk_28') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_28
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_28
+
+      - name: "Test Bulk Light 29"
+        unique_id: test_light_bulk_29
+        state: "{{ states('input_boolean.light_bulk_29') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_29
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_29
+
+      - name: "Test Bulk Light 30"
+        unique_id: test_light_bulk_30
+        state: "{{ states('input_boolean.light_bulk_30') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_bulk_30
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_bulk_30
 
   # Motion / Presence binary sensors (binary_sensor.test_*)
   - binary_sensor:
