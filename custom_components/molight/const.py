@@ -22,14 +22,26 @@ ENTITY_TYPES = [
 # --- Shared config keys ---
 CONF_ENTITY_TYPE = "entity_type"
 CONF_NAME = "name"
+# Optional explicit object_id for the entity this entry creates, applied as a
+# suggested object_id at first registration (HA still uniquifies with _2 on a
+# clash). Absent = derive the entity_id from the name, as usual. Immutable, so
+# it lives only in entry.data and is never edited by the options flow — read it
+# straight from entry.data (molight_config would drop it once options exist).
+CONF_ENTITY_ID = "entity_id"
 
 # Multiselect field in the discovery config-flow steps: the real entities the
 # user picked to wrap in virtual MoLight entities (created with defaults).
 CONF_SELECTED_ENTITIES = "selected_entities"
-# Optional text prepended/appended to each discovered entity's name (applied
-# verbatim, so include your own separator, e.g. a trailing/leading space).
-CONF_NAME_PREFIX = "name_prefix"
-CONF_NAME_SUFFIX = "name_suffix"
+# Optional text prepended/appended to each discovered entity, applied verbatim
+# (so include your own separator, e.g. a trailing/leading space). The affix
+# target selects what it shapes: the friendly name, or the entity_id only
+# (leaving the name identical to the wrapped entity).
+CONF_AFFIX_PREFIX = "affix_prefix"
+CONF_AFFIX_SUFFIX = "affix_suffix"
+CONF_AFFIX_TARGET = "affix_target"
+AFFIX_TARGET_ENTITY_ID = "entity_id"
+AFFIX_TARGET_NAME = "name"
+AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor

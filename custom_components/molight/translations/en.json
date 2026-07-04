@@ -22,8 +22,9 @@
         "description": "Select the occupancy/motion sensors to wrap in virtual occupancy sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Sensors to add",
-          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
-          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
+          "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
+          "affix_suffix": "Suffix (optional) — added after each, applied verbatim (e.g. \" (auto)\")",
+          "affix_target": "Apply the prefix/suffix to"
         }
       },
       "discover_illuminance": {
@@ -31,8 +32,9 @@
         "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Sensors to add",
-          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
-          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
+          "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
+          "affix_suffix": "Suffix (optional) — added after each, applied verbatim (e.g. \" (auto)\")",
+          "affix_target": "Apply the prefix/suffix to"
         }
       },
       "discover_light": {
@@ -40,8 +42,9 @@
         "description": "Select the lights to wrap in virtual lights, created with default settings. Add occupancy, illuminance or schedule references afterwards via each entity's options. Lights already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Lights to add",
-          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
-          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
+          "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
+          "affix_suffix": "Suffix (optional) — added after each, applied verbatim (e.g. \" (auto)\")",
+          "affix_target": "Apply the prefix/suffix to"
         }
       },
       "occupancy": {
@@ -51,7 +54,8 @@
           "occupancy_sensor": "Sensor",
           "occupancy_timeout": "Timeout (seconds)",
           "false_detection_grace": "False-detection grace (s, 0 = disabled)",
-          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)",
+          "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
       "combined_occupancy": {
@@ -59,7 +63,8 @@
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
-          "maintain_sensors": "Maintain sensors (optional)"
+          "maintain_sensors": "Maintain sensors (optional)",
+          "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
       "illuminance": {
@@ -68,7 +73,8 @@
           "name": "Name",
           "illuminance_sensor": "Illuminance sensor",
           "illuminance_threshold": "Threshold (lx)",
-          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)",
+          "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
       "schedule": {
@@ -82,7 +88,8 @@
           "end_sun": "Window end sun event",
           "end_combine": "End: combine time and sun as",
           "start_offset": "Start sun offset (minutes, negative = before)",
-          "end_offset": "End sun offset (minutes, negative = before)"
+          "end_offset": "End sun offset (minutes, negative = before)",
+          "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
       "light": {
@@ -98,7 +105,16 @@
           "hold_entities": "Keep-on entities (optional) — auto-off is suspended while any of these is on",
           "schedule_mode": "Schedule mode",
           "illuminance_mode": "Illuminance mode",
-          "false_detection_off_delay": "Turn-off delay after a false detection (s)"
+          "false_detection_off_delay": "Turn-off delay after a false detection (s)",
+          "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
+        }
+      },
+      "confirm_entity_id": {
+        "title": "Entity ID already exists",
+        "description": "An entity with the ID `{entity_id}` already exists, so Home Assistant will create `{entity_id}_2` instead. Set an Entity ID on the previous step to avoid this.",
+        "menu_options": {
+          "entity_id_proceed": "Create it anyway",
+          "entity_id_change": "Go back and set an Entity ID"
         }
       }
     },
@@ -107,7 +123,8 @@
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
-      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty)."
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty).",
+      "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -122,6 +139,12 @@
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
         "light": "Virtual Light"
+      }
+    },
+    "affix_target": {
+      "options": {
+        "entity_id": "Entity ID only — keep the original name (avoids a name clash's entity ID collision)",
+        "name": "Name — also changes the entity ID"
       }
     },
     "schedule_mode": {

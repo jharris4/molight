@@ -11,7 +11,7 @@ ids or platform setup order.
 """
 from __future__ import annotations
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import ENTITY_ID_FORMAT, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF
 from homeassistant.core import HomeAssistant
@@ -27,7 +27,7 @@ from .const import (
     ENTITY_TYPE_LIGHT,
     SIGNAL_AUTO_OFF_TOGGLED,
 )
-from .helpers import molight_config
+from .helpers import molight_config, suggested_entity_id
 
 
 async def async_setup_entry(
@@ -37,7 +37,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up the companion switch for a Virtual Light entry."""
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
-        async_add_entities([AutoOffSwitch(hass, entry)])
+        entity = AutoOffSwitch(hass, entry)
+        # Parallel the light's explicit id: light.kitchen -> switch.kitchen_auto_off.
+        if (entity_id := suggested_entity_id(
+            hass, entry, ENTITY_ID_FORMAT, suffix="_auto_off"
+        )):
+            entity.entity_id = entity_id
+        async_add_entities([entity])
 
 
 class AutoOffSwitch(SwitchEntity, RestoreEntity):

@@ -117,7 +117,12 @@ import logging
 from collections import deque
 from datetime import datetime, timezone
 
-from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ENTITY_ID_FORMAT,
+    ColorMode,
+    LightEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
@@ -166,7 +171,7 @@ from .const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
-from .helpers import molight_config
+from .helpers import molight_config, suggested_entity_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -178,7 +183,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up MoLight light entities from a config entry."""
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
-        async_add_entities([VirtualLight(hass, entry)])
+        entity = VirtualLight(hass, entry)
+        if (entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT)):
+            entity.entity_id = entity_id
+        async_add_entities([entity])
 
 
 class VirtualLight(LightEntity, RestoreEntity):

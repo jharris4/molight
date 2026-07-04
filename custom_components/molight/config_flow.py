@@ -5,14 +5,28 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components.binary_sensor import (
+    ENTITY_ID_FORMAT as BINARY_SENSOR_ENTITY_ID_FORMAT,
+)
+from homeassistant.components.light import (
+    ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.util import slugify
 
 from .const import (
+    AFFIX_TARGET_ENTITY_ID,
+    AFFIX_TARGET_NAME,
+    AFFIX_TARGETS,
     COMBINE_EARLIEST,
     COMBINE_LATEST,
+    CONF_AFFIX_PREFIX,
+    CONF_AFFIX_SUFFIX,
+    CONF_AFFIX_TARGET,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_FALSE_OFF_DELAY,
@@ -27,8 +41,6 @@ from .const import (
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_NAME_PREFIX,
-    CONF_NAME_SUFFIX,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
@@ -398,12 +410,124 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._entity_type: str | None = None
+        # Set when a manual create step is re-entered from the entity_id
+        # confirm step's "change" option, so the form comes back prefilled.
+        self._prefill: dict[str, Any] | None = None
+        # Stashed create payload while the entity_id confirm step is shown.
+        self._pending: dict[str, Any] | None = None
 
     @staticmethod
     def async_get_options_flow(
         entry: config_entries.ConfigEntry,
     ) -> "MoLightOptionsFlow":
         return MoLightOptionsFlow(entry)
+
+    def _create_step(self, entity_type: str):
+        """Map an entity type to its manual create step handler."""
+        return {
+            ENTITY_TYPE_OCCUPANCY: self.async_step_occupancy,
+            ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
+            ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
+            ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
+            ENTITY_TYPE_LIGHT: self.async_step_light,
+        }[entity_type]
+
+    # ------------------------------------------------------------------
+    # Optional explicit entity_id (manual create steps)
+    # ------------------------------------------------------------------
+
+    def _entity_id_taken(self, entity_id: str) -> bool:
+        """True if entity_id is already registered or has a live state."""
+        return (
+            er.async_get(self.hass).async_get(entity_id) is not None
+            or self.hass.states.get(entity_id) is not None
+        )
+
+    def _resolve_entity_id(
+        self, name: str, user_input: dict[str, Any], entity_id_format: str
+    ) -> tuple[str | None, dict[str, str], bool, str]:
+        """Resolve the optional entity_id field of a manual create step.
+
+        Returns (object_id, errors, needs_confirm, candidate):
+          object_id     — slug to store in CONF_ENTITY_ID, or None to derive it
+          errors        — {CONF_ENTITY_ID: "entity_id_conflict"} on an explicit
+                          clash; the caller re-shows the form
+          needs_confirm — True when blank and the name-derived id already
+                          exists (divert to the confirm step)
+          candidate     — the would-be entity_id, for the confirm message
+        """
+        explicit = (user_input.get(CONF_ENTITY_ID) or "").strip()
+        if explicit:
+            # Tolerate a typed domain prefix (e.g. "light.kitchen").
+            obj = slugify(explicit.split(".")[-1])
+            candidate = entity_id_format.format(obj)
+            if obj and self._entity_id_taken(candidate):
+                return None, {CONF_ENTITY_ID: "entity_id_conflict"}, False, candidate
+            return (obj or None), {}, False, candidate
+        candidate = entity_id_format.format(slugify(name))
+        if self._entity_id_taken(candidate):
+            return None, {}, True, candidate
+        return None, {}, False, candidate
+
+    async def _resolve_and_create(
+        self,
+        *,
+        entity_type: str,
+        name: str,
+        data: dict[str, Any],
+        user_input: dict[str, Any],
+        entity_id_format: str,
+    ) -> tuple[config_entries.FlowResult | None, dict[str, str]]:
+        """Finalize a manual create: create the entry, or divert to confirm.
+
+        Returns (result, errors). When errors is non-empty the caller re-shows
+        its form; otherwise result is the FlowResult to return.
+        """
+        obj, errors, needs_confirm, candidate = self._resolve_entity_id(
+            name, user_input, entity_id_format
+        )
+        if errors:
+            return None, errors
+        data = {k: v for k, v in data.items() if k != CONF_ENTITY_ID}
+        if obj:
+            data[CONF_ENTITY_ID] = obj
+        if needs_confirm:
+            self._pending = {
+                "entity_type": entity_type,
+                "name": name,
+                "data": data,
+                "user_input": user_input,
+                "candidate": candidate,
+            }
+            return await self.async_step_confirm_entity_id(), {}
+        return self.async_create_entry(title=name, data=data), {}
+
+    async def async_step_confirm_entity_id(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Warn that a blank entity_id will collide; let the user choose."""
+        return self.async_show_menu(
+            step_id="confirm_entity_id",
+            menu_options=["entity_id_proceed", "entity_id_change"],
+            description_placeholders={"entity_id": self._pending["candidate"]},
+        )
+
+    async def async_step_entity_id_proceed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Create with the name-derived id (Home Assistant appends _2)."""
+        pending = self._pending
+        return self.async_create_entry(
+            title=pending["name"], data=pending["data"]
+        )
+
+    async def async_step_entity_id_change(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Go back to the create step, prefilled, to set an entity_id."""
+        self._prefill = self._pending["user_input"]
+        self._entity_type = self._pending["entity_type"]
+        return await self._create_step(self._entity_type)()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -425,13 +549,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Choose which kind of virtual entity to create manually."""
         if user_input is not None:
             self._entity_type = user_input[CONF_ENTITY_TYPE]
-            return await {
-                ENTITY_TYPE_OCCUPANCY: self.async_step_occupancy,
-                ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
-                ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
-                ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
-                ENTITY_TYPE_LIGHT: self.async_step_light,
-            }[self._entity_type]()
+            return await self._create_step(self._entity_type)()
 
         return self.async_show_form(
             step_id="create",
@@ -480,16 +598,28 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             selected = user_input.get(CONF_SELECTED_ENTITIES, [])
             # Applied verbatim (no separator inserted) so the user controls
-            # spacing; empty strings leave the discovered name untouched.
-            prefix = user_input.get(CONF_NAME_PREFIX, "")
-            suffix = user_input.get(CONF_NAME_SUFFIX, "")
+            # spacing; empty strings leave the discovered name untouched. The
+            # target decides whether the affix shapes the friendly name or the
+            # entity_id only (leaving the name identical to the wrapped entity).
+            prefix = user_input.get(CONF_AFFIX_PREFIX, "")
+            suffix = user_input.get(CONF_AFFIX_SUFFIX, "")
+            target = user_input.get(CONF_AFFIX_TARGET, AFFIX_TARGET_ENTITY_ID)
             for entity_id in selected:
-                name = f"{prefix}{candidates.get(entity_id, entity_id)}{suffix}"
+                base = candidates.get(entity_id, entity_id)
+                composed = f"{prefix}{base}{suffix}"
+                if target == AFFIX_TARGET_NAME:
+                    data = payload(entity_id, composed)
+                else:
+                    data = payload(entity_id, base)
+                    # Only pin an explicit id when the affix actually changes it;
+                    # otherwise leave the name-derived default (and its _2 dedupe).
+                    if composed != base:
+                        data[CONF_ENTITY_ID] = composed
                 self.hass.async_create_task(
                     self.hass.config_entries.flow.async_init(
                         DOMAIN,
                         context={"source": config_entries.SOURCE_IMPORT},
-                        data=payload(entity_id, name),
+                        data=data,
                     )
                 )
             return self.async_abort(
@@ -520,11 +650,19 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         )
                     ),
                     vol.Optional(
-                        CONF_NAME_PREFIX, default=""
+                        CONF_AFFIX_PREFIX, default=""
                     ): selector.TextSelector(),
                     vol.Optional(
-                        CONF_NAME_SUFFIX, default=""
+                        CONF_AFFIX_SUFFIX, default=""
                     ): selector.TextSelector(),
+                    vol.Required(
+                        CONF_AFFIX_TARGET, default=AFFIX_TARGET_ENTITY_ID
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=AFFIX_TARGETS,
+                            translation_key=CONF_AFFIX_TARGET,
+                        )
+                    ),
                 }
             ),
         )
@@ -585,44 +723,53 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            return self.async_create_entry(
-                title=user_input[CONF_NAME],
+            result, errors = await self._resolve_and_create(
+                entity_type=ENTITY_TYPE_OCCUPANCY,
+                name=user_input[CONF_NAME],
                 data={CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY, **user_input},
+                user_input=user_input,
+                entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
             )
+            if result is not None:
+                return result
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor", multiple=False
+                    )
+                ),
+                vol.Required(
+                    CONF_OCCUPANCY_TIMEOUT, default=120
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1, max=3600, unit_of_measurement="s", mode="box"
+                    )
+                ),
+                vol.Required(
+                    CONF_FALSE_DETECTION_GRACE, default=3
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0, max=60, unit_of_measurement="s", mode="box"
+                    )
+                ),
+                vol.Required(
+                    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                    default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0, max=3600, unit_of_measurement="s", mode="box"
+                    )
+                ),
+                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="occupancy",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): str,
-                    vol.Required(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="binary_sensor", multiple=False
-                        )
-                    ),
-                    vol.Required(
-                        CONF_OCCUPANCY_TIMEOUT, default=120
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_FALSE_DETECTION_GRACE, default=3
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=60, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                        default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self._prefill or {}
             ),
             errors=errors,
         )
@@ -641,34 +788,43 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not user_input.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME],
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_COMBINED_OCCUPANCY,
+                    name=user_input[CONF_NAME],
                     data={
                         CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
                         **user_input,
                     },
+                    user_input=user_input,
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
                 )
+                if result is not None:
+                    return result
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_TRIGGER_SENSORS): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        integration=DOMAIN,
+                        device_class="occupancy",
+                        multiple=True,
+                    )
+                ),
+                vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        integration=DOMAIN,
+                        device_class="occupancy",
+                        multiple=True,
+                    )
+                ),
+                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="combined_occupancy",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): str,
-                    vol.Required(CONF_TRIGGER_SENSORS): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN,
-                            device_class="occupancy",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN,
-                            device_class="occupancy",
-                            multiple=True,
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self._prefill or {}
             ),
             errors=errors,
         )
@@ -684,44 +840,53 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            return self.async_create_entry(
-                title=user_input[CONF_NAME],
+            result, errors = await self._resolve_and_create(
+                entity_type=ENTITY_TYPE_ILLUMINANCE,
+                name=user_input[CONF_NAME],
                 data={CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, **user_input},
+                user_input=user_input,
+                entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
             )
+            if result is not None:
+                return result
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_ILLUMINANCE_SENSOR): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        device_class="illuminance", multiple=False
+                    )
+                ),
+                vol.Required(
+                    CONF_ILLUMINANCE_THRESHOLD, default=10.0
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=100000,
+                        step=0.1,
+                        unit_of_measurement="lx",
+                        mode="box",
+                    )
+                ),
+                vol.Required(
+                    CONF_ILLUMINANCE_HYSTERESIS, default=0.0
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=10000,
+                        step=0.1,
+                        unit_of_measurement="lx",
+                        mode="box",
+                    )
+                ),
+                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="illuminance",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): str,
-                    vol.Required(CONF_ILLUMINANCE_SENSOR): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            device_class="illuminance", multiple=False
-                        )
-                    ),
-                    vol.Required(
-                        CONF_ILLUMINANCE_THRESHOLD, default=10.0
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0,
-                            max=100000,
-                            step=0.1,
-                            unit_of_measurement="lx",
-                            mode="box",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_ILLUMINANCE_HYSTERESIS, default=0.0
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0,
-                            max=10000,
-                            step=0.1,
-                            unit_of_measurement="lx",
-                            mode="box",
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self._prefill or {}
             ),
             errors=errors,
         )
@@ -749,22 +914,31 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # sensor that is permanently off.
                 errors["base"] = "window_incomplete"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME],
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_SCHEDULE,
+                    name=user_input[CONF_NAME],
                     data={
                         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
                         CONF_NAME: user_input[CONF_NAME],
                         CONF_TIME_WINDOWS: [window] if window else [],
                     },
+                    user_input=user_input,
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
                 )
+                if result is not None:
+                    return result
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                **_schedule_edge_fields(None),
+                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="schedule",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): str,
-                    **_schedule_edge_fields(None),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self._prefill or {}
             ),
             errors=errors,
         )
@@ -789,56 +963,65 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 errors = _validate_light_timeout(self.hass, user_input)
             if not errors:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME],
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_LIGHT,
+                    name=user_input[CONF_NAME],
                     data={CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **user_input},
+                    user_input=user_input,
+                    entity_id_format=LIGHT_ENTITY_ID_FORMAT,
                 )
+                if result is not None:
+                    return result
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_LIGHTS): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="light", multiple=True
+                    )
+                ),
+                vol.Required(
+                    CONF_LIGHT_TIMEOUT, default=300
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1, max=3600, unit_of_measurement="s", mode="box"
+                    )
+                ),
+                vol.Required(
+                    CONF_FALSE_OFF_DELAY, default=5
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0, max=300, unit_of_measurement="s", mode="box"
+                    )
+                ),
+                **{
+                    vol.Optional(key): selector.EntitySelector(sel_config)
+                    for key, sel_config in _LIGHT_REF_SELECTORS.items()
+                },
+                vol.Required(
+                    CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ILLUMINANCE_MODES,
+                        translation_key=CONF_ILLUMINANCE_MODE,
+                    )
+                ),
+                vol.Required(
+                    CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=SCHEDULE_MODES,
+                        translation_key=CONF_SCHEDULE_MODE,
+                    )
+                ),
+                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+            }
+        )
         return self.async_show_form(
             step_id="light",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME): str,
-                    vol.Required(CONF_LIGHTS): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="light", multiple=True
-                        )
-                    ),
-                    vol.Required(
-                        CONF_LIGHT_TIMEOUT, default=300
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_FALSE_OFF_DELAY, default=5
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=300, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    **{
-                        vol.Optional(key): selector.EntitySelector(sel_config)
-                        for key, sel_config in _LIGHT_REF_SELECTORS.items()
-                    },
-                    vol.Required(
-                        CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=ILLUMINANCE_MODES,
-                            translation_key=CONF_ILLUMINANCE_MODE,
-                        )
-                    ),
-                    vol.Required(
-                        CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=SCHEDULE_MODES,
-                            translation_key=CONF_SCHEDULE_MODE,
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, self._prefill or {}
             ),
             errors=errors,
         )

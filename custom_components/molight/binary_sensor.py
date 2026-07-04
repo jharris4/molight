@@ -15,7 +15,10 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, time, timedelta, timezone
 
-from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    ENTITY_ID_FORMAT,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -54,7 +57,7 @@ from .const import (
     ENTITY_TYPE_SCHEDULE,
     SUN_EVENTS,
 )
-from .helpers import molight_config
+from .helpers import molight_config, suggested_entity_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,7 +106,10 @@ async def async_setup_entry(
 
     cls = entity_map.get(entity_type)
     if cls is not None:
-        async_add_entities([cls(hass, entry)])
+        entity = cls(hass, entry)
+        if (entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT)):
+            entity.entity_id = entity_id
+        async_add_entities([entity])
 
 
 # ---------------------------------------------------------------------------

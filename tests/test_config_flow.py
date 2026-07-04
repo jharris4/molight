@@ -9,7 +9,13 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
+    AFFIX_TARGET_ENTITY_ID,
+    AFFIX_TARGET_NAME,
+    CONF_AFFIX_PREFIX,
+    CONF_AFFIX_SUFFIX,
+    CONF_AFFIX_TARGET,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_SENSOR,
@@ -18,8 +24,6 @@ from custom_components.molight.const import (
     CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_NAME_PREFIX,
-    CONF_NAME_SUFFIX,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
@@ -558,10 +562,10 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
 
 
 @pytest.mark.asyncio
-async def test_discover_applies_name_prefix_and_suffix(
+async def test_discover_affix_targets_name(
     hass: HomeAssistant,
 ) -> None:
-    """A prefix and/or suffix wrap each discovered entity's name verbatim."""
+    """Target=name wraps each discovered entity's name verbatim, no entity_id."""
     hass.states.async_set(
         "binary_sensor.hall_motion",
         "off",
@@ -573,8 +577,9 @@ async def test_discover_applies_name_prefix_and_suffix(
         result["flow_id"],
         {
             CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"],
-            CONF_NAME_PREFIX: "Auto ",
-            CONF_NAME_SUFFIX: " (occ)",
+            CONF_AFFIX_PREFIX: "Auto ",
+            CONF_AFFIX_SUFFIX: " (occ)",
+            CONF_AFFIX_TARGET: AFFIX_TARGET_NAME,
         },
     )
     assert result["type"] == FlowResultType.ABORT
@@ -588,6 +593,48 @@ async def test_discover_applies_name_prefix_and_suffix(
     assert len(created) == 1
     assert created[0].title == "Auto Hall Motion (occ)"
     assert created[0].data[CONF_NAME] == "Auto Hall Motion (occ)"
+    # Name target never pins an explicit entity_id.
+    assert CONF_ENTITY_ID not in created[0].data
+
+
+@pytest.mark.asyncio
+async def test_discover_affix_targets_entity_id(
+    hass: HomeAssistant,
+) -> None:
+    """Target=entity_id leaves the name, pins the affixed id, and it registers."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Hall Motion"},
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"],
+            CONF_AFFIX_SUFFIX: " virtual",
+            CONF_AFFIX_TARGET: AFFIX_TARGET_ENTITY_ID,
+        },
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+    ]
+    assert len(created) == 1
+    # Name is untouched; only the entity_id carries the affix.
+    assert created[0].data[CONF_NAME] == "Hall Motion"
+    assert created[0].data[CONF_ENTITY_ID] == "Hall Motion virtual"
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "binary_sensor", DOMAIN, created[0].entry_id
+    )
+    assert entity_id == "binary_sensor.hall_motion_virtual"
 
 
 @pytest.mark.asyncio
@@ -708,3 +755,171 @@ async def test_discover_aborts_when_no_candidates(hass: HomeAssistant) -> None:
     result = await _start_discovery(hass, "discover_illuminance")
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "no_candidates"
+
+
+# ---------------------------------------------------------------------------
+# Manual create — optional explicit entity_id
+# ---------------------------------------------------------------------------
+
+
+async def _reach_occupancy_form(hass: HomeAssistant) -> dict:
+    """Advance the manual flow to the occupancy create form."""
+    result = await _start_create(hass)
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
+    )
+
+
+@pytest.mark.asyncio
+async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
+    """An explicit entity_id is stored and used as the registered id."""
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            CONF_ENTITY_ID: "hall_presence",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "hall_presence"
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "binary_sensor", DOMAIN, result["result"].entry_id
+    )
+    assert entity_id == "binary_sensor.hall_presence"
+
+
+@pytest.mark.asyncio
+async def test_manual_explicit_entity_id_conflict_errors(
+    hass: HomeAssistant,
+) -> None:
+    """An explicit entity_id that is already taken hard-blocks the form."""
+    hass.states.async_set("binary_sensor.taken", "off")
+
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            CONF_ENTITY_ID: "taken",
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_ENTITY_ID: "entity_id_conflict"}
+
+
+@pytest.mark.asyncio
+async def test_manual_blank_entity_id_conflict_confirm_proceed(
+    hass: HomeAssistant,
+) -> None:
+    """Blank id whose name-derived id collides prompts, then proceeds to _2."""
+    hass.states.async_set("binary_sensor.hall", "off")
+
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+        },
+    )
+    assert result["type"] == FlowResultType.MENU
+    assert result["step_id"] == "confirm_entity_id"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_proceed"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    # Name-derived path pins nothing; HA does the _2 dedupe at registration.
+    assert CONF_ENTITY_ID not in result["data"]
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "binary_sensor", DOMAIN, result["result"].entry_id
+    )
+    assert entity_id == "binary_sensor.hall_2"
+
+
+@pytest.mark.asyncio
+async def test_manual_blank_entity_id_conflict_confirm_change(
+    hass: HomeAssistant,
+) -> None:
+    """Choosing 'go back' returns to the create form to set an entity_id."""
+    hass.states.async_set("binary_sensor.hall", "off")
+
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+        },
+    )
+    assert result["type"] == FlowResultType.MENU
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_change"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "occupancy"
+    # The prior input is offered back as suggested values on the markers.
+    suggested = {
+        marker.schema: marker.description["suggested_value"]
+        for marker in result["data_schema"].schema
+        if getattr(marker, "description", None)
+        and "suggested_value" in marker.description
+    }
+    assert suggested.get(CONF_NAME) == "Hall"
+
+    # Now setting a distinct id creates the entry cleanly.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            CONF_ENTITY_ID: "hall_presence",
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "hall_presence"
+
+
+@pytest.mark.asyncio
+async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
+    """A light's explicit id gives the companion switch a matching _auto_off id."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Kitchen",
+            CONF_LIGHTS: ["light.kitchen_real"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_ENTITY_ID: "kitchen_virtual",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id("light", DOMAIN, entry.entry_id)
+        == "light.kitchen_virtual"
+    )
+    assert (
+        registry.async_get_entity_id(
+            "switch", DOMAIN, f"{entry.entry_id}_auto_off"
+        )
+        == "switch.kitchen_virtual_auto_off"
+    )
