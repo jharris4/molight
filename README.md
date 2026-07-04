@@ -79,6 +79,17 @@ Once installed (see [Installation](#installation)), everything is configured fro
 
 The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
 
+### Choosing the entity ID
+
+Every manual create form ends with an optional **Entity ID** field:
+
+This field is particularly useful if you often name your virtual entities the same as the entities they are controlling, and don't want to simply rely on home assistant's built-in logic for handling duplicate entity_ids which appends a number to them.
+
+- **Leave it blank** and the ID is derived from the name. If that name-derived ID is already taken, the flow doesn't silently mangle it — it warns you and offers to either **proceed** (Home Assistant appends `_2`) or **go back** to the form, prefilled, and set one yourself.
+- **Type one** to pin it explicitly. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`) and the rest is slugified, so you don't have to get the format exactly right. If the ID you type already exists you're told, and the form is re-shown.
+
+This field only appears when **creating** an entity — the **Configure** (edit) forms omit it, so an entity's ID is fixed once created. To rename one afterwards, use Home Assistant's own entity settings.
+
 ### Bulk discovery
 
 Rather than adding entities one form at a time, the **Add Integration** or **Add Entry** menu offers three discovery actions that scan your Home Assistant entities and let you create many virtual entities in one pass:
@@ -88,6 +99,13 @@ Rather than adding entities one form at a time, the **Add Integration** or **Add
 - **Discover lights** — finds every entity in the `light` domain.
 
 Each action presents a checklist of the matching entities (all pre-selected); untick any you don't want, submit, and a Virtual Occupancy Sensor / Virtual Illuminance Sensor / Virtual Light is created for each pick using default settings, named after the source entity. Edit any of them afterwards via its **Configure** button — for discovered virtual lights, that's where you wire up the occupancy, illuminance, and schedule references.
+
+The same form also offers an optional **prefix** and **suffix** to distinguish the virtual entities from the real ones they wrap, plus a target choosing what the affix shapes:
+
+- **Entity ID** (default) — the prefix/suffix is applied to the entity ID only (e.g. a `v_` prefix gives `binary_sensor.v_hallway`), leaving each virtual entity's friendly name identical to the source it wraps.
+- **Name** — the prefix/suffix is applied to the friendly name instead (e.g. a ` (virtual)` suffix), and the entity ID is derived from that composed name.
+
+Both are applied verbatim with no separator inserted, so you control the spacing; leaving both blank keeps the discovered name untouched.
 
 The list only shows entities you can usefully add: MoLight's own virtual entities are never suggested, disabled entities are hidden, and anything already wrapped by an existing MoLight entry is skipped — so re-running discovery after adding more sensors only offers the new ones.
 
