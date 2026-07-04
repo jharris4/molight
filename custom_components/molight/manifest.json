@@ -1,12 +1,12 @@
 {
   "domain": "molight",
   "name": "MoLight",
-  "version": "0.1.0",
+  "codeowners": ["@jharris4"],
   "config_flow": true,
+  "dependencies": [],
   "documentation": "https://github.com/jharris4/molight",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/jharris4/molight/issues",
   "requirements": [],
-  "dependencies": [],
-  "codeowners": ["@jharris4"],
-  "iot_class": "local_push"
+  "version": "0.1.0"
 }
