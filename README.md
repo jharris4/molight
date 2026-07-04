@@ -95,6 +95,23 @@ Finally, use the virtual light instead of the real lights in your dashboards and
 
 See [Entities](#entities) below for the full description of each entity type and its configuration options.
 
+### Assign a sensor to several lights at once
+
+Wiring one shared sensor into many virtual lights one options form at a time is tedious, so the **Add Integration** or **Add Entry** menu also offers **Assign a sensor to several lights**. Pick the kind of sensor, choose one, set how the lights should use it, then tick the lights — every pick is updated in a single pass.
+
+The three sensor kinds map to a virtual light's reference fields:
+
+- **Assign an occupancy sensor** — choose any MoLight occupancy sensor (simple or combined) and a **role**: *regular* wires it in as the light's **Occupancy sensor** (can turn lights on), *maintain* as its **Maintain occupancy sensor** (keeps an already-on light on but never turns it on).
+- **Assign an illuminance sensor** — choose a Virtual Illuminance Binary Sensor and its **Illuminance mode** (`control` or `gate`).
+- **Assign a schedule sensor** — choose a Virtual Schedule Binary Sensor and its **Schedule mode** (`follow` or `gate`).
+
+The final step lists your virtual lights with the ones **already using that sensor pre-selected**, so the checklist doubles as an audit of the current wiring. The submitted set is authoritative for that sensor-and-role: ticked lights get the reference (along with the chosen mode, replacing whatever they had under the same field), and any pre-selected light you untick has that reference *removed*. When it finishes it reports how many lights were assigned and how many cleared.
+
+Because occupancy feeds the turn-off countdown, the same `light_timeout >= occupancy_timeout` guard from the light form applies here: a target whose turn-off timeout is shorter than the sensor's effective timeout is skipped rather than silently misconfigured, and the skipped lights are named in the summary so you can raise their timeouts and re-run. The illuminance and schedule assignments have no such constraint.
+
+If you don't have any virtual lights yet, the flow tells you so instead of showing an empty checklist.
+
+
 ## Entities
 
 ### Virtual Occupancy Binary Sensor
