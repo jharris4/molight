@@ -5,12 +5,15 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
@@ -18,10 +21,12 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
@@ -29,14 +34,42 @@ from custom_components.molight.const import (
 from custom_components.molight.helpers import molight_config
 
 
-@pytest.mark.asyncio
-async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
-    """Full config flow creates an occupancy sensor entry."""
+async def _start_create(hass: HomeAssistant) -> dict:
+    """Init the flow and pick 'Create a single entity' from the menu.
+
+    Returns the flow result at the entity-type picker (the 'create' step).
+    """
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
+    assert result["type"] == FlowResultType.MENU
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "create"}
+    )
+
+
+async def _start_discovery(hass: HomeAssistant, step: str) -> dict:
+    """Init the flow and pick a discovery step from the menu."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == FlowResultType.MENU
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": step}
+    )
+
+
+def _offered_candidates(result: dict) -> set[str]:
+    """Entity ids the discovery form pre-selects (its default is all candidates)."""
+    return set(result["data_schema"]({})[CONF_SELECTED_ENTITIES])
+
+
+@pytest.mark.asyncio
+async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
+    """Full config flow creates an occupancy sensor entry."""
+    result = await _start_create(hass)
     assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "user"
+    assert result["step_id"] == "create"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -62,9 +95,7 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
 @pytest.mark.asyncio
 async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
     """Schedule flow builds a window with sun-anchored edges."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
@@ -108,9 +139,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     hass: HomeAssistant,
 ) -> None:
     """A half-filled window is rejected instead of silently dropped."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
@@ -140,9 +169,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
 @pytest.mark.asyncio
 async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     """Full config flow creates a virtual light entry."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT},
@@ -174,9 +201,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
@@ -280,9 +305,7 @@ async def test_light_flow_validates_combined_timeout(
         assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
@@ -347,9 +370,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
         assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
@@ -454,9 +475,7 @@ async def test_schedule_options_round_trip(
 @pytest.mark.asyncio
 async def test_config_flow_virtual_light_requires_lights(hass: HomeAssistant) -> None:
     """Virtual light config flow rejects an empty lights list."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
@@ -466,3 +485,191 @@ async def test_config_flow_virtual_light_requires_lights(hass: HomeAssistant) ->
     )
     assert result["type"] == FlowResultType.FORM
     assert "lights" in result["errors"]
+
+
+@pytest.mark.asyncio
+async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> None:
+    """Discovery lists occupancy sensors, skips wrapped/wrong-class, bulk-creates."""
+    hass.states.async_set(
+        "binary_sensor.kitchen_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Kitchen Motion"},
+    )
+    hass.states.async_set(
+        "binary_sensor.hall_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Hall Motion"},
+    )
+    # 'motion' and 'presence' are also treated as occupancy candidates.
+    hass.states.async_set(
+        "binary_sensor.porch_pir",
+        "off",
+        {"device_class": "motion", "friendly_name": "Porch PIR"},
+    )
+    hass.states.async_set(
+        "binary_sensor.study_presence",
+        "off",
+        {"device_class": "presence", "friendly_name": "Study Presence"},
+    )
+    # Wrong device_class — must not be offered.
+    hass.states.async_set(
+        "binary_sensor.front_door", "off", {"device_class": "door"}
+    )
+    # Kitchen is already wrapped by an existing MoLight entry — must be hidden.
+    existing = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Kitchen Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.kitchen_motion",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    existing.add_to_hass(hass)
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_occupancy"
+    assert _offered_candidates(result) == {
+        "binary_sensor.hall_motion",
+        "binary_sensor.porch_pir",
+        "binary_sensor.study_presence",
+    }
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"]},
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "discovery_done"
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+    ]
+    assert len(created) == 1
+    # Defaults applied.
+    assert created[0].data[CONF_OCCUPANCY_TIMEOUT] == 120
+    assert created[0].title == "Hall Motion"
+
+
+@pytest.mark.asyncio
+async def test_discover_illuminance_creates_with_defaults(
+    hass: HomeAssistant,
+) -> None:
+    """Illuminance discovery wraps lux sensors with default threshold."""
+    hass.states.async_set(
+        "sensor.office_lux",
+        "42",
+        {"device_class": "illuminance", "friendly_name": "Office Lux"},
+    )
+    # Wrong device_class.
+    hass.states.async_set(
+        "sensor.office_temp", "21", {"device_class": "temperature"}
+    )
+
+    result = await _start_discovery(hass, "discover_illuminance")
+    assert _offered_candidates(result) == {"sensor.office_lux"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SELECTED_ENTITIES: ["sensor.office_lux"]},
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_ILLUMINANCE_SENSOR) == "sensor.office_lux"
+    ]
+    assert len(created) == 1
+    assert created[0].data[CONF_ENTITY_TYPE] == ENTITY_TYPE_ILLUMINANCE
+    assert created[0].data[CONF_ILLUMINANCE_THRESHOLD] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None:
+    """Light discovery wraps real lights (stored as a single-item list)."""
+    hass.states.async_set(
+        "light.desk", "off", {"friendly_name": "Desk Lamp"}
+    )
+    # Already wrapped by an existing virtual light — must be hidden.
+    existing = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Ceiling",
+            CONF_LIGHTS: ["light.ceiling"],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    existing.add_to_hass(hass)
+    hass.states.async_set("light.ceiling", "off", {"friendly_name": "Ceiling"})
+
+    result = await _start_discovery(hass, "discover_light")
+    assert _offered_candidates(result) == {"light.desk"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SELECTED_ENTITIES: ["light.desk"]},
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_LIGHTS) == ["light.desk"]
+    ]
+    assert len(created) == 1
+    assert created[0].data[CONF_LIGHT_TIMEOUT] == 300
+
+
+@pytest.mark.asyncio
+async def test_discover_never_offers_molight_own_entities(
+    hass: HomeAssistant,
+) -> None:
+    """A MoLight virtual entity (its own device_class match) is never suggested."""
+    hass.states.async_set(
+        "binary_sensor.garage_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Garage Motion"},
+    )
+    # A fully set-up virtual occupancy sensor registers a binary_sensor with
+    # device_class 'occupancy' owned by the molight platform.
+    virtual = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Virtual Occ",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.some_source",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    virtual.add_to_hass(hass)
+    await hass.config_entries.async_setup(virtual.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    virtual_ids = {
+        e.entity_id
+        for e in er.async_entries_for_config_entry(registry, virtual.entry_id)
+    }
+    assert virtual_ids  # the virtual sensor actually created an entity
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    offered = _offered_candidates(result)
+    # The real sensor is offered; none of MoLight's own entities are.
+    assert "binary_sensor.garage_motion" in offered
+    assert not (virtual_ids & offered)
+
+
+@pytest.mark.asyncio
+async def test_discover_aborts_when_no_candidates(hass: HomeAssistant) -> None:
+    """With nothing eligible to wrap, discovery aborts cleanly."""
+    result = await _start_discovery(hass, "discover_illuminance")
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_candidates"

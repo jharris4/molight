@@ -23,6 +23,10 @@ ENTITY_TYPES = [
 CONF_ENTITY_TYPE = "entity_type"
 CONF_NAME = "name"
 
+# Multiselect field in the discovery config-flow steps: the real entities the
+# user picked to wrap in virtual MoLight entities (created with defaults).
+CONF_SELECTED_ENTITIES = "selected_entities"
+
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor
 # latest_occupied_time = last_off - timeout

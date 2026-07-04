@@ -66,9 +66,11 @@ Everything below is covered by the automated test suite.
 
 ## How To Use This Integration
 
-Once installed (see [Installation](#installation)), everything is configured from the UI — no YAML required.
+Once installed (see [Installation](#installation)), everything is configured from the UI — no YAML required. Each virtual entity is its own **config entry**, and you can add as many as you like.
 
-1. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**. Each time you add the integration you create one config entry for one virtual entity, and you pick which kind to create.
+1. Add an entity. The first one comes from **Settings → Devices & Services → Add Integration → MoLight**; after that, add more from the **MoLight** card on the **Devices & Services** page via **Add Entry** (searching **Add Integration → MoLight** again works too). Either way, a menu offers two ways to proceed:
+   - **Create a single entity** — pick which kind of virtual entity to create and fill in its form (the flow for each type is described below).
+   - **Discover…** — scan your existing entities and bulk-create several at once (see [Bulk discovery](#bulk-discovery)).
 2. Create whichever virtual sensors you want your lights to react to — all of them are optional:
    - a **Virtual Occupancy Binary Sensor** for each real motion/presence sensor you want to use,
    - a **Virtual Combined Occupancy Binary Sensor** to merge several of them,
@@ -76,6 +78,18 @@ Once installed (see [Installation](#installation)), everything is configured fro
 3. Then create a **Virtual Light** for each room or light group, pointing it at the real `light` entities and optionally referencing any of the virtual sensors from step 2. A virtual light with no sensors at all is still useful — it turns its real lights off on a timer.
 
 The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
+
+### Bulk discovery
+
+Rather than adding entities one form at a time, the **Add Integration** or **Add Entry** menu offers three discovery actions that scan your Home Assistant entities and let you create many virtual entities in one pass:
+
+- **Discover occupancy sensors** — finds every `binary_sensor` with a `device_class` of `occupancy`, `motion`, or `presence`.
+- **Discover illuminance sensors** — finds every `sensor` with `device_class: illuminance`.
+- **Discover lights** — finds every entity in the `light` domain.
+
+Each action presents a checklist of the matching entities (all pre-selected); untick any you don't want, submit, and a Virtual Occupancy Sensor / Virtual Illuminance Sensor / Virtual Light is created for each pick using default settings, named after the source entity. Edit any of them afterwards via its **Configure** button — for discovered virtual lights, that's where you wire up the occupancy, illuminance, and schedule references.
+
+The list only shows entities you can usefully add: MoLight's own virtual entities are never suggested, disabled entities are hidden, and anything already wrapped by an existing MoLight entry is skipped — so re-running discovery after adding more sensors only offers the new ones.
 
 Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each virtual light also comes with a companion **Auto-off** switch: flip it off to keep the lights on (movie night, guests) and back on to resume normal behavior. Each entry can be edited or removed independently later via its **Configure** button.
 

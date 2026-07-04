@@ -32,6 +32,7 @@ from .const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
@@ -286,6 +287,108 @@ def _validate_light_timeout(
     return {}
 
 
+# ---------------------------------------------------------------------------
+# Discovery — scan real entities and bulk-create virtual entities for them
+# ---------------------------------------------------------------------------
+
+
+def _molight_used_entities(hass: HomeAssistant, key: str) -> set[str]:
+    """Real entity_ids already wrapped by existing MoLight entries under `key`."""
+    used: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        val = _molight_cfg(entry).get(key)
+        if isinstance(val, list):
+            used.update(val)
+        elif val:
+            used.add(val)
+    return used
+
+
+def _discovery_candidates(
+    hass: HomeAssistant,
+    domain: str,
+    device_classes: set[str] | None,
+    used_key: str,
+) -> dict[str, str]:
+    """Candidate real entities to wrap, mapped entity_id -> friendly name.
+
+    Includes entities of the given domain whose (registry-overridden) device
+    class is in `device_classes` (None matches any), excluding: MoLight's own
+    virtual entities, disabled ones, and any already referenced by an existing
+    MoLight entry under `used_key`. Registry entries are the source of truth
+    for device_class; entities that only exist as a state (never registered)
+    are matched on their attribute.
+    """
+    registry = er.async_get(hass)
+    used = _molight_used_entities(hass, used_key)
+    candidates: dict[str, str] = {}
+    # Track every registered entity of this domain up front — including
+    # MoLight's own virtual entities and disabled ones — so the state-based
+    # fallback below can't re-offer something the registry already excludes.
+    seen: set[str] = set()
+    for ent in registry.entities.values():
+        if ent.domain != domain:
+            continue
+        seen.add(ent.entity_id)
+        if ent.platform == DOMAIN or ent.disabled:
+            continue
+        dc = ent.device_class or ent.original_device_class
+        if (
+            device_classes is None or dc in device_classes
+        ) and ent.entity_id not in used:
+            state = hass.states.get(ent.entity_id)
+            candidates[ent.entity_id] = (
+                (state.name if state else None)
+                or ent.name
+                or ent.original_name
+                or ent.entity_id
+            )
+    for state in hass.states.async_all(domain):
+        if state.entity_id in seen or state.entity_id in used:
+            continue
+        if (
+            device_classes is None
+            or state.attributes.get("device_class") in device_classes
+        ):
+            candidates[state.entity_id] = state.name
+    return candidates
+
+
+def _occupancy_payload(entity_id: str, name: str) -> dict[str, Any]:
+    return {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+        CONF_NAME: name,
+        CONF_OCCUPANCY_SENSOR: entity_id,
+        CONF_OCCUPANCY_TIMEOUT: 120,
+        CONF_FALSE_DETECTION_GRACE: 3,
+        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    }
+
+
+def _illuminance_payload(entity_id: str, name: str) -> dict[str, Any]:
+    return {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+        CONF_NAME: name,
+        CONF_ILLUMINANCE_SENSOR: entity_id,
+        CONF_ILLUMINANCE_THRESHOLD: 10.0,
+        CONF_ILLUMINANCE_HYSTERESIS: 0.0,
+    }
+
+
+def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
+    # Wraps a single real light with defaults and no entity references; the
+    # user wires up occupancy/illuminance/schedule afterwards via options.
+    return {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+        CONF_NAME: name,
+        CONF_LIGHTS: [entity_id],
+        CONF_LIGHT_TIMEOUT: 300,
+        CONF_FALSE_OFF_DELAY: 5,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+        CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
+    }
+
+
 class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for MoLight."""
 
@@ -303,7 +406,21 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 1 — choose which kind of virtual entity to create."""
+        """Step 1 — create one entity manually, or discover many at once."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=[
+                "create",
+                "discover_occupancy",
+                "discover_illuminance",
+                "discover_light",
+            ],
+        )
+
+    async def async_step_create(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose which kind of virtual entity to create manually."""
         if user_input is not None:
             self._entity_type = user_input[CONF_ENTITY_TYPE]
             return await {
@@ -315,7 +432,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }[self._entity_type]()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="create",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ENTITY_TYPE): selector.SelectSelector(
@@ -332,6 +449,117 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 }
             ),
+        )
+
+    # ------------------------------------------------------------------
+    # Discovery — bulk-create from scanned real entities
+    # ------------------------------------------------------------------
+
+    async def _async_discovery(
+        self,
+        *,
+        step_id: str,
+        domain: str,
+        device_classes: set[str] | None,
+        used_key: str,
+        payload,
+        user_input: dict[str, Any] | None,
+    ) -> config_entries.FlowResult:
+        """Show a checklist of candidate entities and bulk-create the picks.
+
+        A config flow can only return one entry, so the selected entities are
+        each created through the import step spawned as a background task, and
+        this flow ends with an abort that reports how many were made.
+        """
+        candidates = _discovery_candidates(
+            self.hass, domain, device_classes, used_key
+        )
+
+        if user_input is not None:
+            selected = user_input.get(CONF_SELECTED_ENTITIES, [])
+            for entity_id in selected:
+                name = candidates.get(entity_id, entity_id)
+                self.hass.async_create_task(
+                    self.hass.config_entries.flow.async_init(
+                        DOMAIN,
+                        context={"source": config_entries.SOURCE_IMPORT},
+                        data=payload(entity_id, name),
+                    )
+                )
+            return self.async_abort(
+                reason="discovery_done",
+                description_placeholders={"count": str(len(selected))},
+            )
+
+        if not candidates:
+            return self.async_abort(reason="no_candidates")
+
+        options = [
+            selector.SelectOptionDict(value=eid, label=name)
+            for eid, name in sorted(
+                candidates.items(), key=lambda kv: kv[1].lower()
+            )
+        ]
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SELECTED_ENTITIES, default=list(candidates)
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_discover_occupancy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery(
+            step_id="discover_occupancy",
+            domain="binary_sensor",
+            # Occupancy sensors are commonly exposed under any of these classes.
+            device_classes={"occupancy", "motion", "presence"},
+            used_key=CONF_OCCUPANCY_SENSOR,
+            payload=_occupancy_payload,
+            user_input=user_input,
+        )
+
+    async def async_step_discover_illuminance(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery(
+            step_id="discover_illuminance",
+            domain="sensor",
+            device_classes={"illuminance"},
+            used_key=CONF_ILLUMINANCE_SENSOR,
+            payload=_illuminance_payload,
+            user_input=user_input,
+        )
+
+    async def async_step_discover_light(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery(
+            step_id="discover_light",
+            domain="light",
+            device_classes=None,
+            used_key=CONF_LIGHTS,
+            payload=_light_payload,
+            user_input=user_input,
+        )
+
+    async def async_step_import(
+        self, import_data: dict[str, Any]
+    ) -> config_entries.FlowResult:
+        """Create a single entry from a discovery selection (defaults applied)."""
+        return self.async_create_entry(
+            title=import_data[CONF_NAME], data=import_data
         )
 
     # ------------------------------------------------------------------

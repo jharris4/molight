@@ -2,9 +2,40 @@
   "config": {
     "step": {
       "user": {
+        "title": "Add MoLight entities",
+        "description": "Create a single virtual entity, or discover existing entities to wrap in bulk.",
+        "menu_options": {
+          "create": "Create a single entity",
+          "discover_occupancy": "Discover occupancy sensors",
+          "discover_illuminance": "Discover illuminance sensors",
+          "discover_light": "Discover lights"
+        }
+      },
+      "create": {
         "title": "Create a MoLight virtual entity",
         "data": {
           "entity_type": "Entity type"
+        }
+      },
+      "discover_occupancy": {
+        "title": "Discover occupancy sensors",
+        "description": "Select the occupancy/motion sensors to wrap in virtual occupancy sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
+        "data": {
+          "selected_entities": "Sensors to add"
+        }
+      },
+      "discover_illuminance": {
+        "title": "Discover illuminance sensors",
+        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
+        "data": {
+          "selected_entities": "Sensors to add"
+        }
+      },
+      "discover_light": {
+        "title": "Discover lights",
+        "description": "Select the lights to wrap in virtual lights, created with default settings. Add occupancy, illuminance or schedule references afterwards via each entity's options. Lights already wrapped by MoLight (and disabled ones) are hidden.",
+        "data": {
+          "selected_entities": "Lights to add"
         }
       },
       "occupancy": {
@@ -71,6 +102,10 @@
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty)."
+    },
+    "abort": {
+      "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
+      "discovery_done": "Created {count} virtual MoLight entities. They use default settings; edit any of them via its options."
     }
   },
   "selector": {
