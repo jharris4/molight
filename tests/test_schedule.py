@@ -1,4 +1,5 @@
 """Tests for the MoLight Virtual Schedule Sensor."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone

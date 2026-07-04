@@ -6,6 +6,7 @@ attributes and current occupancy / illuminance / schedule / real-light
 states. Watched sensors are plain states set before the entry is loaded,
 exactly as they would already exist when the light entity is added.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -253,9 +254,7 @@ def _follow_entry():
 @pytest.mark.asyncio
 async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
     """Window ended while HA was down → the off boundary is applied at startup."""
-    mock_restore_cache(
-        hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})]
-    )
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, _follow_entry())
@@ -272,9 +271,7 @@ async def test_restart_missed_window_end_with_lights_already_off(
     hass: HomeAssistant,
 ) -> None:
     """Same boundary catch-up, but nothing to turn off — just clear the marker."""
-    mock_restore_cache(
-        hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})]
-    )
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, _follow_entry())
@@ -311,9 +308,7 @@ async def test_restart_readopts_window_already_applied(
     hass: HomeAssistant, freezer
 ) -> None:
     """Window already applied before the restart and lights still on → SCHEDULED."""
-    mock_restore_cache(
-        hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})]
-    )
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, _follow_entry())

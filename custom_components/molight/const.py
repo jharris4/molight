@@ -48,15 +48,15 @@ AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 # first; the second step lists all virtual lights, pre-selecting those that
 # already reference the sensor. The submitted set is the source of truth —
 # deselecting a pre-selected light removes the reference.
-CONF_ASSIGN_SENSOR = "assign_sensor"   # the virtual sensor entity_id to assign
-CONF_ASSIGN_ROLE = "assign_role"       # occupancy only: regular vs maintain
-CONF_ASSIGN_LIGHTS = "assign_lights"   # target virtual light entity_ids
+CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
+CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
+CONF_ASSIGN_LIGHTS = "assign_lights"  # target virtual light entity_ids
 ASSIGN_ROLE_REGULAR = "regular"
 ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
-CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor
+CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
 # latest_occupied_time = last_off - timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 # A cycle whose on-duration exceeds the timeout by no more than this many
@@ -81,7 +81,7 @@ CONF_TRIGGER_SENSORS = "trigger_sensors"
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
 # --- Virtual Illuminance Binary Sensor ---
-CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"   # entity_id of a real sensor
+CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"  # entity_id of a real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 # Hysteresis band (lx) around the threshold: becomes bright at
 # threshold + hysteresis, dark below threshold - hysteresis; readings inside
@@ -106,7 +106,7 @@ COMBINE_EARLIEST = "earliest"
 SUN_EVENTS = ["sunset", "sunrise"]
 
 # --- Virtual Light ---
-CONF_LIGHTS = "lights"                             # list of real light entity_ids
+CONF_LIGHTS = "lights"  # list of real light entity_ids
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
@@ -155,7 +155,7 @@ SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
 
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
-STATE_ACTIVE = "active"        # lights on, timer running (no occupancy / not occupied)
-STATE_OCCUPIED = "occupied"    # lights on, occupancy active — no countdown
+STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied)
+STATE_OCCUPIED = "occupied"  # lights on, occupancy active — no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window — no timer

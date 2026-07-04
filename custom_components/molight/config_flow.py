@@ -1,4 +1,5 @@
 """Config flow for MoLight."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -93,9 +94,7 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
             offset = int(user_input.get(f"{prefix}_offset") or 0)
             if offset:
                 edge[EDGE_OFFSET] = offset
-            edge[EDGE_COMBINE] = user_input.get(
-                f"{prefix}_combine", COMBINE_LATEST
-            )
+            edge[EDGE_COMBINE] = user_input.get(f"{prefix}_combine", COMBINE_LATEST)
         return edge or None
 
     start, end = _edge("start"), _edge("end")
@@ -136,20 +135,18 @@ def _schedule_edge_fields(window: dict | None) -> dict:
             else vol.Optional(f"{prefix}_time")
         )
         fields[time_key] = selector.TimeSelector()
-        fields[
-            vol.Optional(f"{prefix}_sun", default=edge.get(EDGE_SUN, "none"))
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=_SUN_OPTIONS, translation_key="sun_event"
+        fields[vol.Optional(f"{prefix}_sun", default=edge.get(EDGE_SUN, "none"))] = (
+            selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_SUN_OPTIONS, translation_key="sun_event"
+                )
             )
         )
-        fields[
-            vol.Optional(
-                f"{prefix}_offset", default=edge.get(EDGE_OFFSET, 0)
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=-720, max=720, step=1, unit_of_measurement="min", mode="box"
+        fields[vol.Optional(f"{prefix}_offset", default=edge.get(EDGE_OFFSET, 0))] = (
+            selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=-720, max=720, step=1, unit_of_measurement="min", mode="box"
+                )
             )
         )
         fields[
@@ -267,9 +264,7 @@ def _min_dependent_light_timeout(
             if dependent_ids.intersection(constituents):
                 entry_ids = {
                     e.entity_id
-                    for e in er.async_entries_for_config_entry(
-                        registry, entry.entry_id
-                    )
+                    for e in er.async_entries_for_config_entry(registry, entry.entry_id)
                 }
                 if not entry_ids <= dependent_ids:
                     dependent_ids.update(entry_ids)
@@ -546,9 +541,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.FlowResult:
         """Create with the name-derived id (Home Assistant appends _2)."""
         pending = self._pending
-        return self.async_create_entry(
-            title=pending["name"], data=pending["data"]
-        )
+        return self.async_create_entry(title=pending["name"], data=pending["data"])
 
     async def async_step_entity_id_change(
         self, user_input: dict[str, Any] | None = None
@@ -621,9 +614,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         each created through the import step spawned as a background task, and
         this flow ends with an abort that reports how many were made.
         """
-        candidates = _discovery_candidates(
-            self.hass, domain, device_classes, used_key
-        )
+        candidates = _discovery_candidates(self.hass, domain, device_classes, used_key)
 
         if user_input is not None:
             selected = user_input.get(CONF_SELECTED_ENTITIES, [])
@@ -662,9 +653,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         options = [
             selector.SelectOptionDict(value=eid, label=name)
-            for eid, name in sorted(
-                candidates.items(), key=lambda kv: kv[1].lower()
-            )
+            for eid, name in sorted(candidates.items(), key=lambda kv: kv[1].lower())
         ]
         return self.async_show_form(
             step_id=step_id,
@@ -738,9 +727,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, import_data: dict[str, Any]
     ) -> config_entries.FlowResult:
         """Create a single entry from a discovery selection (defaults applied)."""
-        return self.async_create_entry(
-            title=import_data[CONF_NAME], data=import_data
-        )
+        return self.async_create_entry(title=import_data[CONF_NAME], data=import_data)
 
     # ------------------------------------------------------------------
     # Bulk-assign a virtual sensor to many virtual lights at once
@@ -1225,20 +1212,14 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="light", multiple=True
-                    )
+                    selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                vol.Required(
-                    CONF_LIGHT_TIMEOUT, default=300
-                ): selector.NumberSelector(
+                vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=1, max=3600, unit_of_measurement="s", mode="box"
                     )
                 ),
-                vol.Required(
-                    CONF_FALSE_OFF_DELAY, default=5
-                ): selector.NumberSelector(
+                vol.Required(CONF_FALSE_OFF_DELAY, default=5): selector.NumberSelector(
                     selector.NumberSelectorConfig(
                         min=0, max=300, unit_of_measurement="s", mode="box"
                     )
@@ -1383,9 +1364,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 # the combined sensor's effective timeout is its max constituent.
                 constituents = user_input.get(
                     CONF_TRIGGER_SENSORS, []
-                ) + user_input.get(
-                    CONF_MAINTAIN_SENSORS, []
-                )
+                ) + user_input.get(CONF_MAINTAIN_SENSORS, [])
                 timeouts = [
                     t
                     for e in constituents

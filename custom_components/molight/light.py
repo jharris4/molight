@@ -111,6 +111,7 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
 """
+
 from __future__ import annotations
 
 import logging
@@ -184,7 +185,7 @@ async def async_setup_entry(
     """Set up MoLight light entities from a config entry."""
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
         entity = VirtualLight(hass, entry)
-        if (entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT)):
+        if entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT):
             entity.entity_id = entity_id
         async_add_entities([entity])
 
@@ -265,14 +266,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 raw = last.attributes.get(f"last_on_{source}")
                 if raw:
                     try:
-                        setattr(
-                            self, f"_last_on_{source}", datetime.fromisoformat(raw)
-                        )
+                        setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
                     except (ValueError, TypeError):
                         pass
-            self._schedule_window_applied = last.attributes.get(
-                "schedule_window_start"
-            )
+            self._schedule_window_applied = last.attributes.get("schedule_window_start")
             for attr, field in (
                 # Fall back to the pre-rename attribute name for restores
                 # from before the physical/virtual split.
@@ -802,8 +799,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return False
         state = self.hass.states.get(entity_id)
         return bool(
-            state is not None
-            and state.attributes.get("last_clear_false_detection")
+            state is not None and state.attributes.get("last_clear_false_detection")
         )
 
     def _on_illuminance_change(self, is_bright: bool) -> None:
@@ -895,7 +891,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Return the latest recorded turn-on timestamp across all sources
         except for illuminance (which is only relevant for gating, not attribution)."""
         candidates = [
-            t for t in (
+            t
+            for t in (
                 self._last_on_physical,
                 self._last_on_virtual,
                 self._last_on_occupancy,

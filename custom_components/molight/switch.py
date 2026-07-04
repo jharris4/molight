@@ -9,6 +9,7 @@ The switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies
 the light through the dispatcher, so the coupling doesn't depend on entity
 ids or platform setup order.
 """
+
 from __future__ import annotations
 
 from homeassistant.components.switch import ENTITY_ID_FORMAT, SwitchEntity
@@ -39,9 +40,9 @@ async def async_setup_entry(
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
         entity = AutoOffSwitch(hass, entry)
         # Parallel the light's explicit id: light.kitchen -> switch.kitchen_auto_off.
-        if (entity_id := suggested_entity_id(
+        if entity_id := suggested_entity_id(
             hass, entry, ENTITY_ID_FORMAT, suffix="_auto_off"
-        )):
+        ):
             entity.entity_id = entity_id
         async_add_entities([entity])
 
@@ -81,6 +82,4 @@ class AutoOffSwitch(SwitchEntity, RestoreEntity):
         entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id)
         if entry_data is not None:
             entry_data[DATA_AUTO_OFF_ENABLED] = self._attr_is_on
-        async_dispatcher_send(
-            self.hass, SIGNAL_AUTO_OFF_TOGGLED.format(self._entry_id)
-        )
+        async_dispatcher_send(self.hass, SIGNAL_AUTO_OFF_TOGGLED.format(self._entry_id))

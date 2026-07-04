@@ -6,6 +6,7 @@ device falling off the mesh or an integration reloading. Those blips must
 never be read as state changes, and recovery transitions must behave like
 fresh events.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -234,9 +235,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
     )
-    light = make_light_entry(
-        occupancy="binary_sensor.chain_occupancy", timeout=300
-    )
+    light = make_light_entry(occupancy="binary_sensor.chain_occupancy", timeout=300)
     await setup_entries(hass, occupancy, light)
 
     hass.states.async_set("binary_sensor.motion_1", "on")

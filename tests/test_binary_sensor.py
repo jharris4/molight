@@ -1,4 +1,5 @@
 """Tests for MoLight binary sensor entities."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

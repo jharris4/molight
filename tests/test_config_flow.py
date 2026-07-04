@@ -1,4 +1,5 @@
 """Tests for the MoLight config flow."""
+
 from __future__ import annotations
 
 import pytest
@@ -528,9 +529,7 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
         {"device_class": "presence", "friendly_name": "Study Presence"},
     )
     # Wrong device_class — must not be offered.
-    hass.states.async_set(
-        "binary_sensor.front_door", "off", {"device_class": "door"}
-    )
+    hass.states.async_set("binary_sensor.front_door", "off", {"device_class": "door"})
     # Kitchen is already wrapped by an existing MoLight entry — must be hidden.
     existing = MockConfigEntry(
         domain=DOMAIN,
@@ -658,9 +657,7 @@ async def test_discover_illuminance_creates_with_defaults(
         {"device_class": "illuminance", "friendly_name": "Office Lux"},
     )
     # Wrong device_class.
-    hass.states.async_set(
-        "sensor.office_temp", "21", {"device_class": "temperature"}
-    )
+    hass.states.async_set("sensor.office_temp", "21", {"device_class": "temperature"})
 
     result = await _start_discovery(hass, "discover_illuminance")
     assert _offered_candidates(result) == {"sensor.office_lux"}
@@ -685,9 +682,7 @@ async def test_discover_illuminance_creates_with_defaults(
 @pytest.mark.asyncio
 async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None:
     """Light discovery wraps real lights (stored as a single-item list)."""
-    hass.states.async_set(
-        "light.desk", "off", {"friendly_name": "Desk Lamp"}
-    )
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
     # Already wrapped by an existing virtual light — must be hidden.
     existing = MockConfigEntry(
         domain=DOMAIN,
@@ -928,9 +923,7 @@ async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
         == "light.kitchen_virtual"
     )
     assert (
-        registry.async_get_entity_id(
-            "switch", DOMAIN, f"{entry.entry_id}_auto_off"
-        )
+        registry.async_get_entity_id("switch", DOMAIN, f"{entry.entry_id}_auto_off")
         == "switch.kitchen_virtual_auto_off"
     )
 

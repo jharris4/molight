@@ -10,6 +10,7 @@ Provides four sensor types, all created via the config flow:
   VirtualIlluminanceSensor       — compares a real illuminance sensor to a threshold
   VirtualScheduleSensor          — evaluates configurable time windows
 """
+
 from __future__ import annotations
 
 import logging
@@ -107,7 +108,7 @@ async def async_setup_entry(
     cls = entity_map.get(entity_type)
     if cls is not None:
         entity = cls(hass, entry)
-        if (entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT)):
+        if entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT):
             entity.entity_id = entity_id
         async_add_entities([entity])
 
@@ -407,19 +408,14 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         if not was_on and self._attr_is_on:
             self._cycle_start_lot = self._latest_occupied_time
         elif was_on and not self._attr_is_on:
-            self._last_clear_false = (
-                self._latest_occupied_time == self._cycle_start_lot
-            )
+            self._last_clear_false = self._latest_occupied_time == self._cycle_start_lot
             if self._last_clear_false:
                 self._false_count += 1
 
         self.async_write_ha_state()
 
     def _any_on(self, sensors: list[str]) -> bool:
-        return any(
-            (s := self.hass.states.get(e)) and s.state == "on"
-            for e in sensors
-        )
+        return any((s := self.hass.states.get(e)) and s.state == "on" for e in sensors)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -565,9 +561,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
         )
         self.async_write_ha_state()
 
-    def _evaluate(
-        self, now: datetime
-    ) -> tuple[datetime | None, datetime | None]:
+    def _evaluate(self, now: datetime) -> tuple[datetime | None, datetime | None]:
         """Return (active window start, next boundary after now).
 
         Windows are resolved for yesterday, today, and tomorrow so overnight

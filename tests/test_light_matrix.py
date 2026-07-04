@@ -7,6 +7,7 @@ plain states set via hass.states.async_set — the light only reads states
 and attributes, so the tests stay independent of the virtual-sensor
 implementations.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

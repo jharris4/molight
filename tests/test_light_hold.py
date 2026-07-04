@@ -5,6 +5,7 @@ configured keep-on entity is on. While held every automatic turn-off is
 suspended; turn-ons and manual control are unaffected. Releasing the hold
 re-evaluates the configured rules and otherwise starts a fresh full timer.
 """
+
 from __future__ import annotations
 
 from datetime import timedelta
@@ -331,9 +332,7 @@ async def test_hold_blocks_bright_force_off_release_applies_it(
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(
         hass,
-        make_light_entry(
-            illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_CONTROL
-        ),
+        make_light_entry(illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_CONTROL),
     )
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})

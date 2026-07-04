@@ -1,4 +1,5 @@
 """Tests for the MoLight Virtual Light."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -505,9 +506,7 @@ async def test_false_detection_never_cuts_manual_lights(
     await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
 
     # User turns the light on; occupancy blips on afterwards.
-    await hass.services.async_call(
-        "light", "turn_on", {"entity_id": "light.fd_light"}
-    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": "light.fd_light"})
     await hass.async_block_till_done()
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)

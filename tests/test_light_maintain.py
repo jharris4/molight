@@ -6,6 +6,7 @@ extend occupancy started by a trigger sensor), it holds the light regardless
 of how it was lit — manual, physical, or occupancy. The watched sensors are
 plain states set via hass.states.async_set, as in test_light_matrix.py.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

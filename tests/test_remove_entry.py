@@ -10,6 +10,7 @@ listener's remove callback is not idempotent, so a naive teardown removed it a
 second time and logged "Unable to remove unknown job listener"; the deferred
 test below is the regression guard for that.
 """
+
 from __future__ import annotations
 
 import logging
@@ -97,8 +98,7 @@ def _entities_for(hass: HomeAssistant, entry: MockConfigEntry) -> list[str]:
 
     registry = er.async_get(hass)
     return [
-        e.entity_id
-        for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+        e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)
     ]
 
 
@@ -119,9 +119,13 @@ async def _remove_and_assert_clean(
     assert REMOVE_ERROR not in caplog.text
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR], (
         "removal logged errors: "
-        + "; ".join(r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR)
+        + "; ".join(
+            r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR
+        )
     )
-    assert entry.entry_id not in {e.entry_id for e in hass.config_entries.async_entries(DOMAIN)}
+    assert entry.entry_id not in {
+        e.entry_id for e in hass.config_entries.async_entries(DOMAIN)
+    }
     for entity_id in entities:
         assert hass.states.get(entity_id) is None
 

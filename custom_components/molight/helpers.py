@@ -1,4 +1,5 @@
 """Shared helpers for the MoLight integration."""
+
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -38,6 +39,4 @@ def suggested_entity_id(
     obj = entry.data.get(CONF_ENTITY_ID)
     if not obj:
         return None
-    return async_generate_entity_id(
-        entity_id_format, f"{obj}{suffix}", hass=hass
-    )
+    return async_generate_entity_id(entity_id_format, f"{obj}{suffix}", hass=hass)
