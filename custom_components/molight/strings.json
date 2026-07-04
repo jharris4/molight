@@ -110,6 +110,65 @@
     }
   },
   "options": {
+    "step": {
+      "occupancy": {
+        "title": "Virtual Occupancy Sensor",
+        "data": {
+          "name": "Name",
+          "occupancy_sensor": "Sensor",
+          "occupancy_timeout": "Timeout (seconds)",
+          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
+        }
+      },
+      "combined_occupancy": {
+        "title": "Virtual Combined Occupancy Sensor",
+        "data": {
+          "name": "Name",
+          "trigger_sensors": "Trigger sensors",
+          "maintain_sensors": "Maintain sensors (optional)"
+        }
+      },
+      "illuminance": {
+        "title": "Virtual Illuminance Sensor",
+        "data": {
+          "name": "Name",
+          "illuminance_sensor": "Illuminance sensor",
+          "illuminance_threshold": "Threshold (lx)",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
+        }
+      },
+      "schedule": {
+        "title": "Virtual Schedule Sensor",
+        "data": {
+          "name": "Name",
+          "start_time": "Window start time",
+          "start_sun": "Window start sun event",
+          "start_combine": "Start: combine time and sun as",
+          "end_time": "Window end time",
+          "end_sun": "Window end sun event",
+          "end_combine": "End: combine time and sun as",
+          "start_offset": "Start sun offset (minutes, negative = before)",
+          "end_offset": "End sun offset (minutes, negative = before)"
+        }
+      },
+      "light": {
+        "title": "Virtual Light",
+        "data": {
+          "name": "Name",
+          "lights": "Lights to control",
+          "light_timeout": "Turn-off timeout (seconds)",
+          "occupancy_entity": "Occupancy sensor (optional)",
+          "maintain_occupancy_entity": "Maintain occupancy sensor (optional) — keeps an already-on light on while occupied, never turns it on",
+          "illuminance_entity": "Illuminance sensor (optional)",
+          "schedule_entity": "Schedule sensor (optional)",
+          "hold_entities": "Keep-on entities (optional) — auto-off is suspended while any of these is on",
+          "schedule_mode": "Schedule mode",
+          "illuminance_mode": "Illuminance mode",
+          "false_detection_off_delay": "Turn-off delay after a false detection (s)"
+        }
+      }
+    },
     "error": {
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "lights_required": "At least one light is required.",
