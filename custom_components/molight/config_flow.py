@@ -20,11 +20,17 @@ from .const import (
     AFFIX_TARGET_ENTITY_ID,
     AFFIX_TARGET_NAME,
     AFFIX_TARGETS,
+    ASSIGN_ROLE_MAINTAIN,
+    ASSIGN_ROLE_REGULAR,
+    ASSIGN_ROLES,
     COMBINE_EARLIEST,
     COMBINE_LATEST,
     CONF_AFFIX_PREFIX,
     CONF_AFFIX_SUFFIX,
     CONF_AFFIX_TARGET,
+    CONF_ASSIGN_LIGHTS,
+    CONF_ASSIGN_ROLE,
+    CONF_ASSIGN_SENSOR,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
@@ -403,6 +409,27 @@ def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
     }
 
 
+def _molight_light_entries(
+    hass: HomeAssistant,
+) -> dict[str, config_entries.ConfigEntry]:
+    """Map each virtual light's entity_id to its config entry.
+
+    Only entries that have actually registered a light entity appear — the
+    entity_id is what the bulk-assign light picker stores, and what a light's
+    sensor references are keyed against.
+    """
+    registry = er.async_get(hass)
+    result: dict[str, config_entries.ConfigEntry] = {}
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT:
+            continue
+        for ent in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if ent.domain == "light":
+                result[ent.entity_id] = entry
+                break
+    return result
+
+
 class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for MoLight."""
 
@@ -415,6 +442,8 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._prefill: dict[str, Any] | None = None
         # Stashed create payload while the entity_id confirm step is shown.
         self._pending: dict[str, Any] | None = None
+        # Stashed sensor/role/mode between the two bulk-assign steps.
+        self._assign: dict[str, Any] = {}
 
     @staticmethod
     def async_get_options_flow(
@@ -540,6 +569,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "discover_occupancy",
                 "discover_illuminance",
                 "discover_light",
+                "assign_sensor",
             ],
         )
 
@@ -711,6 +741,224 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(
             title=import_data[CONF_NAME], data=import_data
         )
+
+    # ------------------------------------------------------------------
+    # Bulk-assign a virtual sensor to many virtual lights at once
+    # ------------------------------------------------------------------
+
+    async def async_step_assign_sensor(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose which kind of virtual sensor to assign to lights in bulk."""
+        return self.async_show_menu(
+            step_id="assign_sensor",
+            menu_options=[
+                "assign_occupancy",
+                "assign_illuminance",
+                "assign_schedule",
+            ],
+        )
+
+    async def async_step_assign_occupancy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Pick an occupancy sensor and its role, then choose target lights."""
+        if user_input is not None:
+            role = user_input[CONF_ASSIGN_ROLE]
+            self._assign = {
+                "sensor": user_input[CONF_ASSIGN_SENSOR],
+                "key": (
+                    CONF_MAINTAIN_OCCUPANCY_ENTITY
+                    if role == ASSIGN_ROLE_MAINTAIN
+                    else CONF_OCCUPANCY_ENTITY
+                ),
+                "mode_key": None,
+                "mode": None,
+                # Occupancy feeds the countdown, so the light_timeout guard
+                # applies to each target the same way the light form enforces it.
+                "check_timeout": True,
+            }
+            return await self.async_step_assign_lights()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
+                    _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
+                ),
+                vol.Required(
+                    CONF_ASSIGN_ROLE, default=ASSIGN_ROLE_REGULAR
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ASSIGN_ROLES, translation_key=CONF_ASSIGN_ROLE
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="assign_occupancy", data_schema=schema)
+
+    async def async_step_assign_illuminance(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Pick an illuminance sensor and its mode, then choose target lights."""
+        if user_input is not None:
+            self._assign = {
+                "sensor": user_input[CONF_ASSIGN_SENSOR],
+                "key": CONF_ILLUMINANCE_ENTITY,
+                "mode_key": CONF_ILLUMINANCE_MODE,
+                "mode": user_input[CONF_ILLUMINANCE_MODE],
+                "check_timeout": False,
+            }
+            return await self.async_step_assign_lights()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
+                    _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
+                ),
+                vol.Required(
+                    CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=ILLUMINANCE_MODES,
+                        translation_key=CONF_ILLUMINANCE_MODE,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="assign_illuminance", data_schema=schema)
+
+    async def async_step_assign_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Pick a schedule sensor and its mode, then choose target lights."""
+        if user_input is not None:
+            self._assign = {
+                "sensor": user_input[CONF_ASSIGN_SENSOR],
+                "key": CONF_SCHEDULE_ENTITY,
+                "mode_key": CONF_SCHEDULE_MODE,
+                "mode": user_input[CONF_SCHEDULE_MODE],
+                "check_timeout": False,
+            }
+            return await self.async_step_assign_lights()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
+                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                ),
+                vol.Required(
+                    CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="assign_schedule", data_schema=schema)
+
+    def _light_label(self, entity_id: str) -> str:
+        """Friendly name of a virtual light, falling back to its entity_id."""
+        state = self.hass.states.get(entity_id)
+        return state.name if state and state.name else entity_id
+
+    async def async_step_assign_lights(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Pick the lights that reference the sensor, pre-selecting current users.
+
+        The submitted set is authoritative for this sensor+role: selected
+        lights get the reference (overwriting any prior one under the same
+        key), and pre-selected lights that were deselected have it removed.
+        Occupancy targets whose turn-off timeout is shorter than the sensor's
+        timeout are skipped and reported rather than silently misconfigured.
+        """
+        assign = self._assign
+        key = assign["key"]
+        sensor = assign["sensor"]
+        lights = _molight_light_entries(self.hass)
+        already = {
+            eid
+            for eid, entry in lights.items()
+            if _molight_cfg(entry).get(key) == sensor
+        }
+
+        if user_input is not None:
+            selected = set(user_input.get(CONF_ASSIGN_LIGHTS, []))
+            occ_timeout = (
+                _effective_occupancy_timeout(self.hass, sensor)
+                if assign["check_timeout"]
+                else None
+            )
+            assigned: list[str] = []
+            skipped: list[str] = []
+            for eid in selected:
+                entry = lights.get(eid)
+                if entry is None:
+                    continue  # a stale pick no longer backed by a light entry
+                cfg = _molight_cfg(entry)
+                if (
+                    occ_timeout is not None
+                    and int(cfg.get(CONF_LIGHT_TIMEOUT, 0)) < occ_timeout
+                ):
+                    skipped.append(eid)
+                    continue
+                opts = {
+                    k: v
+                    for k, v in cfg.items()
+                    if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID)
+                }
+                changed = opts.get(key) != sensor
+                opts[key] = sensor
+                if assign["mode_key"] is not None:
+                    changed = changed or opts.get(assign["mode_key"]) != assign["mode"]
+                    opts[assign["mode_key"]] = assign["mode"]
+                if changed:
+                    self.hass.config_entries.async_update_entry(entry, options=opts)
+                    assigned.append(eid)
+
+            removed: list[str] = []
+            for eid in already - selected:
+                entry = lights[eid]
+                opts = {
+                    k: v
+                    for k, v in _molight_cfg(entry).items()
+                    if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID, key)
+                }
+                self.hass.config_entries.async_update_entry(entry, options=opts)
+                removed.append(eid)
+
+            placeholders = {
+                "assigned": str(len(assigned)),
+                "removed": str(len(removed)),
+            }
+            if skipped:
+                placeholders["skipped"] = ", ".join(
+                    sorted(self._light_label(eid) for eid in skipped)
+                )
+                return self.async_abort(
+                    reason="assign_done_skipped",
+                    description_placeholders=placeholders,
+                )
+            return self.async_abort(
+                reason="assign_done", description_placeholders=placeholders
+            )
+
+        if not lights:
+            return self.async_abort(reason="no_lights")
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_ASSIGN_LIGHTS, default=sorted(already)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        integration=DOMAIN, domain="light", multiple=True
+                    )
+                )
+            }
+        )
+        return self.async_show_form(step_id="assign_lights", data_schema=schema)
 
     # ------------------------------------------------------------------
     # Occupancy (simple — one sensor, one timeout)

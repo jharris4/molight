@@ -8,7 +8,48 @@
           "create": "Create a single entity",
           "discover_occupancy": "Discover occupancy sensors",
           "discover_illuminance": "Discover illuminance sensors",
-          "discover_light": "Discover lights"
+          "discover_light": "Discover lights",
+          "assign_sensor": "Assign a sensor to several lights"
+        }
+      },
+      "assign_sensor": {
+        "title": "Assign a sensor to lights",
+        "description": "Attach one virtual sensor to several virtual lights at once. Pick the kind of sensor to assign.",
+        "menu_options": {
+          "assign_occupancy": "Assign an occupancy sensor",
+          "assign_illuminance": "Assign an illuminance sensor",
+          "assign_schedule": "Assign a schedule sensor"
+        }
+      },
+      "assign_occupancy": {
+        "title": "Assign an occupancy sensor",
+        "description": "Choose the occupancy sensor and how it should drive the lights. Regular occupancy turns lights on and off; maintain only holds an already-on light on while occupied.",
+        "data": {
+          "assign_sensor": "Occupancy sensor",
+          "assign_role": "Role"
+        }
+      },
+      "assign_illuminance": {
+        "title": "Assign an illuminance sensor",
+        "description": "Choose the illuminance sensor and how it should drive the lights.",
+        "data": {
+          "assign_sensor": "Illuminance sensor",
+          "illuminance_mode": "Illuminance mode"
+        }
+      },
+      "assign_schedule": {
+        "title": "Assign a schedule sensor",
+        "description": "Choose the schedule sensor and how it should drive the lights.",
+        "data": {
+          "assign_sensor": "Schedule sensor",
+          "schedule_mode": "Schedule mode"
+        }
+      },
+      "assign_lights": {
+        "title": "Choose the lights",
+        "description": "Lights already using this sensor are pre-selected. Add lights to assign it, or deselect a pre-selected light to remove it — the final selection is the complete set that will use this sensor.",
+        "data": {
+          "assign_lights": "Lights"
         }
       },
       "create": {
@@ -128,10 +169,19 @@
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
-      "discovery_done": "Created {count} virtual MoLight entities. They use default settings; edit any of them via its options."
+      "discovery_done": "Created {count} virtual MoLight entities. They use default settings; edit any of them via its options.",
+      "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
+      "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
+      "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}."
     }
   },
   "selector": {
+    "assign_role": {
+      "options": {
+        "regular": "Regular — turns lights on and off with occupancy",
+        "maintain": "Maintain — only holds an already-on light on while occupied"
+      }
+    },
     "entity_type": {
       "options": {
         "occupancy": "Virtual Occupancy Sensor",

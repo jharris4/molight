@@ -43,6 +43,18 @@ AFFIX_TARGET_ENTITY_ID = "entity_id"
 AFFIX_TARGET_NAME = "name"
 AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 
+# Bulk-assign config-flow steps: attach one virtual sensor to many virtual
+# lights at once. The chosen sensor and (for occupancy) its role are picked
+# first; the second step lists all virtual lights, pre-selecting those that
+# already reference the sensor. The submitted set is the source of truth —
+# deselecting a pre-selected light removes the reference.
+CONF_ASSIGN_SENSOR = "assign_sensor"   # the virtual sensor entity_id to assign
+CONF_ASSIGN_ROLE = "assign_role"       # occupancy only: regular vs maintain
+CONF_ASSIGN_LIGHTS = "assign_lights"   # target virtual light entity_ids
+ASSIGN_ROLE_REGULAR = "regular"
+ASSIGN_ROLE_MAINTAIN = "maintain"
+ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
+
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor
 # latest_occupied_time = last_off - timeout

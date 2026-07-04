@@ -11,17 +11,25 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.molight.const import (
     AFFIX_TARGET_ENTITY_ID,
     AFFIX_TARGET_NAME,
+    ASSIGN_ROLE_MAINTAIN,
+    ASSIGN_ROLE_REGULAR,
     CONF_AFFIX_PREFIX,
     CONF_AFFIX_SUFFIX,
     CONF_AFFIX_TARGET,
+    CONF_ASSIGN_LIGHTS,
+    CONF_ASSIGN_ROLE,
+    CONF_ASSIGN_SENSOR,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
+    CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
@@ -36,8 +44,10 @@ from custom_components.molight.const import (
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    ILLUMINANCE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
+from tests.conftest import setup_entries
 
 
 async def _start_create(hass: HomeAssistant) -> dict:
@@ -923,3 +933,188 @@ async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
         )
         == "switch.kitchen_virtual_auto_off"
     )
+
+
+# ---------------------------------------------------------------------------
+# Bulk-assign a virtual sensor to many virtual lights
+# ---------------------------------------------------------------------------
+
+
+async def _reach_assign_kind(hass: HomeAssistant, kind_step: str) -> dict:
+    """Init the flow and advance to a bulk-assign sensor form (sensor + mode)."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "assign_sensor"}
+    )
+    assert result["type"] == FlowResultType.MENU
+    assert result["step_id"] == "assign_sensor"
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": kind_step}
+    )
+
+
+def _light_entry(
+    name: str, obj_id: str, *, timeout: int = 60, **refs
+) -> MockConfigEntry:
+    """A virtual-light entry with a pinned entity_id for predictable ids."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: name,
+            CONF_LIGHTS: [f"light.{obj_id}_real"],
+            CONF_LIGHT_TIMEOUT: timeout,
+            CONF_ENTITY_ID: obj_id,
+            **refs,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_assign_occupancy_adds_and_removes(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Bulk-assign pre-selects current users; the submitted set is authoritative."""
+    # Occupancy sensor (30s timeout fixture) registers binary_sensor.test_occupancy.
+    already_light = _light_entry(
+        "Hall", "hall", occupancy_entity="binary_sensor.test_occupancy"
+    )
+    fresh_light = _light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, occupancy_entry, already_light, fresh_light)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "assign_occupancy"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "assign_lights"
+    # The light already wired to this sensor is pre-selected.
+    assert result["data_schema"]({})[CONF_ASSIGN_LIGHTS] == ["light.hall"]
+
+    # Swap: add the kitchen light, drop the hall light.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.kitchen"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    assert result["description_placeholders"] == {"assigned": "1", "removed": "1"}
+    await hass.async_block_till_done()
+
+    assert (
+        molight_config(fresh_light)[CONF_OCCUPANCY_ENTITY]
+        == "binary_sensor.test_occupancy"
+    )
+    assert CONF_OCCUPANCY_ENTITY not in molight_config(already_light)
+
+
+@pytest.mark.asyncio
+async def test_assign_occupancy_maintain_uses_maintain_key(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """The maintain role writes the maintain reference, not the regular one."""
+    light = _light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_MAINTAIN,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.kitchen"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert cfg[CONF_MAINTAIN_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    assert CONF_OCCUPANCY_ENTITY not in cfg
+
+
+@pytest.mark.asyncio
+async def test_assign_occupancy_skips_short_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A light whose turn-off timeout is below the sensor's is skipped and reported."""
+    short = _light_entry("Closet", "closet", timeout=20)  # < 30s sensor timeout
+    await setup_entries(hass, occupancy_entry, short)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.closet"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done_skipped"
+    assert result["description_placeholders"]["assigned"] == "0"
+    # Skipped lights are reported by their friendly name for identification.
+    assert result["description_placeholders"]["skipped"] == "Closet"
+    await hass.async_block_till_done()
+
+    assert CONF_OCCUPANCY_ENTITY not in molight_config(short)
+
+
+@pytest.mark.asyncio
+async def test_assign_illuminance_sets_mode(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """Assigning an illuminance sensor also stamps the chosen mode."""
+    light = _light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, illuminance_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_illuminance")
+    assert result["step_id"] == "assign_illuminance"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_illuminance",
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.kitchen"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert cfg[CONF_ILLUMINANCE_ENTITY] == "binary_sensor.test_illuminance"
+    assert cfg[CONF_ILLUMINANCE_MODE] == ILLUMINANCE_MODE_GATE
+
+
+@pytest.mark.asyncio
+async def test_assign_aborts_when_no_lights(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """With no virtual lights, the second step aborts cleanly."""
+    await setup_entries(hass, occupancy_entry)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_lights"
