@@ -303,8 +303,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         # One entity may serve several roles — subscribe to it only once.
         watch = list(dict.fromkeys(watch))
 
+        unsub_start: CALLBACK_TYPE | None = None
+
         @callback
         def _subscribe(_event=None) -> None:
+            # When fired via async_listen_once, HA has already removed this
+            # one-time listener; drop our reference so teardown doesn't try to
+            # remove it a second time (that logs "unknown job listener").
+            nonlocal unsub_start
+            unsub_start = None
             self.async_on_remove(
                 async_track_state_change_event(
                     self.hass, watch, self._handle_state_change
@@ -322,11 +329,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self.hass.state is CoreState.running:
             _subscribe()
         else:
-            self.async_on_remove(
-                self.hass.bus.async_listen_once(
-                    EVENT_HOMEASSISTANT_STARTED, _subscribe
-                )
+            unsub_start = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _subscribe
             )
+
+            @callback
+            def _cancel_start() -> None:
+                # async_listen_once' remove callback is not idempotent: it
+                # auto-removes on fire, so only unsubscribe if it hasn't fired.
+                if unsub_start is not None:
+                    unsub_start()
+
+            self.async_on_remove(_cancel_start)
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
