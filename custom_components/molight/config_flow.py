@@ -175,13 +175,22 @@ _LIGHT_REF_SELECTORS = {
 }
 
 
-def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | None:
+def _effective_occupancy_timeout(
+    hass: HomeAssistant, entity_id: str, _seen: set[str] | None = None
+) -> int | None:
     """Resolve the occupancy timeout (seconds) behind a MoLight occupancy entity.
 
     For a simple occupancy sensor this is its configured timeout; for a
     combined sensor it is the max across all constituent sensors (the
-    countdown math anchors to the constituent that clears last).
+    countdown math anchors to the constituent that clears last). Combined
+    sensors can reference each other (the options flow can even create
+    cycles), so entities already being resolved are skipped.
     """
+    if _seen is None:
+        _seen = set()
+    if entity_id in _seen:
+        return None
+    _seen.add(entity_id)
     reg_entry = er.async_get(hass).async_get(entity_id)
     if reg_entry is None or reg_entry.config_entry_id is None:
         return None
@@ -200,7 +209,7 @@ def _effective_occupancy_timeout(hass: HomeAssistant, entity_id: str) -> int | N
         timeouts = [
             t
             for e in constituents
-            if (t := _effective_occupancy_timeout(hass, e)) is not None
+            if (t := _effective_occupancy_timeout(hass, e, _seen)) is not None
         ]
         return max(timeouts, default=None)
     return None
@@ -701,7 +710,9 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             else:
                 # The new constituent set must not outgrow any dependent light:
                 # the combined sensor's effective timeout is its max constituent.
-                constituents = user_input.get(CONF_TRIGGER_SENSORS, []) + user_input.get(
+                constituents = user_input.get(
+                    CONF_TRIGGER_SENSORS, []
+                ) + user_input.get(
                     CONF_MAINTAIN_SENSORS, []
                 )
                 timeouts = [

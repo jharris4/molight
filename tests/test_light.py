@@ -93,7 +93,9 @@ _settle = settle
 
 
 @pytest.mark.asyncio
-async def test_virtual_light_setup(hass: HomeAssistant, light_entry: MockConfigEntry) -> None:
+async def test_virtual_light_setup(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
     """Virtual light is created and starts off."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
@@ -105,13 +107,17 @@ async def test_virtual_light_setup(hass: HomeAssistant, light_entry: MockConfigE
 
 
 @pytest.mark.asyncio
-async def test_virtual_light_turn_on(hass: HomeAssistant, light_entry: MockConfigEntry) -> None:
+async def test_virtual_light_turn_on(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
     """Turning on the virtual light turns on real lights and starts the timer."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
-    await hass.services.async_call("light", "turn_on", {"entity_id": "light.test_light"})
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.test_light"}
+    )
     await hass.async_block_till_done()
 
     state = hass.states.get("light.test_light")
@@ -128,7 +134,9 @@ async def test_virtual_light_auto_off(
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
-    await hass.services.async_call("light", "turn_on", {"entity_id": "light.test_light"})
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.test_light"}
+    )
     await hass.async_block_till_done()
     assert hass.states.get("light.test_light").state == "on"
 
@@ -189,9 +197,11 @@ async def test_light_restores_brightness(
 
 @pytest.mark.asyncio
 async def test_occupancy_suppressed_when_bright(
-    hass: HomeAssistant, occupancy_entry: MockConfigEntry, illuminance_entry: MockConfigEntry
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
 ) -> None:
-    """Occupancy must not turn the light on while the illuminance sensor reads bright."""
+    """Occupancy must not turn the light on while illuminance reads bright."""
     await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
 
     hass.states.async_set("sensor.lux_1", "500")  # bright (threshold 10 in fixture)
@@ -220,7 +230,7 @@ async def test_occupancy_turns_light_on_when_dark(
     illuminance_entry: MockConfigEntry,
     freezer,
 ) -> None:
-    """When dark, occupancy turns the light on; clearing starts the precise countdown."""
+    """Occupancy turns the light on when dark; clearing starts the countdown."""
     await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
 
     hass.states.async_set("sensor.lux_1", "5")  # dark
@@ -501,7 +511,8 @@ async def test_false_detection_never_cuts_manual_lights(
     await hass.async_block_till_done()
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
-    assert hass.states.get("light.fd_light").attributes["molight_state"] == STATE_OCCUPIED
+    attrs = hass.states.get("light.fd_light").attributes
+    assert attrs["molight_state"] == STATE_OCCUPIED
 
     # False clear — but occupancy didn't light these lights, so the normal
     # countdown (60s here, lot never advanced) applies, not the 5s quick-off.
@@ -798,7 +809,9 @@ async def test_gate_mode_blocks_occupancy_outside_window(
 
 @pytest.mark.asyncio
 async def test_bright_turns_light_off(
-    hass: HomeAssistant, occupancy_entry: MockConfigEntry, illuminance_entry: MockConfigEntry
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
 ) -> None:
     """Illuminance switching to bright turns an occupancy-lit light off."""
     await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())

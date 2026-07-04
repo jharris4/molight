@@ -67,6 +67,21 @@ async def test_restart_adopts_burning_lights_with_timer(
 
 
 @pytest.mark.asyncio
+async def test_restart_light_at_brightness_zero_stays_idle(
+    hass: HomeAssistant,
+) -> None:
+    """A real light 'on' at brightness 0 counts as off when seeding at startup,
+    matching the brightness-0-is-off convention used everywhere else."""
+    hass.states.async_set(REAL, "on", {"brightness": 0})
+    await setup_entries(hass, make_light_entry())
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_restart_with_lights_off_stays_idle(hass: HomeAssistant) -> None:
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, make_light_entry())
@@ -155,7 +170,9 @@ async def test_restart_occupied_outside_gate_window_adopts_active(
     hass.states.async_set(REAL, "on")
     await setup_entries(
         hass,
-        make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE),
+        make_light_entry(
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        ),
     )
     await settle(hass)
 
@@ -172,7 +189,9 @@ async def test_restart_occupied_inside_gate_window_goes_occupied(
     hass.states.async_set(SCHED, "on")
     await setup_entries(
         hass,
-        make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE),
+        make_light_entry(
+            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+        ),
     )
     await settle(hass)
 

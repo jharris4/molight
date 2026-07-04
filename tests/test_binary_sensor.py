@@ -56,7 +56,9 @@ def _combined_entry() -> MockConfigEntry:
 
 
 @pytest.mark.asyncio
-async def test_occupancy_sensor_setup(hass: HomeAssistant, occupancy_entry: MockConfigEntry) -> None:
+async def test_occupancy_sensor_setup(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
     """Occupancy sensor is created and starts off."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
@@ -68,7 +70,9 @@ async def test_occupancy_sensor_setup(hass: HomeAssistant, occupancy_entry: Mock
 
 
 @pytest.mark.asyncio
-async def test_occupancy_mirrors_source_on(hass: HomeAssistant, occupancy_entry: MockConfigEntry) -> None:
+async def test_occupancy_mirrors_source_on(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
     """Virtual occupancy turns on when the real sensor turns on."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
@@ -243,6 +247,46 @@ async def test_occupancy_dropout_recovery_to_off_is_real_clear(
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.test_occupancy").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_recovery_to_off_after_unavailable_clear_is_noop(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
+) -> None:
+    """A recovery straight to 'off' after the unavailable clear fired is a no-op.
+
+    The clear was already processed when the timeout expired; re-processing it
+    would advance latest_occupied_time far past the dropout (as if someone had
+    been present the whole time the sensor was dead) and wipe the
+    last_clear_unavailable classification.
+    """
+    occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+
+    dropout = datetime.now(timezone.utc)
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    await hass.async_block_till_done()
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_occupancy").state == "off"
+
+    # Hours later the source finally comes back, reporting 'off'.
+    freezer.tick(timedelta(hours=2))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "off"
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+    assert state.attributes["last_clear_unavailable"] is True
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
 
 
 @pytest.mark.asyncio
@@ -711,7 +755,9 @@ async def test_illuminance_holds_value_when_source_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_sensor_dark(hass: HomeAssistant, illuminance_entry: MockConfigEntry) -> None:
+async def test_illuminance_sensor_dark(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
     """Illuminance sensor is OFF (no light detected) when lux is below the threshold."""
     illuminance_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(illuminance_entry.entry_id)
@@ -725,7 +771,9 @@ async def test_illuminance_sensor_dark(hass: HomeAssistant, illuminance_entry: M
 
 
 @pytest.mark.asyncio
-async def test_illuminance_sensor_bright(hass: HomeAssistant, illuminance_entry: MockConfigEntry) -> None:
+async def test_illuminance_sensor_bright(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
     """Illuminance sensor is ON (light detected) when lux meets the threshold."""
     illuminance_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(illuminance_entry.entry_id)

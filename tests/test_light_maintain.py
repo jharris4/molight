@@ -405,3 +405,34 @@ async def test_hold_release_respects_maintain(hass: HomeAssistant, freezer) -> N
 
     await _tick(hass, freezer, 300)
     assert _state(hass).state == "on"
+
+
+# ---------------------------------------------------------------------------
+# One entity serving several roles
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_same_entity_as_occupancy_and_maintain(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The same entity configured as both occupancy and maintain works in
+    both roles instead of one silently shadowing the other."""
+    entry = make_light_entry(occupancy=OCC, maintain=OCC, timeout=60)
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    # Both roles clear together → the normal countdown runs.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _tick(hass, freezer, 61)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE

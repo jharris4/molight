@@ -155,11 +155,11 @@ from .const import (
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
-    SIGNAL_AUTO_OFF_TOGGLED,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SIGNAL_AUTO_OFF_TOGGLED,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -285,13 +285,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         watch = list(self._lights)
         if self._occupancy_entity:
             watch.append(self._occupancy_entity)
-        if self._maintain_entity and self._maintain_entity not in watch:
+        if self._maintain_entity:
             watch.append(self._maintain_entity)
         if self._illuminance_entity:
             watch.append(self._illuminance_entity)
         if self._schedule_entity:
             watch.append(self._schedule_entity)
         watch.extend(self._hold_entities)
+        # One entity may serve several roles — subscribe to it only once.
+        watch = list(dict.fromkeys(watch))
 
         @callback
         def _subscribe(_event=None) -> None:
@@ -327,8 +329,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         }
         self._held = self._compute_held()
 
+        # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
-            (s := self.hass.states.get(e)) and s.state == "on"
+            (s := self.hass.states.get(e)) is not None
+            and s.state == "on"
+            and s.attributes.get("brightness") != 0
             for e in self._lights
         )
 
@@ -424,7 +429,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._last_brightness_change_virtual = now
             self._attr_brightness = brightness
         await self._set_lights(True, brightness=brightness)
-        self._transition_on(manual=True)
+        self._transition_on()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Turn off all real lights and go idle."""
@@ -453,17 +458,21 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._on_light_brightness_change(old_state, new_state)
                 return
             self._on_light_state_change(new_state.state)
-        elif same_state:
+            return
+        if same_state:
             return  # attribute-only change (battery, ...)
-        elif entity_id == self._occupancy_entity:
+        # One entity may serve several roles (e.g. as both the occupancy and
+        # the maintain entity), so the role checks are independent, not
+        # exclusive.
+        if entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
-        elif entity_id == self._maintain_entity:
+        if entity_id == self._maintain_entity:
             self._on_maintain_change(new_state.state == "on")
-        elif entity_id == self._illuminance_entity:
+        if entity_id == self._illuminance_entity:
             self._on_illuminance_change(new_state.state == "on")
-        elif entity_id == self._schedule_entity:
+        if entity_id == self._schedule_entity:
             self._on_schedule_change(new_state)
-        elif entity_id in self._hold_entities:
+        if entity_id in self._hold_entities:
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
 
@@ -473,7 +482,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._machine_state == STATE_IDLE:
                 self._last_on_physical = datetime.now(timezone.utc)
                 self._occupancy_lit_lights = False  # the user owns this on-period
-            self._transition_on(manual=True)
+            self._transition_on()
         else:
             if self._all_lights_off():
                 self._go_idle()
@@ -892,7 +901,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return max(0, int(self._light_timeout - elapsed))
         return self._light_timeout
 
-    def _transition_on(self, manual: bool = False) -> None:
+    def _transition_on(self) -> None:
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
@@ -951,6 +960,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._timer_unsub = None
         if self._held:
             return  # engaged in the same loop iteration the timer fired
+        if self._machine_state not in (STATE_ACTIVE, STATE_COUNTDOWN):
+            return  # state moved on in the same loop iteration the timer fired
         await self._set_lights(False)
         self._go_idle()
 

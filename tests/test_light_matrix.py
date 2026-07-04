@@ -138,7 +138,9 @@ async def test_illuminance_dark_activation(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_dark_is_noop_while_running(hass: HomeAssistant, freezer) -> None:
+async def test_illuminance_dark_is_noop_while_running(
+    hass: HomeAssistant, freezer
+) -> None:
     """Dark while already ACTIVE changes nothing; the original timer stands."""
     entry = make_light_entry(illuminance=ILLUM)
     hass.states.async_set(ILLUM, "on")  # bright
@@ -250,7 +252,9 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
 @pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
 async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> None:
     """Window end turns the lights off from every running state."""
-    entry = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+    )
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
 
@@ -278,7 +282,9 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
 @pytest.mark.asyncio
 async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
     """Window end while IDLE stays IDLE."""
-    entry = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+    )
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
 
@@ -318,9 +324,13 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 
 
 @pytest.mark.asyncio
-async def test_gate_window_start_keeps_running_state(hass: HomeAssistant, freezer) -> None:
+async def test_gate_window_start_keeps_running_state(
+    hass: HomeAssistant, freezer
+) -> None:
     """Window start while already ACTIVE leaves the state and timer untouched."""
-    entry = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+    )
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
 
@@ -400,6 +410,41 @@ async def test_reoccupancy_during_countdown_cancels_timer(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A timer expiring in the same loop iteration occupancy returns is a no-op.
+
+    async_call_later has already fired the callback at that point, so the
+    occupancy handler's _cancel_timer can't stop it — _timer_expired itself
+    must notice the state machine moved on (mirroring its _held guard) instead
+    of turning the lights off over an occupied room.
+    """
+    entry = make_light_entry(occupancy=OCC)
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # Occupancy returns; the expiry coroutine still runs afterwards, exactly
+    # as when both land in the same event-loop iteration.
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    light = hass.data["entity_components"]["light"].get_entity(VIRTUAL)
+    await light._timer_expired(datetime.now(timezone.utc))
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio

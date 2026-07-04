@@ -216,6 +216,12 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self._last_on_time = datetime.now(timezone.utc)
             self._attr_is_on = True
         else:
+            if not self._attr_is_on:
+                # Already cleared (the unavailable timeout fired) — a late
+                # recovery straight to "off" must not re-process the clear,
+                # which would advance latest_occupied_time past the dropout
+                # and overwrite the clear's classification.
+                return
             now = datetime.now(timezone.utc)
             self._last_clear_false = self._is_false_cycle(now)
             self._last_clear_unavailable = False
@@ -330,7 +336,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 )
             except (ValueError, TypeError):
                 pass
-        all_sensors = list(dict.fromkeys(self._trigger_sensors + self._maintain_sensors))
+        all_sensors = list(
+            dict.fromkeys(self._trigger_sensors + self._maintain_sensors)
+        )
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, all_sensors, self._handle_occupancy_change
@@ -522,6 +530,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
         self._unsub_transition = None
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
         self.async_on_remove(self._cancel_transition_timer)
         self._refresh()
 

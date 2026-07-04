@@ -75,7 +75,7 @@ SUN_EVENTS = ["sunset", "sunrise"]
 
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"                             # list of real light entity_ids
-CONF_LIGHT_TIMEOUT = "light_timeout"              # seconds; must be >= occupancy_timeout
+CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.
@@ -123,7 +123,7 @@ SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
 
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
-STATE_ACTIVE = "active"        # lights on, timer running (no occupancy sensor / not occupied)
+STATE_ACTIVE = "active"        # lights on, timer running (no occupancy / not occupied)
 STATE_OCCUPIED = "occupied"    # lights on, occupancy active — no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
-STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode schedule window — no timer
+STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window — no timer
