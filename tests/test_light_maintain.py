@@ -437,3 +437,46 @@ async def test_same_entity_as_occupancy_and_maintain(
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_illuminance_reactivation_adopted_by_maintain(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Dark re-activation while the maintain entity is on is held, not timed."""
+    entry = make_light_entry(maintain=MAINT, illuminance=ILLUM)
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(MAINT, "off")
+    await setup_entries(hass, entry)
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    # Bright forces the light off; presence arrives while it is off.
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    hass.states.async_set(MAINT, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"  # maintain never turns lights on
+
+    # Dark again with time left on the original on-period: the re-lit light
+    # is adopted by the maintain entity instead of running the countdown.
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    # No countdown while maintained...
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "on"
+
+    # ...the maintain clear starts the normal one.
+    hass.states.async_set(MAINT, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"

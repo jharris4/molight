@@ -13,7 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -548,6 +549,174 @@ async def test_stays_on_until_all_real_lights_off(hass: HomeAssistant) -> None:
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
     hass.states.async_set(REAL2, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
+# Self-caused service echoes and manual control while occupied
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_manual_turn_on_while_occupied_stays_occupied(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Turning the virtual light on during occupancy keeps OCCUPIED, no timer."""
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    # No timer was armed: the light outlives its timeout while occupied.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_self_service_echo_does_not_upgrade_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The real light confirming our own turn_on must not restart the timer.
+
+    Illuminance-dark re-activation grants only the remaining portion of the
+    original on-period. When the real light's state then echoes our own
+    service call, that echo must be recognised as self-caused — treating it
+    as an external turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
+    full timer.
+    """
+    contexts = []
+
+    @callback
+    def _capture(event) -> None:
+        if (
+            event.data["domain"] == "light"
+            and event.data["service"] == "turn_on"
+            and REAL in event.data["service_data"].get("entity_id", [])
+        ):
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _capture)
+
+    await setup_entries(hass, make_light_entry(illuminance=ILLUM))
+    hass.states.async_set(ILLUM, "off")  # dark
+    await settle(hass)
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    # Bright forces the light off; 40s later it gets dark again, so only
+    # ~20s of the original 60s on-period remain.
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=40))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # The real light confirms the re-activation service call (same context).
+    assert contexts
+    hass.states.async_set(REAL, "on", context=contexts[-1])
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # The remaining ~20s countdown still stands — not a fresh 60s timer.
+    freezer.tick(timedelta(seconds=21))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_countdown_falls_back_when_lot_corrupt(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A garbage latest_occupied_time falls back to the full light_timeout."""
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+
+    hass.states.async_set(OCC, "on", {"latest_occupied_time": "garbage"})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": "garbage"})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # The unparsable anchor is ignored: the base 60s timeout applies.
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_attribute_only_change_does_not_restart_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A non-brightness attribute update (battery, ...) is not human activity."""
+    await setup_entries(hass, make_light_entry())
+
+    hass.states.async_set(REAL, "on", {"brightness": 100})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 100, "battery": 42})
+    await settle(hass)
+
+    # The original 60s timer still expires on schedule — it was not restarted
+    # by the attribute update at the 30s mark.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_brightness_zero_on_one_light_keeps_running(hass: HomeAssistant) -> None:
+    """Brightness 0 is an off in disguise, but other lit lights keep us on."""
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
+
+    hass.states.async_set(REAL, "on", {"brightness": 100})
+    await settle(hass)
+    hass.states.async_set(REAL2, "on", {"brightness": 100})
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(REAL, "on", {"brightness": 0})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["last_brightness_change_physical"] is not None
+
+    # Dimming the second light to 0 too counts as everything off.
+    hass.states.async_set(REAL2, "on", {"brightness": 0})
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"

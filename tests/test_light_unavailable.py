@@ -295,3 +295,63 @@ async def test_unavailable_real_light_counts_as_off(hass: HomeAssistant) -> None
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_light_with_no_state_never_counts_as_off(hass: HomeAssistant) -> None:
+    """A controlled light that has never reported a state is not assumed off."""
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
+
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    # REAL2 has no state at all — turning REAL off must not release the
+    # virtual light, since REAL2 may well still be burning.
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_schedule_recovery_readopts_externally_relit_light(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Recovering mid-window re-adopts a light that was cycled during the blip.
+
+    While the schedule was unavailable the real light was switched off and
+    back on, leaving the machine ACTIVE with a timer. Recovery to the same
+    window re-enters SCHEDULED and cancels that timer, so the light stays on
+    until the window ends.
+    """
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    hass.states.async_set(REAL, "on")  # the real light confirms the turn-on
+    await settle(hass)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+
+    # The light is cycled externally during the blip: off, then on again.
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    # Recovery inside the same window re-adopts it: SCHEDULED, timer gone.
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"

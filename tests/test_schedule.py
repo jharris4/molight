@@ -129,3 +129,45 @@ async def test_sun_edge_with_offset(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == shifted.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
+    """With no windows the sensor is off and the daily re-check keeps working."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    await _setup(hass, _schedule_entry([]))
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] is None
+
+    # No boundaries in sight — the sensor re-evaluates tomorrow without error.
+    freezer.tick(timedelta(days=1, minutes=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.night_schedule").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_invalid_window_edges_never_activate(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Unresolvable edges (bad times, wrong types, missing end) yield no window."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    await _setup(
+        hass,
+        _schedule_entry(
+            [
+                {"start": "25:99", "end": "23:00"},  # unparsable start time
+                {"start": 42, "end": "23:00"},  # wrong edge type
+                {"start": "19:00"},  # missing end
+            ]
+        ),
+    )
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+    assert state.attributes["next_transition"] is None

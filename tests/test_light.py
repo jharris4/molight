@@ -827,3 +827,37 @@ async def test_bright_turns_light_off(
     state = hass.states.get("light.gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_light_restore_ignores_corrupt_attributes(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Garbage restored timestamps/brightness are dropped instead of failing setup."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "light.test_light",
+                "off",
+                {
+                    "last_on_virtual": "not-a-timestamp",
+                    "last_on_occupancy": "also-garbage",
+                    "last_brightness_change_physical": "garbage",
+                    "last_brightness_change_virtual": "garbage",
+                    "brightness": "200",  # wrong type — ignored
+                },
+            )
+        ],
+    )
+
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "off"
+    assert state.attributes["last_on_virtual"] is None
+    assert state.attributes["last_on_occupancy"] is None
+    assert state.attributes["last_brightness_change_physical"] is None
+    assert state.attributes["last_brightness_change_virtual"] is None

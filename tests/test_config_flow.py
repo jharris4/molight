@@ -23,8 +23,10 @@ from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
@@ -36,6 +38,8 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
@@ -46,6 +50,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import setup_entries
@@ -1111,3 +1116,237 @@ async def test_assign_aborts_when_no_lights(
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "no_lights"
+
+
+# ---------------------------------------------------------------------------
+# Manual create steps not covered above
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_config_flow_combined_occupancy(hass: HomeAssistant) -> None:
+    """The combined flow rejects an empty trigger list, then creates the entry."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY}
+    )
+    assert result["step_id"] == "combined_occupancy"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Combined", CONF_TRIGGER_SENSORS: []},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_TRIGGER_SENSORS: "trigger_sensors_required"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.occ_b"],
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_TYPE] == ENTITY_TYPE_COMBINED_OCCUPANCY
+    assert result["data"][CONF_TRIGGER_SENSORS] == ["binary_sensor.occ_a"]
+    assert result["data"][CONF_MAINTAIN_SENSORS] == ["binary_sensor.occ_b"]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_illuminance(hass: HomeAssistant) -> None:
+    """Full config flow creates an illuminance sensor entry."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE}
+    )
+    assert result["step_id"] == "illuminance"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_THRESHOLD: 25.0,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["title"] == "Hall Illuminance"
+    assert result["data"][CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
+    assert result["data"][CONF_ILLUMINANCE_THRESHOLD] == 25.0
+    # Unsubmitted hysteresis falls back to its schema default.
+    assert result["data"][CONF_ILLUMINANCE_HYSTERESIS] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Options flows not covered above
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_illuminance_options_round_trip(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """Illuminance options replace the stored configuration."""
+    await setup_entries(hass, illuminance_entry)
+
+    result = await hass.config_entries.options.async_init(illuminance_entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "illuminance"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.lux_2",
+            CONF_ILLUMINANCE_THRESHOLD: 42.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 2.5,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    cfg = molight_config(illuminance_entry)
+    assert cfg[CONF_ILLUMINANCE_SENSOR] == "sensor.lux_2"
+    assert cfg[CONF_ILLUMINANCE_THRESHOLD] == 42.0
+    assert cfg[CONF_ILLUMINANCE_HYSTERESIS] == 2.5
+
+
+@pytest.mark.asyncio
+async def test_combined_options_reject_constituent_above_light_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Adding a slow constituent that outgrows a dependent light is rejected."""
+    big = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Big Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_big",
+            CONF_OCCUPANCY_TIMEOUT: 120,
+        },
+    )
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    light = _light_entry("Hall", "hall", occupancy_entity="binary_sensor.combined")
+    await setup_entries(hass, occupancy_entry, big, combined, light)
+
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    assert result["step_id"] == "combined_occupancy"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Combined", CONF_TRIGGER_SENSORS: []},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_TRIGGER_SENSORS: "trigger_sensors_required"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: [
+                "binary_sensor.test_occupancy",
+                "binary_sensor.big_occupancy",  # 120s > the light's 60s
+            ],
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "occupancy_timeout_too_long"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_occupancy_options_validate_through_nested_combined(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Raising a timeout checks lights depending on it through nested combineds."""
+    inner = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Inner Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.inner_combined"],
+        },
+    )
+    light = _light_entry(
+        "Hall", "hall", occupancy_entity="binary_sensor.outer_combined"
+    )
+    await setup_entries(hass, occupancy_entry, inner, outer, light)
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 90,  # > the light's 60s timeout
+            CONF_FALSE_DETECTION_GRACE: 0,
+            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_OCCUPANCY_TIMEOUT: "occupancy_timeout_too_long"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
+            CONF_FALSE_DETECTION_GRACE: 0,
+            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_assign_schedule_sets_mode(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Assigning a schedule sensor stamps the schedule reference and mode."""
+    light = _light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, schedule_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_schedule")
+    assert result["step_id"] == "assign_schedule"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_schedule",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.kitchen"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.test_schedule"
+    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE

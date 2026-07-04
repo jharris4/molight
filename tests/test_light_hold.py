@@ -439,3 +439,41 @@ async def test_hold_suppresses_false_detection_quick_off(
     # Default false-off delay is 5s; held lights must survive far longer.
     await _tick(hass, freezer, 600)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_startup_hold_keeps_missed_window_end_marker(
+    hass: HomeAssistant,
+) -> None:
+    """A follow window that ended while HA was down is not applied while held.
+
+    The light restores as SCHEDULED with the window marker kept; releasing
+    the hold applies the missed off boundary.
+    """
+    mock_restore_cache(
+        hass,
+        [State(VIRTUAL, "on", {"schedule_window_start": MARKER})],
+    )
+    hass.states.async_set("light.real_1", "on")
+    hass.states.async_set(SCHED, "off")  # the window ended during downtime
+    hass.states.async_set(HOLD, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+        ),
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == MARKER
+
+    # Releasing the hold applies the missed window end.
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["schedule_window_start"] is None

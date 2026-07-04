@@ -785,3 +785,106 @@ async def test_illuminance_sensor_bright(
 
     state = hass.states.get("binary_sensor.test_illuminance")
     assert state.state == "on"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_holds_state_on_unparsable_reading(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """A non-numeric source reading holds the last known state."""
+    illuminance_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(illuminance_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("sensor.lux_1", "500")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "on"
+
+    hass.states.async_set("sensor.lux_1", "broken")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "on"
+
+    hass.states.async_set("sensor.lux_1", "5")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "off"
+
+
+# ---------------------------------------------------------------------------
+# Restore robustness — corrupt attributes must never break setup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_occupancy_restore_ignores_corrupt_attributes(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Garbage restored attributes are dropped instead of failing setup."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.test_occupancy",
+                "off",
+                {
+                    "latest_occupied_time": "not-a-timestamp",
+                    "last_on_time": "also-not-a-timestamp",
+                    "false_detection_count": "many",
+                },
+            )
+        ],
+    )
+    occupancy_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "off"
+    assert state.attributes["latest_occupied_time"] is None
+    assert state.attributes["last_on_time"] is None
+    assert state.attributes["false_detection_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_combined_restores_false_detection_count(hass: HomeAssistant) -> None:
+    """The combined sensor's false-detection count survives a restart."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.combined_occupancy",
+                "off",
+                {"false_detection_count": 7},
+            )
+        ],
+    )
+    entry = _combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.combined_occupancy")
+    assert state.attributes["false_detection_count"] == 7
+
+
+@pytest.mark.asyncio
+async def test_combined_ignores_corrupt_constituent_lot(hass: HomeAssistant) -> None:
+    """A constituent clearing with a garbage latest_occupied_time is ignored."""
+    entry = _combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.test_occupancy", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
+
+    hass.states.async_set(
+        "binary_sensor.test_occupancy",
+        "off",
+        {"latest_occupied_time": "garbage"},
+    )
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.combined_occupancy")
+    assert state.state == "off"
+    assert state.attributes["latest_occupied_time"] is None
