@@ -1,6 +1,9 @@
 {
   "name": "molight",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "hass": "docker compose up",
     "hass:down": "docker compose down",
