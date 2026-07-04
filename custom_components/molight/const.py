@@ -26,6 +26,10 @@ CONF_NAME = "name"
 # Multiselect field in the discovery config-flow steps: the real entities the
 # user picked to wrap in virtual MoLight entities (created with defaults).
 CONF_SELECTED_ENTITIES = "selected_entities"
+# Optional text prepended/appended to each discovered entity's name (applied
+# verbatim, so include your own separator, e.g. a trailing/leading space).
+CONF_NAME_PREFIX = "name_prefix"
+CONF_NAME_SUFFIX = "name_suffix"
 
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"   # entity_id of the real binary_sensor

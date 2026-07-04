@@ -18,6 +18,8 @@ from custom_components.molight.const import (
     CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
+    CONF_NAME_PREFIX,
+    CONF_NAME_SUFFIX,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
@@ -553,6 +555,39 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
     # Defaults applied.
     assert created[0].data[CONF_OCCUPANCY_TIMEOUT] == 120
     assert created[0].title == "Hall Motion"
+
+
+@pytest.mark.asyncio
+async def test_discover_applies_name_prefix_and_suffix(
+    hass: HomeAssistant,
+) -> None:
+    """A prefix and/or suffix wrap each discovered entity's name verbatim."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Hall Motion"},
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"],
+            CONF_NAME_PREFIX: "Auto ",
+            CONF_NAME_SUFFIX: " (occ)",
+        },
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+    ]
+    assert len(created) == 1
+    assert created[0].title == "Auto Hall Motion (occ)"
+    assert created[0].data[CONF_NAME] == "Auto Hall Motion (occ)"
 
 
 @pytest.mark.asyncio

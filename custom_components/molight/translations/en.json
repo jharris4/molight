@@ -21,21 +21,27 @@
         "title": "Discover occupancy sensors",
         "description": "Select the occupancy/motion sensors to wrap in virtual occupancy sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
-          "selected_entities": "Sensors to add"
+          "selected_entities": "Sensors to add",
+          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
+          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
         }
       },
       "discover_illuminance": {
         "title": "Discover illuminance sensors",
         "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
-          "selected_entities": "Sensors to add"
+          "selected_entities": "Sensors to add",
+          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
+          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
         }
       },
       "discover_light": {
         "title": "Discover lights",
         "description": "Select the lights to wrap in virtual lights, created with default settings. Add occupancy, illuminance or schedule references afterwards via each entity's options. Lights already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
-          "selected_entities": "Lights to add"
+          "selected_entities": "Lights to add",
+          "name_prefix": "Name prefix (optional) — added before each name, e.g. \"Auto \"",
+          "name_suffix": "Name suffix (optional) — added after each name, e.g. \" (auto)\""
         }
       },
       "occupancy": {

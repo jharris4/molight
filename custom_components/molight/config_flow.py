@@ -27,6 +27,8 @@ from .const import (
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
+    CONF_NAME_PREFIX,
+    CONF_NAME_SUFFIX,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
@@ -477,8 +479,12 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             selected = user_input.get(CONF_SELECTED_ENTITIES, [])
+            # Applied verbatim (no separator inserted) so the user controls
+            # spacing; empty strings leave the discovered name untouched.
+            prefix = user_input.get(CONF_NAME_PREFIX, "")
+            suffix = user_input.get(CONF_NAME_SUFFIX, "")
             for entity_id in selected:
-                name = candidates.get(entity_id, entity_id)
+                name = f"{prefix}{candidates.get(entity_id, entity_id)}{suffix}"
                 self.hass.async_create_task(
                     self.hass.config_entries.flow.async_init(
                         DOMAIN,
@@ -512,7 +518,13 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             multiple=True,
                             mode=selector.SelectSelectorMode.LIST,
                         )
-                    )
+                    ),
+                    vol.Optional(
+                        CONF_NAME_PREFIX, default=""
+                    ): selector.TextSelector(),
+                    vol.Optional(
+                        CONF_NAME_SUFFIX, default=""
+                    ): selector.TextSelector(),
                 }
             ),
         )
