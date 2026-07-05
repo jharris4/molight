@@ -401,6 +401,32 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
 
 
 @pytest.mark.asyncio
+async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
+) -> None:
+    """With no auto-on brightness set, an automatic turn-on doesn't touch brightness."""
+    # The gated light entry configures no auto-on brightness.
+    mock_restore_cache(
+        hass,
+        [State("light.gated_light", "on", {"brightness": 143})],
+    )
+    await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
+
+    hass.states.async_set("sensor.lux_1", "5")  # dark
+    await _settle(hass)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+
+    state = hass.states.get("light.gated_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    # The restored brightness is preserved — no auto-on value overrode it.
+    assert state.attributes["brightness"] == 143
+
+
+@pytest.mark.asyncio
 async def test_external_light_adoption(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
