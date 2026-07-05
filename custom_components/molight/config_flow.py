@@ -1271,7 +1271,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
                     selector.NumberSelectorConfig(
-                        min=1, max=3600, unit_of_measurement="s", mode="box"
+                        min=1, max=14400, unit_of_measurement="s", mode="box"
                     )
                 ),
                 vol.Required(CONF_FALSE_OFF_DELAY, default=5): selector.NumberSelector(
@@ -1600,7 +1600,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 default=cfg.get(CONF_LIGHT_TIMEOUT, 300),
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
-                    min=1, max=3600, unit_of_measurement="s", mode="box"
+                    min=1, max=14400, unit_of_measurement="s", mode="box"
                 )
             ),
             vol.Required(
