@@ -214,6 +214,10 @@ Controls N real lights with an occupancy-aware state machine.
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, illuminance going dark, or a follow-mode window. Manual and physical turn-ons keep their own brightness. Leave blank to let automatic turn-ons use the real lights' own last/default brightness |
+| **Effect warning duration (s)** | `0` disables. When the turn-off timer expires, instead of going dark the light first shows a brief *effect* cue for this long (see below) |
+| **Effect brightness (%)** | Brightness during the effect stage. `0` blinks the real lights fully off — a distinct "about to turn off" flash |
+| **Warn grace period (s)** | `0` disables. After the effect stage, the light stays on for this long as a grace period before finally turning off, giving you time to re-trigger it |
+| **Warn brightness (%)** *(optional)* | Brightness during the warn grace period. Leave blank to keep whatever brightness the light had before the warning began |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | A MoLight occupancy sensor that keeps an already-on light on while occupied but never turns it on (see below) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
@@ -230,16 +234,27 @@ ACTIVE     lights on, timer running (manual/external turn-on, no occupancy)
 OCCUPIED   lights on, occupancy active — timer suspended
 COUNTDOWN  occupancy cleared, timer ticking toward lights-off
 SCHEDULED  lights on inside a follow-mode window — no timer
+EFFECT     auto-off imminent — showing the brief effect/blink warning stage
+WARN       auto-off imminent — grace period before the lights go off
 ```
 
 - `IDLE` + manual/external turn-on → `ACTIVE` (timer starts)
 - `IDLE`/`ACTIVE` + occupancy becomes active (and it's dark / in-window) → `OCCUPIED`
 - `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is the turn-off timeout anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected
-- `ACTIVE`/`COUNTDOWN` + timer expires → `IDLE` (real lights turned off)
+- `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (see the warning sequence below); with both stages disabled this collapses to going straight to `IDLE`
 - any state + all real lights turned off externally → `IDLE`
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window.
+
+#### Effect / warn warning
+
+By default the light turns off the instant its timer expires. Setting an **effect** and/or **warn** timeout flags the impending turn-off first, so a room isn't dropped into darkness without notice:
+
+1. **Effect** — a brief cue for *effect warning duration* seconds: the real lights are driven to the *effect brightness* (`0` blinks them fully off — a hard-to-miss flash). Skipped when its timeout is `0`.
+2. **Warn** — a grace period for *warn grace period* seconds at the *warn brightness* (or the brightness the light already had, if left blank), then the lights turn off. Skipped when its timeout is `0`.
+
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning and restores the pre-warning brightness, so the interruption leaves no trace. Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 #### Maintain occupancy sensor
 

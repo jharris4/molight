@@ -11,6 +11,8 @@ State machine
                  triggers and there is no active occupancy
   OCCUPIED   lights on, occupancy active — timer suspended
   COUNTDOWN  occupancy just cleared, timer ticking toward lights-off
+  EFFECT     auto-off imminent — showing the brief effect/blink warning stage
+  WARN       auto-off imminent — grace period before the lights go off
 
 Transitions
   IDLE + (manual on OR occupancy trigger [no occupancy sensor / not occupied])
@@ -23,7 +25,24 @@ Transitions
        → COUNTDOWN  (start timer)
 
   ACTIVE/COUNTDOWN + timer expires
-       → IDLE  (turn off real lights)
+       → EFFECT → WARN → IDLE  (see "Effect/warn warning" below)
+
+Effect/warn warning
+  When the auto-off timer expires the light can flag the impending off before
+  going dark, controlled by four options (all default to the feature being off,
+  so the light turns straight off exactly as before):
+    EFFECT — a brief cue (blink/dip to effect_brightness, 0 = fully off) shown
+             for effect_timeout seconds. Skipped when effect_timeout is 0.
+    WARN   — a grace period at warn_brightness (absent = the brightness the
+             light had before the warning) for warn_timeout seconds, then off.
+             Skipped when warn_timeout is 0.
+  Throughout EFFECT and WARN the virtual light stays logically on. Any
+  re-trigger — occupancy/maintain becoming active, a manual or physical
+  turn-on, an external dim — cancels the sequence and behaves exactly as if
+  the pre-off timer were still running, restoring the pre-warning brightness so
+  the warning is transparent. Auto-off being held mid-sequence aborts it the
+  same way. Bright-forces-off (control mode) and a gate/follow window ending
+  still turn the lights off during the sequence, as they would mid-countdown.
 
   any + light turned off externally
        → IDLE
@@ -148,6 +167,8 @@ from homeassistant.util.percentage import percentage_to_ranged_value
 
 from .const import (
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_OFF_DELAY,
     CONF_HOLD_ENTITIES,
@@ -160,6 +181,8 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_WARN_BRIGHTNESS,
+    CONF_WARN_TIMEOUT,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
@@ -170,9 +193,11 @@ from .const import (
     SIGNAL_AUTO_OFF_TOGGLED,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_WARN,
 )
 from .helpers import molight_config, suggested_entity_id
 
@@ -220,6 +245,27 @@ class VirtualLight(LightEntity, RestoreEntity):
         # the user) — the only case where a false-detection clear may cut the
         # lights short.
         self._occupancy_lit_lights: bool = False
+
+        # Effect/warn warning sequence run at auto-off instead of an immediate
+        # off. Timeouts of 0 disable each stage; effect_brightness is a 0-255
+        # value (0 = blink fully off); warn_brightness is None to keep whatever
+        # brightness the light had before the warning began.
+        self._effect_timeout: int = int(cfg.get(CONF_EFFECT_TIMEOUT, 0))
+        self._effect_brightness: int = round(
+            percentage_to_ranged_value(
+                (1, 255), int(cfg.get(CONF_EFFECT_BRIGHTNESS, 0))
+            )
+        )
+        self._warn_timeout: int = int(cfg.get(CONF_WARN_TIMEOUT, 0))
+        warn_pct = cfg.get(CONF_WARN_BRIGHTNESS)
+        self._warn_brightness: int | None = (
+            round(percentage_to_ranged_value((1, 255), int(warn_pct)))
+            if warn_pct
+            else None
+        )
+        # Brightness the light had when the warning sequence began, restored on
+        # any re-trigger so the effect/warn stages leave no lasting trace.
+        self._pre_warn_brightness: int | None = None
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._maintain_entity: str | None = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
@@ -558,7 +604,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
             return
 
-        if self._machine_state in (STATE_ACTIVE, STATE_COUNTDOWN):
+        if self._machine_state in (
+            STATE_ACTIVE,
+            STATE_COUNTDOWN,
+            STATE_EFFECT,
+            STATE_WARN,
+        ):
+            # An external dim during the warning sequence is a re-trigger like
+            # any other: honour the new brightness and restart the full timer.
+            self._pre_warn_brightness = None
             self._machine_state = STATE_ACTIVE
             self._start_timer()
         self.async_write_ha_state()
@@ -628,6 +682,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         if held:
             # Suspend any pending automatic off; the machine state stays put.
             self._cancel_timer()
+            if self._in_warning():
+                # Auto-off just became held mid-warning: abort the sequence and
+                # restore the light. Held, so ACTIVE arms no timer.
+                self._machine_state = STATE_ACTIVE
+                self._resume_lights()
         else:
             self._resume_after_hold_release()
         self.async_write_ha_state()
@@ -757,10 +816,15 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Outside the schedule window — occupancy may not turn lights
                 # on; window start re-evaluates occupancy.
                 return
+            was_warning = self._in_warning()
             self._last_on_occupancy = datetime.now(timezone.utc)
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
-            if not self._attr_is_on:
+            if was_warning:
+                # Occupancy returned mid-warning: undo the effect/warn stage so
+                # the light looks exactly as it did while the timer was running.
+                self._resume_lights()
+            elif not self._attr_is_on:
                 self._occupancy_lit_lights = True
                 self.hass.async_create_task(
                     self._set_lights(True, brightness=self._auto_on_brightness)
@@ -789,7 +853,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         if maintained:
             # Not a turn-on, so no illuminance/schedule gating: an on light
             # is simply adopted; an off light stays off.
-            if self._machine_state in (STATE_ACTIVE, STATE_COUNTDOWN):
+            if self._machine_state in (
+                STATE_ACTIVE,
+                STATE_COUNTDOWN,
+                STATE_EFFECT,
+                STATE_WARN,
+            ):
+                if self._in_warning():
+                    self._resume_lights()
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self.async_write_ha_state()
@@ -963,6 +1034,9 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _transition_on(self) -> None:
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
+        # A manual/physical turn-on ends any warning sequence; the caller has
+        # already set the real lights, so just drop the restore snapshot.
+        self._pre_warn_brightness = None
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
 
@@ -998,6 +1072,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
         self._occupancy_lit_lights = False
+        self._pre_warn_brightness = None
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
@@ -1020,15 +1095,100 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._timer_unsub = None
         if self._held:
             return  # engaged in the same loop iteration the timer fired
-        if self._machine_state not in (STATE_ACTIVE, STATE_COUNTDOWN):
-            return  # state moved on in the same loop iteration the timer fired
-        await self._set_lights(False)
-        self._go_idle()
+        state = self._machine_state
+        if state in (STATE_ACTIVE, STATE_COUNTDOWN):
+            # Normal auto-off: run the warning sequence, or turn straight off.
+            self._begin_warning()
+        elif state == STATE_EFFECT:
+            self._enter_warn()
+        elif state == STATE_WARN:
+            await self._set_lights(False)
+            self._go_idle()
+        # any other state: the machine moved on in the same loop iteration the
+        # timer fired — nothing to do.
 
     def _cancel_timer(self) -> None:
         if self._timer_unsub is not None:
             self._timer_unsub()
             self._timer_unsub = None
+
+    # ------------------------------------------------------------------
+    # Effect / warn warning sequence
+    # ------------------------------------------------------------------
+
+    def _in_warning(self) -> bool:
+        """True while showing the effect or warn stage before auto-off."""
+        return self._machine_state in (STATE_EFFECT, STATE_WARN)
+
+    def _begin_warning(self) -> None:
+        """Auto-off is due: start the effect→warn warning sequence.
+
+        Snapshots the current brightness (restored if the user re-triggers or
+        reused by a warn stage with no brightness of its own). Falls through to
+        the warn stage — and to a plain off — when the earlier stage is
+        disabled, so both timeouts at 0 behaves exactly like the old immediate
+        off.
+        """
+        self._pre_warn_brightness = self._attr_brightness
+        if self._effect_timeout > 0:
+            self._machine_state = STATE_EFFECT
+            self.hass.async_create_task(
+                self._set_stage_lights(self._effect_brightness)
+            )
+            self._start_timer(self._effect_timeout)
+            self.async_write_ha_state()
+            return
+        self._enter_warn()
+
+    def _enter_warn(self) -> None:
+        """Advance to the WARN grace period, or turn the lights off when it is
+        disabled."""
+        if self._warn_timeout > 0:
+            self._machine_state = STATE_WARN
+            brightness = (
+                self._warn_brightness
+                if self._warn_brightness is not None
+                else self._pre_warn_brightness
+            ) or 255
+            self.hass.async_create_task(self._set_stage_lights(brightness))
+            self._start_timer(self._warn_timeout)
+            self.async_write_ha_state()
+            return
+        self.hass.async_create_task(self._set_lights(False))
+        self._go_idle()
+
+    def _resume_lights(self) -> None:
+        """Restore the real lights to their pre-warning brightness when a
+        re-trigger interrupts the effect/warn sequence. The caller sets the
+        resulting machine state."""
+        brightness = self._pre_warn_brightness
+        self._pre_warn_brightness = None
+        self.hass.async_create_task(self._set_lights(True, brightness=brightness))
+
+    async def _set_stage_lights(self, brightness: int) -> None:
+        """Drive the real lights for an effect/warn stage while the virtual
+        light stays logically on. Brightness 0 blinks the real lights off."""
+        context = Context()
+        self._self_context_ids.append(context.id)
+        if brightness:
+            await self.hass.services.async_call(
+                "light",
+                "turn_on",
+                {"entity_id": self._lights, ATTR_BRIGHTNESS: brightness},
+                blocking=False,
+                context=context,
+            )
+            self._attr_brightness = brightness
+        else:
+            await self.hass.services.async_call(
+                "light",
+                "turn_off",
+                {"entity_id": self._lights},
+                blocking=False,
+                context=context,
+            )
+        self._attr_is_on = True
+        self.async_write_ha_state()
 
     # ------------------------------------------------------------------
     # Real-light control

@@ -21,6 +21,8 @@ from custom_components.molight.const import (
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
@@ -43,6 +45,8 @@ from custom_components.molight.const import (
     CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_WARN_BRIGHTNESS,
+    CONF_WARN_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
@@ -210,6 +214,75 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Living Room"
     assert result["data"][CONF_HOLD_ENTITIES] == ["input_boolean.guest_mode"]
+    # Unsubmitted effect/warn stages default to disabled.
+    assert result["data"][CONF_EFFECT_TIMEOUT] == 0
+    assert result["data"][CONF_WARN_TIMEOUT] == 0
+    assert CONF_WARN_BRIGHTNESS not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_effect_warn_options(hass: HomeAssistant) -> None:
+    """Effect/warn warning fields round-trip through the create flow."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_BRIGHTNESS: 0,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_BRIGHTNESS: 50,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_EFFECT_TIMEOUT] == 10
+    assert data[CONF_EFFECT_BRIGHTNESS] == 0
+    assert data[CONF_WARN_TIMEOUT] == 20
+    assert data[CONF_WARN_BRIGHTNESS] == 50
+
+
+@pytest.mark.asyncio
+async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> None:
+    """warn_brightness is optional: omitting it in options removes the override
+    (falling back to keeping the current brightness) while the timeouts persist."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_BRIGHTNESS: 50,
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_WARN_TIMEOUT: 20,
+            # warn_brightness intentionally omitted — the user cleared it.
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert cfg[CONF_WARN_TIMEOUT] == 20
+    assert CONF_WARN_BRIGHTNESS not in cfg
 
 
 @pytest.mark.asyncio

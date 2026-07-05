@@ -118,6 +118,22 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
+# Effect/warn warning sequence before an automatic turn-off. When the auto-off
+# timer expires the light can flag the impending off before going dark:
+#   EFFECT — a brief attention cue (a blink/dip to effect_brightness), shown
+#            for effect_timeout seconds. effect_brightness is a percent 0-100
+#            where 0 blinks the real lights fully off.
+#   WARN   — a grace period at warn_brightness for warn_timeout seconds, then
+#            the lights turn off. warn_brightness is an optional percent 1-100;
+#            absent = keep whatever brightness was in effect before the warning.
+# Each stage is skipped when its timeout is 0 (both default 0 = feature off,
+# so the light turns straight off exactly as before). Any re-trigger during
+# either stage (occupancy, manual/physical on, a dim, ...) cancels it and
+# behaves as if the pre-off timer were still running, restoring the brightness.
+CONF_EFFECT_TIMEOUT = "effect_timeout"
+CONF_EFFECT_BRIGHTNESS = "effect_brightness"
+CONF_WARN_TIMEOUT = "warn_timeout"
+CONF_WARN_BRIGHTNESS = "warn_brightness"
 # Optional references to virtual entities (entity_ids)
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 # Maintain occupancy entity: keeps an already-on light on while it is on, but
@@ -165,3 +181,5 @@ STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied
 STATE_OCCUPIED = "occupied"  # lights on, occupancy active — no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window — no timer
+STATE_EFFECT = "effect"  # auto-off imminent — brief effect/blink stage
+STATE_WARN = "warn"  # auto-off imminent — grace period before lights-off
