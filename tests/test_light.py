@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from homeassistant.core import HomeAssistant, State
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import HomeAssistant, State, callback
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -608,6 +609,71 @@ async def test_virtual_brightness_change(
     async_fire_time_changed(hass)
     await _settle(hass)
     assert hass.states.get("light.test_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_virtual_brightness_propagates_to_real_light(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Brightness set on the virtual light is commanded to the real lights."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Record outgoing service calls without replacing the light service (so the
+    # virtual entity's own turn-on still routes normally).
+    service_calls: list[dict] = []
+
+    @callback
+    def _record(event) -> None:
+        service_calls.append(event.data)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.test_light", "brightness": 100},
+    )
+    await hass.async_block_till_done()
+
+    # The virtual light turned the real light on at the same brightness.
+    real_on = [
+        d
+        for d in service_calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and "light.living_room" in d["service_data"].get("entity_id", [])
+    ]
+    assert real_on, "no turn_on was issued to the real light"
+    assert real_on[-1]["service_data"]["brightness"] == 100
+
+
+@pytest.mark.asyncio
+async def test_real_brightness_reflects_in_virtual_light(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An external brightness change on a real light is mirrored by the virtual one."""
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    # Adopt the real light (external on, no brightness reported yet).
+    hass.states.async_set("light.living_room", "on")
+    await _settle(hass)
+    state = hass.states.get("light.test_light")
+    assert state.state == "on"
+    assert state.attributes.get("brightness") is None
+
+    # It gets dimmed externally — the virtual light reflects the new value.
+    hass.states.async_set("light.living_room", "on", {"brightness": 180})
+    await _settle(hass)
+    assert hass.states.get("light.test_light").attributes["brightness"] == 180
+
+    # A further external change is reflected too.
+    hass.states.async_set("light.living_room", "on", {"brightness": 60})
+    await _settle(hass)
+    assert hass.states.get("light.test_light").attributes["brightness"] == 60
 
 
 def _fd_occupancy_entry() -> MockConfigEntry:
