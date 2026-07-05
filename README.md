@@ -244,17 +244,41 @@ An optional **auto-on brightness** forces a level whenever the light comes on *a
 
 ## Development
 
-This repository uses a devcontainer to test & run the integration locally.
+Local development uses **two independent containers**, each with a distinct job. They are unrelated (no shared network or startup dependency), but both bind port `8123`, so only one can run at a time.
 
-Tests run inside the devcontainer:
+| Container | Image | What it's for |
+| --- | --- | --- |
+| **Dev container** (`dev:*`) | generic Debian + Python 3.14 | Your toolchain — editing, `pytest`, `ruff`. VS Code attaches here. HA is pip-installed into a venv (`/opt/molight-venv`) as a library. |
+| **HA runtime** (`hass:*`) | official `home-assistant:stable` | The real Home Assistant app, for manual/UI testing. Your integration is mounted read-only. |
+
+npm scripts follow a `<target>:<action>` naming scheme so the prefix tells you which container you're touching.
+
+### Working in the dev container
+
+Every command below runs *inside* the dev container via `devcontainer exec`:
 
 ```bash
-npm run up      # start the devcontainer
-npm test        # pytest inside the container
-npm run lint    # ruff inside the container
+npm run dev:up       # create/start the dev container (fast after first build)
+npm test             # pytest
+npm run lint         # ruff check
+npm run format       # ruff format
+npm run dev:shell    # open a bash shell inside the container
+npm run dev:rebuild  # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
 ```
 
-`npm run hass` starts a docker-compose HA instance for manual testing. It binds the same port (8123) as the devcontainer, so only one can run at a time.
+### Running Home Assistant
+
+There are two ways to get a live HA instance, depending on what you're testing:
+
+```bash
+npm run hass:up      # run stock HA (stable image) with the integration mounted read-only
+npm run hass:down    # stop it and free port 8123
+
+npm run dev:hass     # run HA from source inside the dev container — code is live-editable,
+                     # and debugpy is available for breakpoints
+```
+
+Use `hass:up` to confirm behavior against a real, released HA build; use `dev:hass` for active development, where HA runs against your working tree and can be restarted and debugged in place. Remember to `hass:down` before starting the dev container (or vice versa) so port 8123 is free.
 
 ## Design notes
 

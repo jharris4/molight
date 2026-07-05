@@ -6,12 +6,12 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "hass": "docker compose up",
+    "hass:up": "docker compose up",
     "hass:down": "docker compose down",
-    "up": "devcontainer up --workspace-folder .",
-    "rebuild": "devcontainer up --workspace-folder . --remove-existing-container",
-    "shell": "devcontainer exec --workspace-folder . bash",
-    "develop": "devcontainer exec --workspace-folder . bash scripts/develop",
+    "dev:up": "devcontainer up --workspace-folder .",
+    "dev:rebuild": "devcontainer up --workspace-folder . --remove-existing-container",
+    "dev:shell": "devcontainer exec --workspace-folder . bash",
+    "dev:hass": "devcontainer exec --workspace-folder . bash scripts/develop",
     "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest",
     "lint": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check custom_components tests",
     "format": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff format custom_components tests"
