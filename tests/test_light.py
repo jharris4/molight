@@ -658,22 +658,42 @@ async def test_real_brightness_reflects_in_virtual_light(
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
-    # Adopt the real light (external on, no brightness reported yet).
-    hass.states.async_set("light.living_room", "on")
+    # Adopt the real light coming on at a brightness — reflected immediately,
+    # on the off→on adoption edge (not only on later dims).
+    hass.states.async_set("light.living_room", "on", {"brightness": 180})
     await _settle(hass)
     state = hass.states.get("light.test_light")
     assert state.state == "on"
-    assert state.attributes.get("brightness") is None
-
-    # It gets dimmed externally — the virtual light reflects the new value.
-    hass.states.async_set("light.living_room", "on", {"brightness": 180})
-    await _settle(hass)
-    assert hass.states.get("light.test_light").attributes["brightness"] == 180
+    assert state.attributes["brightness"] == 180
 
     # A further external change is reflected too.
     hass.states.async_set("light.living_room", "on", {"brightness": 60})
     await _settle(hass)
     assert hass.states.get("light.test_light").attributes["brightness"] == 60
+
+
+@pytest.mark.asyncio
+async def test_startup_adopts_physical_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A real light already on at startup seeds the virtual light's brightness."""
+    # Real light is already on at 200 before the virtual light is set up, and
+    # the restored virtual state carries a different (stale) brightness.
+    hass.states.async_set("light.living_room", "on", {"brightness": 200})
+    mock_restore_cache(
+        hass,
+        [State("light.test_light", "on", {"brightness": 143})],
+    )
+
+    light_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(light_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.test_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    # The physical brightness wins over the stale restored value.
+    assert state.attributes["brightness"] == 200
 
 
 def _fd_occupancy_entry() -> MockConfigEntry:

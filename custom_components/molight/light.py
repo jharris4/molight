@@ -365,6 +365,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             for e in self._lights
         )
 
+        # Match the physical brightness at startup too, overriding the value
+        # restored from our own last state, so the virtual light always tracks
+        # the real lights rather than a stale restored figure.
+        if self._attr_is_on and (brightness := self._physical_brightness()):
+            self._attr_brightness = brightness
+
         if self._follow_schedule_seed():
             return
 
@@ -485,7 +491,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if new_state.state == "on":
                     self._on_light_brightness_change(old_state, new_state)
                 return
-            self._on_light_state_change(new_state.state)
+            self._on_light_state_change(
+                new_state.state, new_state.attributes.get("brightness")
+            )
             return
         if same_state:
             return  # attribute-only change (battery, ...)
@@ -504,9 +512,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
 
-    def _on_light_state_change(self, state: str) -> None:
+    def _on_light_state_change(self, state: str, brightness: int | None = None) -> None:
         """Handle a real light being turned on/off externally."""
         if state == "on":
+            # Mirror the real light's brightness so the virtual light always
+            # matches it — including on this off→on adoption edge, not just on
+            # later dims (which _on_light_brightness_change handles).
+            if brightness:
+                self._attr_brightness = brightness
             if self._machine_state == STATE_IDLE:
                 self._last_on_physical = datetime.now(timezone.utc)
                 self._occupancy_lit_lights = False  # the user owns this on-period
@@ -559,6 +572,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             if state.state == "on" and state.attributes.get("brightness") != 0:
                 return False
         return True
+
+    def _physical_brightness(self) -> int | None:
+        """Brightness of the first on real light reporting one, else None."""
+        for entity_id in self._lights:
+            state = self.hass.states.get(entity_id)
+            if state is not None and state.state == "on":
+                if brightness := state.attributes.get("brightness"):
+                    return brightness
+        return None
 
     def _is_illuminance_bright(self) -> bool:
         """Return True when illuminance is bright enough to suppress lighting."""
