@@ -43,6 +43,10 @@ Effect/warn warning
   the warning is transparent. Auto-off being held mid-sequence aborts it the
   same way. Bright-forces-off (control mode) and a gate/follow window ending
   still turn the lights off during the sequence, as they would mid-countdown.
+  The pre-warning brightness is exposed as the pre_warn_brightness attribute
+  (null outside the sequence) and survives restarts: a restart landing
+  mid-warning with the lights still on restores that brightness instead of
+  adopting the stage's; lights found off stay off (the auto-off completed).
 
   any + light turned off externally
        → IDLE
@@ -265,6 +269,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         # Brightness the light had when the warning sequence began, restored on
         # any re-trigger so the effect/warn stages leave no lasting trace.
+        # Exposed as the pre_warn_brightness attribute so it survives a
+        # restart landing mid-warning.
         self._pre_warn_brightness: int | None = None
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
@@ -341,6 +347,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             raw_brightness = last.attributes.get(ATTR_BRIGHTNESS)
             if isinstance(raw_brightness, int):
                 self._attr_brightness = raw_brightness
+            # Non-null only when the last state was written mid effect/warn;
+            # _seed_state then undoes the interrupted warning stage.
+            raw_pre_warn = last.attributes.get("pre_warn_brightness")
+            if isinstance(raw_pre_warn, int):
+                self._pre_warn_brightness = raw_pre_warn
 
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -416,6 +427,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         # the real lights rather than a stale restored figure.
         if self._attr_is_on and (brightness := self._physical_brightness()):
             self._attr_brightness = brightness
+
+        if self._pre_warn_brightness is not None:
+            if self._attr_is_on:
+                # The restart landed mid effect/warn with the lights still on:
+                # undo the warning stage like any other re-trigger, then seed
+                # normally (the warn-stage brightness must not be adopted).
+                self._resume_lights()
+            else:
+                # The lights ended up off (e.g. mid blink-off) — treat the
+                # auto-off as having completed; the room is not re-lit.
+                self._pre_warn_brightness = None
 
         if self._follow_schedule_seed():
             return
@@ -508,6 +530,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if brightness is not None:
             self._last_brightness_change_virtual = now
             self._attr_brightness = brightness
+        elif self._in_warning():
+            # No explicit brightness: restore the pre-warning brightness so
+            # the effect/warn stage leaves no trace, like any other re-trigger.
+            brightness = self._pre_warn_brightness
+            if brightness is not None:
+                self._attr_brightness = brightness
         await self._set_lights(True, brightness=brightness)
         self._transition_on()
 
@@ -748,6 +776,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                     # blipped unavailable and recovered mid-window. A manual
                     # off in between stands, mirroring the restart seed.
                     if self._attr_is_on:
+                        if self._in_warning():
+                            # A timer that ran while the schedule was
+                            # unavailable reached the warning — undo it, the
+                            # recovered window owns the lights again.
+                            self._resume_lights()
                         self._machine_state = STATE_SCHEDULED
                         self._cancel_timer()
                         self.async_write_ha_state()
@@ -795,9 +828,15 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _apply_window_start(self, marker: str | None) -> None:
         """Enter the SCHEDULED state and turn the lights on (follow mode)."""
         self._schedule_window_applied = marker
+        was_warning = self._in_warning()
         self._machine_state = STATE_SCHEDULED
         self._cancel_timer()
-        if not self._attr_is_on:
+        if was_warning:
+            # The window takes over mid-warning: the virtual light is
+            # logically on but the real lights are blinked off / dimmed by
+            # the effect/warn stage — restore them for the window.
+            self._resume_lights()
+        elif not self._attr_is_on:
             self.hass.async_create_task(
                 self._set_lights(True, brightness=self._auto_on_brightness)
             )
@@ -1102,7 +1141,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         elif state == STATE_EFFECT:
             self._enter_warn()
         elif state == STATE_WARN:
-            await self._set_lights(False)
+            # Task + synchronous _go_idle (the idiom used everywhere else):
+            # awaiting the service call first would let a re-trigger landing
+            # mid-await be stomped back to IDLE when the await returns.
+            self.hass.async_create_task(self._set_lights(False))
             self._go_idle()
         # any other state: the machine moved on in the same loop iteration the
         # timer fired — nothing to do.
@@ -1235,5 +1277,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_brightness_change_virtual": _fmt(
                 self._last_brightness_change_virtual
             ),
+            # Non-null only while the effect/warn stage is showing; persisted
+            # so a restart mid-warning can restore the pre-warning brightness.
+            "pre_warn_brightness": self._pre_warn_brightness,
             "schedule_window_start": self._schedule_window_applied,
         }

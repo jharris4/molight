@@ -25,6 +25,7 @@ from custom_components.molight.const import (
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_WARN,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
@@ -337,3 +338,88 @@ async def test_restart_schedule_state_missing_falls_through(
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# Effect / warn warning sequence at startup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_restart_during_effect_blink_off_seeds_idle(
+    hass: HomeAssistant,
+) -> None:
+    """A restart during the effect blink-off finds the real lights off and
+    seeds IDLE — the auto-off effectively completed early; the restored
+    pre-warn snapshot must not re-light the room."""
+    mock_restore_cache(
+        hass,
+        [State(VIRTUAL, "on", {"brightness": 200, "pre_warn_brightness": 200})],
+    )
+    hass.states.async_set(REAL, "off")  # blinked off by the effect stage
+    await setup_entries(
+        hass,
+        make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30),
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["pre_warn_brightness"] is None
+
+
+@pytest.mark.asyncio
+async def test_restart_during_warn_restores_pre_warn_brightness(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A restart during the warn grace re-adopts the lit lights as ACTIVE at
+    the restored pre-warning brightness (not the warn-stage brightness), with
+    a fresh full timer that later runs a new warning."""
+    mock_restore_cache(
+        hass,
+        [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 200})],
+    )
+    hass.states.async_set(REAL, "on", {"brightness": 255})  # warn stage at 100%
+    await setup_entries(
+        hass, make_light_entry(warn_timeout=30, warn_brightness=100)
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    # A fresh full timer (60s) runs, then the warn stage, then off.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_WARN
+
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
+    hass: HomeAssistant,
+) -> None:
+    """A restore from before pre_warn_brightness existed (attribute absent)
+    falls back to adopting the physical brightness as-is."""
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"brightness": 255})])
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    await setup_entries(
+        hass, make_light_entry(warn_timeout=30, warn_brightness=100)
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 255

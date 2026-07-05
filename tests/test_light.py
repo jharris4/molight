@@ -1103,6 +1103,7 @@ async def test_light_restore_ignores_corrupt_attributes(
                     "last_brightness_change_physical": "garbage",
                     "last_brightness_change_virtual": "garbage",
                     "brightness": "200",  # wrong type — ignored
+                    "pre_warn_brightness": "150",  # wrong type — ignored
                 },
             )
         ],
@@ -1118,6 +1119,7 @@ async def test_light_restore_ignores_corrupt_attributes(
     assert state.attributes["last_on_occupancy"] is None
     assert state.attributes["last_brightness_change_physical"] is None
     assert state.attributes["last_brightness_change_virtual"] is None
+    assert state.attributes["pre_warn_brightness"] is None
 
 
 # ---------------------------------------------------------------------------
