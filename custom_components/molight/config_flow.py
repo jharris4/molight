@@ -32,10 +32,13 @@ from .const import (
     CONF_ASSIGN_LIGHTS,
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
+    CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_TRANSITION,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
@@ -61,6 +64,7 @@ from .const import (
     CONF_TRIGGER_SENSORS,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    CONF_WARN_TRANSITION,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     DOMAIN,
     EDGE_COMBINE,
@@ -102,6 +106,12 @@ _STAGE_TIMEOUT_SELECTOR = selector.NumberSelector(
 _EFFECT_BRIGHTNESS_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, max=100, step=1, unit_of_measurement="%", mode="box"
+    )
+)
+# Optional fade times for the light's own service calls (blank/0 = none).
+_TRANSITION_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=0, max=300, step=0.1, unit_of_measurement="s", mode="box"
     )
 )
 
@@ -325,6 +335,25 @@ def _validate_light_timeout(
         ):
             return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
     return {}
+
+
+def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
+    """Check each stage fade fits inside its stage: transition <= timeout.
+
+    A disabled stage has timeout 0, so setting a fade for it fails the same
+    rule rather than being silently ignored.
+    """
+    errors: dict[str, str] = {}
+    for transition_key, timeout_key, error in (
+        (CONF_EFFECT_TRANSITION, CONF_EFFECT_TIMEOUT, "effect_transition_too_long"),
+        (CONF_WARN_TRANSITION, CONF_WARN_TIMEOUT, "warn_transition_too_long"),
+    ):
+        transition = user_input.get(transition_key)
+        if transition is not None and float(transition) > float(
+            user_input.get(timeout_key, 0)
+        ):
+            errors[transition_key] = error
+    return errors
 
 
 # ---------------------------------------------------------------------------
@@ -1222,6 +1251,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
                 errors = _validate_light_timeout(self.hass, user_input)
+            errors.update(_validate_stage_transitions(user_input))
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
@@ -1250,14 +1280,18 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 ),
                 vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
+                vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
                 vol.Required(
                     CONF_EFFECT_TIMEOUT, default=0
                 ): _STAGE_TIMEOUT_SELECTOR,
                 vol.Required(
                     CONF_EFFECT_BRIGHTNESS, default=0
                 ): _EFFECT_BRIGHTNESS_SELECTOR,
+                vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
                 vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
                 vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
                 **{
                     vol.Optional(key): selector.EntitySelector(sel_config)
                     for key, sel_config in _LIGHT_REF_SELECTORS.items()
@@ -1546,6 +1580,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
                 errors = _validate_light_timeout(self.hass, user_input)
+            errors.update(_validate_stage_transitions(user_input))
             if not errors:
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.
@@ -1577,21 +1612,23 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 )
             ),
         }
-        # Optional brightness: suggested_value (not default) so it can be
-        # cleared back to "no override" once set.
-        auto_on = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
-        auto_on_marker = (
-            vol.Optional(
-                CONF_AUTO_ON_BRIGHTNESS, description={"suggested_value": auto_on}
+        # Optional numeric fields: suggested_value (not default) so they can
+        # be cleared back to "not set" once given a value.
+        def _clearable(key: str) -> vol.Optional:
+            current = cfg.get(key)
+            return (
+                vol.Optional(key, description={"suggested_value": current})
+                if current is not None
+                else vol.Optional(key)
             )
-            if auto_on is not None
-            else vol.Optional(CONF_AUTO_ON_BRIGHTNESS)
-        )
-        schema[auto_on_marker] = _AUTO_ON_BRIGHTNESS_SELECTOR
+
+        schema[_clearable(CONF_AUTO_ON_BRIGHTNESS)] = _AUTO_ON_BRIGHTNESS_SELECTOR
+        schema[_clearable(CONF_AUTO_ON_TRANSITION)] = _TRANSITION_SELECTOR
+        schema[_clearable(CONF_AUTO_OFF_TRANSITION)] = _TRANSITION_SELECTOR
         # Effect/warn warning stages. Timeouts and the effect brightness always
         # have a value (0 = disabled / blink off), so they use plain defaults;
-        # warn_brightness is optional (blank = keep the pre-warn brightness) and
-        # so uses suggested_value to stay clearable.
+        # warn_brightness and the stage transitions are optional and so stay
+        # clearable.
         schema[
             vol.Required(CONF_EFFECT_TIMEOUT, default=cfg.get(CONF_EFFECT_TIMEOUT, 0))
         ] = _STAGE_TIMEOUT_SELECTOR
@@ -1600,19 +1637,12 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 CONF_EFFECT_BRIGHTNESS, default=cfg.get(CONF_EFFECT_BRIGHTNESS, 0)
             )
         ] = _EFFECT_BRIGHTNESS_SELECTOR
+        schema[_clearable(CONF_EFFECT_TRANSITION)] = _TRANSITION_SELECTOR
         schema[
             vol.Required(CONF_WARN_TIMEOUT, default=cfg.get(CONF_WARN_TIMEOUT, 0))
         ] = _STAGE_TIMEOUT_SELECTOR
-        warn_brightness = cfg.get(CONF_WARN_BRIGHTNESS)
-        warn_marker = (
-            vol.Optional(
-                CONF_WARN_BRIGHTNESS,
-                description={"suggested_value": warn_brightness},
-            )
-            if warn_brightness is not None
-            else vol.Optional(CONF_WARN_BRIGHTNESS)
-        )
-        schema[warn_marker] = _AUTO_ON_BRIGHTNESS_SELECTOR
+        schema[_clearable(CONF_WARN_BRIGHTNESS)] = _AUTO_ON_BRIGHTNESS_SELECTOR
+        schema[_clearable(CONF_WARN_TRANSITION)] = _TRANSITION_SELECTOR
         # Pre-fill via suggested_value (not default): a default can never be
         # cleared in the UI, which would make sensor references permanent.
         for key, sel_config in _LIGHT_REF_SELECTORS.items():

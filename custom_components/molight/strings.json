@@ -148,10 +148,14 @@
           "illuminance_mode": "Illuminance mode",
           "false_detection_off_delay": "Turn-off delay after a false detection (s)",
           "auto_on_brightness": "Auto-on brightness (%, optional) — used only when the light turns on automatically",
+          "auto_on_transition": "Auto-on transition (s, optional) — fade time when the light turns on automatically",
+          "auto_off_transition": "Auto-off transition (s, optional) — fade time when the light turns off automatically",
           "effect_timeout": "Effect warning duration (s, 0 = off) — blink/dip before auto-off",
           "effect_brightness": "Effect brightness (%) — 0 blinks the lights fully off",
+          "effect_transition": "Effect transition (s, optional) — fade time into the effect brightness; must not exceed the effect duration",
           "warn_timeout": "Warn grace period (s, 0 = off) — kept on after the effect before turning off",
           "warn_brightness": "Warn brightness (%, optional) — blank keeps the current brightness",
+          "warn_transition": "Warn transition (s, optional) — fade time into the warn brightness; must not exceed the warn grace period",
           "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
@@ -170,7 +174,9 @@
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty).",
-      "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name."
+      "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
+      "effect_transition_too_long": "The effect transition must not exceed the effect warning duration (and the effect must be enabled).",
+      "warn_transition_too_long": "The warn transition must not exceed the warn grace period (and the warn stage must be enabled)."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -286,10 +292,14 @@
           "illuminance_mode": "Illuminance mode",
           "false_detection_off_delay": "Turn-off delay after a false detection (s)",
           "auto_on_brightness": "Auto-on brightness (%, optional) — used only when the light turns on automatically",
+          "auto_on_transition": "Auto-on transition (s, optional) — fade time when the light turns on automatically",
+          "auto_off_transition": "Auto-off transition (s, optional) — fade time when the light turns off automatically",
           "effect_timeout": "Effect warning duration (s, 0 = off) — blink/dip before auto-off",
           "effect_brightness": "Effect brightness (%) — 0 blinks the lights fully off",
+          "effect_transition": "Effect transition (s, optional) — fade time into the effect brightness; must not exceed the effect duration",
           "warn_timeout": "Warn grace period (s, 0 = off) — kept on after the effect before turning off",
-          "warn_brightness": "Warn brightness (%, optional) — blank keeps the current brightness"
+          "warn_brightness": "Warn brightness (%, optional) — blank keeps the current brightness",
+          "warn_transition": "Warn transition (s, optional) — fade time into the warn brightness; must not exceed the warn grace period"
         }
       }
     },
@@ -298,7 +308,9 @@
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
-      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty)."
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty).",
+      "effect_transition_too_long": "The effect transition must not exceed the effect warning duration (and the effect must be enabled).",
+      "warn_transition_too_long": "The warn transition must not exceed the warn grace period (and the warn stage must be enabled)."
     }
   }
 }

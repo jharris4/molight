@@ -134,6 +134,24 @@ CONF_EFFECT_TIMEOUT = "effect_timeout"
 CONF_EFFECT_BRIGHTNESS = "effect_brightness"
 CONF_WARN_TIMEOUT = "warn_timeout"
 CONF_WARN_BRIGHTNESS = "warn_brightness"
+# Optional fade times (seconds) sent as the transition of the service calls
+# the virtual light makes itself. Absent/0 = no transition attribute is sent
+# (the real lights use their own default).
+#   auto_on_transition  — automatic turn-ons only (occupancy, illuminance
+#                         going dark, follow-mode window start); manual and
+#                         physical turn-ons are untouched.
+#   auto_off_transition — automatic turn-offs (timer expiry, false-detection
+#                         quick off, bright-forces-off, window end); a manual
+#                         off is untouched.
+#   effect_transition   — fade into the effect stage's brightness.
+#   warn_transition     — fade into the warn stage's brightness.
+# A stage fade must fit inside its stage: effect_transition <= effect_timeout
+# and warn_transition <= warn_timeout (enforced by the config/options flows,
+# which also rejects a fade on a disabled stage since its timeout is 0).
+CONF_AUTO_ON_TRANSITION = "auto_on_transition"
+CONF_AUTO_OFF_TRANSITION = "auto_off_transition"
+CONF_EFFECT_TRANSITION = "effect_transition"
+CONF_WARN_TRANSITION = "warn_transition"
 # Optional references to virtual entities (entity_ids)
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 # Maintain occupancy entity: keeps an already-on light on while it is on, but

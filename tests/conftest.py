@@ -9,9 +9,12 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
+    CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_TRANSITION,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
@@ -29,6 +32,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_MODE,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    CONF_WARN_TRANSITION,
     DOMAIN,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
@@ -66,6 +70,10 @@ def make_light_entry(
     effect_brightness: int | None = None,
     warn_timeout: int | None = None,
     warn_brightness: int | None = None,
+    auto_on_transition: float | None = None,
+    auto_off_transition: float | None = None,
+    effect_transition: float | None = None,
+    warn_transition: float | None = None,
 ) -> MockConfigEntry:
     """Build a virtual-light entry wired to arbitrary entity ids.
 
@@ -103,6 +111,14 @@ def make_light_entry(
         data[CONF_WARN_TIMEOUT] = warn_timeout
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
+    if auto_on_transition is not None:
+        data[CONF_AUTO_ON_TRANSITION] = auto_on_transition
+    if auto_off_transition is not None:
+        data[CONF_AUTO_OFF_TRANSITION] = auto_off_transition
+    if effect_transition is not None:
+        data[CONF_EFFECT_TRANSITION] = effect_transition
+    if warn_transition is not None:
+        data[CONF_WARN_TRANSITION] = warn_transition
     return MockConfigEntry(domain=DOMAIN, data=data)
 
 

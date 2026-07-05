@@ -20,9 +20,12 @@ from custom_components.molight.const import (
     CONF_ASSIGN_LIGHTS,
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
+    CONF_AUTO_OFF_TRANSITION,
+    CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_TRANSITION,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
@@ -47,6 +50,7 @@ from custom_components.molight.const import (
     CONF_TRIGGER_SENSORS,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    CONF_WARN_TRANSITION,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
@@ -283,6 +287,135 @@ async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> N
     cfg = molight_config(light)
     assert cfg[CONF_WARN_TIMEOUT] == 20
     assert CONF_WARN_BRIGHTNESS not in cfg
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_transitions(hass: HomeAssistant) -> None:
+    """All four transition fields round-trip through the create flow."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_AUTO_ON_TRANSITION: 2,
+            CONF_AUTO_OFF_TRANSITION: 3.5,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_TRANSITION: 1,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_TRANSITION: 20,  # equal to the timeout is allowed
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_AUTO_ON_TRANSITION] == 2
+    assert data[CONF_AUTO_OFF_TRANSITION] == 3.5
+    assert data[CONF_EFFECT_TRANSITION] == 1
+    assert data[CONF_WARN_TRANSITION] == 20
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_stage_transition_above_timeout(
+    hass: HomeAssistant,
+) -> None:
+    """A stage transition longer than its stage timeout is rejected — including
+    a transition on a disabled (timeout 0) stage."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_TRANSITION: 11,
+            CONF_WARN_TIMEOUT: 0,  # warn disabled, so any warn fade is invalid
+            CONF_WARN_TRANSITION: 5,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_EFFECT_TRANSITION: "effect_transition_too_long",
+        CONF_WARN_TRANSITION: "warn_transition_too_long",
+    }
+
+    # Fixing both fields lets the entry be created.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_TRANSITION: 10,
+            CONF_WARN_TIMEOUT: 0,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_options_validate_and_clear_transitions(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow enforces transition <= stage timeout, and omitting a
+    previously set transition clears it."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_TRANSITION: 5,
+            CONF_AUTO_ON_TRANSITION: 2,
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_TRANSITION: 21,  # > warn_timeout
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_WARN_TRANSITION: "warn_transition_too_long"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_WARN_TIMEOUT: 20,
+            CONF_AUTO_OFF_TRANSITION: 4,
+            # warn/auto-on transitions intentionally omitted — cleared.
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert cfg[CONF_AUTO_OFF_TRANSITION] == 4
+    assert CONF_WARN_TRANSITION not in cfg
+    assert CONF_AUTO_ON_TRANSITION not in cfg
 
 
 @pytest.mark.asyncio

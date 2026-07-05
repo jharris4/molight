@@ -29,13 +29,17 @@ Transitions
 
 Effect/warn warning
   When the auto-off timer expires the light can flag the impending off before
-  going dark, controlled by four options (all default to the feature being off,
-  so the light turns straight off exactly as before):
+  going dark, controlled by these options (all default to the feature being
+  off, so the light turns straight off exactly as before):
     EFFECT — a brief cue (blink/dip to effect_brightness, 0 = fully off) shown
              for effect_timeout seconds. Skipped when effect_timeout is 0.
     WARN   — a grace period at warn_brightness (absent = the brightness the
              light had before the warning) for warn_timeout seconds, then off.
              Skipped when warn_timeout is 0.
+  Each stage can optionally fade into its brightness over effect_transition /
+  warn_transition seconds (each validated <= its stage's timeout). Separately,
+  auto_on_transition / auto_off_transition fade automatic turn-ons and
+  turn-offs; manual/physical turn-ons and a manual off never get a transition.
   Throughout EFFECT and WARN the virtual light stays logically on. Any
   re-trigger — occupancy/maintain becoming active, a manual or physical
   turn-on, an external dim — cancels the sequence and behaves exactly as if
@@ -143,6 +147,7 @@ from datetime import datetime, timezone
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
+    ATTR_TRANSITION,
     ENTITY_ID_FORMAT,
     ColorMode,
     LightEntity,
@@ -170,9 +175,12 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util.percentage import percentage_to_ranged_value
 
 from .const import (
+    CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_TRANSITION,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_FALSE_OFF_DELAY,
     CONF_HOLD_ENTITIES,
@@ -187,6 +195,7 @@ from .const import (
     CONF_SCHEDULE_MODE,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
@@ -206,6 +215,11 @@ from .const import (
 from .helpers import molight_config, suggested_entity_id
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _opt_transition(value) -> float | None:
+    """Configured transition → float seconds; absent/0 = don't send one."""
+    return float(value) if value else None
 
 
 async def async_setup_entry(
@@ -267,6 +281,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             if warn_pct
             else None
         )
+        # Optional fade times (seconds) for the service calls this light makes
+        # itself: automatic turn-ons/offs and the effect/warn stage changes.
+        # None (absent or 0) sends no transition attribute. Manual/physical
+        # turn-ons and a manual off are never given a transition.
+        self._auto_on_transition = _opt_transition(cfg.get(CONF_AUTO_ON_TRANSITION))
+        self._auto_off_transition = _opt_transition(cfg.get(CONF_AUTO_OFF_TRANSITION))
+        self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
+        self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
         # Brightness the light had when the warning sequence began, restored on
         # any re-trigger so the effect/warn stages leave no lasting trace.
         # Exposed as the pre_warn_brightness attribute so it survives a
@@ -508,7 +530,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._schedule_window_applied = None
             self._machine_state = STATE_IDLE
             if self._attr_is_on:
-                self.hass.async_create_task(self._set_lights(False))
+                self.hass.async_create_task(self._auto_lights_off())
             self.async_write_ha_state()
             return True
 
@@ -743,7 +765,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         ):
             # The follow window we turned on for ended while held.
             self._schedule_window_applied = None
-            self.hass.async_create_task(self._set_lights(False))
+            self.hass.async_create_task(self._auto_lights_off())
             self._go_idle()
             return
 
@@ -751,7 +773,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._is_illuminance_bright()
             and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
         ):
-            self.hass.async_create_task(self._set_lights(False))
+            self.hass.async_create_task(self._auto_lights_off())
             self._go_idle()
             return
 
@@ -793,7 +815,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 # Window ended — apply the off boundary.
                 self._schedule_window_applied = None
-                self.hass.async_create_task(self._set_lights(False))
+                self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
             return
 
@@ -801,7 +823,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # occupancy the same way illuminance going dark does.
         if new_state.state != "on":
             if self._machine_state != STATE_IDLE and not self._held:
-                self.hass.async_create_task(self._set_lights(False))
+                self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
@@ -820,9 +842,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(
-                    self._set_lights(True, brightness=self._auto_on_brightness)
-                )
+                self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
 
     def _apply_window_start(self, marker: str | None) -> None:
@@ -837,9 +857,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # the effect/warn stage — restore them for the window.
             self._resume_lights()
         elif not self._attr_is_on:
-            self.hass.async_create_task(
-                self._set_lights(True, brightness=self._auto_on_brightness)
-            )
+            self.hass.async_create_task(self._auto_lights_on())
         self.async_write_ha_state()
 
     def _on_occupancy_change(self, occupied: bool) -> None:
@@ -865,9 +883,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._resume_lights()
             elif not self._attr_is_on:
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(
-                    self._set_lights(True, brightness=self._auto_on_brightness)
-                )
+                self.hass.async_create_task(self._auto_lights_on())
             self.async_write_ha_state()
         else:
             if self._machine_state == STATE_OCCUPIED:
@@ -970,7 +986,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Auto-off held — releasing the hold re-checks brightness.
                 return
             if self._machine_state != STATE_IDLE:
-                self.hass.async_create_task(self._set_lights(False))
+                self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
@@ -989,16 +1005,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(
-                    self._set_lights(True, brightness=self._auto_on_brightness)
-                )
+                self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
             else:
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
                     self._last_on_illuminance = datetime.now(timezone.utc)
                     self.hass.async_create_task(
-                        self._set_lights(True, brightness=self._auto_on_brightness)
+                        self._auto_lights_on()
                     )
                     if self._maintain_active():
                         # Recent history justified the turn-on; the maintain
@@ -1144,7 +1158,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # Task + synchronous _go_idle (the idiom used everywhere else):
             # awaiting the service call first would let a re-trigger landing
             # mid-await be stomped back to IDLE when the await returns.
-            self.hass.async_create_task(self._set_lights(False))
+            self.hass.async_create_task(self._auto_lights_off())
             self._go_idle()
         # any other state: the machine moved on in the same loop iteration the
         # timer fired — nothing to do.
@@ -1175,7 +1189,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
             self.hass.async_create_task(
-                self._set_stage_lights(self._effect_brightness)
+                self._set_stage_lights(self._effect_brightness, self._effect_transition)
             )
             self._start_timer(self._effect_timeout)
             self.async_write_ha_state()
@@ -1192,31 +1206,43 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if self._warn_brightness is not None
                 else self._pre_warn_brightness
             ) or 255
-            self.hass.async_create_task(self._set_stage_lights(brightness))
+            self.hass.async_create_task(
+                self._set_stage_lights(brightness, self._warn_transition)
+            )
             self._start_timer(self._warn_timeout)
             self.async_write_ha_state()
             return
-        self.hass.async_create_task(self._set_lights(False))
+        self.hass.async_create_task(self._auto_lights_off())
         self._go_idle()
 
     def _resume_lights(self) -> None:
         """Restore the real lights to their pre-warning brightness when a
         re-trigger interrupts the effect/warn sequence. The caller sets the
-        resulting machine state."""
+        resulting machine state. No transition: the restore must be as
+        immediate as the re-trigger that caused it."""
         brightness = self._pre_warn_brightness
         self._pre_warn_brightness = None
         self.hass.async_create_task(self._set_lights(True, brightness=brightness))
 
-    async def _set_stage_lights(self, brightness: int) -> None:
+    async def _set_stage_lights(
+        self, brightness: int, transition: float | None = None
+    ) -> None:
         """Drive the real lights for an effect/warn stage while the virtual
         light stays logically on. Brightness 0 blinks the real lights off."""
         context = Context()
         self._self_context_ids.append(context.id)
+        transition_data = (
+            {ATTR_TRANSITION: transition} if transition is not None else {}
+        )
         if brightness:
             await self.hass.services.async_call(
                 "light",
                 "turn_on",
-                {"entity_id": self._lights, ATTR_BRIGHTNESS: brightness},
+                {
+                    "entity_id": self._lights,
+                    ATTR_BRIGHTNESS: brightness,
+                    **transition_data,
+                },
                 blocking=False,
                 context=context,
             )
@@ -1225,7 +1251,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             await self.hass.services.async_call(
                 "light",
                 "turn_off",
-                {"entity_id": self._lights},
+                {"entity_id": self._lights, **transition_data},
                 blocking=False,
                 context=context,
             )
@@ -1236,10 +1262,31 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Real-light control
     # ------------------------------------------------------------------
 
-    async def _set_lights(self, on: bool, brightness: int | None = None) -> None:
+    def _auto_lights_on(self):
+        """Coroutine turning the real lights on for an automatic trigger,
+        with the configured auto-on brightness and transition."""
+        return self._set_lights(
+            True,
+            brightness=self._auto_on_brightness,
+            transition=self._auto_on_transition,
+        )
+
+    def _auto_lights_off(self):
+        """Coroutine turning the real lights off for an automatic turn-off,
+        with the configured auto-off transition. Manual offs bypass this."""
+        return self._set_lights(False, transition=self._auto_off_transition)
+
+    async def _set_lights(
+        self,
+        on: bool,
+        brightness: int | None = None,
+        transition: float | None = None,
+    ) -> None:
         context = Context()
         self._self_context_ids.append(context.id)
         service_data: dict = {"entity_id": self._lights}
+        if transition is not None:
+            service_data[ATTR_TRANSITION] = transition
         if on and brightness is not None:
             service_data[ATTR_BRIGHTNESS] = brightness
             # Mirror the commanded brightness so the virtual light reports it
