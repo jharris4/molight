@@ -92,17 +92,17 @@
         "title": "Occupancy sensor defaults",
         "description": "These settings are applied to every occupancy sensor you're adding. Adjust them if you like — you can also edit each one individually later.",
         "data": {
-          "occupancy_timeout": "Timeout (seconds)",
-          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
-          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
+          "occupancy_timeout": "Timeout (seconds) - how long the sensor stays 'on' after the last detection",
+          "false_detection_grace": "False-detection grace (s, 0 = disabled) - occupancies less than or equal to this value are considered false detections",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled) - clear occupancy if sensor is unavailable for this long"
         }
       },
       "discover_illuminance_defaults": {
         "title": "Illuminance sensor defaults",
         "description": "These settings are applied to every illuminance sensor you're adding. Adjust them if you like — you can also edit each one individually later.",
         "data": {
-          "illuminance_threshold": "Threshold (lx)",
-          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
+          "illuminance_threshold": "Threshold (lx) - below this value is considered 'dark'",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled) - don't report changes if changes are less than this amount"
         }
       },
       "discover_light_defaults": {
@@ -134,9 +134,9 @@
         "data": {
           "name": "Name",
           "occupancy_sensor": "Sensor",
-          "occupancy_timeout": "Timeout (seconds)",
-          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
-          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)",
+          "occupancy_timeout": "Timeout (seconds) - how long the sensor stays 'on' after the last detection",
+          "false_detection_grace": "False-detection grace (s, 0 = disabled) - occupancies less than or equal to this value are considered false detections",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled) - clear occupancy if sensor is unavailable for this long",
           "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
@@ -154,8 +154,8 @@
         "data": {
           "name": "Name",
           "illuminance_sensor": "Illuminance sensor",
-          "illuminance_threshold": "Threshold (lx)",
-          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)",
+          "illuminance_threshold": "Threshold (lx) - below this value is considered 'dark'",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled) - don't report changes if changes are less than this amount",
           "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
@@ -282,9 +282,9 @@
         "data": {
           "name": "Name",
           "occupancy_sensor": "Sensor",
-          "occupancy_timeout": "Timeout (seconds)",
-          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
-          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
+          "occupancy_timeout": "Timeout (seconds) - how long the sensor stays 'on' after the last detection",
+          "false_detection_grace": "False-detection grace (s, 0 = disabled) - occupancies less than or equal to this value are considered false detections",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled) - clear occupancy if sensor is unavailable for this long"
         }
       },
       "combined_occupancy": {
@@ -300,8 +300,8 @@
         "data": {
           "name": "Name",
           "illuminance_sensor": "Illuminance sensor",
-          "illuminance_threshold": "Threshold (lx)",
-          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
+          "illuminance_threshold": "Threshold (lx) - below this value is considered 'dark'",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled) - don't report changes if changes are less than this amount"
         }
       },
       "schedule": {
