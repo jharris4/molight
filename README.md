@@ -214,10 +214,14 @@ Controls N real lights with an occupancy-aware state machine.
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, illuminance going dark, or a follow-mode window. Manual and physical turn-ons keep their own brightness. Leave blank to let automatic turn-ons use the real lights' own last/default brightness |
+| **Auto-on transition (s)** *(optional)* | Fade time when the light turns on *automatically*. Blank or `0` sends no transition. Manual and physical turn-ons never get a transition |
+| **Auto-off transition (s)** *(optional)* | Fade time when the light turns off *automatically* — timer expiry, bright forcing off, a window ending. Blank or `0` sends no transition. A manual off is always immediate |
 | **Effect warning duration (s)** | `0` disables. When the turn-off timer expires, instead of going dark the light first shows a brief *effect* cue for this long (see below) |
 | **Effect brightness (%)** | Brightness during the effect stage. `0` blinks the real lights fully off — a distinct "about to turn off" flash |
+| **Effect transition (s)** *(optional)* | Fade time into the effect brightness. Must not exceed the effect warning duration (setting one while the effect stage is disabled is rejected the same way) |
 | **Warn grace period (s)** | `0` disables. After the effect stage, the light stays on for this long as a grace period before finally turning off, giving you time to re-trigger it |
 | **Warn brightness (%)** *(optional)* | Brightness during the warn grace period. Leave blank to keep whatever brightness the light had before the warning began |
+| **Warn transition (s)** *(optional)* | Fade time into the warn brightness. Must not exceed the warn grace period (setting one while the warn stage is disabled is rejected the same way) |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | A MoLight occupancy sensor that keeps an already-on light on while occupied but never turns it on (see below) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
@@ -254,7 +258,9 @@ By default the light turns off the instant its timer expires. Setting an **effec
 1. **Effect** — a brief cue for *effect warning duration* seconds: the real lights are driven to the *effect brightness* (`0` blinks them fully off — a hard-to-miss flash). Skipped when its timeout is `0`.
 2. **Warn** — a grace period for *warn grace period* seconds at the *warn brightness* (or the brightness the light already had, if left blank), then the lights turn off. Skipped when its timeout is `0`.
 
-Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning and restores the pre-warning brightness, so the interruption leaves no trace. Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
+Each stage can optionally fade into its brightness over the *effect transition* / *warn transition* seconds. A stage's transition must fit inside the stage — the form rejects a transition longer than its stage's duration, and since a disabled stage has duration `0`, setting a transition for a disabled stage is rejected the same way rather than silently ignored.
+
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning and restores the pre-warning brightness, so the interruption leaves no trace. The restore is deliberately immediate (no fade), so the room snaps back the moment you re-trigger. Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 #### Maintain occupancy sensor
 
@@ -287,6 +293,12 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`).
 
 Set an optional **auto-on brightness** to force a level whenever the light comes on *automatically* — occupancy, illuminance going dark, or a follow-mode window start. Manual turn-ons (via the virtual entity) and physical turn-ons (at the real light) are left alone, so you can dim the room by hand without it snapping back. Leave it blank to keep the previous behaviour, where automatic turn-ons don't command a brightness at all.
+
+#### Transitions
+
+Automatic actions can fade instead of switching instantly. The optional **auto-on transition** fades automatic turn-ons (occupancy, going dark, a follow-mode window start), and the **auto-off transition** fades automatic turn-offs (timer expiry, bright forcing off in `control` mode, a window ending). Manual and physical turn-ons, and a manual off, are never given a transition — when you flip the switch, it responds immediately. Leaving a transition blank (or `0`) sends no `transition` attribute at all, so lights keep whatever their integration's default behaviour is.
+
+The effect/warn warning stages have their own fades (**effect transition** / **warn transition**) — see [Effect / warn warning](#effect--warn-warning).
 
 #### Attribution
 
