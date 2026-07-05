@@ -79,6 +79,10 @@ Once installed (see [Installation](#installation)), everything is configured fro
 
 The order matters: a virtual entity must already exist before another one can reference it — occupancy, illuminance, and schedule sensors before the virtual light that uses them, and simple occupancy sensors before a combined sensor that merges them. Sensors are reusable, so one occupancy or illuminance sensor can serve several virtual lights.
 
+Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each virtual light also comes with a companion **Auto-off** switch: flip it off to keep the lights on (movie night, guests) and back on to resume normal behavior. Each entry can be edited or removed independently later via its **Configure** button.
+
+See [Entities](#entities) below for the full description of each entity type and its configuration options.
+
 ### Choosing the entity ID
 
 Every manual create form ends with an optional **Entity ID** field:
@@ -98,7 +102,7 @@ Rather than adding entities one form at a time, the **Add Integration** or **Add
 - **Discover illuminance sensors** — finds every `sensor` with `device_class: illuminance`.
 - **Discover lights** — finds every entity in the `light` domain.
 
-Each action presents a checklist of the matching entities (all pre-selected); untick any you don't want, submit, and a Virtual Occupancy Sensor / Virtual Illuminance Sensor / Virtual Light is created for each pick using default settings, named after the source entity. Edit any of them afterwards via its **Configure** button — for discovered virtual lights, that's where you wire up the occupancy, illuminance, and schedule references.
+Each action presents a checklist of the matching entities (all pre-selected); untick any you don't want, submit, and a Virtual Occupancy Sensor / Virtual Illuminance Sensor / Virtual Light is created for each pick named after the source entity.
 
 The same form also offers an optional **prefix** and **suffix** to distinguish the virtual entities from the real ones they wrap, plus a target choosing what the affix shapes:
 
@@ -109,9 +113,10 @@ Both are applied verbatim with no separator inserted, so you control the spacing
 
 The list only shows entities you can usefully add: MoLight's own virtual entities are never suggested, disabled entities are hidden, and anything already wrapped by an existing MoLight entry is skipped — so re-running discovery after adding more sensors only offers the new ones.
 
-Finally, use the virtual light instead of the real lights in your dashboards and voice assistants — turning it on and off controls the real lights, and all the automatic behavior comes along for free. Each virtual light also comes with a companion **Auto-off** switch: flip it off to keep the lights on (movie night, guests) and back on to resume normal behavior. Each entry can be edited or removed independently later via its **Configure** button.
+Once you submit the first form, a second form is shown that allows you the option to change any of the default settings that will be applied to all of the Virtual Entities created by the discovery process.
 
-See [Entities](#entities) below for the full description of each entity type and its configuration options.
+You can also edit any of them individually afterwards via its **Configure** button — for discovered virtual lights, that's where you wire up the occupancy, illuminance, and schedule references.
+
 
 ### Assign a sensor to several lights at once
 

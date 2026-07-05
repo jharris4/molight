@@ -766,6 +766,11 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
         result["flow_id"],
         {CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"]},
     )
+    # Selecting advances to the editable-defaults step; submitting it unchanged
+    # keeps the defaults.
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_occupancy_defaults"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "discovery_done"
     await hass.async_block_till_done()
@@ -802,6 +807,8 @@ async def test_discover_affix_targets_name(
             CONF_AFFIX_TARGET: AFFIX_TARGET_NAME,
         },
     )
+    assert result["type"] == FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -837,6 +844,8 @@ async def test_discover_affix_targets_entity_id(
             CONF_AFFIX_TARGET: AFFIX_TARGET_ENTITY_ID,
         },
     )
+    assert result["type"] == FlowResultType.FORM
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -877,6 +886,9 @@ async def test_discover_illuminance_creates_with_defaults(
         result["flow_id"],
         {CONF_SELECTED_ENTITIES: ["sensor.office_lux"]},
     )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_illuminance_defaults"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -914,6 +926,9 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
         result["flow_id"],
         {CONF_SELECTED_ENTITIES: ["light.desk"]},
     )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_light_defaults"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -924,6 +939,70 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
     ]
     assert len(created) == 1
     assert created[0].data[CONF_LIGHT_TIMEOUT] == 300
+
+
+@pytest.mark.asyncio
+async def test_discover_defaults_step_applies_overrides(hass: HomeAssistant) -> None:
+    """Edited defaults on the discovery step apply to every created entity."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion",
+        "off",
+        {"device_class": "occupancy", "friendly_name": "Hall Motion"},
+    )
+    hass.states.async_set(
+        "binary_sensor.study_presence",
+        "off",
+        {"device_class": "presence", "friendly_name": "Study Presence"},
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_SELECTED_ENTITIES: [
+                "binary_sensor.hall_motion",
+                "binary_sensor.study_presence",
+            ]
+        },
+    )
+    assert result["step_id"] == "discover_occupancy_defaults"
+    # A non-default timeout, entered once, applies to both created sensors.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_OCCUPANCY_TIMEOUT: 45}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_OCCUPANCY
+    ]
+    assert len(created) == 2
+    assert all(e.data[CONF_OCCUPANCY_TIMEOUT] == 45 for e in created)
+
+
+@pytest.mark.asyncio
+async def test_discover_light_defaults_validate_stage_transition(
+    hass: HomeAssistant,
+) -> None:
+    """The light defaults step enforces the same stage-transition rule."""
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+
+    result = await _start_discovery(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+    # An effect transition longer than the (disabled) effect stage is rejected
+    # before any entity is created.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_TRANSITION: 5},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_light_defaults"
+    assert result["errors"]
 
 
 @pytest.mark.asyncio

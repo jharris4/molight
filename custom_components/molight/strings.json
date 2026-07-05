@@ -60,7 +60,7 @@
       },
       "discover_occupancy": {
         "title": "Discover occupancy sensors",
-        "description": "Select the occupancy/motion sensors to wrap in virtual occupancy sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
+        "description": "Select the occupancy/motion sensors to wrap in virtual occupancy sensors. The next step lets you adjust the default settings before they're created. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
@@ -70,7 +70,7 @@
       },
       "discover_illuminance": {
         "title": "Discover illuminance sensors",
-        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors, created with default settings you can edit afterwards. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
+        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors. The next step lets you adjust the default settings before they're created. Sensors already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
@@ -80,12 +80,53 @@
       },
       "discover_light": {
         "title": "Discover lights",
-        "description": "Select the lights to wrap in virtual lights, created with default settings. Add occupancy, illuminance or schedule references afterwards via each entity's options. Lights already wrapped by MoLight (and disabled ones) are hidden.",
+        "description": "Select the lights to wrap in virtual lights. The next step lets you adjust the default settings — including occupancy, illuminance and schedule references — before they're created. Lights already wrapped by MoLight (and disabled ones) are hidden.",
         "data": {
           "selected_entities": "Lights to add",
           "affix_prefix": "Prefix (optional) — added before each, applied verbatim (e.g. \"Auto \")",
           "affix_suffix": "Suffix (optional) — added after each, applied verbatim (e.g. \" (auto)\")",
           "affix_target": "Apply the prefix/suffix to"
+        }
+      },
+      "discover_occupancy_defaults": {
+        "title": "Occupancy sensor defaults",
+        "description": "These settings are applied to every occupancy sensor you're adding. Adjust them if you like — you can also edit each one individually later.",
+        "data": {
+          "occupancy_timeout": "Timeout (seconds)",
+          "false_detection_grace": "False-detection grace (s, 0 = disabled)",
+          "clear_on_unavailable_timeout": "Clear after unavailable (s, 0 = disabled)"
+        }
+      },
+      "discover_illuminance_defaults": {
+        "title": "Illuminance sensor defaults",
+        "description": "These settings are applied to every illuminance sensor you're adding. Adjust them if you like — you can also edit each one individually later.",
+        "data": {
+          "illuminance_threshold": "Threshold (lx)",
+          "illuminance_hysteresis": "Hysteresis (lx, 0 = disabled)"
+        }
+      },
+      "discover_light_defaults": {
+        "title": "Light defaults",
+        "description": "These settings are applied to every light you're adding. Adjust them if you like — you can also edit each one individually later.",
+        "data": {
+          "light_timeout": "Turn-off timeout (seconds)",
+          "occupancy_entity": "Occupancy sensor (optional)",
+          "maintain_occupancy_entity": "Maintain occupancy sensor (optional) — keeps an already-on light on while occupied, never turns it on",
+          "illuminance_entity": "Illuminance sensor (optional)",
+          "schedule_entity": "Schedule sensor (optional)",
+          "hold_entities": "Keep-on entities (optional) — auto-off is suspended while any of these is on",
+          "schedule_mode": "Schedule mode",
+          "illuminance_mode": "Illuminance mode",
+          "false_detection_off_delay": "Turn-off delay after a false detection (s)",
+          "auto_on_brightness": "Auto-on brightness (%, optional) — used only when the light turns on automatically",
+          "auto_on_transition": "Auto-on transition (s, optional) — fade time when the light turns on automatically",
+          "auto_off_transition": "Auto-off transition (s, optional) — fade time when the light turns off automatically",
+          "effect_timeout": "Effect warning duration (s, 0 = off) — blink/dip before auto-off",
+          "effect_brightness": "Effect brightness (%) — 0 blinks the lights fully off",
+          "effect_transition": "Effect transition (s, optional) — fade time into the effect brightness; must not exceed the effect duration",
+          "warn_timeout": "Warn grace period (s, 0 = off) — kept on after the effect before turning off",
+          "warn_brightness": "Warn brightness (%, optional) — blank keeps the current brightness",
+          "warn_transition": "Warn transition (s, optional) — fade time into the warn brightness; must not exceed the warn grace period"
         }
       },
       "occupancy": {
@@ -180,7 +221,7 @@
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
-      "discovery_done": "Created {count} virtual MoLight entities. They use default settings; edit any of them via its options.",
+      "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
       "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}."

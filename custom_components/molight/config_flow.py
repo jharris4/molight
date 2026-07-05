@@ -357,6 +357,96 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Shared option-field schemas
+#
+# The editable settings of each entity type, with their creation-time defaults
+# (optional fields blank). Used both by the manual create steps and by the
+# discovery "adjust defaults" steps, so the two stay in sync. Name, entity_id
+# and the wrapped source entity are added by each caller, not here.
+# ---------------------------------------------------------------------------
+
+
+def _occupancy_option_fields() -> dict:
+    return {
+        vol.Required(CONF_OCCUPANCY_TIMEOUT, default=120): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1, max=3600, unit_of_measurement="s", mode="box"
+            )
+        ),
+        vol.Required(CONF_FALSE_DETECTION_GRACE, default=3): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=60, unit_of_measurement="s", mode="box"
+            )
+        ),
+        vol.Required(
+            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+            default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=3600, unit_of_measurement="s", mode="box"
+            )
+        ),
+    }
+
+
+def _illuminance_option_fields() -> dict:
+    return {
+        vol.Required(CONF_ILLUMINANCE_THRESHOLD, default=10.0): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=100000, step=0.1, unit_of_measurement="lx", mode="box"
+            )
+        ),
+        vol.Required(CONF_ILLUMINANCE_HYSTERESIS, default=0.0): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=10000, step=0.1, unit_of_measurement="lx", mode="box"
+            )
+        ),
+    }
+
+
+def _light_option_fields() -> dict:
+    return {
+        vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1, max=14400, unit_of_measurement="s", mode="box"
+            )
+        ),
+        vol.Required(CONF_FALSE_OFF_DELAY, default=5): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0, max=300, unit_of_measurement="s", mode="box"
+            )
+        ),
+        vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+        vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
+        vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
+        vol.Required(CONF_EFFECT_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
+        vol.Required(CONF_EFFECT_BRIGHTNESS, default=0): _EFFECT_BRIGHTNESS_SELECTOR,
+        vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
+        vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
+        vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+        vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
+        **{
+            vol.Optional(key): selector.EntitySelector(sel_config)
+            for key, sel_config in _LIGHT_REF_SELECTORS.items()
+        },
+        vol.Required(
+            CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=ILLUMINANCE_MODES, translation_key=CONF_ILLUMINANCE_MODE
+            )
+        ),
+        vol.Required(
+            CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
+            )
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Discovery — scan real entities and bulk-create virtual entities for them
 # ---------------------------------------------------------------------------
 
@@ -493,6 +583,9 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pending: dict[str, Any] | None = None
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
+        # Stashed selection + affix + candidate map between a discovery step
+        # and its "adjust defaults" step.
+        self._discovery: dict[str, Any] = {}
 
     @staticmethod
     def async_get_options_flow(
@@ -652,55 +745,37 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # Discovery — bulk-create from scanned real entities
     # ------------------------------------------------------------------
 
-    async def _async_discovery(
+    async def _async_discovery_select(
         self,
         *,
         step_id: str,
         domain: str,
         device_classes: set[str] | None,
         used_key: str,
-        payload,
+        defaults_step,
         user_input: dict[str, Any] | None,
     ) -> config_entries.FlowResult:
-        """Show a checklist of candidate entities and bulk-create the picks.
+        """Show a checklist of candidate entities, then adjust their defaults.
 
-        A config flow can only return one entry, so the selected entities are
-        each created through the import step spawned as a background task, and
-        this flow ends with an abort that reports how many were made.
+        On submit the selection and affix choices are stashed and the flow
+        moves to the type's defaults step, which lets the user edit the
+        settings applied to every pick before the bulk-create runs.
         """
         candidates = _discovery_candidates(self.hass, domain, device_classes, used_key)
 
         if user_input is not None:
-            selected = user_input.get(CONF_SELECTED_ENTITIES, [])
-            # Applied verbatim (no separator inserted) so the user controls
-            # spacing; empty strings leave the discovered name untouched. The
-            # target decides whether the affix shapes the friendly name or the
-            # entity_id only (leaving the name identical to the wrapped entity).
-            prefix = user_input.get(CONF_AFFIX_PREFIX, "")
-            suffix = user_input.get(CONF_AFFIX_SUFFIX, "")
-            target = user_input.get(CONF_AFFIX_TARGET, AFFIX_TARGET_ENTITY_ID)
-            for entity_id in selected:
-                base = candidates.get(entity_id, entity_id)
-                composed = f"{prefix}{base}{suffix}"
-                if target == AFFIX_TARGET_NAME:
-                    data = payload(entity_id, composed)
-                else:
-                    data = payload(entity_id, base)
-                    # Only pin an explicit id when the affix actually changes it;
-                    # otherwise leave the name-derived default (and its _2 dedupe).
-                    if composed != base:
-                        data[CONF_ENTITY_ID] = composed
-                self.hass.async_create_task(
-                    self.hass.config_entries.flow.async_init(
-                        DOMAIN,
-                        context={"source": config_entries.SOURCE_IMPORT},
-                        data=data,
-                    )
-                )
-            return self.async_abort(
-                reason="discovery_done",
-                description_placeholders={"count": str(len(selected))},
-            )
+            self._discovery = {
+                "selected": user_input.get(CONF_SELECTED_ENTITIES, []),
+                # Affixes are applied verbatim (no separator inserted) so the
+                # user controls spacing; empty strings leave the name untouched.
+                # The target decides whether the affix shapes the friendly name
+                # or the entity_id only (name identical to the wrapped entity).
+                "prefix": user_input.get(CONF_AFFIX_PREFIX, ""),
+                "suffix": user_input.get(CONF_AFFIX_SUFFIX, ""),
+                "target": user_input.get(CONF_AFFIX_TARGET, AFFIX_TARGET_ENTITY_ID),
+                "candidates": candidates,
+            }
+            return await defaults_step()
 
         if not candidates:
             return self.async_abort(reason="no_candidates")
@@ -740,41 +815,126 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    def _finish_discovery(
+        self, payload, overrides: dict[str, Any]
+    ) -> config_entries.FlowResult:
+        """Bulk-create the stashed selection, layering the chosen settings on top.
+
+        A config flow can only return one entry, so each selected entity is
+        created through the import step spawned as a background task, and this
+        flow ends with an abort that reports how many were made.
+        """
+        disc = self._discovery
+        selected = disc["selected"]
+        candidates = disc["candidates"]
+        prefix, suffix, target = disc["prefix"], disc["suffix"], disc["target"]
+        # Drop cleared optional fields so they stay absent from the entry
+        # rather than being stored as None.
+        overrides = {k: v for k, v in overrides.items() if v is not None}
+        for entity_id in selected:
+            base = candidates.get(entity_id, entity_id)
+            composed = f"{prefix}{base}{suffix}"
+            if target == AFFIX_TARGET_NAME:
+                data = payload(entity_id, composed)
+            else:
+                data = payload(entity_id, base)
+                # Only pin an explicit id when the affix actually changes it;
+                # otherwise leave the name-derived default (and its _2 dedupe).
+                if composed != base:
+                    data[CONF_ENTITY_ID] = composed
+            # The defaults form supplies every editable setting; the source
+            # entity, name and entity_id it never touches stay as the payload
+            # set them.
+            data.update(overrides)
+            self.hass.async_create_task(
+                self.hass.config_entries.flow.async_init(
+                    DOMAIN,
+                    context={"source": config_entries.SOURCE_IMPORT},
+                    data=data,
+                )
+            )
+        return self.async_abort(
+            reason="discovery_done",
+            description_placeholders={"count": str(len(selected))},
+        )
+
     async def async_step_discover_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery(
+        return await self._async_discovery_select(
             step_id="discover_occupancy",
             domain="binary_sensor",
             # Occupancy sensors are commonly exposed under any of these classes.
             device_classes={"occupancy", "motion", "presence"},
             used_key=CONF_OCCUPANCY_SENSOR,
-            payload=_occupancy_payload,
+            defaults_step=self.async_step_discover_occupancy_defaults,
             user_input=user_input,
+        )
+
+    async def async_step_discover_occupancy_defaults(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Adjust the defaults applied to every discovered occupancy sensor."""
+        if user_input is not None:
+            return self._finish_discovery(_occupancy_payload, user_input)
+        return self.async_show_form(
+            step_id="discover_occupancy_defaults",
+            data_schema=vol.Schema(_occupancy_option_fields()),
         )
 
     async def async_step_discover_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery(
+        return await self._async_discovery_select(
             step_id="discover_illuminance",
             domain="sensor",
             device_classes={"illuminance"},
             used_key=CONF_ILLUMINANCE_SENSOR,
-            payload=_illuminance_payload,
+            defaults_step=self.async_step_discover_illuminance_defaults,
             user_input=user_input,
+        )
+
+    async def async_step_discover_illuminance_defaults(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Adjust the defaults applied to every discovered illuminance sensor."""
+        if user_input is not None:
+            return self._finish_discovery(_illuminance_payload, user_input)
+        return self.async_show_form(
+            step_id="discover_illuminance_defaults",
+            data_schema=vol.Schema(_illuminance_option_fields()),
         )
 
     async def async_step_discover_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery(
+        return await self._async_discovery_select(
             step_id="discover_light",
             domain="light",
             device_classes=None,
             used_key=CONF_LIGHTS,
-            payload=_light_payload,
+            defaults_step=self.async_step_discover_light_defaults,
             user_input=user_input,
+        )
+
+    async def async_step_discover_light_defaults(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Adjust the defaults applied to every discovered light.
+
+        The same light_timeout/stage-transition checks the manual light form
+        enforces apply here, since one setting set is shared by every pick.
+        """
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            errors = _validate_light_timeout(self.hass, user_input)
+            errors.update(_validate_stage_transitions(user_input))
+            if not errors:
+                return self._finish_discovery(_light_payload, user_input)
+        return self.async_show_form(
+            step_id="discover_light_defaults",
+            data_schema=vol.Schema(_light_option_fields()),
+            errors=errors,
         )
 
     async def async_step_import(
@@ -1030,28 +1190,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         domain="binary_sensor", multiple=False
                     )
                 ),
-                vol.Required(
-                    CONF_OCCUPANCY_TIMEOUT, default=120
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1, max=3600, unit_of_measurement="s", mode="box"
-                    )
-                ),
-                vol.Required(
-                    CONF_FALSE_DETECTION_GRACE, default=3
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0, max=60, unit_of_measurement="s", mode="box"
-                    )
-                ),
-                vol.Required(
-                    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                    default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0, max=3600, unit_of_measurement="s", mode="box"
-                    )
-                ),
+                **_occupancy_option_fields(),
                 vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
             }
         )
@@ -1147,28 +1286,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         device_class="illuminance", multiple=False
                     )
                 ),
-                vol.Required(
-                    CONF_ILLUMINANCE_THRESHOLD, default=10.0
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0,
-                        max=100000,
-                        step=0.1,
-                        unit_of_measurement="lx",
-                        mode="box",
-                    )
-                ),
-                vol.Required(
-                    CONF_ILLUMINANCE_HYSTERESIS, default=0.0
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0,
-                        max=10000,
-                        step=0.1,
-                        unit_of_measurement="lx",
-                        mode="box",
-                    )
-                ),
+                **_illuminance_option_fields(),
                 vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
             }
         )
@@ -1269,49 +1387,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1, max=14400, unit_of_measurement="s", mode="box"
-                    )
-                ),
-                vol.Required(CONF_FALSE_OFF_DELAY, default=5): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=0, max=300, unit_of_measurement="s", mode="box"
-                    )
-                ),
-                vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
-                vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
-                vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
-                vol.Required(
-                    CONF_EFFECT_TIMEOUT, default=0
-                ): _STAGE_TIMEOUT_SELECTOR,
-                vol.Required(
-                    CONF_EFFECT_BRIGHTNESS, default=0
-                ): _EFFECT_BRIGHTNESS_SELECTOR,
-                vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
-                vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
-                vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
-                vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
-                **{
-                    vol.Optional(key): selector.EntitySelector(sel_config)
-                    for key, sel_config in _LIGHT_REF_SELECTORS.items()
-                },
-                vol.Required(
-                    CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=ILLUMINANCE_MODES,
-                        translation_key=CONF_ILLUMINANCE_MODE,
-                    )
-                ),
-                vol.Required(
-                    CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=SCHEDULE_MODES,
-                        translation_key=CONF_SCHEDULE_MODE,
-                    )
-                ),
+                **_light_option_fields(),
                 vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
             }
         )
