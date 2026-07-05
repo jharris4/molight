@@ -147,6 +147,7 @@
           "schedule_mode": "Schedule mode",
           "illuminance_mode": "Illuminance mode",
           "false_detection_off_delay": "Turn-off delay after a false detection (s)",
+          "auto_on_brightness": "Auto-on brightness (%, optional) — used only when the light turns on automatically",
           "entity_id": "Entity ID (optional) — leave blank to derive it from the name"
         }
       },
@@ -279,7 +280,8 @@
           "hold_entities": "Keep-on entities (optional) — auto-off is suspended while any of these is on",
           "schedule_mode": "Schedule mode",
           "illuminance_mode": "Illuminance mode",
-          "false_detection_off_delay": "Turn-off delay after a false detection (s)"
+          "false_detection_off_delay": "Turn-off delay after a false detection (s)",
+          "auto_on_brightness": "Auto-on brightness (%, optional) — used only when the light turns on automatically"
         }
       }
     },

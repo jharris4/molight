@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_ENTITY,
@@ -260,6 +261,143 @@ async def test_occupancy_turns_light_on_when_dark(
     state = hass.states.get("light.gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_auto_on_brightness_applied_on_occupancy(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
+) -> None:
+    """An automatic (occupancy) turn-on forces the configured brightness."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Bright Light",
+            CONF_LIGHTS: ["light.living_room"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_AUTO_ON_BRIGHTNESS: 40,  # 40% → 102 of 255
+        },
+    )
+    await _setup_entries(hass, occupancy_entry, illuminance_entry, light)
+
+    hass.states.async_set("sensor.lux_1", "5")  # dark
+    await _settle(hass)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+
+    state = hass.states.get("light.bright_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["brightness"] == 102
+
+
+@pytest.mark.asyncio
+async def test_auto_on_brightness_not_applied_on_manual_on(hass: HomeAssistant) -> None:
+    """A manual turn-on must not be overridden by the auto-on brightness."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Bright Light",
+            CONF_LIGHTS: ["light.living_room"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_AUTO_ON_BRIGHTNESS: 40,
+        },
+    )
+    await _setup_entries(hass, light)
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.bright_light"}
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get("light.bright_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    # No brightness was requested and none is forced — the auto-on value is
+    # reserved for automatic turn-ons.
+    assert state.attributes.get("brightness") is None
+
+
+@pytest.mark.asyncio
+async def test_auto_on_brightness_applied_on_schedule_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A follow-mode window start turns the light on at the configured brightness."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Porch Light",
+            CONF_LIGHTS: ["light.porch_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
+            CONF_AUTO_ON_BRIGHTNESS: 40,  # 40% → 102 of 255
+        },
+    )
+    await _setup_entries(hass, _night_schedule_entry(), light)
+
+    assert hass.states.get("light.porch_light").state == "off"
+
+    # Window starts at 21:00 → automatic turn-on at the auto-on brightness.
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=timezone.utc)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await _settle(hass)
+
+    state = hass.states.get("light.porch_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["brightness"] == 102
+
+
+@pytest.mark.asyncio
+async def test_auto_on_brightness_applied_on_illuminance_dark(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
+) -> None:
+    """Illuminance going dark re-lights the light at the configured brightness."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Kitchen Light",
+            CONF_LIGHTS: ["light.kitchen_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_AUTO_ON_BRIGHTNESS: 40,
+        },
+    )
+    await _setup_entries(hass, illuminance_entry, light)
+
+    # Manual turn-on at T0 (dark) — no brightness requested, so none is forced.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.kitchen_light"}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("light.kitchen_light").attributes.get("brightness") is None
+
+    # T0+20: it gets bright — lights forced off.
+    freezer.tick(timedelta(seconds=20))
+    hass.states.async_set("sensor.lux_1", "500")
+    await _settle(hass)
+    assert hass.states.get("light.kitchen_light").state == "off"
+
+    # T0+30: dark again — re-lit automatically, now at the auto-on brightness.
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("sensor.lux_1", "5")
+    await _settle(hass)
+
+    state = hass.states.get("light.kitchen_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
+    assert state.attributes["brightness"] == 102
 
 
 @pytest.mark.asyncio

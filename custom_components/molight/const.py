@@ -108,6 +108,12 @@ SUN_EVENTS = ["sunset", "sunrise"]
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
+# Brightness (percent, 1-100) applied when the light is turned on
+# *automatically* — by occupancy, illuminance going dark, or a follow-mode
+# schedule window. Manual and physical turn-ons are never affected (they keep
+# whatever brightness the user/last state set). Absent = don't set a brightness
+# on automatic turn-ons either (the real lights use their own last/default).
+CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.

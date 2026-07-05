@@ -32,6 +32,7 @@ from .const import (
     CONF_ASSIGN_LIGHTS,
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
@@ -79,6 +80,13 @@ from .helpers import molight_config as _molight_cfg
 # a bare SelectSelector can't be un-set once it has a value.
 _SUN_OPTIONS = ["none", *SUN_EVENTS]
 _COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
+
+# Optional brightness (percent) for automatic turn-ons of a virtual light.
+_AUTO_ON_BRIGHTNESS_SELECTOR = selector.NumberSelector(
+    selector.NumberSelectorConfig(
+        min=1, max=100, step=1, unit_of_measurement="%", mode="box"
+    )
+)
 
 
 def _window_from_input(user_input: dict[str, Any]) -> dict | None:
@@ -1224,6 +1232,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         min=0, max=300, unit_of_measurement="s", mode="box"
                     )
                 ),
+                vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                 **{
                     vol.Optional(key): selector.EntitySelector(sel_config)
                     for key, sel_config in _LIGHT_REF_SELECTORS.items()
@@ -1543,6 +1552,17 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 )
             ),
         }
+        # Optional brightness: suggested_value (not default) so it can be
+        # cleared back to "no override" once set.
+        auto_on = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
+        auto_on_marker = (
+            vol.Optional(
+                CONF_AUTO_ON_BRIGHTNESS, description={"suggested_value": auto_on}
+            )
+            if auto_on is not None
+            else vol.Optional(CONF_AUTO_ON_BRIGHTNESS)
+        )
+        schema[auto_on_marker] = _AUTO_ON_BRIGHTNESS_SELECTOR
         # Pre-fill via suggested_value (not default): a default can never be
         # cleared in the UI, which would make sensor references permanent.
         for key, sel_config in _LIGHT_REF_SELECTORS.items():

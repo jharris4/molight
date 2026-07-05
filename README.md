@@ -213,6 +213,7 @@ Controls N real lights with an occupancy-aware state machine.
 | **Lights** | Real `light` entities to control |
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
+| **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, illuminance going dark, or a follow-mode window. Manual and physical turn-ons keep their own brightness. Leave blank to let automatic turn-ons use the real lights' own last/default brightness |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | A MoLight occupancy sensor that keeps an already-on light on while occupied but never turns it on (see below) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
@@ -269,6 +270,8 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 #### Brightness
 
 The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`).
+
+Set an optional **auto-on brightness** to force a level whenever the light comes on *automatically* — occupancy, illuminance going dark, or a follow-mode window start. Manual turn-ons (via the virtual entity) and physical turn-ons (at the real light) are left alone, so you can dim the room by hand without it snapping back. Leave it blank to keep the previous behaviour, where automatic turn-ons don't command a brightness at all.
 
 #### Attribution
 

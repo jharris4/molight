@@ -144,8 +144,10 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util.percentage import percentage_to_ranged_value
 
 from .const import (
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_ENTITY_TYPE,
     CONF_FALSE_OFF_DELAY,
     CONF_HOLD_ENTITIES,
@@ -207,6 +209,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
         self._light_timeout: int = int(cfg.get(CONF_LIGHT_TIMEOUT, 300))
         self._false_off_delay: int = int(cfg.get(CONF_FALSE_OFF_DELAY, 5))
+        # Brightness (0-255) for automatic turn-ons, converted from the stored
+        # percentage with HA's own percent→brightness scaling. None leaves
+        # automatic turn-ons unqualified, as before.
+        pct = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
+        self._auto_on_brightness: int | None = (
+            round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
+        )
         # True while the current on-period was started by occupancy (not by
         # the user) — the only case where a false-detection clear may cut the
         # lights short.
@@ -697,7 +706,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(self._set_lights(True))
+                self.hass.async_create_task(
+                    self._set_lights(True, brightness=self._auto_on_brightness)
+                )
                 self.async_write_ha_state()
 
     def _apply_window_start(self, marker: str | None) -> None:
@@ -706,7 +717,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._machine_state = STATE_SCHEDULED
         self._cancel_timer()
         if not self._attr_is_on:
-            self.hass.async_create_task(self._set_lights(True))
+            self.hass.async_create_task(
+                self._set_lights(True, brightness=self._auto_on_brightness)
+            )
         self.async_write_ha_state()
 
     def _on_occupancy_change(self, occupied: bool) -> None:
@@ -727,7 +740,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._cancel_timer()
             if not self._attr_is_on:
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(self._set_lights(True))
+                self.hass.async_create_task(
+                    self._set_lights(True, brightness=self._auto_on_brightness)
+                )
             self.async_write_ha_state()
         else:
             if self._machine_state == STATE_OCCUPIED:
@@ -842,13 +857,17 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self._occupancy_lit_lights = True
-                self.hass.async_create_task(self._set_lights(True))
+                self.hass.async_create_task(
+                    self._set_lights(True, brightness=self._auto_on_brightness)
+                )
                 self.async_write_ha_state()
             else:
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
                     self._last_on_illuminance = datetime.now(timezone.utc)
-                    self.hass.async_create_task(self._set_lights(True))
+                    self.hass.async_create_task(
+                        self._set_lights(True, brightness=self._auto_on_brightness)
+                    )
                     if self._maintain_active():
                         # Recent history justified the turn-on; the maintain
                         # entity now holds the re-lit light.
@@ -999,6 +1018,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         service_data: dict = {"entity_id": self._lights}
         if on and brightness is not None:
             service_data[ATTR_BRIGHTNESS] = brightness
+            # Mirror the commanded brightness so the virtual light reports it
+            # (the real-light echo is ignored as a self-caused change).
+            self._attr_brightness = brightness
         await self.hass.services.async_call(
             "light",
             "turn_on" if on else "turn_off",
