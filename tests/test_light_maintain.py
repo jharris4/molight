@@ -480,3 +480,21 @@ async def test_illuminance_reactivation_adopted_by_maintain(
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_countdown_with_absent_maintain_entity(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A maintain entity with no state yet doesn't break the countdown math."""
+    await setup_entries(hass, make_light_entry(occupancy=OCC, maintain=MAINT))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"

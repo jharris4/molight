@@ -171,3 +171,23 @@ async def test_invalid_window_edges_never_activate(
     assert state.state == "off"
     assert state.attributes["current_window_start"] is None
     assert state.attributes["next_transition"] is None
+
+
+@pytest.mark.asyncio
+async def test_sun_edge_ignores_unparsable_offset(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A sun edge with a non-numeric offset resolves as if it had none."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    await _setup(
+        hass,
+        _schedule_entry(
+            [{"start": {"sun": "sunset", "offset": "soon"}, "end": "23:00"}]
+        ),
+    )
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state in ("on", "off")
+    # The window still resolved: a boundary is scheduled.
+    assert state.attributes["next_transition"] is not None

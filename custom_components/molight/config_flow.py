@@ -1412,6 +1412,17 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         self._entry = entry
         self._cfg = _molight_cfg(entry)
 
+    def _finish(self, data: dict[str, Any]) -> config_entries.FlowResult:
+        """Store the edited options, syncing the entry title to the new name.
+
+        HA ignores an options flow's title, so a rename via the Name field
+        would otherwise leave the integrations page showing the old title.
+        """
+        name = data[CONF_NAME]
+        if name != self._entry.title:
+            self.hass.config_entries.async_update_entry(self._entry, title=name)
+        return self.async_create_entry(title=name, data=data)
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
@@ -1442,9 +1453,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             ):
                 errors[CONF_OCCUPANCY_TIMEOUT] = "occupancy_timeout_too_long"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME], data=user_input
-                )
+                return self._finish(user_input)
 
         cfg = self._cfg
         return self.async_show_form(
@@ -1520,9 +1529,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 if timeouts and min_light is not None and max(timeouts) > min_light:
                     errors["base"] = "occupancy_timeout_too_long"
                 else:
-                    return self.async_create_entry(
-                        title=user_input[CONF_NAME], data=user_input
-                    )
+                    return self._finish(user_input)
 
         cfg = self._cfg
         return self.async_show_form(
@@ -1563,7 +1570,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         if user_input is not None:
-            return self.async_create_entry(title=user_input[CONF_NAME], data=user_input)
+            return self._finish(user_input)
 
         cfg = self._cfg
         return self.async_show_form(
@@ -1621,12 +1628,11 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             if window is None and _window_input_provided(user_input):
                 errors["base"] = "window_incomplete"
             else:
-                return self.async_create_entry(
-                    title=user_input[CONF_NAME],
-                    data={
+                return self._finish(
+                    {
                         CONF_NAME: user_input[CONF_NAME],
                         CONF_TIME_WINDOWS: [window] if window else [],
-                    },
+                    }
                 )
 
         cfg = self._cfg
@@ -1661,7 +1667,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.
                 clean = {k: v for k, v in user_input.items() if v is not None}
-                return self.async_create_entry(title=clean[CONF_NAME], data=clean)
+                return self._finish(clean)
 
         cfg = self._cfg
         schema: dict = {

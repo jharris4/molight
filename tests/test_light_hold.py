@@ -477,3 +477,38 @@ async def test_startup_hold_keeps_missed_window_end_marker(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
+
+
+@pytest.mark.asyncio
+async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None:
+    """A hold that lands in the same loop pass the timer fires still wins.
+
+    The timer callback is a coroutine, so between its task being created and
+    executed a hold state-change can slip in; _timer_expired re-checks the
+    hold before acting. Driven white-box because the ordering can't be
+    arranged deterministically through the event loop.
+    """
+    from homeassistant.helpers.entity_platform import async_get_platforms
+    from homeassistant.util import dt as dt_util
+
+    await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    hass.states.async_set(HOLD, "on")
+    await settle(hass)
+    assert _state(hass).attributes["auto_off_held"] is True
+
+    light = next(
+        p.entities[VIRTUAL]
+        for p in async_get_platforms(hass, "molight")
+        if VIRTUAL in p.entities
+    )
+    # Simulate the already-dispatched timer firing after the hold engaged.
+    await light._timer_expired(dt_util.utcnow())
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE

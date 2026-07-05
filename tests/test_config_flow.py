@@ -1635,3 +1635,206 @@ async def test_assign_schedule_sets_mode(
     cfg = molight_config(light)
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.test_schedule"
     assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+
+
+# ---------------------------------------------------------------------------
+# Options flow — entry title, error paths, and reference-resolution edges
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_options_rename_updates_entry_title(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Renaming via the options flow syncs the config entry's title.
+
+    HA ignores an options flow's title argument, so without the explicit
+    sync the integrations page would keep showing the old name forever.
+    """
+    await setup_entries(hass, occupancy_entry)
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_NAME: "Renamed Occupancy"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    assert occupancy_entry.title == "Renamed Occupancy"
+    assert molight_config(occupancy_entry)[CONF_NAME] == "Renamed Occupancy"
+
+
+@pytest.mark.asyncio
+async def test_schedule_options_reject_incomplete_window(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """The options flow rejects a half-filled window like the create flow."""
+    await setup_entries(hass, schedule_entry)
+
+    result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Test Schedule", "start_time": "20:00:00"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_incomplete"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_require_lights(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """The options flow rejects clearing the lights list entirely."""
+    await setup_entries(hass, light_entry)
+
+    result = await hass.config_entries.options.async_init(light_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_NAME: "Test Light", CONF_LIGHTS: []}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "lights_required"}
+
+
+@pytest.mark.asyncio
+async def test_occupancy_options_pass_without_registered_entities(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """No registered entities → no dependent lights → any timeout passes."""
+    await setup_entries(hass, occupancy_entry)
+    registry = er.async_get(hass)
+    for ent in er.async_entries_for_config_entry(registry, occupancy_entry.entry_id):
+        registry.async_remove(ent.entity_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Test Occupancy", CONF_OCCUPANCY_TIMEOUT: 3600},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """References that resolve to no occupancy timeout impose no constraint.
+
+    Covers a reference to a MoLight entry of a non-occupancy type, one to a
+    registered entity without a config entry, and one to another domain's
+    entity — none of them can supply a timeout, so a tiny light_timeout is
+    accepted.
+    """
+    await setup_entries(hass, illuminance_entry)
+    registry = er.async_get(hass)
+    loose = registry.async_get_or_create(
+        "binary_sensor", "test", "uid_loose", suggested_object_id="loose_motion"
+    )
+    foreign_entry = MockConfigEntry(domain="other")
+    foreign_entry.add_to_hass(hass)
+    foreign = registry.async_get_or_create(
+        "binary_sensor",
+        "other",
+        "uid_foreign",
+        suggested_object_id="foreign_motion",
+        config_entry=foreign_entry,
+    )
+
+    for occupancy_ref, maintain_ref in (
+        ("binary_sensor.test_illuminance", loose.entity_id),
+        (foreign.entity_id, None),
+    ):
+        result = await _start_create(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+        )
+        user_input = {
+            CONF_NAME: f"Loose Light {occupancy_ref}",
+            CONF_LIGHTS: ["light.some_real"],
+            CONF_LIGHT_TIMEOUT: 1,
+            CONF_OCCUPANCY_ENTITY: occupancy_ref,
+        }
+        if maintain_ref:
+            user_input[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain_ref
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_discover_candidates_from_registry(hass: HomeAssistant) -> None:
+    """Discovery honors registry device classes and registry-level exclusions.
+
+    Registered entities are matched on their (possibly overridden) registry
+    device_class even without a live state; disabled entities and MoLight's
+    own registrations are hidden even when a matching state exists.
+    """
+    registry = er.async_get(hass)
+    pir = registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_pir",
+        suggested_object_id="reg_pir",
+        original_device_class="motion",
+        original_name="Reg PIR",
+    )
+    override = registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_override",
+        suggested_object_id="reg_override",
+        original_device_class="door",
+    )
+    registry.async_update_entity(override.entity_id, device_class="occupancy")
+    disabled = registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_disabled",
+        suggested_object_id="reg_disabled",
+        original_device_class="occupancy",
+    )
+    registry.async_update_entity(
+        disabled.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    own = registry.async_get_or_create(
+        "binary_sensor",
+        DOMAIN,
+        "uid_own",
+        suggested_object_id="molight_own",
+        original_device_class="occupancy",
+    )
+    # A matching state must not re-offer what the registry already excludes.
+    hass.states.async_set(own.entity_id, "off", {"device_class": "occupancy"})
+    # Registered with a non-matching class — hidden.
+    registry.async_get_or_create(
+        "sensor", "test", "uid_lux", suggested_object_id="reg_lux"
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    assert result["type"] == FlowResultType.FORM
+    assert _offered_candidates(result) == {pir.entity_id, override.entity_id}
+
+
+@pytest.mark.asyncio
+async def test_assign_ignores_stale_light_pick(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A submitted light no longer backed by an entry is skipped, not crashed."""
+    light = _light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.ghost"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    assert result["description_placeholders"] == {"assigned": "0", "removed": "0"}

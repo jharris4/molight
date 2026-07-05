@@ -827,6 +827,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
+                # Lights already on: the window opening lifts the gate that
+                # kept already-active occupancy from holding them.
+                if self._occupancy_holds():
+                    self._adopt_active_occupancy()
                 return
             occ_state = (
                 self.hass.states.get(self._occupancy_entity)
@@ -945,6 +949,36 @@ class VirtualLight(LightEntity, RestoreEntity):
         state = self.hass.states.get(self._occupancy_entity)
         return state is not None and state.state == "on"
 
+    def _occupancy_holds(self) -> bool:
+        """True when already-active occupancy may hold an on light as OCCUPIED.
+
+        Adoption is gated exactly like a turn-on (bright or outside a
+        gate-mode window suppress it), unlike the maintain entity, which is
+        never gated. Without adoption, a light turned on while occupancy is
+        already active would run a timer that expires despite presence — and
+        the steady-on sensor produces no event that could ever rescue it.
+        """
+        return (
+            self._occupancy_active()
+            and not self._is_illuminance_bright()
+            and not self._gate_schedule_inactive()
+        )
+
+    def _adopt_active_occupancy(self) -> None:
+        """Move an on light to OCCUPIED when a gate lifts mid-on-period.
+
+        Used when illuminance turns dark or a gate-mode window starts while
+        the lights are already on (ACTIVE/COUNTDOWN/EFFECT/WARN) with
+        occupancy active. Not a turn-on: attribution and the occupancy-lit
+        flag are left untouched, so the user still owns a manual on-period.
+        """
+        was_warning = self._in_warning()
+        self._machine_state = STATE_OCCUPIED
+        self._cancel_timer()
+        if was_warning:
+            self._resume_lights()
+        self.async_write_ha_state()
+
     def _maintain_active(self) -> bool:
         """True when the maintain occupancy entity is configured and on."""
         if not self._maintain_entity:
@@ -990,7 +1024,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._go_idle()
         else:
             if self._machine_state != STATE_IDLE:
-                return  # already running; no change needed
+                # Lights already on: going dark lifts the gate that kept
+                # already-active occupancy from holding them — adopt it so a
+                # timer can't expire despite presence.
+                if self._occupancy_holds():
+                    self._adopt_active_occupancy()
+                return
             if self._gate_schedule_inactive():
                 return  # outside the schedule window — no activation
 
@@ -1102,10 +1141,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
 
-        # Turned on while the maintain entity is already occupied: hold the
-        # light immediately instead of running a timer that would expire
+        # Turned on while the maintain entity — or the regular occupancy
+        # entity, when not gated by bright/window — is already occupied: hold
+        # the light immediately instead of running a timer that would expire
         # despite presence.
-        if self._maintain_active():
+        if self._maintain_active() or self._occupancy_holds():
             self._machine_state = STATE_OCCUPIED
             self._attr_is_on = True
             self._cancel_timer()

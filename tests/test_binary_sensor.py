@@ -888,3 +888,28 @@ async def test_combined_ignores_corrupt_constituent_lot(hass: HomeAssistant) -> 
     state = hass.states.get("binary_sensor.combined_occupancy")
     assert state.state == "off"
     assert state.attributes["latest_occupied_time"] is None
+
+
+@pytest.mark.asyncio
+async def test_combined_restore_ignores_corrupt_false_count(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A corrupt restored false_detection_count falls back to zero."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.combined_occupancy",
+                "off",
+                {"false_detection_count": "garbage"},
+            )
+        ],
+    )
+    for entry in (occupancy_entry, _occupancy2_entry(), _combined_entry()):
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.combined_occupancy")
+    assert state is not None
+    assert state.attributes["false_detection_count"] == 0
