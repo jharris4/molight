@@ -272,6 +272,8 @@ npm test             # pytest
 npm run lint         # ruff check
 npm run format       # ruff format
 npm run dev:shell    # open a bash shell inside the container
+npm run dev:stop     # stop the container, keeping it for a fast dev:up next time
+npm run dev:down     # stop and remove the container (dev:up recreates it)
 npm run dev:rebuild  # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
 ```
 

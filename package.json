@@ -8,7 +8,10 @@
   "scripts": {
     "hass:up": "docker compose up",
     "hass:down": "docker compose down",
+    "hass:pull": "docker compose pull",
     "dev:up": "devcontainer up --workspace-folder .",
+    "dev:stop": "docker stop $(docker ps -q --filter \"label=devcontainer.local_folder=$PWD\")",
+    "dev:down": "docker rm -f $(docker ps -aq --filter \"label=devcontainer.local_folder=$PWD\")",
     "dev:rebuild": "devcontainer up --workspace-folder . --remove-existing-container",
     "dev:shell": "devcontainer exec --workspace-folder . bash",
     "dev:hass": "devcontainer exec --workspace-folder . bash scripts/develop",
