@@ -91,6 +91,10 @@ The final step lists your virtual lights with current users of that sensor **pre
 
 Because occupancy feeds the turn-off countdown, the `light_timeout >= occupancy_timeout` guard applies here too: lights whose turn-off timeout is shorter than the sensor's effective timeout are skipped and named in the summary, so you can raise their timeouts and re-run.
 
+## Examples
+
+For worked examples with the exact field values to enter — a plain turn-off timer, a single-sensor room, the full occupancy/illuminance/schedule setup, and a porch light — see [EXAMPLES.md](EXAMPLES.md).
+
 ## Entity reference
 
 ### Virtual Occupancy Binary Sensor

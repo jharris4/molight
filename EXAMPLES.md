@@ -1,4 +1,15 @@
-Since the configuration of MoLight is all UI-driven, here are some examples of the actual field values you'd enter for various scenarios. Every create form starts with a **Name** (the entity ID derives from it) and ends with an optional **Entity ID** override if you want to pin it. :folded_hands:
+# MoLight — configuration examples
+
+MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios — from the simplest case to the full toolbox. Every create form starts with a **Name** (the entity ID derives from it) and ends with an optional **Entity ID** override if you want to pin it.
+
+The examples build on each other:
+
+1. [Just a turn-off timer](#example-1--just-a-turn-off-timer-the-simplest-case) — no sensors at all
+2. [Simple occupancy](#example-2--simple-occupancy-case) — one motion sensor
+3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
+4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
+
+See the [README](README.md#entity-reference) for the full field reference.
 
 ---
 
@@ -10,8 +21,8 @@ No sensors at all — a virtual light that turns its lights off a set time after
 
 ```text
 Name:              Pantry                       # → light.pantry
-Lights:            light.pantry_real            # pin the Entity ID field if it
-Turn-off timeout:  300         # off 5 min after it's turned on
+Lights:            light.pantry_real            # the real light it controls
+Turn-off timeout:  300                          # off 5 min after it's turned on
 ```
 
 Turn it on (app, voice, or wall switch) → 5 minutes later it turns itself off. That's the whole thing.
