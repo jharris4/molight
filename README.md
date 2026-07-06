@@ -253,6 +253,15 @@ Local development uses **two independent containers**, each with a distinct job.
 
 npm scripts follow a `<target>:<action>` naming scheme so the prefix tells you which container you're touching.
 
+### Running the tests
+
+```bash
+npm install         # install tooling
+npm run hass:down   # free port 8123 (devcontainer and HA runtime can't coexist)
+npm run dev:up      # start the devcontainer (fast after first build)
+npm test
+```
+
 ### Working in the dev container
 
 Every command below runs *inside* the dev container via `devcontainer exec`:
