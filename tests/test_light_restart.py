@@ -327,6 +327,23 @@ async def test_restart_applies_missed_window_start(
 
 
 @pytest.mark.asyncio
+async def test_restart_missed_window_start_with_lights_already_on(
+    hass: HomeAssistant,
+) -> None:
+    """Same boundary catch-up, but nothing to turn on — adopt SCHEDULED and
+    stamp the marker, leaving the already-on lights alone."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(REAL, "on")
+    await setup_entries(hass, _follow_entry())
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == MARKER
+
+
+@pytest.mark.asyncio
 async def test_restart_readopts_window_already_applied(
     hass: HomeAssistant, freezer
 ) -> None:
