@@ -305,6 +305,28 @@ async def test_restart_outside_window_no_marker_adopts_active(
 
 
 @pytest.mark.asyncio
+async def test_restart_applies_missed_window_start(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Window began while HA was down → the off light is turned on at startup."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, _follow_entry())
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == MARKER
+
+    # No auto-off timer in SCHEDULED.
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
 async def test_restart_readopts_window_already_applied(
     hass: HomeAssistant, freezer
 ) -> None:
