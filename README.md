@@ -123,6 +123,8 @@ Combines multiple Virtual Occupancy Sensors into one.
 
 After a restart, a *maintain* sensor that has already been `on` for more than 5 seconds is assumed to reflect occupancy triggered before HA went down, and seeds the sensor `on` (the one exception to "maintain sensors never start occupancy").
 
+Attributes: `latest_occupied_time` (max across all constituents), `last_clear_false_detection`, `false_detection_count`.
+
 ### Virtual Illuminance Binary Sensor
 
 `on` = at or above the threshold (bright enough, no artificial lighting needed)
@@ -135,6 +137,8 @@ After a restart, a *maintain* sensor that has already been `on` for more than 5 
 | **Hysteresis (lx)** | `0` disables. Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold |
 
 An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
+
+Attributes: none beyond the standard bright/dark (`on`/`off`) state.
 
 ### Virtual Schedule Binary Sensor
 
@@ -180,6 +184,18 @@ Controls N real lights with an occupancy-aware state machine.
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
 | **Schedule mode** | `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)) |
+
+#### Attributes
+
+| Attribute | Description |
+|---|---|
+| `molight_state` | Current state-machine state (`IDLE`, `ACTIVE`, `OCCUPIED`, `COUNTDOWN`, `SCHEDULED`, `EFFECT`, `WARN`) |
+| `auto_off_held` | Whether auto-off is currently held (Auto-off switch off or a keep-on entity on) |
+| `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
+| `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
+| `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
+| `pre_warn_brightness` | Brightness saved before an effect/warn stage, so a restart mid-warning can restore it; null except mid-sequence |
+| `schedule_window_start` | Follow-mode window marker used for restart catch-up |
 
 #### State machine
 
