@@ -219,6 +219,13 @@ WARN       auto-off imminent — grace period before the lights go off
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window. The current state is exposed as the `molight_state` attribute.
 
+**Precedence when sources conflict.** With several sources configured on one light, control resolves top-down:
+
+1. **Manual / physical control** — always wins and is never gated; a manual off turns the light off from any state. A manual off *mid follow-window* drops to `IDLE` and hands control back to the sensors until the next window boundary.
+2. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, and illuminance changes are ignored entirely (window start forces on, window end forces off).
+3. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy is active.
+4. **Occupancy** — turns the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority.
+
 #### Effect / warn warning
 
 By default the light turns off the instant its timer expires. Setting an **effect** and/or **warn** duration flags the impending turn-off first, so a room isn't dropped into darkness without notice:

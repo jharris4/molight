@@ -353,6 +353,54 @@ async def test_gate_window_start_keeps_running_state(
 
 
 # ---------------------------------------------------------------------------
+# Forced-off precedence with occupancy + control-illuminance + gate-schedule
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_forced_off_beats_occupancy_with_all_three_configured(
+    hass: HomeAssistant,
+) -> None:
+    """With occupancy + control-illuminance + gate-schedule all configured, each
+    forced-off path wins over active occupancy.
+
+    Companion to test_scheduled_ignores_occupancy_and_illuminance (follow mode):
+    this pins the gate/control combination. Precedence while running is
+    control-bright > occupancy and gate-window-end > occupancy — active
+    occupancy never shields the light from either forced off.
+    """
+    entry = make_light_entry(
+        occupancy=OCC,
+        illuminance=ILLUM,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    hass.states.async_set(SCHED, "on")  # in-window
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "on")  # occupied
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Bright in control mode forces the lights off despite occupancy + in-window.
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    # Dark again with occupancy still active re-lights (control gate lifted).
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Gate window ending forces the lights off despite occupancy + dark.
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
 # Manual control is never gated
 # ---------------------------------------------------------------------------
 
