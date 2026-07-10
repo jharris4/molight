@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -129,6 +130,38 @@ async def test_sun_edge_with_offset(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == shifted.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_polar_day_fixed_time_stands_alone(hass: HomeAssistant, freezer) -> None:
+    """A sun anchor whose event doesn't occur (polar day/night) resolves to
+    nothing, leaving the edge's fixed time to stand alone."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 21:30:00+00:00")
+    with patch(
+        "custom_components.molight.binary_sensor.get_astral_event_date",
+        return_value=None,
+    ):
+        await _setup(
+            hass,
+            _schedule_entry(
+                [
+                    {
+                        "start": {
+                            "time": "21:00",
+                            "sun": "sunset",
+                            "combine": "latest",
+                        },
+                        "end": "23:00",
+                    }
+                ]
+            ),
+        )
+        state = hass.states.get("binary_sensor.night_schedule")
+
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
 
 
 @pytest.mark.asyncio

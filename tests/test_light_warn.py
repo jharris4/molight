@@ -534,3 +534,44 @@ async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_external_dim_during_warning_honors_new_brightness(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An external dim mid-warning cancels the sequence and restarts the full
+    timer, but keeps the dim's own brightness — the pre-warn snapshot is not
+    restored over the user's explicit choice."""
+    entry = make_light_entry(
+        effect_timeout=10, effect_brightness=50, warn_timeout=15
+    )
+    await setup_entries(hass, entry)
+
+    await _turn_on_virtual(hass, brightness=200)
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_EFFECT
+    assert _state(hass).attributes["pre_warn_brightness"] == 200
+
+    # Someone dims the real light mid-effect.
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+    assert state.attributes["pre_warn_brightness"] is None
+    assert state.attributes["last_brightness_change_physical"] is not None
+
+    # The full timer restarted: the warning comes back around, snapshotting
+    # the dimmed brightness this time.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_EFFECT
+    assert _state(hass).attributes["pre_warn_brightness"] == 120

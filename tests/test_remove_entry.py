@@ -22,12 +22,15 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
+    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SCHEDULE_ENTITY,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
@@ -35,7 +38,9 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    SCHEDULE_MODE_GATE,
 )
+from custom_components.molight.helpers import molight_config
 from tests.conftest import make_light_entry, settle
 
 REMOVE_ERROR = "Unable to remove unknown job listener"
@@ -189,3 +194,79 @@ async def test_remove_light_added_before_startup_never_started_is_clean(
     await hass.async_block_till_done()
 
     await _remove_and_assert_clean(hass, entry, caplog)
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_strips_references_from_dependents(
+    hass: HomeAssistant,
+) -> None:
+    """Removing a sensor entry cleans its references out of surviving entries.
+
+    A dangling reference silently degrades the dependents — worst of all a
+    gate-mode schedule reference, which would read as a gate that never opens
+    and block every automatic turn-on.
+    """
+    occupancy = _occupancy_entry()  # registers binary_sensor.rm_occupancy
+    schedule = _schedule_entry()  # registers binary_sensor.rm_schedule
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Rm Combined",
+            CONF_TRIGGER_SENSORS: [
+                "binary_sensor.rm_occupancy",
+                "binary_sensor.other",
+            ],
+        },
+    )
+    light = make_light_entry(
+        name="Rm Light",
+        occupancy="binary_sensor.rm_occupancy",
+        schedule="binary_sensor.rm_schedule",
+        schedule_mode=SCHEDULE_MODE_GATE,
+        hold_entities=["binary_sensor.rm_occupancy", "input_boolean.guest"],
+    )
+    for entry in (occupancy, schedule, combined, light):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(occupancy.entry_id)
+    await settle(hass)
+
+    light_cfg = molight_config(light)
+    assert CONF_OCCUPANCY_ENTITY not in light_cfg
+    assert light_cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.rm_schedule"
+    assert light_cfg[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
+    assert molight_config(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.other"]
+
+    await hass.config_entries.async_remove(schedule.entry_id)
+    await settle(hass)
+    assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_without_references_leaves_others_alone(
+    hass: HomeAssistant,
+) -> None:
+    """Removing an unreferenced entry must not rewrite unrelated entries."""
+    occupancy = _occupancy_entry()
+    light = make_light_entry(name="Rm Light")  # references nothing
+    for entry in (occupancy, light):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(occupancy.entry_id)
+    await settle(hass)
+
+    # Untouched: no options were written onto the light entry.
+    assert not light.options
+
+    # An entry that never loaded registered no entities — removing it has
+    # nothing to clean up and equally touches nobody.
+    never_loaded = _illuminance_entry()
+    never_loaded.add_to_hass(hass)
+    await hass.config_entries.async_remove(never_loaded.entry_id)
+    await settle(hass)
+    assert not light.options

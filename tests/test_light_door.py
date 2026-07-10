@@ -34,6 +34,7 @@ from custom_components.molight.const import (
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_WARN,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
@@ -551,3 +552,75 @@ async def test_open_close_seed_adopts_open_door(hass: HomeAssistant, freezer) ->
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> None:
+    """A door opened under a bright gate never lit the room; closing it must
+    not start a countdown from IDLE."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
+    )
+    hass.states.async_set(ILLUM, "on")  # bright
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")  # opened — bright-gated, no turn-on
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    hass.states.async_set(DOOR, "off")  # closed — nothing to count down
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_open_close_close_mid_warning_lets_it_finish(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Closing the door mid effect/warn lets the sequence wind down to off.
+
+    A door standing open under a bright gate never held the light (the open
+    was gated away), so its close must not restart the countdown either —
+    the warning already in flight runs to completion.
+    """
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        illuminance=ILLUM,
+        effect_timeout=10,
+        effect_brightness=0,
+        warn_timeout=15,
+    )
+    hass.states.async_set(ILLUM, "on")  # bright
+    await setup_entries(hass, entry)
+
+    # Manual on is never gated: ACTIVE with the 60s timer.
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+
+    hass.states.async_set(DOOR, "on")  # opened mid-warning — bright-gated
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+
+    hass.states.async_set(DOOR, "off")  # closed mid-warning — let it finish
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_WARN
+
+    freezer.tick(timedelta(seconds=16))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE

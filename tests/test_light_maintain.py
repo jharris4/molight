@@ -498,3 +498,32 @@ async def test_countdown_with_absent_maintain_entity(
 
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_maintain_only_false_clear_gets_normal_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no regular occupancy sensor a false-flagged maintain clear still
+    earns the normal countdown — the quick off only cuts short occupancy-lit
+    lights, and without an occupancy sensor no light is ever occupancy-lit."""
+    entry = make_light_entry(maintain=MAINT, timeout=60)
+    hass.states.async_set(MAINT, "off")
+    await setup_entries(hass, entry)
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await hass.async_block_till_done()
+    hass.states.async_set(MAINT, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(MAINT, "off", {"last_clear_false_detection": True})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # Past the 5s false-detection quick off — the normal 60s countdown runs.
+    await _tick(hass, freezer, 10)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 51)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE

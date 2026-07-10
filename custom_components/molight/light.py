@@ -43,10 +43,13 @@ Effect/warn warning
   Throughout EFFECT and WARN the virtual light stays logically on. Any
   re-trigger — occupancy/maintain becoming active, a manual or physical
   turn-on, an external dim — cancels the sequence and behaves exactly as if
-  the pre-off timer were still running, restoring the pre-warning brightness so
-  the warning is transparent. Auto-off being held mid-sequence aborts it the
-  same way. Bright-forces-off (control mode) and a gate/follow window ending
-  still turn the lights off during the sequence, as they would mid-countdown.
+  the pre-off timer were still running. Re-triggers that carry no brightness
+  of their own (occupancy/maintain/door, a virtual turn-on without an explicit
+  brightness, a gate lifting, auto-off becoming held) restore the pre-warning
+  brightness so the warning is transparent; a physical turn-on or an external
+  dim brings its own brightness, which is honoured instead of the snapshot.
+  Bright-forces-off (control mode) and a gate/follow window ending still turn
+  the lights off during the sequence, as they would mid-countdown.
   The pre-warning brightness is exposed as the pre_warn_brightness attribute
   (null outside the sequence) and survives restarts: a restart landing
   mid-warning with the lights still on restores that brightness instead of
@@ -790,8 +793,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         Automatic turn-offs suppressed while held are applied from current
         conditions: a follow window that ended, being outside a gate window,
         or bright in control mode turn the lights off now; an active follow
-        window or active occupancy keeps them on without a timer; otherwise
-        a fresh full timer starts.
+        window or active occupancy (gated like any adoption — suppressed when
+        bright or outside a gate window) keeps them on without a timer;
+        otherwise a fresh full timer starts.
         """
         if not self._attr_is_on:
             return  # lights-off transitions were never suppressed
@@ -820,7 +824,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._go_idle()
             return
 
-        if self._occupancy_active() or self._maintain_active() or self._door_holds():
+        # Occupancy adoption is gated exactly like every other adoption path
+        # (_occupancy_holds); the maintain entity and an open_close door are
+        # never gated once the light is on.
+        if self._occupancy_holds() or self._maintain_active() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
             return
 

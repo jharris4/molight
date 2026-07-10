@@ -545,6 +545,48 @@ async def test_brightness_change_resets_countdown(
 
 
 @pytest.mark.asyncio
+async def test_brightness_change_while_occupied_records_without_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An external dim while OCCUPIED is recorded and mirrored, but occupancy
+    still owns the light — the dim must not arm a timer."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Occ Dim Light",
+            CONF_LIGHTS: ["light.real_dim"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.occ_dim",
+        },
+    )
+    await _setup_entries(hass, entry)
+
+    hass.states.async_set("binary_sensor.occ_dim", "on")
+    await _settle(hass)
+    state = hass.states.get("light.occ_dim_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    # The real light reports on, then someone dims it at the wall.
+    hass.states.async_set("light.real_dim", "on", {"brightness": 200})
+    await _settle(hass)
+    hass.states.async_set("light.real_dim", "on", {"brightness": 120})
+    await _settle(hass)
+
+    state = hass.states.get("light.occ_dim_light")
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["brightness"] == 120
+    assert state.attributes["last_brightness_change_physical"] is not None
+
+    # Occupancy still suspends the timer — well past the timeout, still on.
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.occ_dim_light").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_brightness_zero_treated_as_off(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:

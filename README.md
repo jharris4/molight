@@ -142,7 +142,7 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state.
 
 ### Virtual Schedule Binary Sensor
 
-`on` = current time is within an active window. Transitions fire at the exact boundary (no polling). Overnight windows (e.g. 22:00 → 06:00) are supported.
+`on` = current time is within an active window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported.
 
 Each window edge is a fixed time, a sun event, or both:
 
@@ -175,7 +175,7 @@ Controls N real lights with an occupancy-aware state machine.
 | **Effect brightness (%)** | Brightness during the effect stage. `0` blinks the real lights fully off — a distinct "about to turn off" flash |
 | **Effect fade (s)** *(optional)* | Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too) |
 | **Warning grace period (s)** | `0` disables. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
-| **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began |
+| **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one) |
 | **Warning fade (s)** *(optional)* | Fade into the warning brightness. Must fit within the grace period |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
@@ -191,7 +191,7 @@ Controls N real lights with an occupancy-aware state machine.
 
 | Attribute | Description |
 |---|---|
-| `molight_state` | Current state-machine state (`IDLE`, `ACTIVE`, `OCCUPIED`, `COUNTDOWN`, `SCHEDULED`, `EFFECT`, `WARN`) |
+| `molight_state` | Current state-machine state, as a lowercase value: `idle`, `active`, `occupied`, `countdown`, `scheduled`, `effect`, `warn` |
 | `auto_off_held` | Whether auto-off is currently held (Auto-off switch off or a keep-on entity on) |
 | `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
@@ -238,7 +238,7 @@ By default the light turns off the instant its timer expires. Setting an **effec
 
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade on a disabled stage is rejected rather than silently ignored).
 
-Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning and restores the pre-warning brightness, so the interruption leaves no trace. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning. A re-trigger that carries no brightness of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness, so the interruption leaves no trace; a physical turn-on or an external dim brings its own brightness, which is honored instead. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 #### Maintain occupancy sensor
 
@@ -264,7 +264,7 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 - Every automatic turn-off is suspended — the timer, the false-detection quick off, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
 - Turn-ons are unaffected (occupancy, going dark, and window starts still light the room), and a manual off always works.
-- When the last hold releases, the light re-evaluates its rules: a follow window that ended while held turns it off now, as does being outside a gate window or bright in `control` mode; active occupancy keeps it on; an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
+- When the last hold releases, the light re-evaluates its rules: a follow window that ended while held turns it off now, as does being outside a gate window or bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
 - A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The switch state survives restarts, and a held light adopted at startup won't start a timer.
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
@@ -334,5 +334,6 @@ Use `hass:up` to confirm behavior against a real, released HA build; use `dev:ha
 
 - Each virtual entity is its own config entry, so they can be created, edited, and removed independently.
 - A virtual entity must exist before another can reference it (sensors before the lights that use them).
+- Removing an entry strips references to its entities from the entries that survive it — a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open.
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy entity (including through a combined sensor), and raising an occupancy sensor's timeout checks every light that depends on it.
 - Once an entry's options have been edited, the options fully replace the original data (so cleared optional fields stay cleared).

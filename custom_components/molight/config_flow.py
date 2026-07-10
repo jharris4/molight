@@ -1336,10 +1336,15 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             window = _window_from_input(user_input)
-            if window is None and _window_input_provided(user_input):
-                # Half-filled window: it would be silently dropped, leaving a
-                # sensor that is permanently off.
-                errors["base"] = "window_incomplete"
+            if window is None:
+                # A half-filled window would be silently dropped and an empty
+                # form would create a sensor that is permanently off — either
+                # way a schedule nothing can ever follow.
+                errors["base"] = (
+                    "window_incomplete"
+                    if _window_input_provided(user_input)
+                    else "window_required"
+                )
             else:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_SCHEDULE,
@@ -1347,7 +1352,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
                         CONF_NAME: user_input[CONF_NAME],
-                        CONF_TIME_WINDOWS: [window] if window else [],
+                        CONF_TIME_WINDOWS: [window],
                     },
                     user_input=user_input,
                     entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
@@ -1645,13 +1650,17 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             window = _window_from_input(user_input)
-            if window is None and _window_input_provided(user_input):
-                errors["base"] = "window_incomplete"
+            if window is None:
+                errors["base"] = (
+                    "window_incomplete"
+                    if _window_input_provided(user_input)
+                    else "window_required"
+                )
             else:
                 return self._finish(
                     {
                         CONF_NAME: user_input[CONF_NAME],
-                        CONF_TIME_WINDOWS: [window] if window else [],
+                        CONF_TIME_WINDOWS: [window],
                     }
                 )
 

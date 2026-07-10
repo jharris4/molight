@@ -1838,3 +1838,124 @@ async def test_assign_ignores_stale_light_pick(
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "assign_done"
     assert result["description_placeholders"] == {"assigned": "0", "removed": "0"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None:
+    """An empty schedule form is rejected — it would create a sensor that is
+    permanently off, which nothing can ever follow or gate on."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_NAME: "Empty Schedule"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_required"}
+
+    # Completing the window creates the entry as usual.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Empty Schedule", "start_time": "21:00:00", "end_time": "23:00:00"},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TIME_WINDOWS] == [
+        {"start": {"time": "21:00:00"}, "end": {"time": "23:00:00"}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_schedule_options_require_window(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """The options flow rejects clearing the window entirely, like the create flow."""
+    await setup_entries(hass, schedule_entry)
+
+    result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_NAME: "Test Schedule"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_required"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entity_type", "taken", "user_input"),
+    [
+        pytest.param(
+            ENTITY_TYPE_COMBINED_OCCUPANCY,
+            "binary_sensor.taken",
+            {CONF_NAME: "X", CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"]},
+            id="combined",
+        ),
+        pytest.param(
+            ENTITY_TYPE_ILLUMINANCE,
+            "binary_sensor.taken",
+            {CONF_NAME: "X", CONF_ILLUMINANCE_SENSOR: "sensor.lux_a"},
+            id="illuminance",
+        ),
+        pytest.param(
+            ENTITY_TYPE_SCHEDULE,
+            "binary_sensor.taken",
+            {CONF_NAME: "X", "start_time": "21:00:00", "end_time": "23:00:00"},
+            id="schedule",
+        ),
+        pytest.param(
+            ENTITY_TYPE_LIGHT,
+            "light.taken",
+            {CONF_NAME: "X", CONF_LIGHTS: ["light.real_x"]},
+            id="light",
+        ),
+    ],
+)
+async def test_explicit_entity_id_conflict_all_create_steps(
+    hass: HomeAssistant, entity_type: str, taken: str, user_input: dict
+) -> None:
+    """Every create step re-shows its form on an explicit entity_id clash."""
+    hass.states.async_set(taken, "off")
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: entity_type}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**user_input, CONF_ENTITY_ID: "taken"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_ENTITY_ID: "entity_id_conflict"}
+
+
+@pytest.mark.asyncio
+async def test_assign_noop_leaves_entry_untouched(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Re-assigning a sensor a light already carries must not rewrite the entry
+    (a rewrite would needlessly reload it)."""
+    light = _light_entry(
+        "Hall", "hall", occupancy_entity="binary_sensor.test_occupancy"
+    )
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    assert result["description_placeholders"] == {"assigned": "0", "removed": "0"}
+    await hass.async_block_till_done()
+
+    # No options were written — the reference still comes from the entry data.
+    assert not light.options
+    assert (
+        molight_config(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    )

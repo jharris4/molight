@@ -333,7 +333,8 @@
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
-      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty).",
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
+      "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled)."
@@ -525,7 +526,8 @@
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
-      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event (or leave the window fully empty).",
+      "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
+      "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled)."
     }
