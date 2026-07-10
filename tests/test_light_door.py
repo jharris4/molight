@@ -26,11 +26,14 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.molight.const import (
     DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
+    SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
+    STATE_SCHEDULED,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
@@ -40,6 +43,7 @@ ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 HOLD = "input_boolean.guest"
 VIRTUAL = "light.matrix_light"
+MARKER = "2026-07-02T21:00:00+00:00"
 
 
 def _state(hass: HomeAssistant):
@@ -292,6 +296,242 @@ async def test_open_close_bright_forces_off_over_held_door(
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
+# gate lifts while the door stands open — dark arrival / gate window start
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_open_close_dark_arrival_lights_open_door(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Going dark with the door standing open lights the room and holds it."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
+    )
+    hass.states.async_set(ILLUM, "on")  # bright
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")  # opened while bright — gated, no light
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(ILLUM, "off")  # dark, door still open
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Held with no timer while the door stays open.
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_open_close_dark_return_re_holds_open_door(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Bright forces off; dark returning re-lights AND re-holds the open door."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
+    )
+    hass.states.async_set(ILLUM, "off")  # dark
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(ILLUM, "on")  # bright forces off over the held door
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(ILLUM, "off")  # dark again, door never closed
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Re-held, not a countdown: no timer may expire while the door is open.
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("door_mode", "expect_on"),
+    [
+        pytest.param(DOOR_MODE_OPEN_CLOSE, True, id="open_close-lights"),
+        pytest.param(DOOR_MODE_OPEN, False, id="open-stays-off"),
+    ],
+)
+async def test_gate_window_start_reevaluates_open_door(
+    hass: HomeAssistant, door_mode: str, expect_on: bool
+) -> None:
+    """A standing-open open_close door lights the room when the window opens.
+
+    An open-mode door is a momentary trigger with no standing state, so the
+    window start does not re-fire it.
+    """
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=door_mode,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    hass.states.async_set(SCHED, "off")
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")  # opened outside the window — gated
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(SCHED, "on")  # window opens, door still open
+    await settle(hass)
+    state = _state(hass)
+    assert (state.state == "on") is expect_on
+    if expect_on:
+        assert state.attributes["molight_state"] == STATE_OCCUPIED
+        assert state.attributes["last_on_door"] is not None
+        # Closing hands over to the normal countdown.
+        hass.states.async_set(DOOR, "off")
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+# ---------------------------------------------------------------------------
+# unavailability — the hold survives a sensor blip
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_open_close_unavailable_door_keeps_holding(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A held-open door that blips unavailable keeps its hold until it closes."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(DOOR, "unavailable")  # battery sensor blip
+    await settle(hass)
+    hass.states.async_set(OCC, "off")  # occupancy clears during the blip
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(DOOR, "off")  # recovers closed — countdown starts
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+# ---------------------------------------------------------------------------
+# follow-mode schedule — the window owns the lights
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_follow_window_ignores_door(hass: HomeAssistant) -> None:
+    """While SCHEDULED, door open/close events are ignored entirely."""
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+    assert _state(hass).attributes["last_on_door"] is None
+
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    # Window end forces off even though the door reopened meanwhile.
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
+# interactions with other holds and the warning sequence
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_open_mode_occupancy_holds_after_trigger(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An open-mode trigger lands OCCUPIED while occupancy holds, then defers."""
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN, occupancy=OCC)
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Occupancy, not the open-mode door, is what holds: no timer while on.
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(OCC, "off")  # the open-mode door does not hold
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
+async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> None:
+    """Re-opening mid effect/warn undoes the warning stage like any re-trigger."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN, effect_timeout=10, effect_brightness=0
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "off")  # ignored in open mode
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))  # timeout → warning (EFFECT) begins
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+
+    hass.states.async_set(DOOR, "on")  # re-open mid-warning: a re-trigger
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio

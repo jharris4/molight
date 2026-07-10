@@ -154,6 +154,11 @@ Door handling (when a door entity is configured), per door_mode:
     maintained light does: an already-on light with the door open is adopted
     as OCCUPIED. Forced offs (bright in control mode, a gate window ending)
     still win over a held-open door, as they do over occupancy.
+    A standing-open door is re-evaluated when a gate lifts, exactly like
+    already-active occupancy: illuminance going dark or a gate-mode window
+    starting turns the lights on and holds them while the door is open. The
+    door's last known state is cached, so a sensor that blips unavailable
+    keeps holding until it reports closed.
 """
 
 from __future__ import annotations
@@ -326,6 +331,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW)
         self._door_entity: str | None = cfg.get(CONF_DOOR_ENTITY)
         self._door_mode: str = cfg.get(CONF_DOOR_MODE, DOOR_MODE_OPEN)
+        # Last known open/closed of the door — kept ourselves so a briefly
+        # unavailable sensor (battery contact sensors blip) holds its last
+        # value instead of reading as closed and dropping its hold.
+        self._door_open: bool = False
         self._hold_entities: list[str] = cfg.get(CONF_HOLD_ENTITIES, [])
         # Last known on/off of each keep-on entity — kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
@@ -461,6 +470,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             for e in self._hold_entities
         }
         self._held = self._compute_held()
+
+        # An unavailable/unknown/missing door counts as closed at startup.
+        if self._door_entity:
+            door = self.hass.states.get(self._door_entity)
+            self._door_open = door is not None and door.state == "on"
 
         # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
@@ -631,7 +645,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id == self._schedule_entity:
             self._on_schedule_change(new_state)
         if entity_id == self._door_entity:
-            self._on_door_change(new_state.state == "on")
+            self._door_open = new_state.state == "on"
+            self._on_door_change(self._door_open)
         if entity_id in self._hold_entities:
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
@@ -848,7 +863,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
 
         # Gate mode: window end forces lights off; window start re-evaluates
-        # occupancy the same way illuminance going dark does.
+        # occupancy and a held-open door the same way illuminance going dark
+        # does.
         if new_state.state != "on":
             if self._machine_state != STATE_IDLE and not self._held:
                 self.hass.async_create_task(self._auto_lights_off())
@@ -861,20 +877,23 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
                 return
+            if self._is_illuminance_bright():
+                return  # dark-gated, like any automatic turn-on
             occ_state = (
                 self.hass.states.get(self._occupancy_entity)
                 if self._occupancy_entity
                 else None
             )
-            if (
-                occ_state
-                and occ_state.state == "on"
-                and not self._is_illuminance_bright()
-            ):
-                self._last_on_occupancy = datetime.now(timezone.utc)
+            occ_active = occ_state is not None and occ_state.state == "on"
+            if occ_active or self._door_holds():
+                now = datetime.now(timezone.utc)
+                if occ_active:
+                    self._last_on_occupancy = now
+                else:
+                    self._last_on_door = now
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
-                self._occupancy_lit_lights = True
+                self._occupancy_lit_lights = occ_active
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
 
@@ -1021,12 +1040,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         Such a door holds an already-on light on with no timer, exactly like
         active occupancy or the maintain entity, and its closing starts the
         countdown. In plain open mode a door never holds — it is only a
-        momentary turn-on trigger — so this is always False there.
+        momentary turn-on trigger — so this is always False there. Reads the
+        last known door state, so a sensor that blips unavailable keeps
+        holding until it reports closed.
         """
         if not self._door_entity or self._door_mode != DOOR_MODE_OPEN_CLOSE:
             return False
-        state = self.hass.states.get(self._door_entity)
-        return state is not None and state.state == "on"
+        return self._door_open
 
     def _on_door_change(self, is_open: bool) -> None:
         """Handle the configured door sensor changing (on = open).
@@ -1050,10 +1070,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             # An open_close door holds the light (no timer) like the maintain
             # entity; an already-occupied/maintained room holds it too. Only a
             # plain open-mode trigger with no other hold runs the timeout.
+            # (Occupancy needs no bright/window re-check here — the gates
+            # above already returned.)
             holds = (
-                self._door_mode == DOOR_MODE_OPEN_CLOSE
+                self._door_holds()
                 or self._maintain_active()
-                or self._occupancy_holds()
+                or self._occupancy_active()
             )
             self._machine_state = STATE_OCCUPIED if holds else STATE_ACTIVE
             self._cancel_timer()
@@ -1070,7 +1092,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._door_mode != DOOR_MODE_OPEN_CLOSE:
                 return  # open mode: closing is ignored
-            if self._machine_state in (STATE_IDLE, STATE_SCHEDULED):
+            if self._machine_state == STATE_IDLE:
                 return
             if self._occupancy_active() or self._maintain_active():
                 return  # presence still holds the lights on
@@ -1129,17 +1151,19 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._gate_schedule_inactive():
                 return  # outside the schedule window — no activation
 
-            # Check whether we should activate due to occupancy or recent history.
+            # Check whether we should activate due to occupancy, a held-open
+            # door, or recent history.
             occ_state = (
                 self.hass.states.get(self._occupancy_entity)
                 if self._occupancy_entity
                 else None
             )
-            if occ_state and occ_state.state == "on":
+            occ_active = occ_state is not None and occ_state.state == "on"
+            if occ_active or self._door_holds():
                 self._last_on_illuminance = datetime.now(timezone.utc)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
-                self._occupancy_lit_lights = True
+                self._occupancy_lit_lights = occ_active
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
             else:
