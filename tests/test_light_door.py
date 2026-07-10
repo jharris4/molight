@@ -20,7 +20,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -43,12 +44,24 @@ OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 HOLD = "input_boolean.guest"
+REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
 
 
 def _state(hass: HomeAssistant):
     return hass.states.get(VIRTUAL)
+
+
+def _record_service_calls(hass: HomeAssistant) -> list[dict]:
+    calls: list[dict] = []
+
+    @callback
+    def _record(event) -> None:
+        calls.append(event.data)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    return calls
 
 
 # ---------------------------------------------------------------------------
@@ -552,6 +565,41 @@ async def test_open_close_seed_adopts_open_door(hass: HomeAssistant, freezer) ->
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_door_open_applies_auto_on_brightness_and_transition(
+    hass: HomeAssistant,
+) -> None:
+    """A door-triggered turn-on is automatic: it carries the configured
+    auto-on brightness and fade, exactly like an occupancy turn-on."""
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN,
+        auto_on_brightness=40,  # 40% → 102 of 255
+        auto_on_transition=2.5,
+    )
+    await setup_entries(hass, entry)
+    calls = _record_service_calls(hass)
+
+    hass.states.async_set(DOOR, "on")  # opened
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 102
+
+    on_calls = [
+        d
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and REAL in d["service_data"].get("entity_id", [])
+    ]
+    assert on_calls
+    assert on_calls[-1]["service_data"]["brightness"] == 102
+    assert on_calls[-1]["service_data"]["transition"] == 2.5
 
 
 @pytest.mark.asyncio

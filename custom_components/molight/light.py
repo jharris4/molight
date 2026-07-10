@@ -7,18 +7,19 @@ State machine
 ─────────────
   IDLE       lights off, no timer
   ACTIVE     lights on, timer running
-               → entered when light turned on manually, or when occupancy
-                 triggers and there is no active occupancy
+               → entered on a manual/physical turn-on or an open-mode door
+                 trigger, when no occupancy/maintain/door hold applies
   OCCUPIED   lights on, occupancy active — timer suspended
   COUNTDOWN  occupancy just cleared, timer ticking toward lights-off
+  SCHEDULED  lights on inside a follow-mode schedule window — no timer
   EFFECT     auto-off imminent — showing the brief effect/blink warning stage
   WARN       auto-off imminent — grace period before the lights go off
 
 Transitions
-  IDLE + (manual on OR occupancy trigger [no occupancy sensor / not occupied])
+  IDLE + (manual/physical on OR open-mode door trigger) [no active hold]
        → ACTIVE  (start timer immediately)
 
-  IDLE/ACTIVE + occupancy becomes active
+  IDLE/ACTIVE/COUNTDOWN + occupancy becomes active
        → OCCUPIED  (cancel any running timer)
 
   OCCUPIED + occupancy clears

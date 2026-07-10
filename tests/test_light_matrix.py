@@ -326,6 +326,32 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 
 
 @pytest.mark.asyncio
+async def test_gate_window_start_relights_at_auto_on_brightness(
+    hass: HomeAssistant,
+) -> None:
+    """A gate-mode window start re-activating standing occupancy is an
+    automatic turn-on: the configured auto-on brightness applies."""
+    entry = make_light_entry(
+        occupancy=OCC,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+        auto_on_brightness=40,  # 40% → 102 of 255
+    )
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "on")
+    await setup_entries(hass, entry)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(SCHED, "on")  # window opens with occupancy standing
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["brightness"] == 102
+
+
+@pytest.mark.asyncio
 async def test_gate_window_start_keeps_running_state(
     hass: HomeAssistant, freezer
 ) -> None:

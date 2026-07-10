@@ -109,10 +109,11 @@ SUN_EVENTS = ["sunset", "sunrise"]
 CONF_LIGHTS = "lights"  # list of real light entity_ids
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 # Brightness (percent, 1-100) applied when the light is turned on
-# *automatically* — by occupancy, illuminance going dark, or a follow-mode
-# schedule window. Manual and physical turn-ons are never affected (they keep
-# whatever brightness the user/last state set). Absent = don't set a brightness
-# on automatic turn-ons either (the real lights use their own last/default).
+# *automatically* — by occupancy, a door opening, illuminance going dark, or
+# a schedule window. Manual and physical turn-ons are never affected (they
+# keep whatever brightness the user/last state set). Absent = don't set a
+# brightness on automatic turn-ons either (the real lights use their own
+# last/default).
 CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
@@ -137,8 +138,8 @@ CONF_WARN_BRIGHTNESS = "warn_brightness"
 # Optional fade times (seconds) sent as the transition of the service calls
 # the virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
-#   auto_on_transition  — automatic turn-ons only (occupancy, illuminance
-#                         going dark, follow-mode window start); manual and
+#   auto_on_transition  — automatic turn-ons only (occupancy, a door opening,
+#                         illuminance going dark, a window start); manual and
 #                         physical turn-ons are untouched.
 #   auto_off_transition — automatic turn-offs (timer expiry, false-detection
 #                         quick off, bright-forces-off, window end); a manual

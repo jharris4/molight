@@ -168,7 +168,7 @@ Controls N real lights with an occupancy-aware state machine.
 | **Lights** | Real `light` entities to control |
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
-| **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, illuminance going dark, or a follow-mode window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
+| **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, a door opening, illuminance going dark, or a schedule window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
 | **Auto-on fade (s)** *(optional)* | Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons never get one |
 | **Auto-off fade (s)** *(optional)* | Fade time for automatic turn-offs — timer expiry, bright forcing off, a window ending. A manual off is always immediate |
 | **Effect warning duration (s)** | `0` disables. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
@@ -213,7 +213,7 @@ WARN       auto-off imminent — grace period before the lights go off
 ```
 
 - `IDLE` + manual/external turn-on → `ACTIVE` (timer starts)
-- `IDLE`/`ACTIVE` + occupancy becomes active (and it's dark / in-window) → `OCCUPIED`
+- `IDLE`/`ACTIVE`/`COUNTDOWN` + occupancy becomes active (and it's dark / in-window) → `OCCUPIED`
 - Already-active occupancy is adopted the same way: turning the light on (manually or at the wall) while the occupancy sensor is on goes straight to `OCCUPIED`, as does illuminance turning dark or a gate-mode window opening while the light is on — a timer never expires despite presence
 - `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is the turn-off timeout anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)

@@ -51,8 +51,7 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
-          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
+          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window."
         }
       },
       "assign_lights": {
