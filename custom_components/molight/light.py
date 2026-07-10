@@ -65,8 +65,9 @@ Turn-on attribution
                          (async_turn_on was called directly).
     last_on_occupancy  — occupancy sensor triggered the lights.
     last_on_illuminance— an illuminance→dark change triggered the lights.
+    last_on_door       — a door sensor opening triggered the lights.
 
-  All four are exposed as extra state attributes (ISO strings or null).
+  All are exposed as extra state attributes (ISO strings or null).
   The most-recent value is used when computing the illuminance-dark countdown
   in the absence of an occupancy sensor.
 
@@ -137,6 +138,22 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
   • gate — occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
+
+Door handling (when a door entity is configured), per door_mode:
+  Opening the door (state on) is a turn-on trigger, gated by illuminance and
+  a gate-mode schedule exactly like occupancy — it only lights the room when
+  it is dark (if an illuminance entity is set) and inside a gate window.
+  • open       — opening turns the lights on with the normal timeout (ACTIVE);
+    the door is otherwise ignored, so closing does nothing and the lights
+    time out even if the door stays open. A momentary trigger.
+  • open_close — the open door holds the lights on with no timer (OCCUPIED,
+    just like an occupancy sensor) for as long as it stays open; closing
+    starts the auto-off countdown, but defers to any active occupancy/maintain
+    entity or keep-on hold so a closed door never cuts the lights over someone
+    still present. A held-open door survives a restart the same way a
+    maintained light does: an already-on light with the door open is adopted
+    as OCCUPIED. Forced offs (bright in control mode, a gate window ending)
+    still win over a held-open door, as they do over occupancy.
 """
 
 from __future__ import annotations
@@ -178,6 +195,8 @@ from .const import (
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_TRANSITION,
+    CONF_DOOR_ENTITY,
+    CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -198,6 +217,8 @@ from .const import (
     CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
+    DOOR_MODE_OPEN,
+    DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
@@ -236,7 +257,7 @@ async def async_setup_entry(
 
 
 class VirtualLight(LightEntity, RestoreEntity):
-    """A virtual light with occupancy/illuminance/schedule awareness."""
+    """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
@@ -303,6 +324,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
         self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW)
+        self._door_entity: str | None = cfg.get(CONF_DOOR_ENTITY)
+        self._door_mode: str = cfg.get(CONF_DOOR_MODE, DOOR_MODE_OPEN)
         self._hold_entities: list[str] = cfg.get(CONF_HOLD_ENTITIES, [])
         # Last known on/off of each keep-on entity — kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
@@ -326,6 +349,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_virtual: datetime | None = None
         self._last_on_occupancy: datetime | None = None
         self._last_on_illuminance: datetime | None = None
+        self._last_on_door: datetime | None = None
         self._last_brightness_change_physical: datetime | None = None
         self._last_brightness_change_virtual: datetime | None = None
 
@@ -345,7 +369,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if last is not None:
             # Restore turn-on attribution so the illuminance re-activation
             # countdown keeps working across a restart.
-            for source in ("physical", "virtual", "occupancy", "illuminance"):
+            for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
                 raw = last.attributes.get(f"last_on_{source}")
                 if raw:
                     try:
@@ -384,6 +408,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             watch.append(self._illuminance_entity)
         if self._schedule_entity:
             watch.append(self._schedule_entity)
+        if self._door_entity:
+            watch.append(self._door_entity)
         watch.extend(self._hold_entities)
         # One entity may serve several roles — subscribe to it only once.
         watch = list(dict.fromkeys(watch))
@@ -476,10 +502,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._on_occupancy_change(occupied=True)
                 return
 
-        if self._attr_is_on and self._maintain_active():
+        if self._attr_is_on and (self._maintain_active() or self._door_holds()):
             # Adopt an already-on light as maintained — no gating, since this
-            # is not a turn-on; the maintain entity clearing starts the
-            # countdown as usual.
+            # is not a turn-on; the maintain entity clearing, or the door
+            # closing, starts the countdown as usual.
             self._machine_state = STATE_OCCUPIED
             self.async_write_ha_state()
             return
@@ -604,6 +630,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._on_illuminance_change(new_state.state == "on")
         if entity_id == self._schedule_entity:
             self._on_schedule_change(new_state)
+        if entity_id == self._door_entity:
+            self._on_door_change(new_state.state == "on")
         if entity_id in self._hold_entities:
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
@@ -777,7 +805,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._go_idle()
             return
 
-        if self._occupancy_active() or self._maintain_active():
+        if self._occupancy_active() or self._maintain_active() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
             return
 
@@ -828,8 +856,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._machine_state != STATE_IDLE:
                 # Lights already on: the window opening lifts the gate that
-                # kept already-active occupancy from holding them.
-                if self._occupancy_holds():
+                # kept already-active occupancy (or an open door) from holding
+                # them.
+                if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
                 return
             occ_state = (
@@ -891,8 +920,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
         else:
             if self._machine_state == STATE_OCCUPIED:
-                if self._maintain_active():
-                    return  # maintain entity holds the light on
+                if self._maintain_active() or self._door_holds():
+                    return  # maintain entity / open door holds the light on
                 self._machine_state = STATE_COUNTDOWN
                 if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                     # The whole cycle was a false detection and nobody else
@@ -926,8 +955,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._machine_state != STATE_OCCUPIED:
                 return
-            if self._occupancy_active():
-                return  # regular occupancy still holds the light on
+            if self._occupancy_active() or self._door_holds():
+                return  # regular occupancy / open door still holds the light on
             self._machine_state = STATE_COUNTDOWN
             if (
                 self._occupancy_lit_lights
@@ -986,6 +1015,73 @@ class VirtualLight(LightEntity, RestoreEntity):
         state = self.hass.states.get(self._maintain_entity)
         return state is not None and state.state == "on"
 
+    def _door_holds(self) -> bool:
+        """True when an open_close-mode door is currently open (holds the light).
+
+        Such a door holds an already-on light on with no timer, exactly like
+        active occupancy or the maintain entity, and its closing starts the
+        countdown. In plain open mode a door never holds — it is only a
+        momentary turn-on trigger — so this is always False there.
+        """
+        if not self._door_entity or self._door_mode != DOOR_MODE_OPEN_CLOSE:
+            return False
+        state = self.hass.states.get(self._door_entity)
+        return state is not None and state.state == "on"
+
+    def _on_door_change(self, is_open: bool) -> None:
+        """Handle the configured door sensor changing (on = open).
+
+        Opening is a turn-on trigger, gated by illuminance/a gate-mode schedule
+        exactly like occupancy. In open_close mode the open door then holds the
+        lights on (OCCUPIED, no timer) until it closes, whereupon the countdown
+        starts unless occupancy/a keep-on hold still applies; in open mode the
+        door is a momentary trigger (ACTIVE, normal timeout) and closing is
+        ignored.
+        """
+        if self._machine_state == STATE_SCHEDULED:
+            return  # follow-mode window owns the lights
+        if is_open:
+            if self._is_illuminance_bright():
+                return  # dark-gated, like occupancy
+            if self._gate_schedule_inactive():
+                return  # outside a gate-mode schedule window
+            was_warning = self._in_warning()
+            self._last_on_door = datetime.now(timezone.utc)
+            # An open_close door holds the light (no timer) like the maintain
+            # entity; an already-occupied/maintained room holds it too. Only a
+            # plain open-mode trigger with no other hold runs the timeout.
+            holds = (
+                self._door_mode == DOOR_MODE_OPEN_CLOSE
+                or self._maintain_active()
+                or self._occupancy_holds()
+            )
+            self._machine_state = STATE_OCCUPIED if holds else STATE_ACTIVE
+            self._cancel_timer()
+            if was_warning:
+                # Opening mid-warning is a re-trigger: undo the effect/warn
+                # stage so the light looks as it did before the warning.
+                self._resume_lights()
+            elif not self._attr_is_on:
+                self._occupancy_lit_lights = False  # the door owns this period
+                self.hass.async_create_task(self._auto_lights_on())
+            if not holds:
+                self._start_timer()
+            self.async_write_ha_state()
+        else:
+            if self._door_mode != DOOR_MODE_OPEN_CLOSE:
+                return  # open mode: closing is ignored
+            if self._machine_state in (STATE_IDLE, STATE_SCHEDULED):
+                return
+            if self._occupancy_active() or self._maintain_active():
+                return  # presence still holds the lights on
+            if self._in_warning():
+                return  # already winding down toward off; let it finish
+            # The door was the reason to be on and it just closed: start the
+            # normal countdown toward off.
+            self._machine_state = STATE_COUNTDOWN
+            self._start_timer()
+            self.async_write_ha_state()
+
     def _occupancy_clear_was_false(self) -> bool:
         """True when the occupancy sensor flagged its clear as a false detection."""
         return self._clear_was_false(self._occupancy_entity)
@@ -1025,9 +1121,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._machine_state != STATE_IDLE:
                 # Lights already on: going dark lifts the gate that kept
-                # already-active occupancy from holding them — adopt it so a
-                # timer can't expire despite presence.
-                if self._occupancy_holds():
+                # already-active occupancy (or an open door) from holding
+                # them — adopt so a timer can't expire despite presence.
+                if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
                 return
             if self._gate_schedule_inactive():
@@ -1100,6 +1196,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_physical,
                 self._last_on_virtual,
                 self._last_on_occupancy,
+                self._last_on_door,
             )
             if t is not None
         ]
@@ -1141,11 +1238,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
 
-        # Turned on while the maintain entity — or the regular occupancy
-        # entity, when not gated by bright/window — is already occupied: hold
-        # the light immediately instead of running a timer that would expire
-        # despite presence.
-        if self._maintain_active() or self._occupancy_holds():
+        # Turned on while the maintain entity, an open_close door, or the
+        # regular occupancy entity (when not gated by bright/window) is
+        # already holding presence: hold the light immediately instead of
+        # running a timer that would expire despite presence.
+        if self._maintain_active() or self._occupancy_holds() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
             self._attr_is_on = True
             self._cancel_timer()
@@ -1358,6 +1455,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_on_virtual": _fmt(self._last_on_virtual),
             "last_on_occupancy": _fmt(self._last_on_occupancy),
             "last_on_illuminance": _fmt(self._last_on_illuminance),
+            "last_on_door": _fmt(self._last_on_door),
             "last_brightness_change_physical": _fmt(
                 self._last_brightness_change_physical
             ),

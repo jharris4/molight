@@ -193,6 +193,23 @@ SCHEDULE_MODE_FOLLOW = "follow"
 SCHEDULE_MODE_GATE = "gate"
 SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
 
+# Optional real door/contact binary_sensor (on = open) that drives the light.
+# Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
+# like occupancy (only lights up when dark and inside a gate-mode window).
+# door_mode controls what the door state does after that:
+#   open       — opening turns the lights on with the normal timeout; the door
+#                is otherwise ignored (closing does nothing). A momentary
+#                trigger, like a light switch that pops back out.
+#   open_close — the open door holds the lights on (no timer) while it stays
+#                open, and closing starts the auto-off countdown, deferring to
+#                occupancy/keep-on holds (a closed door never cuts the lights
+#                over someone the occupancy sensor still sees).
+CONF_DOOR_ENTITY = "door_entity"
+CONF_DOOR_MODE = "door_mode"
+DOOR_MODE_OPEN = "open"
+DOOR_MODE_OPEN_CLOSE = "open_close"
+DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
+
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied)

@@ -51,7 +51,8 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window."
+          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
         }
       },
       "assign_lights": {
@@ -158,9 +159,11 @@
           "maintain_occupancy_entity": "Maintain occupancy sensor",
           "illuminance_entity": "Illuminance sensor",
           "schedule_entity": "Schedule sensor",
+          "door_entity": "Door sensor",
           "hold_entities": "Keep-on entities",
           "illuminance_mode": "Illuminance mode",
-          "schedule_mode": "Schedule mode"
+          "schedule_mode": "Schedule mode",
+          "door_mode": "Door mode"
         },
         "data_description": {
           "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified).",
@@ -178,9 +181,11 @@
           "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
           "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
           "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
           "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
           "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window."
+          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
         }
       },
       "occupancy": {
@@ -282,9 +287,11 @@
           "maintain_occupancy_entity": "Maintain occupancy sensor",
           "illuminance_entity": "Illuminance sensor",
           "schedule_entity": "Schedule sensor",
+          "door_entity": "Door sensor",
           "hold_entities": "Keep-on entities",
           "illuminance_mode": "Illuminance mode",
           "schedule_mode": "Schedule mode",
+          "door_mode": "Door mode",
           "entity_id": "Entity ID"
         },
         "data_description": {
@@ -304,9 +311,11 @@
           "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
           "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
           "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
           "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
           "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
           "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
           "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
         }
       },
@@ -382,6 +391,12 @@
       "options": {
         "control": "Control — dark gates turn-on, bright turns lights off",
         "gate": "Gate only — dark gates turn-on, bright never turns lights off"
+      }
+    },
+    "door_mode": {
+      "options": {
+        "open": "On open — turn on when the door opens (normal timeout)",
+        "open_close": "Open & close — on while open, off when closed"
       }
     }
   },
@@ -474,9 +489,11 @@
           "maintain_occupancy_entity": "Maintain occupancy sensor",
           "illuminance_entity": "Illuminance sensor",
           "schedule_entity": "Schedule sensor",
+          "door_entity": "Door sensor",
           "hold_entities": "Keep-on entities",
           "illuminance_mode": "Illuminance mode",
-          "schedule_mode": "Schedule mode"
+          "schedule_mode": "Schedule mode",
+          "door_mode": "Door mode"
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
@@ -495,9 +512,11 @@
           "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
           "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
           "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
           "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
           "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window."
+          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
         }
       }
     },

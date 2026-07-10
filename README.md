@@ -183,6 +183,8 @@ Controls N real lights with an occupancy-aware state machine.
 | **Illuminance mode** | `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
 | **Schedule mode** | `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
+| **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
+| **Door mode** | `open` — opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close` — the lights stay on while the door is open and start the countdown when it closes |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)) |
 
 #### Attributes
@@ -193,6 +195,7 @@ Controls N real lights with an occupancy-aware state machine.
 | `auto_off_held` | Whether auto-off is currently held (Auto-off switch off or a keep-on entity on) |
 | `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
+| `last_on_door` | Timestamp of the last turn-on caused by the door opening |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `pre_warn_brightness` | Brightness saved before an effect/warn stage, so a restart mid-warning can restore it; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
@@ -222,9 +225,9 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 **Precedence when sources conflict.** With several sources configured on one light, control resolves top-down:
 
 1. **Manual / physical control** — always wins and is never gated; a manual off turns the light off from any state. A manual off *mid follow-window* drops to `IDLE` and hands control back to the sensors until the next window boundary.
-2. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, and illuminance changes are ignored entirely (window start forces on, window end forces off).
-3. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy is active.
-4. **Occupancy** — turns the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority.
+2. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, illuminance, and door changes are ignored entirely (window start forces on, window end forces off).
+3. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy or a held-open door is active.
+4. **Occupancy and door opening** — turn the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority. An `open_close` door then holds the light like occupancy until it closes.
 
 #### Effect / warn warning
 
@@ -246,6 +249,15 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 - Forced offs still win, exactly as they do over regular occupancy: bright in `control` mode, a gate-mode window ending, and a manual off all turn the light off immediately; a follow-mode window owns the light entirely.
 - The false-detection quick off fires on a maintain clear only when *both* sensors flagged their clears false — genuine presence on either side earns the normal countdown.
 
+#### Door sensor
+
+A door sensor drives the light straight from a real door/contact `binary_sensor` (`on` = open) — a pantry, closet, wardrobe, or garage light. Opening the door is a turn-on trigger, gated by illuminance and a gate-mode schedule exactly like occupancy: it only lights the room when it's dark (if an illuminance sensor is set) and inside a gate window. What happens next depends on the **door mode**:
+
+- **`open`** — opening turns the lights on with the normal turn-off timeout (`ACTIVE`), then the door is ignored: closing does nothing and the lights time out even if the door stays open. Re-opening re-triggers the timer. Use it as a momentary "someone came through here" trigger.
+- **`open_close`** — the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown. The close **defers to presence**: if a regular occupancy or maintain sensor is still active, or a keep-on entity is holding auto-off, the lights stay on — a closed door never cuts the lights over someone the room still sees. An already-on light with the door open is adopted as `OCCUPIED` at startup, and forced offs (bright in `control` mode, a gate window ending, a manual off) still win over a held-open door, just as they do over occupancy.
+
+The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening, window) rather than to MoLight virtual sensors. The last door-driven turn-on is exposed as the `last_on_door` attribute.
+
 #### Holding auto-off
 
 Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-off is *held* while that switch is off **or** any configured keep-on entity is on:
@@ -259,7 +271,7 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 
 #### Brightness and fades
 
-The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance`).
+The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
 An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; manual and physical turn-ons are left alone, so you can dim the room by hand without it snapping back. Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions — flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
 

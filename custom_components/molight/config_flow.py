@@ -36,6 +36,8 @@ from .const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_DOOR_ENTITY,
+    CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -67,6 +69,8 @@ from .const import (
     CONF_WARN_TRANSITION,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     DOMAIN,
+    DOOR_MODE_OPEN,
+    DOOR_MODES,
     EDGE_COMBINE,
     EDGE_OFFSET,
     EDGE_SUN,
@@ -197,11 +201,14 @@ def _schedule_edge_fields(window: dict | None) -> dict:
     return fields
 
 
-# Pickers for a virtual light's optional entity references. The schedule
-# sensor has no device_class (HA offers none that fits), so its picker can
-# only narrow to MoLight binary sensors. Keep-on entities can be anything
-# with an on/off state (input_boolean, switch, binary_sensor, ...), so that
-# picker is not narrowed at all.
+# Pickers for a virtual light's optional entity references. The occupancy,
+# maintain, illuminance and schedule sensors are MoLight virtual sensors
+# (integration=DOMAIN); the schedule sensor has no device_class (HA offers
+# none that fits), so its picker can only narrow to MoLight binary sensors.
+# The door sensor is a plain real contact sensor, so its picker is not
+# restricted to MoLight — only to door-ish binary_sensor device classes.
+# Keep-on entities can be anything with an on/off state (input_boolean,
+# switch, binary_sensor, ...), so that picker is not narrowed at all.
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -223,6 +230,11 @@ _LIGHT_REF_SELECTORS = {
     ),
     CONF_SCHEDULE_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN, domain="binary_sensor", multiple=False
+    ),
+    CONF_DOOR_ENTITY: selector.EntitySelectorConfig(
+        domain="binary_sensor",
+        device_class=["door", "garage_door", "opening", "window"],
+        multiple=False,
     ),
     CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(multiple=True),
 }
@@ -443,6 +455,13 @@ def _light_option_fields() -> dict:
                 options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
             )
         ),
+        vol.Required(
+            CONF_DOOR_MODE, default=DOOR_MODE_OPEN
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=DOOR_MODES, translation_key=CONF_DOOR_MODE
+            )
+        ),
     }
 
 
@@ -545,6 +564,7 @@ def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
         CONF_FALSE_OFF_DELAY: 5,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
+        CONF_DOOR_MODE: DOOR_MODE_OPEN,
     }
 
 
@@ -1754,6 +1774,16 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
+            )
+        )
+        schema[
+            vol.Required(
+                CONF_DOOR_MODE,
+                default=cfg.get(CONF_DOOR_MODE, DOOR_MODE_OPEN),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=DOOR_MODES, translation_key=CONF_DOOR_MODE
             )
         )
 

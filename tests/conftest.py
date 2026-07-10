@@ -12,6 +12,8 @@ from custom_components.molight.const import (
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_TRANSITION,
+    CONF_DOOR_ENTITY,
+    CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -64,6 +66,8 @@ def make_light_entry(
     illuminance_mode: str | None = None,
     schedule: str | None = None,
     schedule_mode: str | None = None,
+    door: str | None = None,
+    door_mode: str | None = None,
     hold_entities: list[str] | None = None,
     auto_on_brightness: int | None = None,
     effect_timeout: int | None = None,
@@ -99,6 +103,10 @@ def make_light_entry(
         data[CONF_SCHEDULE_ENTITY] = schedule
     if schedule_mode:
         data[CONF_SCHEDULE_MODE] = schedule_mode
+    if door:
+        data[CONF_DOOR_ENTITY] = door
+    if door_mode:
+        data[CONF_DOOR_MODE] = door_mode
     if hold_entities:
         data[CONF_HOLD_ENTITIES] = hold_entities
     if auto_on_brightness is not None:

@@ -8,6 +8,7 @@ The examples build on each other:
 2. [Simple occupancy](#example-2--simple-occupancy-case) — one motion sensor
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
+5. [Pantry light](#example-5--pantry-light-door-sensor) — a door/contact sensor
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -136,6 +137,27 @@ Schedule mode:   follow    # on at window start, off at window end
 ```
 
 `follow` = porch-light behavior; the window owns the light but manual changes mid-window still stand. Use `gate` instead if you want occupancy to control the light *only inside* the window.
+
+---
+
+### Example 5 — Pantry light (door sensor)
+
+Open the pantry door → light on; close it → light off. A single entry driven by a real door/contact sensor:
+
+**Virtual Light**
+
+```text
+Name:              Pantry                       # → light.pantry
+Lights:            light.pantry_real
+Door sensor:       binary_sensor.pantry_door    # a real contact sensor (on = open)
+Door mode:         open_close                   # on while open, off when closed
+```
+
+Open the door and the light stays on the whole time it's open — no timeout while you're rummaging. Close it and a countdown (the **Turn-off timeout**) begins.
+
+- Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off — closing is ignored. Handy for a walk-through door where you don't want the light killed the instant it shuts.
+- Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy — no wasted light opening a pantry in daylight.
+- In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor (or a keep-on entity is holding auto-off) and it still sees someone, the lights stay on instead of dropping on a person who just shut the door behind them.
 
 ---
 
