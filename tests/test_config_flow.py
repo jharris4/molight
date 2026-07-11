@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, section
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -105,6 +105,22 @@ async def _start_discovery(hass: HomeAssistant, step: str) -> dict:
 def _offered_candidates(result: dict) -> set[str]:
     """Entity ids the discovery form pre-selects (its default is all candidates)."""
     return set(result["data_schema"]({})[CONF_SELECTED_ENTITIES])
+
+
+def _suggested_values(schema) -> dict:
+    """The suggested values a form schema carries, section values nested."""
+    out: dict = {}
+    for marker, value in schema.schema.items():
+        if isinstance(value, section):
+            inner = _suggested_values(value.schema)
+            if inner:
+                out[marker.schema] = inner
+        elif (
+            getattr(marker, "description", None)
+            and "suggested_value" in marker.description
+        ):
+            out[marker.schema] = marker.description["suggested_value"]
+    return out
 
 
 @pytest.mark.asyncio
@@ -467,6 +483,79 @@ async def test_light_options_validate_and_clear_transitions(
     assert cfg[CONF_AUTO_OFF_TRANSITION] == 4
     assert CONF_WARN_TRANSITION not in cfg
     assert CONF_AUTO_ON_TRANSITION not in cfg
+
+
+@pytest.mark.asyncio
+async def test_light_flow_error_keeps_submitted_values(hass: HomeAssistant) -> None:
+    """A rejected create submission comes back prefilled, not reset to defaults."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 90,
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_TRANSITION: 21,  # > warn_timeout
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "warn_transition_too_long"}
+
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "Hall Light"
+    assert suggested[CONF_LIGHTS] == ["light.hall"]
+    assert suggested[CONF_LIGHT_TIMEOUT] == 90
+    assert suggested[SECTION_WARNING][CONF_WARN_TIMEOUT] == 20
+    assert suggested[SECTION_WARNING][CONF_WARN_TRANSITION] == 21
+
+
+@pytest.mark.asyncio
+async def test_light_options_error_keeps_submitted_values(
+    hass: HomeAssistant,
+) -> None:
+    """A rejected options submission comes back as typed, not the stored values."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall Light Renamed",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 90,
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_TRANSITION: 21,  # > warn_timeout
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "warn_transition_too_long"}
+
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "Hall Light Renamed"
+    assert suggested[CONF_LIGHT_TIMEOUT] == 90
+    assert suggested[SECTION_WARNING][CONF_WARN_TRANSITION] == 21
 
 
 @pytest.mark.asyncio

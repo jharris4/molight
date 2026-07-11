@@ -1160,7 +1160,9 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
             step_id="discover_light_defaults",
-            data_schema=vol.Schema(_light_option_fields()),
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_light_option_fields()), user_input or {}
+            ),
             errors=errors,
         )
 
@@ -1425,7 +1427,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="occupancy",
             data_schema=self.add_suggested_values_to_schema(
-                schema, self._prefill or {}
+                schema, user_input or self._prefill or {}
             ),
             errors=errors,
         )
@@ -1481,7 +1483,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="combined_occupancy",
             data_schema=self.add_suggested_values_to_schema(
-                schema, self._prefill or {}
+                schema, user_input or self._prefill or {}
             ),
             errors=errors,
         )
@@ -1523,7 +1525,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="illuminance",
             data_schema=self.add_suggested_values_to_schema(
-                schema, self._prefill or {}
+                schema, user_input or self._prefill or {}
             ),
             errors=errors,
         )
@@ -1584,7 +1586,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="schedule",
             data_schema=self.add_suggested_values_to_schema(
-                schema, self._prefill or {}
+                schema, user_input or self._prefill or {}
             ),
             errors=errors,
         )
@@ -1633,7 +1635,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="light",
             data_schema=self.add_suggested_values_to_schema(
-                schema, self._prefill or {}
+                schema, user_input or self._prefill or {}
             ),
             errors=errors,
         )
@@ -1709,7 +1711,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="occupancy",
             data_schema=self.add_suggested_values_to_schema(
-                schema, _nest_sections(cfg, _OCCUPANCY_SECTIONS)
+                schema, user_input or _nest_sections(cfg, _OCCUPANCY_SECTIONS)
             ),
             errors=errors,
         )
@@ -1746,32 +1748,35 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                     return self._finish(user_input)
 
         cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_TRIGGER_SENSORS,
+                    default=cfg.get(CONF_TRIGGER_SENSORS, []),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        integration=DOMAIN,
+                        device_class="occupancy",
+                        multiple=True,
+                    )
+                ),
+                vol.Optional(
+                    CONF_MAINTAIN_SENSORS,
+                    default=cfg.get(CONF_MAINTAIN_SENSORS, []),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        integration=DOMAIN,
+                        device_class="occupancy",
+                        multiple=True,
+                    )
+                ),
+            }
+        )
         return self.async_show_form(
             step_id="combined_occupancy",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-                    vol.Required(
-                        CONF_TRIGGER_SENSORS,
-                        default=cfg.get(CONF_TRIGGER_SENSORS, []),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN,
-                            device_class="occupancy",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAINTAIN_SENSORS,
-                        default=cfg.get(CONF_MAINTAIN_SENSORS, []),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            integration=DOMAIN,
-                            device_class="occupancy",
-                            multiple=True,
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or {}
             ),
             errors=errors,
         )
@@ -1842,7 +1847,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="schedule",
             data_schema=self.add_suggested_values_to_schema(
-                schema, _window_suggested(first)
+                schema, user_input or _window_suggested(first)
             ),
             errors=errors,
         )
@@ -1887,7 +1892,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="light",
             data_schema=self.add_suggested_values_to_schema(
-                schema, _nest_sections(cfg, _LIGHT_SECTIONS)
+                schema, user_input or _nest_sections(cfg, _LIGHT_SECTIONS)
             ),
             errors=errors,
         )
