@@ -117,14 +117,24 @@
         "title": "Occupancy sensor defaults",
         "description": "These settings are applied to every entity you're adding. Adjust them if you like — each one can also be edited individually later via its Configure button.",
         "data": {
-          "occupancy_timeout": "Occupancy timeout",
-          "false_detection_grace": "False-detection grace",
-          "clear_on_unavailable_timeout": "Clear after unavailable"
+          "occupancy_timeout": "Occupancy timeout"
         },
         "data_description": {
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns).",
-          "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
-          "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Expert tuning — the defaults suit most sensors.",
+            "data": {
+              "false_detection_grace": "False-detection grace",
+              "clear_on_unavailable_timeout": "Clear after unavailable"
+            },
+            "data_description": {
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+            }
+          }
         }
       },
       "discover_illuminance_defaults": {
@@ -143,48 +153,74 @@
         "title": "Light defaults",
         "description": "These settings are applied to every entity you're adding. Adjust them if you like — each one can also be edited individually later via its Configure button.",
         "data": {
-          "light_timeout": "Turn-off timeout",
-          "false_detection_off_delay": "False-detection off delay",
-          "auto_on_brightness": "Auto-on brightness",
-          "auto_on_transition": "Auto-on fade",
-          "auto_off_transition": "Auto-off fade",
-          "effect_timeout": "Effect warning duration",
-          "effect_brightness": "Effect brightness",
-          "effect_transition": "Effect fade",
-          "warn_timeout": "Warning grace period",
-          "warn_brightness": "Warning brightness",
-          "warn_transition": "Warning fade",
-          "occupancy_entity": "Occupancy sensor",
-          "maintain_occupancy_entity": "Maintain occupancy sensor",
-          "illuminance_entity": "Illuminance sensor",
-          "schedule_entity": "Schedule sensor",
-          "door_entity": "Door sensor",
-          "hold_entities": "Keep-on entities",
-          "illuminance_mode": "Illuminance mode",
-          "schedule_mode": "Schedule mode",
-          "door_mode": "Door mode"
+          "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified).",
-          "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
-          "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-          "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-          "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant.",
-          "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-          "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-          "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
-          "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
-          "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-          "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period.",
-          "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-          "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
-          "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-          "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
-          "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
-          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
+          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Sensors & triggers",
+            "description": "The virtual sensors and helper entities that drive the lights — all optional. Each mode sits next to the sensor it applies to.",
+            "data": {
+              "occupancy_entity": "Occupancy sensor",
+              "maintain_occupancy_entity": "Maintain occupancy sensor",
+              "illuminance_entity": "Illuminance sensor",
+              "illuminance_mode": "Illuminance mode",
+              "schedule_entity": "Schedule sensor",
+              "schedule_mode": "Schedule mode",
+              "door_entity": "Door sensor",
+              "door_mode": "Door mode",
+              "hold_entities": "Keep-on entities"
+            },
+            "data_description": {
+              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+            }
+          },
+          "behavior": {
+            "name": "Turn-on & turn-off behavior",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "data": {
+              "false_detection_off_delay": "False-detection off delay",
+              "auto_on_brightness": "Auto-on brightness",
+              "auto_on_transition": "Auto-on fade",
+              "auto_off_transition": "Auto-off fade"
+            },
+            "data_description": {
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+            }
+          },
+          "warning": {
+            "name": "Off warning sequence",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "data": {
+              "effect_timeout": "Effect warning duration",
+              "effect_brightness": "Effect brightness",
+              "effect_transition": "Effect fade",
+              "warn_timeout": "Warning grace period",
+              "warn_brightness": "Warning brightness",
+              "warn_transition": "Warning fade"
+            },
+            "data_description": {
+              "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
+              "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
+              "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
+            }
+          }
         }
       },
       "occupancy": {
@@ -193,17 +229,27 @@
         "data": {
           "name": "Name",
           "occupancy_sensor": "Source sensor",
-          "occupancy_timeout": "Occupancy timeout",
-          "false_detection_grace": "False-detection grace",
-          "clear_on_unavailable_timeout": "Clear after unavailable",
-          "entity_id": "Entity ID"
+          "occupancy_timeout": "Occupancy timeout"
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns).",
-          "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
-          "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value).",
-          "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Expert tuning and a fixed entity ID — the defaults suit most sensors.",
+            "data": {
+              "false_detection_grace": "False-detection grace",
+              "clear_on_unavailable_timeout": "Clear after unavailable",
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value).",
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
         }
       },
       "combined_occupancy": {
@@ -212,13 +258,23 @@
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
-          "maintain_sensors": "Maintain sensors",
-          "entity_id": "Entity ID"
+          "maintain_sensors": "Maintain sensors"
         },
         "data_description": {
           "trigger_sensors": "Virtual occupancy sensors that can start occupancy — any one turning on starts it.",
-          "maintain_sensors": "Optional. Keep occupancy alive once started but can never start it — e.g. a sensitive mmWave sensor that would false-trigger on its own.",
-          "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+          "maintain_sensors": "Optional. Keep occupancy alive once started but can never start it — e.g. a sensitive mmWave sensor that would false-trigger on its own."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Rarely needed.",
+            "data": {
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
         }
       },
       "illuminance": {
@@ -228,41 +284,75 @@
           "name": "Name",
           "illuminance_sensor": "Source sensor",
           "illuminance_threshold": "Threshold",
-          "illuminance_hysteresis": "Hysteresis",
-          "entity_id": "Entity ID"
+          "illuminance_hysteresis": "Hysteresis"
         },
         "data_description": {
           "illuminance_sensor": "The real illuminance (lux) sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold − hysteresis. 0 disables.",
-          "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold − hysteresis. 0 disables."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Rarely needed.",
+            "data": {
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
         }
       },
       "schedule": {
         "title": "Virtual Schedule Sensor",
         "description": "On while the current time is inside the window. Each edge is a fixed time, a sun event with an optional offset, or both combined — e.g. start at the later of sunset − 15 min and 21:00. Overnight windows work.",
         "data": {
-          "name": "Name",
-          "start_time": "Start time",
-          "start_sun": "Start sun event",
-          "start_offset": "Start sun offset",
-          "start_combine": "Start — time vs. sun",
-          "end_time": "End time",
-          "end_sun": "End sun event",
-          "end_offset": "End sun offset",
-          "end_combine": "End — time vs. sun",
-          "entity_id": "Entity ID"
+          "name": "Name"
         },
-        "data_description": {
-          "start_time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-          "start_sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
-          "start_offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-          "start_combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00.",
-          "end_time": "Fixed local time the window closes. An end at or before the start rolls over to the next day (overnight window).",
-          "end_sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
-          "end_offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-          "end_combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00.",
-          "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+        "sections": {
+          "start": {
+            "name": "Window start",
+            "description": "A fixed time, a sun event with an optional offset, or both combined.",
+            "data": {
+              "time": "Time",
+              "sun": "Sun event",
+              "offset": "Sun offset",
+              "combine": "Time vs. sun"
+            },
+            "data_description": {
+              "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
+              "sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
+              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00."
+            }
+          },
+          "end": {
+            "name": "Window end",
+            "description": "A fixed time, a sun event with an optional offset, or both combined. An end at or before the start rolls over to the next day (overnight window).",
+            "data": {
+              "time": "Time",
+              "sun": "Sun event",
+              "offset": "Sun offset",
+              "combine": "Time vs. sun"
+            },
+            "data_description": {
+              "time": "Fixed local time the window closes.",
+              "sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
+              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "description": "Rarely needed.",
+            "data": {
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
         }
       },
       "light": {
@@ -271,51 +361,85 @@
         "data": {
           "name": "Name",
           "lights": "Lights to control",
-          "light_timeout": "Turn-off timeout",
-          "false_detection_off_delay": "False-detection off delay",
-          "auto_on_brightness": "Auto-on brightness",
-          "auto_on_transition": "Auto-on fade",
-          "auto_off_transition": "Auto-off fade",
-          "effect_timeout": "Effect warning duration",
-          "effect_brightness": "Effect brightness",
-          "effect_transition": "Effect fade",
-          "warn_timeout": "Warning grace period",
-          "warn_brightness": "Warning brightness",
-          "warn_transition": "Warning fade",
-          "occupancy_entity": "Occupancy sensor",
-          "maintain_occupancy_entity": "Maintain occupancy sensor",
-          "illuminance_entity": "Illuminance sensor",
-          "schedule_entity": "Schedule sensor",
-          "door_entity": "Door sensor",
-          "hold_entities": "Keep-on entities",
-          "illuminance_mode": "Illuminance mode",
-          "schedule_mode": "Schedule mode",
-          "door_mode": "Door mode",
-          "entity_id": "Entity ID"
+          "light_timeout": "Turn-off timeout"
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified).",
-          "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
-          "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-          "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-          "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant.",
-          "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-          "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-          "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
-          "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
-          "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-          "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period.",
-          "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-          "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
-          "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-          "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
-          "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
-          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-          "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Sensors & triggers",
+            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "data": {
+              "occupancy_entity": "Occupancy sensor",
+              "maintain_occupancy_entity": "Maintain occupancy sensor",
+              "illuminance_entity": "Illuminance sensor",
+              "illuminance_mode": "Illuminance mode",
+              "schedule_entity": "Schedule sensor",
+              "schedule_mode": "Schedule mode",
+              "door_entity": "Door sensor",
+              "door_mode": "Door mode",
+              "hold_entities": "Keep-on entities"
+            },
+            "data_description": {
+              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+            }
+          },
+          "behavior": {
+            "name": "Turn-on & turn-off behavior",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "data": {
+              "false_detection_off_delay": "False-detection off delay",
+              "auto_on_brightness": "Auto-on brightness",
+              "auto_on_transition": "Auto-on fade",
+              "auto_off_transition": "Auto-off fade"
+            },
+            "data_description": {
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+            }
+          },
+          "warning": {
+            "name": "Off warning sequence",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "data": {
+              "effect_timeout": "Effect warning duration",
+              "effect_brightness": "Effect brightness",
+              "effect_transition": "Effect fade",
+              "warn_timeout": "Warning grace period",
+              "warn_brightness": "Warning brightness",
+              "warn_transition": "Warning fade"
+            },
+            "data_description": {
+              "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
+              "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
+              "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "description": "Rarely needed.",
+            "data": {
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
         }
       },
       "confirm_entity_id": {
@@ -407,15 +531,25 @@
         "data": {
           "name": "Name",
           "occupancy_sensor": "Source sensor",
-          "occupancy_timeout": "Occupancy timeout",
-          "false_detection_grace": "False-detection grace",
-          "clear_on_unavailable_timeout": "Clear after unavailable"
+          "occupancy_timeout": "Occupancy timeout"
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns).",
-          "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
-          "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Expert tuning — the defaults suit most sensors.",
+            "data": {
+              "false_detection_grace": "False-detection grace",
+              "clear_on_unavailable_timeout": "Clear after unavailable"
+            },
+            "data_description": {
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+            }
+          }
         }
       },
       "combined_occupancy": {
@@ -448,25 +582,41 @@
         "title": "Virtual Schedule Sensor",
         "description": "Each edge is a fixed time, a sun event with an optional offset, or both combined. Overnight windows work.",
         "data": {
-          "name": "Name",
-          "start_time": "Start time",
-          "start_sun": "Start sun event",
-          "start_offset": "Start sun offset",
-          "start_combine": "Start — time vs. sun",
-          "end_time": "End time",
-          "end_sun": "End sun event",
-          "end_offset": "End sun offset",
-          "end_combine": "End — time vs. sun"
+          "name": "Name"
         },
-        "data_description": {
-          "start_time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-          "start_sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
-          "start_offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-          "start_combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00.",
-          "end_time": "Fixed local time the window closes. An end at or before the start rolls over to the next day (overnight window).",
-          "end_sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
-          "end_offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-          "end_combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00."
+        "sections": {
+          "start": {
+            "name": "Window start",
+            "description": "A fixed time, a sun event with an optional offset, or both combined.",
+            "data": {
+              "time": "Time",
+              "sun": "Sun event",
+              "offset": "Sun offset",
+              "combine": "Time vs. sun"
+            },
+            "data_description": {
+              "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
+              "sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
+              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00."
+            }
+          },
+          "end": {
+            "name": "Window end",
+            "description": "A fixed time, a sun event with an optional offset, or both combined. An end at or before the start rolls over to the next day (overnight window).",
+            "data": {
+              "time": "Time",
+              "sun": "Sun event",
+              "offset": "Sun offset",
+              "combine": "Time vs. sun"
+            },
+            "data_description": {
+              "time": "Fixed local time the window closes.",
+              "sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
+              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00."
+            }
+          }
         }
       },
       "light": {
@@ -474,49 +624,75 @@
         "data": {
           "name": "Name",
           "lights": "Lights to control",
-          "light_timeout": "Turn-off timeout",
-          "false_detection_off_delay": "False-detection off delay",
-          "auto_on_brightness": "Auto-on brightness",
-          "auto_on_transition": "Auto-on fade",
-          "auto_off_transition": "Auto-off fade",
-          "effect_timeout": "Effect warning duration",
-          "effect_brightness": "Effect brightness",
-          "effect_transition": "Effect fade",
-          "warn_timeout": "Warning grace period",
-          "warn_brightness": "Warning brightness",
-          "warn_transition": "Warning fade",
-          "occupancy_entity": "Occupancy sensor",
-          "maintain_occupancy_entity": "Maintain occupancy sensor",
-          "illuminance_entity": "Illuminance sensor",
-          "schedule_entity": "Schedule sensor",
-          "door_entity": "Door sensor",
-          "hold_entities": "Keep-on entities",
-          "illuminance_mode": "Illuminance mode",
-          "schedule_mode": "Schedule mode",
-          "door_mode": "Door mode"
+          "light_timeout": "Turn-off timeout"
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified).",
-          "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
-          "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-          "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-          "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant.",
-          "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-          "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-          "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
-          "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
-          "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-          "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period.",
-          "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-          "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
-          "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-          "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-          "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
-          "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work.",
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
-          "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them."
+          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+        },
+        "sections": {
+          "sensors": {
+            "name": "Sensors & triggers",
+            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "data": {
+              "occupancy_entity": "Occupancy sensor",
+              "maintain_occupancy_entity": "Maintain occupancy sensor",
+              "illuminance_entity": "Illuminance sensor",
+              "illuminance_mode": "Illuminance mode",
+              "schedule_entity": "Schedule sensor",
+              "schedule_mode": "Schedule mode",
+              "door_entity": "Door sensor",
+              "door_mode": "Door mode",
+              "hold_entities": "Keep-on entities"
+            },
+            "data_description": {
+              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
+              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+            }
+          },
+          "behavior": {
+            "name": "Turn-on & turn-off behavior",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "data": {
+              "false_detection_off_delay": "False-detection off delay",
+              "auto_on_brightness": "Auto-on brightness",
+              "auto_on_transition": "Auto-on fade",
+              "auto_off_transition": "Auto-off fade"
+            },
+            "data_description": {
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+            }
+          },
+          "warning": {
+            "name": "Off warning sequence",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "data": {
+              "effect_timeout": "Effect warning duration",
+              "effect_brightness": "Effect brightness",
+              "effect_transition": "Effect fade",
+              "warn_timeout": "Warning grace period",
+              "warn_brightness": "Warning brightness",
+              "warn_transition": "Warning fade"
+            },
+            "data_description": {
+              "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
+              "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
+              "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
+            }
+          }
         }
       }
     },

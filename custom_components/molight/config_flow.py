@@ -13,6 +13,7 @@ from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
@@ -119,24 +120,127 @@ _TRANSITION_SELECTOR = selector.NumberSelector(
     )
 )
 
+# ---------------------------------------------------------------------------
+# Collapsible form sections
+#
+# The forms group their fields into collapsible sections, but that grouping is
+# presentation only: entries keep storing one flat mapping. Submitted section
+# sub-dicts are flattened straight back by _flatten_sections, and stored values
+# are re-nested by _nest_sections so add_suggested_values_to_schema (which
+# recurses into sections) can prefill the forms. Section keys must therefore
+# never collide with a CONF_* key.
+#
+# Every section is vol.Required with a dict default: the frontend always
+# submits sections (collapsed or not), and the default lets programmatic
+# submissions omit one — voluptuous then validates the empty dict against the
+# section schema, which fills in the per-field defaults.
+# ---------------------------------------------------------------------------
+
+SECTION_BEHAVIOR = "behavior"
+SECTION_WARNING = "warning"
+SECTION_SENSORS = "sensors"
+SECTION_ADVANCED = "advanced"
+
+# Which flat config keys live in which section of the virtual-light form.
+_LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
+    SECTION_BEHAVIOR: (
+        CONF_FALSE_OFF_DELAY,
+        CONF_AUTO_ON_BRIGHTNESS,
+        CONF_AUTO_ON_TRANSITION,
+        CONF_AUTO_OFF_TRANSITION,
+    ),
+    SECTION_WARNING: (
+        CONF_EFFECT_TIMEOUT,
+        CONF_EFFECT_BRIGHTNESS,
+        CONF_EFFECT_TRANSITION,
+        CONF_WARN_TIMEOUT,
+        CONF_WARN_BRIGHTNESS,
+        CONF_WARN_TRANSITION,
+    ),
+    SECTION_SENSORS: (
+        CONF_OCCUPANCY_ENTITY,
+        CONF_MAINTAIN_OCCUPANCY_ENTITY,
+        CONF_ILLUMINANCE_ENTITY,
+        CONF_ILLUMINANCE_MODE,
+        CONF_SCHEDULE_ENTITY,
+        CONF_SCHEDULE_MODE,
+        CONF_DOOR_ENTITY,
+        CONF_DOOR_MODE,
+        CONF_HOLD_ENTITIES,
+    ),
+    SECTION_ADVANCED: (CONF_ENTITY_ID,),
+}
+
+_OCCUPANCY_SECTIONS: dict[str, tuple[str, ...]] = {
+    SECTION_ADVANCED: (
+        CONF_FALSE_DETECTION_GRACE,
+        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+        CONF_ENTITY_ID,
+    ),
+}
+
+# Combined occupancy, illuminance and schedule only tuck the optional
+# entity_id away; their remaining fields stay top-level.
+_ENTITY_ID_SECTIONS: dict[str, tuple[str, ...]] = {
+    SECTION_ADVANCED: (CONF_ENTITY_ID,),
+}
+
+
+def _flatten_sections(
+    user_input: dict[str, Any], layout: dict[str, tuple[str, ...]]
+) -> dict[str, Any]:
+    """Collapse a form's section sub-dicts back into a flat mapping."""
+    flat = dict(user_input)
+    for key in layout:
+        flat.update(flat.pop(key, None) or {})
+    return flat
+
+
+def _nest_sections(
+    values: dict[str, Any], layout: dict[str, tuple[str, ...]]
+) -> dict[str, Any]:
+    """Group flat stored values into section sub-dicts for form prefills."""
+    nested = dict(values)
+    for section_key, fields in layout.items():
+        inner = {f: nested.pop(f) for f in fields if f in nested}
+        if inner:
+            nested[section_key] = inner
+    return nested
+
+
+def _entity_id_section() -> dict:
+    """Collapsed Advanced section holding only the optional entity_id."""
+    return {
+        vol.Required(SECTION_ADVANCED, default=dict): section(
+            vol.Schema({vol.Optional(CONF_ENTITY_ID): selector.TextSelector()}),
+            {"collapsed": True},
+        )
+    }
+
 
 def _window_from_input(user_input: dict[str, Any]) -> dict | None:
-    """Build a schedule window dict from the flat form fields, or None."""
+    """Build a schedule window dict from the start/end sections, or None.
 
-    def _edge(prefix: str) -> dict | None:
+    The section keys match the stored window shape, so a submitted edge dict
+    maps straight onto a window edge (minus the "none" sun placeholder and
+    zero offset).
+    """
+
+    def _edge(data: dict[str, Any]) -> dict | None:
         edge: dict = {}
-        if user_input.get(f"{prefix}_time"):
-            edge[EDGE_TIME] = user_input[f"{prefix}_time"]
-        sun = user_input.get(f"{prefix}_sun")
+        if data.get(EDGE_TIME):
+            edge[EDGE_TIME] = data[EDGE_TIME]
+        sun = data.get(EDGE_SUN)
         if sun and sun != "none":
             edge[EDGE_SUN] = sun
-            offset = int(user_input.get(f"{prefix}_offset") or 0)
+            offset = int(data.get(EDGE_OFFSET) or 0)
             if offset:
                 edge[EDGE_OFFSET] = offset
-            edge[EDGE_COMBINE] = user_input.get(f"{prefix}_combine", COMBINE_LATEST)
+            edge[EDGE_COMBINE] = data.get(EDGE_COMBINE, COMBINE_LATEST)
         return edge or None
 
-    start, end = _edge("start"), _edge("end")
+    start = _edge(user_input.get("start") or {})
+    end = _edge(user_input.get("end") or {})
     if start and end:
         return {"start": start, "end": end}
     return None
@@ -145,60 +249,65 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
 def _window_input_provided(user_input: dict[str, Any]) -> bool:
     """True when the user filled in any window edge field at all."""
     return any(
-        user_input.get(f"{prefix}_time")
-        or user_input.get(f"{prefix}_sun") not in (None, "none")
-        for prefix in ("start", "end")
+        (user_input.get(key) or {}).get(EDGE_TIME)
+        or (user_input.get(key) or {}).get(EDGE_SUN) not in (None, "none")
+        for key in ("start", "end")
     )
 
 
-def _schedule_edge_fields(window: dict | None) -> dict:
-    """Form fields for a schedule window, prefilled from an existing window."""
+def _window_suggested(window: dict | None) -> dict:
+    """Suggested start/end section values from a stored window.
 
-    def _edge_defaults(edge) -> dict:
+    Legacy plain-string edges ("HH:MM") are upgraded to time-only edge dicts.
+    """
+
+    def _edge(edge) -> dict:
         if isinstance(edge, str):
             return {EDGE_TIME: edge}
         return edge if isinstance(edge, dict) else {}
 
     window = window or {}
-    fields: dict = {}
-    for prefix in ("start", "end"):
-        edge = _edge_defaults(window.get(prefix))
-        # suggested_value (not default) so a previously set time can be
-        # cleared to make the edge sun-only.
-        time_key = (
-            vol.Optional(
-                f"{prefix}_time",
-                description={"suggested_value": edge[EDGE_TIME]},
-            )
-            if edge.get(EDGE_TIME)
-            else vol.Optional(f"{prefix}_time")
+    return {"start": _edge(window.get("start")), "end": _edge(window.get("end"))}
+
+
+def _schedule_edge_fields() -> dict:
+    """Start/end sections for the schedule window (expanded — both required)."""
+
+    def _edge_section() -> section:
+        return section(
+            vol.Schema(
+                {
+                    vol.Optional(EDGE_TIME): selector.TimeSelector(),
+                    vol.Optional(EDGE_SUN, default="none"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=_SUN_OPTIONS, translation_key="sun_event"
+                        )
+                    ),
+                    vol.Optional(EDGE_OFFSET, default=0): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-720,
+                            max=720,
+                            step=1,
+                            unit_of_measurement="min",
+                            mode="box",
+                        )
+                    ),
+                    vol.Optional(
+                        EDGE_COMBINE, default=COMBINE_LATEST
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=_COMBINE_OPTIONS, translation_key="combine_mode"
+                        )
+                    ),
+                }
+            ),
+            {"collapsed": False},
         )
-        fields[time_key] = selector.TimeSelector()
-        fields[vol.Optional(f"{prefix}_sun", default=edge.get(EDGE_SUN, "none"))] = (
-            selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=_SUN_OPTIONS, translation_key="sun_event"
-                )
-            )
-        )
-        fields[vol.Optional(f"{prefix}_offset", default=edge.get(EDGE_OFFSET, 0))] = (
-            selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=-720, max=720, step=1, unit_of_measurement="min", mode="box"
-                )
-            )
-        )
-        fields[
-            vol.Optional(
-                f"{prefix}_combine",
-                default=edge.get(EDGE_COMBINE, COMBINE_LATEST),
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=_COMBINE_OPTIONS, translation_key="combine_mode"
-            )
-        )
-    return fields
+
+    return {
+        vol.Required("start", default=dict): _edge_section(),
+        vol.Required("end", default=dict): _edge_section(),
+    }
 
 
 # Pickers for a virtual light's optional entity references. The occupancy,
@@ -353,9 +462,10 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     """Check each stage fade fits inside its stage: transition <= timeout.
 
     A disabled stage has timeout 0, so setting a fade for it fails the same
-    rule rather than being silently ignored.
+    rule rather than being silently ignored. The offending fields live inside
+    a collapsed section, where the frontend can't anchor a field error, so the
+    first violation is reported as a base error.
     """
-    errors: dict[str, str] = {}
     for transition_key, timeout_key, error in (
         (CONF_EFFECT_TRANSITION, CONF_EFFECT_TIMEOUT, "effect_transition_too_long"),
         (CONF_WARN_TRANSITION, CONF_WARN_TIMEOUT, "warn_transition_too_long"),
@@ -364,8 +474,8 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
         if transition is not None and float(transition) > float(
             user_input.get(timeout_key, 0)
         ):
-            errors[transition_key] = error
-    return errors
+            return {"base": error}
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -378,13 +488,9 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _occupancy_option_fields() -> dict:
-    return {
-        vol.Required(CONF_OCCUPANCY_TIMEOUT, default=120): selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=1, max=3600, unit_of_measurement="s", mode="box"
-            )
-        ),
+def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
+    """Occupancy settings: the timeout up front, expert knobs under Advanced."""
+    advanced: dict = {
         vol.Required(CONF_FALSE_DETECTION_GRACE, default=3): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0, max=60, unit_of_measurement="s", mode="box"
@@ -397,6 +503,18 @@ def _occupancy_option_fields() -> dict:
             selector.NumberSelectorConfig(
                 min=0, max=3600, unit_of_measurement="s", mode="box"
             )
+        ),
+    }
+    if with_entity_id:
+        advanced[vol.Optional(CONF_ENTITY_ID)] = selector.TextSelector()
+    return {
+        vol.Required(CONF_OCCUPANCY_TIMEOUT, default=120): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1, max=3600, unit_of_measurement="s", mode="box"
+            )
+        ),
+        vol.Required(SECTION_ADVANCED, default=dict): section(
+            vol.Schema(advanced), {"collapsed": True}
         ),
     }
 
@@ -416,53 +534,107 @@ def _illuminance_option_fields() -> dict:
     }
 
 
-def _light_option_fields() -> dict:
-    return {
+def _light_option_fields(*, with_entity_id: bool = False) -> dict:
+    """Sectioned settings of a virtual light.
+
+    Only the turn-off timeout stays top-level; everything else is grouped:
+    turn-on/off behavior and the off-warning stages collapsed (defaults are
+    fine to start with), the sensor wiring expanded since it is the point of
+    a virtual light. Each mode dropdown sits next to its entity picker.
+    """
+    fields: dict = {
         vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=1, max=14400, unit_of_measurement="s", mode="box"
             )
         ),
-        vol.Required(CONF_FALSE_OFF_DELAY, default=5): selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0, max=300, unit_of_measurement="s", mode="box"
-            )
+        vol.Required(SECTION_SENSORS, default=dict): section(
+            vol.Schema(
+                {
+                    vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
+                    ),
+                    vol.Optional(
+                        CONF_MAINTAIN_OCCUPANCY_ENTITY
+                    ): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_MAINTAIN_OCCUPANCY_ENTITY]
+                    ),
+                    vol.Optional(CONF_ILLUMINANCE_ENTITY): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
+                    ),
+                    vol.Required(
+                        CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=ILLUMINANCE_MODES,
+                            translation_key=CONF_ILLUMINANCE_MODE,
+                        )
+                    ),
+                    vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                    ),
+                    vol.Required(
+                        CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
+                        )
+                    ),
+                    vol.Optional(CONF_DOOR_ENTITY): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_DOOR_ENTITY]
+                    ),
+                    vol.Required(
+                        CONF_DOOR_MODE, default=DOOR_MODE_OPEN
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=DOOR_MODES, translation_key=CONF_DOOR_MODE
+                        )
+                    ),
+                    vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
+                        _LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES]
+                    ),
+                }
+            ),
+            {"collapsed": False},
         ),
-        vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
-        vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
-        vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
-        vol.Required(CONF_EFFECT_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
-        vol.Required(CONF_EFFECT_BRIGHTNESS, default=0): _EFFECT_BRIGHTNESS_SELECTOR,
-        vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
-        vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
-        vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
-        vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
-        **{
-            vol.Optional(key): selector.EntitySelector(sel_config)
-            for key, sel_config in _LIGHT_REF_SELECTORS.items()
-        },
-        vol.Required(
-            CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
-        ): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=ILLUMINANCE_MODES, translation_key=CONF_ILLUMINANCE_MODE
-            )
+        vol.Required(SECTION_BEHAVIOR, default=dict): section(
+            vol.Schema(
+                {
+                    vol.Required(CONF_FALSE_OFF_DELAY, default=5): (
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0, max=300, unit_of_measurement="s", mode="box"
+                            )
+                        )
+                    ),
+                    vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
+                    vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
+                }
+            ),
+            {"collapsed": True},
         ),
-        vol.Required(
-            CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
-        ): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
-            )
-        ),
-        vol.Required(
-            CONF_DOOR_MODE, default=DOOR_MODE_OPEN
-        ): selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=DOOR_MODES, translation_key=CONF_DOOR_MODE
-            )
+        vol.Required(SECTION_WARNING, default=dict): section(
+            vol.Schema(
+                {
+                    vol.Required(CONF_EFFECT_TIMEOUT, default=0): (
+                        _STAGE_TIMEOUT_SELECTOR
+                    ),
+                    vol.Required(CONF_EFFECT_BRIGHTNESS, default=0): (
+                        _EFFECT_BRIGHTNESS_SELECTOR
+                    ),
+                    vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
+                    vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
+                    vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
+                }
+            ),
+            {"collapsed": True},
         ),
     }
+    if with_entity_id:
+        fields.update(_entity_id_section())
+    return fields
 
 
 # ---------------------------------------------------------------------------
@@ -641,8 +813,10 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         Returns (object_id, errors, needs_confirm, candidate):
           object_id     — slug to store in CONF_ENTITY_ID, or None to derive it
-          errors        — {CONF_ENTITY_ID: "entity_id_conflict"} on an explicit
-                          clash; the caller re-shows the form
+          errors        — {"base": "entity_id_conflict"} on an explicit clash
+                          (base, not field: the entity_id field sits inside a
+                          collapsed section where a field error can't anchor);
+                          the caller re-shows the form
           needs_confirm — True when blank and the name-derived id already
                           exists (divert to the confirm step)
           candidate     — the would-be entity_id, for the confirm message
@@ -653,7 +827,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             obj = slugify(explicit.split(".")[-1])
             candidate = entity_id_format.format(obj)
             if obj and self._entity_id_taken(candidate):
-                return None, {CONF_ENTITY_ID: "entity_id_conflict"}, False, candidate
+                return None, {"base": "entity_id_conflict"}, False, candidate
             return (obj or None), {}, False, candidate
         candidate = entity_id_format.format(slugify(name))
         if self._entity_id_taken(candidate):
@@ -666,16 +840,19 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         entity_type: str,
         name: str,
         data: dict[str, Any],
-        user_input: dict[str, Any],
+        prefill: dict[str, Any],
         entity_id_format: str,
     ) -> tuple[config_entries.FlowResult | None, dict[str, str]]:
         """Finalize a manual create: create the entry, or divert to confirm.
 
+        `data` is the flat entry payload (sections already flattened);
+        `prefill` is the raw, still-nested form input, stashed so the
+        "go back and change" path can re-show the form as submitted.
         Returns (result, errors). When errors is non-empty the caller re-shows
         its form; otherwise result is the FlowResult to return.
         """
         obj, errors, needs_confirm, candidate = self._resolve_entity_id(
-            name, user_input, entity_id_format
+            name, data, entity_id_format
         )
         if errors:
             return None, errors
@@ -687,7 +864,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "entity_type": entity_type,
                 "name": name,
                 "data": data,
-                "user_input": user_input,
+                "user_input": prefill,
                 "candidate": candidate,
             }
             return await self.async_step_confirm_entity_id(), {}
@@ -896,7 +1073,9 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered occupancy sensor."""
         if user_input is not None:
-            return self._finish_discovery(_occupancy_payload, user_input)
+            return self._finish_discovery(
+                _occupancy_payload, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+            )
         return self.async_show_form(
             step_id="discover_occupancy_defaults",
             data_schema=vol.Schema(_occupancy_option_fields()),
@@ -947,10 +1126,11 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _validate_light_timeout(self.hass, user_input)
-            errors.update(_validate_stage_transitions(user_input))
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            errors = _validate_light_timeout(self.hass, flat)
+            errors.update(_validate_stage_transitions(flat))
             if not errors:
-                return self._finish_discovery(_light_payload, user_input)
+                return self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
             step_id="discover_light_defaults",
             data_schema=vol.Schema(_light_option_fields()),
@@ -1192,11 +1372,12 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
             result, errors = await self._resolve_and_create(
                 entity_type=ENTITY_TYPE_OCCUPANCY,
-                name=user_input[CONF_NAME],
-                data={CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY, **user_input},
-                user_input=user_input,
+                name=flat[CONF_NAME],
+                data={CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY, **flat},
+                prefill=user_input,
                 entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
             )
             if result is not None:
@@ -1210,8 +1391,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         domain="binary_sensor", multiple=False
                     )
                 ),
-                **_occupancy_option_fields(),
-                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+                **_occupancy_option_fields(with_entity_id=True),
             }
         )
         return self.async_show_form(
@@ -1233,17 +1413,18 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            if not user_input.get(CONF_TRIGGER_SENSORS):
+            flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            if not flat.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
             else:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_COMBINED_OCCUPANCY,
-                    name=user_input[CONF_NAME],
+                    name=flat[CONF_NAME],
                     data={
                         CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
-                        **user_input,
+                        **flat,
                     },
-                    user_input=user_input,
+                    prefill=user_input,
                     entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
                 )
                 if result is not None:
@@ -1266,7 +1447,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
-                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+                **_entity_id_section(),
             }
         )
         return self.async_show_form(
@@ -1288,11 +1469,12 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
             result, errors = await self._resolve_and_create(
                 entity_type=ENTITY_TYPE_ILLUMINANCE,
-                name=user_input[CONF_NAME],
-                data={CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, **user_input},
-                user_input=user_input,
+                name=flat[CONF_NAME],
+                data={CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, **flat},
+                prefill=user_input,
                 entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
             )
             if result is not None:
@@ -1307,7 +1489,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 ),
                 **_illuminance_option_fields(),
-                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+                **_entity_id_section(),
             }
         )
         return self.async_show_form(
@@ -1346,15 +1528,19 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     else "window_required"
                 )
             else:
+                data = {
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_TIME_WINDOWS: [window],
+                }
+                entity_id = (user_input.get(SECTION_ADVANCED) or {}).get(CONF_ENTITY_ID)
+                if entity_id:
+                    data[CONF_ENTITY_ID] = entity_id
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_SCHEDULE,
                     name=user_input[CONF_NAME],
-                    data={
-                        CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
-                        CONF_NAME: user_input[CONF_NAME],
-                        CONF_TIME_WINDOWS: [window],
-                    },
-                    user_input=user_input,
+                    data=data,
+                    prefill=user_input,
                     entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
                 )
                 if result is not None:
@@ -1363,8 +1549,8 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
-                **_schedule_edge_fields(None),
-                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+                **_schedule_edge_fields(),
+                **_entity_id_section(),
             }
         )
         return self.async_show_form(
@@ -1390,17 +1576,18 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            if not user_input.get(CONF_LIGHTS):
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                errors = _validate_light_timeout(self.hass, user_input)
-            errors.update(_validate_stage_transitions(user_input))
+                errors = _validate_light_timeout(self.hass, flat)
+            errors.update(_validate_stage_transitions(flat))
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
-                    name=user_input[CONF_NAME],
-                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **user_input},
-                    user_input=user_input,
+                    name=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
+                    prefill=user_input,
                     entity_id_format=LIGHT_ENTITY_ID_FORMAT,
                 )
                 if result is not None:
@@ -1412,8 +1599,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                **_light_option_fields(),
-                vol.Optional(CONF_ENTITY_ID): selector.TextSelector(),
+                **_light_option_fields(with_entity_id=True),
             }
         )
         return self.async_show_form(
@@ -1469,58 +1655,33 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
             # Raising this sensor's timeout must not outgrow any virtual light
             # that depends on it (directly or through a combined sensor).
             min_light = _min_dependent_light_timeout(self.hass, self._entry.entry_id)
-            if (
-                min_light is not None
-                and int(user_input[CONF_OCCUPANCY_TIMEOUT]) > min_light
-            ):
+            if min_light is not None and int(flat[CONF_OCCUPANCY_TIMEOUT]) > min_light:
                 errors[CONF_OCCUPANCY_TIMEOUT] = "occupancy_timeout_too_long"
             else:
-                return self._finish(user_input)
+                return self._finish(flat)
 
         cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_OCCUPANCY_SENSOR, default=cfg.get(CONF_OCCUPANCY_SENSOR)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor", multiple=False
+                    )
+                ),
+                **_occupancy_option_fields(),
+            }
+        )
         return self.async_show_form(
             step_id="occupancy",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-                    vol.Required(
-                        CONF_OCCUPANCY_SENSOR, default=cfg.get(CONF_OCCUPANCY_SENSOR)
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="binary_sensor", multiple=False
-                        )
-                    ),
-                    vol.Required(
-                        CONF_OCCUPANCY_TIMEOUT,
-                        default=cfg.get(CONF_OCCUPANCY_TIMEOUT, 120),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_FALSE_DETECTION_GRACE,
-                        default=cfg.get(CONF_FALSE_DETECTION_GRACE, 0),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=60, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                    vol.Required(
-                        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                        default=cfg.get(
-                            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                            DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                        ),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0, max=3600, unit_of_measurement="s", mode="box"
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, _nest_sections(cfg, _OCCUPANCY_SECTIONS)
             ),
             errors=errors,
         )
@@ -1598,45 +1759,23 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             return self._finish(user_input)
 
         cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_ILLUMINANCE_SENSOR,
+                    default=cfg.get(CONF_ILLUMINANCE_SENSOR),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        device_class="illuminance", multiple=False
+                    )
+                ),
+                **_illuminance_option_fields(),
+            }
+        )
         return self.async_show_form(
             step_id="illuminance",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-                    vol.Required(
-                        CONF_ILLUMINANCE_SENSOR,
-                        default=cfg.get(CONF_ILLUMINANCE_SENSOR),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            device_class="illuminance", multiple=False
-                        )
-                    ),
-                    vol.Required(
-                        CONF_ILLUMINANCE_THRESHOLD,
-                        default=cfg.get(CONF_ILLUMINANCE_THRESHOLD, 10.0),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0,
-                            max=100000,
-                            step=0.1,
-                            unit_of_measurement="lx",
-                            mode="box",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_ILLUMINANCE_HYSTERESIS,
-                        default=cfg.get(CONF_ILLUMINANCE_HYSTERESIS, 0.0),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0,
-                            max=10000,
-                            step=0.1,
-                            unit_of_measurement="lx",
-                            mode="box",
-                        )
-                    ),
-                }
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, cfg),
         )
 
     # ------------------------------------------------------------------
@@ -1666,13 +1805,16 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
 
         cfg = self._cfg
         first = (cfg.get(CONF_TIME_WINDOWS) or [None])[0]
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                **_schedule_edge_fields(),
+            }
+        )
         return self.async_show_form(
             step_id="schedule",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-                    **_schedule_edge_fields(first),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                schema, _window_suggested(first)
             ),
             errors=errors,
         )
@@ -1687,117 +1829,37 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            if not user_input.get(CONF_LIGHTS):
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
-                errors = _validate_light_timeout(self.hass, user_input)
-            errors.update(_validate_stage_transitions(user_input))
+                errors = _validate_light_timeout(self.hass, flat)
+            errors.update(_validate_stage_transitions(flat))
             if not errors:
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.
-                clean = {k: v for k, v in user_input.items() if v is not None}
+                clean = {k: v for k, v in flat.items() if v is not None}
                 return self._finish(clean)
 
         cfg = self._cfg
-        schema: dict = {
-            vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
-            vol.Required(
-                CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="light", multiple=True)
-            ),
-            vol.Required(
-                CONF_LIGHT_TIMEOUT,
-                default=cfg.get(CONF_LIGHT_TIMEOUT, 300),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=1, max=14400, unit_of_measurement="s", mode="box"
-                )
-            ),
-            vol.Required(
-                CONF_FALSE_OFF_DELAY,
-                default=cfg.get(CONF_FALSE_OFF_DELAY, 5),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0, max=300, unit_of_measurement="s", mode="box"
-                )
-            ),
-        }
-        # Optional numeric fields: suggested_value (not default) so they can
+        # Current values are applied as suggested values (not defaults) so the
+        # optional fields — sensor references, brightness/fade overrides — can
         # be cleared back to "not set" once given a value.
-        def _clearable(key: str) -> vol.Optional:
-            current = cfg.get(key)
-            return (
-                vol.Optional(key, description={"suggested_value": current})
-                if current is not None
-                else vol.Optional(key)
-            )
-
-        schema[_clearable(CONF_AUTO_ON_BRIGHTNESS)] = _AUTO_ON_BRIGHTNESS_SELECTOR
-        schema[_clearable(CONF_AUTO_ON_TRANSITION)] = _TRANSITION_SELECTOR
-        schema[_clearable(CONF_AUTO_OFF_TRANSITION)] = _TRANSITION_SELECTOR
-        # Effect/warn warning stages. Timeouts and the effect brightness always
-        # have a value (0 = disabled / blink off), so they use plain defaults;
-        # warn_brightness and the stage transitions are optional and so stay
-        # clearable.
-        schema[
-            vol.Required(CONF_EFFECT_TIMEOUT, default=cfg.get(CONF_EFFECT_TIMEOUT, 0))
-        ] = _STAGE_TIMEOUT_SELECTOR
-        schema[
-            vol.Required(
-                CONF_EFFECT_BRIGHTNESS, default=cfg.get(CONF_EFFECT_BRIGHTNESS, 0)
-            )
-        ] = _EFFECT_BRIGHTNESS_SELECTOR
-        schema[_clearable(CONF_EFFECT_TRANSITION)] = _TRANSITION_SELECTOR
-        schema[
-            vol.Required(CONF_WARN_TIMEOUT, default=cfg.get(CONF_WARN_TIMEOUT, 0))
-        ] = _STAGE_TIMEOUT_SELECTOR
-        schema[_clearable(CONF_WARN_BRIGHTNESS)] = _AUTO_ON_BRIGHTNESS_SELECTOR
-        schema[_clearable(CONF_WARN_TRANSITION)] = _TRANSITION_SELECTOR
-        # Pre-fill via suggested_value (not default): a default can never be
-        # cleared in the UI, which would make sensor references permanent.
-        for key, sel_config in _LIGHT_REF_SELECTORS.items():
-            current = cfg.get(key)
-            marker = (
-                vol.Optional(key, description={"suggested_value": current})
-                if current
-                else vol.Optional(key)
-            )
-            schema[marker] = selector.EntitySelector(sel_config)
-
-        schema[
-            vol.Required(
-                CONF_ILLUMINANCE_MODE,
-                default=cfg.get(CONF_ILLUMINANCE_MODE, ILLUMINANCE_MODE_CONTROL),
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=ILLUMINANCE_MODES, translation_key=CONF_ILLUMINANCE_MODE
-            )
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                ),
+                **_light_option_fields(),
+            }
         )
-        schema[
-            vol.Required(
-                CONF_SCHEDULE_MODE,
-                default=cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW),
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
-            )
-        )
-        schema[
-            vol.Required(
-                CONF_DOOR_MODE,
-                default=cfg.get(CONF_DOOR_MODE, DOOR_MODE_OPEN),
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=DOOR_MODES, translation_key=CONF_DOOR_MODE
-            )
-        )
-
         return self.async_show_form(
             step_id="light",
-            data_schema=vol.Schema(schema),
+            data_schema=self.add_suggested_values_to_schema(
+                schema, _nest_sections(cfg, _LIGHT_SECTIONS)
+            ),
             errors=errors,
         )

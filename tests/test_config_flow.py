@@ -9,6 +9,12 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.molight.config_flow import (
+    SECTION_ADVANCED,
+    SECTION_BEHAVIOR,
+    SECTION_SENSORS,
+    SECTION_WARNING,
+)
 from custom_components.molight.const import (
     AFFIX_TARGET_ENTITY_ID,
     AFFIX_TARGET_NAME,
@@ -135,14 +141,18 @@ async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
         result["flow_id"],
         {
             CONF_NAME: "Night",
-            "start_time": "21:00:00",
-            "start_sun": "sunset",
-            "start_offset": -15,
-            "start_combine": "latest",
-            "end_time": "07:00:00",
-            "end_sun": "sunrise",
-            "end_offset": 10,
-            "end_combine": "earliest",
+            "start": {
+                "time": "21:00:00",
+                "sun": "sunset",
+                "offset": -15,
+                "combine": "latest",
+            },
+            "end": {
+                "time": "07:00:00",
+                "sun": "sunrise",
+                "offset": 10,
+                "combine": "earliest",
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -177,7 +187,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     # Start edge only — no end.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Night", "start_time": "21:00:00"},
+        {CONF_NAME: "Night", "start": {"time": "21:00:00"}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_incomplete"}
@@ -185,7 +195,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     # Sun-only edges (no fixed times) are a complete window.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Night", "start_sun": "sunset", "end_sun": "sunrise"},
+        {CONF_NAME: "Night", "start": {"sun": "sunset"}, "end": {"sun": "sunrise"}},
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TIME_WINDOWS] == [
@@ -212,7 +222,7 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
             CONF_NAME: "Living Room",
             CONF_LIGHTS: ["light.living_room_1", "light.living_room_2"],
             CONF_LIGHT_TIMEOUT: 300,
-            CONF_HOLD_ENTITIES: ["input_boolean.guest_mode"],
+            SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["input_boolean.guest_mode"]},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -237,10 +247,12 @@ async def test_light_flow_stores_effect_warn_options(hass: HomeAssistant) -> Non
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
-            CONF_EFFECT_TIMEOUT: 10,
-            CONF_EFFECT_BRIGHTNESS: 0,
-            CONF_WARN_TIMEOUT: 20,
-            CONF_WARN_BRIGHTNESS: 50,
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_BRIGHTNESS: 0,
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_BRIGHTNESS: 50,
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -277,8 +289,10 @@ async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> N
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            CONF_WARN_TIMEOUT: 20,
-            # warn_brightness intentionally omitted — the user cleared it.
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                # warn_brightness intentionally omitted — the user cleared it.
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -302,12 +316,16 @@ async def test_light_flow_stores_transitions(hass: HomeAssistant) -> None:
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
-            CONF_AUTO_ON_TRANSITION: 2,
-            CONF_AUTO_OFF_TRANSITION: 3.5,
-            CONF_EFFECT_TIMEOUT: 10,
-            CONF_EFFECT_TRANSITION: 1,
-            CONF_WARN_TIMEOUT: 20,
-            CONF_WARN_TRANSITION: 20,  # equal to the timeout is allowed
+            SECTION_BEHAVIOR: {
+                CONF_AUTO_ON_TRANSITION: 2,
+                CONF_AUTO_OFF_TRANSITION: 3.5,
+            },
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_TRANSITION: 1,
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_TRANSITION: 20,  # equal to the timeout is allowed
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -335,17 +353,19 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
-            CONF_EFFECT_TIMEOUT: 10,
-            CONF_EFFECT_TRANSITION: 11,
-            CONF_WARN_TIMEOUT: 0,  # warn disabled, so any warn fade is invalid
-            CONF_WARN_TRANSITION: 5,
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_TRANSITION: 11,
+                # warn disabled, so any warn fade is invalid too
+                CONF_WARN_TIMEOUT: 0,
+                CONF_WARN_TRANSITION: 5,
+            },
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {
-        CONF_EFFECT_TRANSITION: "effect_transition_too_long",
-        CONF_WARN_TRANSITION: "warn_transition_too_long",
-    }
+    # The fields sit inside a collapsed section, so the first violation is
+    # reported as a base error.
+    assert result["errors"] == {"base": "effect_transition_too_long"}
 
     # Fixing both fields lets the entry be created.
     result = await hass.config_entries.flow.async_configure(
@@ -354,9 +374,11 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
-            CONF_EFFECT_TIMEOUT: 10,
-            CONF_EFFECT_TRANSITION: 10,
-            CONF_WARN_TIMEOUT: 0,
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_TRANSITION: 10,
+                CONF_WARN_TIMEOUT: 0,
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -391,12 +413,14 @@ async def test_light_options_validate_and_clear_transitions(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            CONF_WARN_TIMEOUT: 20,
-            CONF_WARN_TRANSITION: 21,  # > warn_timeout
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_TRANSITION: 21,  # > warn_timeout
+            },
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_WARN_TRANSITION: "warn_transition_too_long"}
+    assert result["errors"] == {"base": "warn_transition_too_long"}
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -404,8 +428,8 @@ async def test_light_options_validate_and_clear_transitions(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            CONF_WARN_TIMEOUT: 20,
-            CONF_AUTO_OFF_TRANSITION: 4,
+            SECTION_WARNING: {CONF_WARN_TIMEOUT: 20},
+            SECTION_BEHAVIOR: {CONF_AUTO_OFF_TRANSITION: 4},
             # warn/auto-on transitions intentionally omitted — cleared.
         },
     )
@@ -440,7 +464,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 20,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -453,7 +477,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -545,7 +569,9 @@ async def test_light_flow_validates_combined_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 40,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy",
+            SECTION_SENSORS: {
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy"
+            },
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -557,7 +583,9 @@ async def test_light_flow_validates_combined_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 45,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy",
+            SECTION_SENSORS: {
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy"
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -610,7 +638,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 20,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a",
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a"},
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -622,7 +650,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a",
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a"},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -683,10 +711,8 @@ async def test_schedule_options_round_trip(
         result["flow_id"],
         {
             CONF_NAME: "Test Schedule",
-            "start_time": "20:00:00",
-            "start_sun": "sunset",
-            "start_combine": "latest",
-            "end_time": "06:00:00",
+            "start": {"time": "20:00:00", "sun": "sunset", "combine": "latest"},
+            "end": {"time": "06:00:00"},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -998,7 +1024,7 @@ async def test_discover_light_defaults_validate_stage_transition(
     # before any entity is created.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_TRANSITION: 5},
+        {SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_TRANSITION: 5}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_light_defaults"
@@ -1075,7 +1101,7 @@ async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
             CONF_NAME: "Hall Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
-            CONF_ENTITY_ID: "hall_presence",
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "hall_presence"},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1103,11 +1129,12 @@ async def test_manual_explicit_entity_id_conflict_errors(
             CONF_NAME: "Hall Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
-            CONF_ENTITY_ID: "taken",
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "taken"},
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_ENTITY_ID: "entity_id_conflict"}
+    # Base error: the entity_id field sits inside a collapsed section.
+    assert result["errors"] == {"base": "entity_id_conflict"}
 
 
 @pytest.mark.asyncio
@@ -1183,7 +1210,7 @@ async def test_manual_blank_entity_id_conflict_confirm_change(
             CONF_NAME: "Hall",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
-            CONF_ENTITY_ID: "hall_presence",
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "hall_presence"},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1588,8 +1615,10 @@ async def test_occupancy_options_validate_through_nested_combined(
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 90,  # > the light's 60s timeout
-            CONF_FALSE_DETECTION_GRACE: 0,
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+            SECTION_ADVANCED: {
+                CONF_FALSE_DETECTION_GRACE: 0,
+                CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+            },
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -1601,8 +1630,10 @@ async def test_occupancy_options_validate_through_nested_combined(
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
-            CONF_FALSE_DETECTION_GRACE: 0,
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+            SECTION_ADVANCED: {
+                CONF_FALSE_DETECTION_GRACE: 0,
+                CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+            },
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1674,7 +1705,7 @@ async def test_schedule_options_reject_incomplete_window(
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Test Schedule", "start_time": "20:00:00"},
+        {CONF_NAME: "Test Schedule", "start": {"time": "20:00:00"}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_incomplete"}
@@ -1748,14 +1779,15 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
         )
+        sensors = {CONF_OCCUPANCY_ENTITY: occupancy_ref}
+        if maintain_ref:
+            sensors[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain_ref
         user_input = {
             CONF_NAME: f"Loose Light {occupancy_ref}",
             CONF_LIGHTS: ["light.some_real"],
             CONF_LIGHT_TIMEOUT: 1,
-            CONF_OCCUPANCY_ENTITY: occupancy_ref,
+            SECTION_SENSORS: sensors,
         }
-        if maintain_ref:
-            user_input[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain_ref
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], user_input
         )
@@ -1857,7 +1889,11 @@ async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None
     # Completing the window creates the entry as usual.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Empty Schedule", "start_time": "21:00:00", "end_time": "23:00:00"},
+        {
+            CONF_NAME: "Empty Schedule",
+            "start": {"time": "21:00:00"},
+            "end": {"time": "23:00:00"},
+        },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TIME_WINDOWS] == [
@@ -1899,7 +1935,11 @@ async def test_schedule_options_require_window(
         pytest.param(
             ENTITY_TYPE_SCHEDULE,
             "binary_sensor.taken",
-            {CONF_NAME: "X", "start_time": "21:00:00", "end_time": "23:00:00"},
+            {
+                CONF_NAME: "X",
+                "start": {"time": "21:00:00"},
+                "end": {"time": "23:00:00"},
+            },
             id="schedule",
         ),
         pytest.param(
@@ -1921,10 +1961,11 @@ async def test_explicit_entity_id_conflict_all_create_steps(
         result["flow_id"], {CONF_ENTITY_TYPE: entity_type}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {**user_input, CONF_ENTITY_ID: "taken"}
+        result["flow_id"],
+        {**user_input, SECTION_ADVANCED: {CONF_ENTITY_ID: "taken"}},
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_ENTITY_ID: "entity_id_conflict"}
+    assert result["errors"] == {"base": "entity_id_conflict"}
 
 
 @pytest.mark.asyncio
