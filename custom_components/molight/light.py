@@ -225,8 +225,15 @@ from .const import (
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_ENABLED,
+    DEFAULT_DOOR_MODE,
+    DEFAULT_EFFECT_BRIGHTNESS,
+    DEFAULT_EFFECT_TIMEOUT,
+    DEFAULT_FALSE_OFF_DELAY,
+    DEFAULT_ILLUMINANCE_MODE,
+    DEFAULT_LIGHT_TIMEOUT,
+    DEFAULT_SCHEDULE_MODE,
+    DEFAULT_WARN_TIMEOUT,
     DOMAIN,
-    DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
@@ -280,8 +287,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._entry_id = entry.entry_id
 
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
-        self._light_timeout: int = int(cfg.get(CONF_LIGHT_TIMEOUT, 300))
-        self._false_off_delay: int = int(cfg.get(CONF_FALSE_OFF_DELAY, 5))
+        self._light_timeout: int = int(
+            cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)
+        )
+        self._false_off_delay: int = int(
+            cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
+        )
         # Brightness (0-255) for automatic turn-ons, converted from the stored
         # percentage with HA's own percent→brightness scaling. None leaves
         # automatic turn-ons unqualified, as before.
@@ -298,13 +309,16 @@ class VirtualLight(LightEntity, RestoreEntity):
         # off. Timeouts of 0 disable each stage; effect_brightness is a 0-255
         # value (0 = blink fully off); warn_brightness is None to keep whatever
         # brightness the light had before the warning began.
-        self._effect_timeout: int = int(cfg.get(CONF_EFFECT_TIMEOUT, 0))
+        self._effect_timeout: int = int(
+            cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT)
+        )
         self._effect_brightness: int = round(
             percentage_to_ranged_value(
-                (1, 255), int(cfg.get(CONF_EFFECT_BRIGHTNESS, 0))
+                (1, 255),
+                int(cfg.get(CONF_EFFECT_BRIGHTNESS, DEFAULT_EFFECT_BRIGHTNESS)),
             )
         )
-        self._warn_timeout: int = int(cfg.get(CONF_WARN_TIMEOUT, 0))
+        self._warn_timeout: int = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
         warn_pct = cfg.get(CONF_WARN_BRIGHTNESS)
         self._warn_brightness: int | None = (
             round(percentage_to_ranged_value((1, 255), int(warn_pct)))
@@ -329,12 +343,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._maintain_entity: str | None = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
         self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
         self._illuminance_mode: str = cfg.get(
-            CONF_ILLUMINANCE_MODE, ILLUMINANCE_MODE_CONTROL
+            CONF_ILLUMINANCE_MODE, DEFAULT_ILLUMINANCE_MODE
         )
         self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
-        self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, SCHEDULE_MODE_FOLLOW)
+        self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
         self._door_entity: str | None = cfg.get(CONF_DOOR_ENTITY)
-        self._door_mode: str = cfg.get(CONF_DOOR_MODE, DOOR_MODE_OPEN)
+        self._door_mode: str = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
         # Last known open/closed of the door — kept ourselves so a briefly
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.

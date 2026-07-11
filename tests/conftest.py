@@ -18,6 +18,7 @@ from custom_components.molight.const import (
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
@@ -152,6 +153,10 @@ def occupancy_entry() -> MockConfigEntry:
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
+            # Classification off, like the runtime fallback the fixture's
+            # missing key used to hit; tests exercising false detections set
+            # their own grace explicitly.
+            CONF_FALSE_DETECTION_GRACE: 0,
         },
     )
 

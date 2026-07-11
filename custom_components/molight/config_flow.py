@@ -69,8 +69,19 @@ from .const import (
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    DEFAULT_DOOR_MODE,
+    DEFAULT_EFFECT_BRIGHTNESS,
+    DEFAULT_EFFECT_TIMEOUT,
+    DEFAULT_FALSE_DETECTION_GRACE,
+    DEFAULT_FALSE_OFF_DELAY,
+    DEFAULT_ILLUMINANCE_HYSTERESIS,
+    DEFAULT_ILLUMINANCE_MODE,
+    DEFAULT_ILLUMINANCE_THRESHOLD,
+    DEFAULT_LIGHT_TIMEOUT,
+    DEFAULT_OCCUPANCY_TIMEOUT,
+    DEFAULT_SCHEDULE_MODE,
+    DEFAULT_WARN_TIMEOUT,
     DOMAIN,
-    DOOR_MODE_OPEN,
     DOOR_MODES,
     EDGE_COMBINE,
     EDGE_OFFSET,
@@ -81,9 +92,7 @@ from .const import (
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
-    ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODES,
-    SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
@@ -130,10 +139,14 @@ _TRANSITION_SELECTOR = selector.NumberSelector(
 # recurses into sections) can prefill the forms. Section keys must therefore
 # never collide with a CONF_* key.
 #
-# Every section is vol.Required with a dict default: the frontend always
-# submits sections (collapsed or not), and the default lets programmatic
-# submissions omit one — voluptuous then validates the empty dict against the
-# section schema, which fills in the per-field defaults.
+# Every section is vol.Required with NO marker default. A marker default gets
+# serialized onto the expandable field itself, and the frontend's initial-data
+# pass prefers a field default over recursing into a section — so a section
+# default (even an empty dict) hides every per-field default and suggested
+# value inside it. Submissions must therefore include each section key: the
+# frontend always submits sections (collapsed or not), and programmatic
+# submissions pass an empty dict, which voluptuous validates against the
+# section schema, filling in the per-field defaults.
 # ---------------------------------------------------------------------------
 
 SECTION_BEHAVIOR = "behavior"
@@ -211,7 +224,7 @@ def _nest_sections(
 def _entity_id_section() -> dict:
     """Collapsed Advanced section holding only the optional entity_id."""
     return {
-        vol.Required(SECTION_ADVANCED, default=dict): section(
+        vol.Required(SECTION_ADVANCED): section(
             vol.Schema({vol.Optional(CONF_ENTITY_ID): selector.TextSelector()}),
             {"collapsed": True},
         )
@@ -305,8 +318,8 @@ def _schedule_edge_fields() -> dict:
         )
 
     return {
-        vol.Required("start", default=dict): _edge_section(),
-        vol.Required("end", default=dict): _edge_section(),
+        vol.Required("start"): _edge_section(),
+        vol.Required("end"): _edge_section(),
     }
 
 
@@ -375,7 +388,7 @@ def _effective_occupancy_timeout(
     cfg = _molight_cfg(entry)
     entity_type = cfg.get(CONF_ENTITY_TYPE)
     if entity_type == ENTITY_TYPE_OCCUPANCY:
-        return int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
+        return int(cfg.get(CONF_OCCUPANCY_TIMEOUT, DEFAULT_OCCUPANCY_TIMEOUT))
     if entity_type == ENTITY_TYPE_COMBINED_OCCUPANCY:
         constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
             CONF_MAINTAIN_SENSORS, []
@@ -433,7 +446,7 @@ def _min_dependent_light_timeout(
             cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
             or cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in dependent_ids
         ):
-            timeouts.append(int(cfg.get(CONF_LIGHT_TIMEOUT, 0)))
+            timeouts.append(int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)))
     return min(timeouts, default=None)
 
 
@@ -491,7 +504,9 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
 def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
     """Occupancy settings: the timeout up front, expert knobs under Advanced."""
     advanced: dict = {
-        vol.Required(CONF_FALSE_DETECTION_GRACE, default=3): selector.NumberSelector(
+        vol.Required(
+            CONF_FALSE_DETECTION_GRACE, default=DEFAULT_FALSE_DETECTION_GRACE
+        ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0, max=60, unit_of_measurement="s", mode="box"
             )
@@ -508,12 +523,14 @@ def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
     if with_entity_id:
         advanced[vol.Optional(CONF_ENTITY_ID)] = selector.TextSelector()
     return {
-        vol.Required(CONF_OCCUPANCY_TIMEOUT, default=120): selector.NumberSelector(
+        vol.Required(
+            CONF_OCCUPANCY_TIMEOUT, default=DEFAULT_OCCUPANCY_TIMEOUT
+        ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=1, max=3600, unit_of_measurement="s", mode="box"
             )
         ),
-        vol.Required(SECTION_ADVANCED, default=dict): section(
+        vol.Required(SECTION_ADVANCED): section(
             vol.Schema(advanced), {"collapsed": True}
         ),
     }
@@ -521,12 +538,16 @@ def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
 
 def _illuminance_option_fields() -> dict:
     return {
-        vol.Required(CONF_ILLUMINANCE_THRESHOLD, default=10.0): selector.NumberSelector(
+        vol.Required(
+            CONF_ILLUMINANCE_THRESHOLD, default=DEFAULT_ILLUMINANCE_THRESHOLD
+        ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0, max=100000, step=0.1, unit_of_measurement="lx", mode="box"
             )
         ),
-        vol.Required(CONF_ILLUMINANCE_HYSTERESIS, default=0.0): selector.NumberSelector(
+        vol.Required(
+            CONF_ILLUMINANCE_HYSTERESIS, default=DEFAULT_ILLUMINANCE_HYSTERESIS
+        ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0, max=10000, step=0.1, unit_of_measurement="lx", mode="box"
             )
@@ -543,12 +564,14 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
     a virtual light. Each mode dropdown sits next to its entity picker.
     """
     fields: dict = {
-        vol.Required(CONF_LIGHT_TIMEOUT, default=300): selector.NumberSelector(
+        vol.Required(
+            CONF_LIGHT_TIMEOUT, default=DEFAULT_LIGHT_TIMEOUT
+        ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=1, max=14400, unit_of_measurement="s", mode="box"
             )
         ),
-        vol.Required(SECTION_SENSORS, default=dict): section(
+        vol.Required(SECTION_SENSORS): section(
             vol.Schema(
                 {
                     vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
@@ -563,7 +586,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                         _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
                     ),
                     vol.Required(
-                        CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                        CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=ILLUMINANCE_MODES,
@@ -574,7 +597,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                         _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
                     ),
                     vol.Required(
-                        CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                        CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
@@ -584,7 +607,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                         _LIGHT_REF_SELECTORS[CONF_DOOR_ENTITY]
                     ),
                     vol.Required(
-                        CONF_DOOR_MODE, default=DOOR_MODE_OPEN
+                        CONF_DOOR_MODE, default=DEFAULT_DOOR_MODE
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=DOOR_MODES, translation_key=CONF_DOOR_MODE
@@ -597,10 +620,12 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
             ),
             {"collapsed": False},
         ),
-        vol.Required(SECTION_BEHAVIOR, default=dict): section(
+        vol.Required(SECTION_BEHAVIOR): section(
             vol.Schema(
                 {
-                    vol.Required(CONF_FALSE_OFF_DELAY, default=5): (
+                    vol.Required(
+                        CONF_FALSE_OFF_DELAY, default=DEFAULT_FALSE_OFF_DELAY
+                    ): (
                         selector.NumberSelector(
                             selector.NumberSelectorConfig(
                                 min=0, max=300, unit_of_measurement="s", mode="box"
@@ -614,17 +639,19 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
             ),
             {"collapsed": True},
         ),
-        vol.Required(SECTION_WARNING, default=dict): section(
+        vol.Required(SECTION_WARNING): section(
             vol.Schema(
                 {
-                    vol.Required(CONF_EFFECT_TIMEOUT, default=0): (
-                        _STAGE_TIMEOUT_SELECTOR
-                    ),
-                    vol.Required(CONF_EFFECT_BRIGHTNESS, default=0): (
-                        _EFFECT_BRIGHTNESS_SELECTOR
-                    ),
+                    vol.Required(
+                        CONF_EFFECT_TIMEOUT, default=DEFAULT_EFFECT_TIMEOUT
+                    ): _STAGE_TIMEOUT_SELECTOR,
+                    vol.Required(
+                        CONF_EFFECT_BRIGHTNESS, default=DEFAULT_EFFECT_BRIGHTNESS
+                    ): _EFFECT_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
-                    vol.Required(CONF_WARN_TIMEOUT, default=0): _STAGE_TIMEOUT_SELECTOR,
+                    vol.Required(
+                        CONF_WARN_TIMEOUT, default=DEFAULT_WARN_TIMEOUT
+                    ): _STAGE_TIMEOUT_SELECTOR,
                     vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
                 }
@@ -709,8 +736,8 @@ def _occupancy_payload(entity_id: str, name: str) -> dict[str, Any]:
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
         CONF_NAME: name,
         CONF_OCCUPANCY_SENSOR: entity_id,
-        CONF_OCCUPANCY_TIMEOUT: 120,
-        CONF_FALSE_DETECTION_GRACE: 3,
+        CONF_OCCUPANCY_TIMEOUT: DEFAULT_OCCUPANCY_TIMEOUT,
+        CONF_FALSE_DETECTION_GRACE: DEFAULT_FALSE_DETECTION_GRACE,
         CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     }
 
@@ -720,8 +747,8 @@ def _illuminance_payload(entity_id: str, name: str) -> dict[str, Any]:
         CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
         CONF_NAME: name,
         CONF_ILLUMINANCE_SENSOR: entity_id,
-        CONF_ILLUMINANCE_THRESHOLD: 10.0,
-        CONF_ILLUMINANCE_HYSTERESIS: 0.0,
+        CONF_ILLUMINANCE_THRESHOLD: DEFAULT_ILLUMINANCE_THRESHOLD,
+        CONF_ILLUMINANCE_HYSTERESIS: DEFAULT_ILLUMINANCE_HYSTERESIS,
     }
 
 
@@ -732,11 +759,11 @@ def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: name,
         CONF_LIGHTS: [entity_id],
-        CONF_LIGHT_TIMEOUT: 300,
-        CONF_FALSE_OFF_DELAY: 5,
-        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
-        CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
-        CONF_DOOR_MODE: DOOR_MODE_OPEN,
+        CONF_LIGHT_TIMEOUT: DEFAULT_LIGHT_TIMEOUT,
+        CONF_FALSE_OFF_DELAY: DEFAULT_FALSE_OFF_DELAY,
+        CONF_ILLUMINANCE_MODE: DEFAULT_ILLUMINANCE_MODE,
+        CONF_SCHEDULE_MODE: DEFAULT_SCHEDULE_MODE,
+        CONF_DOOR_MODE: DEFAULT_DOOR_MODE,
     }
 
 
@@ -1217,7 +1244,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
                 ),
                 vol.Required(
-                    CONF_ILLUMINANCE_MODE, default=ILLUMINANCE_MODE_CONTROL
+                    CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=ILLUMINANCE_MODES,
@@ -1248,7 +1275,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
                 ),
                 vol.Required(
-                    CONF_SCHEDULE_MODE, default=SCHEDULE_MODE_FOLLOW
+                    CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
@@ -1300,7 +1327,8 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 cfg = _molight_cfg(entry)
                 if (
                     occ_timeout is not None
-                    and int(cfg.get(CONF_LIGHT_TIMEOUT, 0)) < occ_timeout
+                    and int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+                    < occ_timeout
                 ):
                     skipped.append(eid)
                     continue

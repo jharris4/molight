@@ -48,6 +48,10 @@ from .const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    DEFAULT_FALSE_DETECTION_GRACE,
+    DEFAULT_ILLUMINANCE_HYSTERESIS,
+    DEFAULT_ILLUMINANCE_THRESHOLD,
+    DEFAULT_OCCUPANCY_TIMEOUT,
     EDGE_COMBINE,
     EDGE_OFFSET,
     EDGE_SUN,
@@ -154,8 +158,12 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
-        self._timeout: int = int(cfg.get(CONF_OCCUPANCY_TIMEOUT, 0))
-        self._grace: float = float(cfg.get(CONF_FALSE_DETECTION_GRACE, 0))
+        self._timeout: int = int(
+            cfg.get(CONF_OCCUPANCY_TIMEOUT, DEFAULT_OCCUPANCY_TIMEOUT)
+        )
+        self._grace: float = float(
+            cfg.get(CONF_FALSE_DETECTION_GRACE, DEFAULT_FALSE_DETECTION_GRACE)
+        )
         self._unavailable_timeout: int = int(
             cfg.get(
                 CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
@@ -454,8 +462,12 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         self._attr_unique_id = entry.entry_id
 
         self._source_entity: str = cfg[CONF_ILLUMINANCE_SENSOR]
-        self._threshold: float = float(cfg.get(CONF_ILLUMINANCE_THRESHOLD, 10.0))
-        self._hysteresis: float = float(cfg.get(CONF_ILLUMINANCE_HYSTERESIS, 0.0))
+        self._threshold: float = float(
+            cfg.get(CONF_ILLUMINANCE_THRESHOLD, DEFAULT_ILLUMINANCE_THRESHOLD)
+        )
+        self._hysteresis: float = float(
+            cfg.get(CONF_ILLUMINANCE_HYSTERESIS, DEFAULT_ILLUMINANCE_HYSTERESIS)
+        )
 
         self._attr_is_on = False
 

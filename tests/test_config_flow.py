@@ -69,6 +69,13 @@ from custom_components.molight.const import (
 from custom_components.molight.helpers import molight_config
 from tests.conftest import setup_entries
 
+# The frontend always submits every section key, even collapsed sections that
+# were never opened. The section markers have no defaults, so programmatic
+# submissions must do the same; an empty dict makes voluptuous fill in the
+# per-field defaults. Spread one of these first so explicit sections override.
+EMPTY_LIGHT_SECTIONS = {SECTION_SENSORS: {}, SECTION_BEHAVIOR: {}, SECTION_WARNING: {}}
+EMPTY_LIGHT_CREATE_SECTIONS = {**EMPTY_LIGHT_SECTIONS, SECTION_ADVANCED: {}}
+
 
 async def _start_create(hass: HomeAssistant) -> dict:
     """Init the flow and pick 'Create a single entity' from the menu.
@@ -119,6 +126,7 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
             CONF_NAME: "Hall Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -153,6 +161,7 @@ async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
                 "offset": 10,
                 "combine": "earliest",
             },
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -187,7 +196,12 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     # Start edge only — no end.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Night", "start": {"time": "21:00:00"}},
+        {
+            CONF_NAME: "Night",
+            "start": {"time": "21:00:00"},
+            "end": {},
+            SECTION_ADVANCED: {},
+        },
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_incomplete"}
@@ -195,7 +209,12 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     # Sun-only edges (no fixed times) are a complete window.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Night", "start": {"sun": "sunset"}, "end": {"sun": "sunrise"}},
+        {
+            CONF_NAME: "Night",
+            "start": {"sun": "sunset"},
+            "end": {"sun": "sunrise"},
+            SECTION_ADVANCED: {},
+        },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TIME_WINDOWS] == [
@@ -219,6 +238,7 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Living Room",
             CONF_LIGHTS: ["light.living_room_1", "light.living_room_2"],
             CONF_LIGHT_TIMEOUT: 300,
@@ -244,6 +264,7 @@ async def test_light_flow_stores_effect_warn_options(hass: HomeAssistant) -> Non
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
@@ -286,6 +307,7 @@ async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> N
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
@@ -313,6 +335,7 @@ async def test_light_flow_stores_transitions(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
@@ -350,6 +373,7 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
@@ -371,6 +395,7 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
@@ -410,6 +435,7 @@ async def test_light_options_validate_and_clear_transitions(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
@@ -425,6 +451,7 @@ async def test_light_options_validate_and_clear_transitions(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
@@ -464,6 +491,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 20,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
         },
     )
@@ -477,6 +505,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
         },
     )
@@ -513,6 +542,7 @@ async def test_occupancy_options_reject_timeout_above_light_timeout(
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 120,  # > the light's 60s timeout
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -524,6 +554,7 @@ async def test_occupancy_options_reject_timeout_above_light_timeout(
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -569,6 +600,7 @@ async def test_light_flow_validates_combined_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 40,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {
                 CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy"
             },
@@ -583,6 +615,7 @@ async def test_light_flow_validates_combined_timeout(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 45,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {
                 CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_occupancy"
             },
@@ -638,6 +671,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 20,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a"},
         },
     )
@@ -650,6 +684,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.combined_a"},
         },
     )
@@ -683,6 +718,7 @@ async def test_light_options_can_clear_occupancy_reference(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
+            **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
@@ -735,7 +771,12 @@ async def test_config_flow_virtual_light_requires_lights(hass: HomeAssistant) ->
     )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Empty Light", CONF_LIGHTS: [], CONF_LIGHT_TIMEOUT: 300},
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Empty Light",
+            CONF_LIGHTS: [],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
     )
     assert result["type"] == FlowResultType.FORM
     assert "lights" in result["errors"]
@@ -796,7 +837,9 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
     # keeps the defaults.
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_occupancy_defaults"
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {SECTION_ADVANCED: {}}
+    )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "discovery_done"
     await hass.async_block_till_done()
@@ -834,7 +877,9 @@ async def test_discover_affix_targets_name(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {SECTION_ADVANCED: {}}
+    )
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -871,7 +916,9 @@ async def test_discover_affix_targets_entity_id(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {SECTION_ADVANCED: {}}
+    )
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -954,7 +1001,9 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_light_defaults"
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], dict(EMPTY_LIGHT_SECTIONS)
+    )
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
@@ -994,7 +1043,7 @@ async def test_discover_defaults_step_applies_overrides(hass: HomeAssistant) -> 
     assert result["step_id"] == "discover_occupancy_defaults"
     # A non-default timeout, entered once, applies to both created sensors.
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_OCCUPANCY_TIMEOUT: 45}
+        result["flow_id"], {CONF_OCCUPANCY_TIMEOUT: 45, SECTION_ADVANCED: {}}
     )
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
@@ -1024,7 +1073,10 @@ async def test_discover_light_defaults_validate_stage_transition(
     # before any entity is created.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_TRANSITION: 5}},
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_TRANSITION: 5},
+        },
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_light_defaults"
@@ -1151,6 +1203,7 @@ async def test_manual_blank_entity_id_conflict_confirm_proceed(
             CONF_NAME: "Hall",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.MENU
@@ -1185,6 +1238,7 @@ async def test_manual_blank_entity_id_conflict_confirm_change(
             CONF_NAME: "Hall",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
             CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.MENU
@@ -1446,7 +1500,7 @@ async def test_config_flow_combined_occupancy(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Combined", CONF_TRIGGER_SENSORS: []},
+        {CONF_NAME: "Combined", CONF_TRIGGER_SENSORS: [], SECTION_ADVANCED: {}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_TRIGGER_SENSORS: "trigger_sensors_required"}
@@ -1457,6 +1511,7 @@ async def test_config_flow_combined_occupancy(hass: HomeAssistant) -> None:
             CONF_NAME: "Combined",
             CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"],
             CONF_MAINTAIN_SENSORS: ["binary_sensor.occ_b"],
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1480,6 +1535,7 @@ async def test_config_flow_illuminance(hass: HomeAssistant) -> None:
             CONF_NAME: "Hall Illuminance",
             CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
             CONF_ILLUMINANCE_THRESHOLD: 25.0,
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1686,7 +1742,7 @@ async def test_options_rename_updates_entry_title(
 
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_NAME: "Renamed Occupancy"}
+        result["flow_id"], {CONF_NAME: "Renamed Occupancy", SECTION_ADVANCED: {}}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
@@ -1705,7 +1761,7 @@ async def test_schedule_options_reject_incomplete_window(
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Test Schedule", "start": {"time": "20:00:00"}},
+        {CONF_NAME: "Test Schedule", "start": {"time": "20:00:00"}, "end": {}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_incomplete"}
@@ -1720,7 +1776,8 @@ async def test_light_options_require_lights(
 
     result = await hass.config_entries.options.async_init(light_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_NAME: "Test Light", CONF_LIGHTS: []}
+        result["flow_id"],
+        {**EMPTY_LIGHT_SECTIONS, CONF_NAME: "Test Light", CONF_LIGHTS: []},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_LIGHTS: "lights_required"}
@@ -1740,7 +1797,11 @@ async def test_occupancy_options_pass_without_registered_entities(
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_NAME: "Test Occupancy", CONF_OCCUPANCY_TIMEOUT: 3600},
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_TIMEOUT: 3600,
+            SECTION_ADVANCED: {},
+        },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
@@ -1783,6 +1844,7 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
         if maintain_ref:
             sensors[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain_ref
         user_input = {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: f"Loose Light {occupancy_ref}",
             CONF_LIGHTS: ["light.some_real"],
             CONF_LIGHT_TIMEOUT: 1,
@@ -1881,7 +1943,8 @@ async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_NAME: "Empty Schedule"}
+        result["flow_id"],
+        {CONF_NAME: "Empty Schedule", "start": {}, "end": {}, SECTION_ADVANCED: {}},
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_required"}
@@ -1893,6 +1956,7 @@ async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None
             CONF_NAME: "Empty Schedule",
             "start": {"time": "21:00:00"},
             "end": {"time": "23:00:00"},
+            SECTION_ADVANCED: {},
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1910,7 +1974,7 @@ async def test_schedule_options_require_window(
 
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_NAME: "Test Schedule"}
+        result["flow_id"], {CONF_NAME: "Test Schedule", "start": {}, "end": {}}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_required"}
@@ -1945,7 +2009,11 @@ async def test_schedule_options_require_window(
         pytest.param(
             ENTITY_TYPE_LIGHT,
             "light.taken",
-            {CONF_NAME: "X", CONF_LIGHTS: ["light.real_x"]},
+            {
+                **EMPTY_LIGHT_SECTIONS,
+                CONF_NAME: "X",
+                CONF_LIGHTS: ["light.real_x"],
+            },
             id="light",
         ),
     ],

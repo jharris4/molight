@@ -59,12 +59,14 @@ ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
 # latest_occupied_time = last_off - timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
+DEFAULT_OCCUPANCY_TIMEOUT = 120
 # A cycle whose on-duration exceeds the timeout by no more than this many
 # seconds contained exactly one instantaneous detection (the sensor never
 # re-triggered during its hold time) — almost always a false detection.
 # Such cycles don't advance latest_occupied_time and are counted in the
 # false_detection_count attribute. 0 disables classification.
 CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
+DEFAULT_FALSE_DETECTION_GRACE = 3
 # When the source sensor is unavailable/unknown for this many seconds while
 # occupancy is active, treat it as occupancy having cleared (the room may
 # still be occupied, so the clear is flagged via last_clear_unavailable and
@@ -83,10 +85,12 @@ CONF_MAINTAIN_SENSORS = "maintain_sensors"
 # --- Virtual Illuminance Binary Sensor ---
 CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"  # entity_id of a real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
+DEFAULT_ILLUMINANCE_THRESHOLD = 10.0
 # Hysteresis band (lx) around the threshold: becomes bright at
 # threshold + hysteresis, dark below threshold - hysteresis; readings inside
 # the band hold the current state. 0 = plain comparator.
 CONF_ILLUMINANCE_HYSTERESIS = "illuminance_hysteresis"
+DEFAULT_ILLUMINANCE_HYSTERESIS = 0.0
 
 # --- Virtual Schedule Binary Sensor ---
 # List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain
@@ -108,6 +112,7 @@ SUN_EVENTS = ["sunset", "sunrise"]
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
+DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* — by occupancy, a door opening, illuminance going dark, or
 # a schedule window. Manual and physical turn-ons are never affected (they
@@ -119,6 +124,7 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
+DEFAULT_FALSE_OFF_DELAY = 5
 # Effect/warn warning sequence before an automatic turn-off. When the auto-off
 # timer expires the light can flag the impending off before going dark:
 #   EFFECT — a brief attention cue (a blink/dip to effect_brightness), shown
@@ -132,8 +138,11 @@ CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 # either stage (occupancy, manual/physical on, a dim, ...) cancels it and
 # behaves as if the pre-off timer were still running, restoring the brightness.
 CONF_EFFECT_TIMEOUT = "effect_timeout"
+DEFAULT_EFFECT_TIMEOUT = 0
 CONF_EFFECT_BRIGHTNESS = "effect_brightness"
+DEFAULT_EFFECT_BRIGHTNESS = 0
 CONF_WARN_TIMEOUT = "warn_timeout"
+DEFAULT_WARN_TIMEOUT = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
 # Optional fade times (seconds) sent as the transition of the service calls
 # the virtual light makes itself. Absent/0 = no transition attribute is sent
@@ -185,6 +194,7 @@ CONF_ILLUMINANCE_MODE = "illuminance_mode"
 ILLUMINANCE_MODE_CONTROL = "control"
 ILLUMINANCE_MODE_GATE = "gate"
 ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE]
+DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How a referenced schedule entity affects the light:
 #   follow — lights turn on at window start and off at window end (porch lights)
@@ -193,6 +203,7 @@ CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
 SCHEDULE_MODE_GATE = "gate"
 SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
+DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
 
 # Optional real door/contact binary_sensor (on = open) that drives the light.
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
@@ -210,6 +221,7 @@ CONF_DOOR_MODE = "door_mode"
 DOOR_MODE_OPEN = "open"
 DOOR_MODE_OPEN_CLOSE = "open_close"
 DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
+DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
 
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
