@@ -29,6 +29,15 @@ CONF_NAME = "name"
 # straight from entry.data (molight_config would drop it once options exist).
 CONF_ENTITY_ID = "entity_id"
 
+# Discovery filter step, shown before the entity checklist: optional area and
+# label multiselects narrow the candidates (an entity matches through its own
+# registry assignment or its device's), and a preselect toggle decides whether
+# the checklist starts with everything checked (bulk-add) or nothing (pick a
+# few). None of these are stored on created entries.
+CONF_FILTER_AREAS = "filter_areas"
+CONF_FILTER_LABELS = "filter_labels"
+CONF_PRESELECT_ALL = "preselect_all"
+
 # Multiselect field in the discovery config-flow steps: the real entities the
 # user picked to wrap in virtual MoLight entities (created with defaults).
 CONF_SELECTED_ENTITIES = "selected_entities"

@@ -14,6 +14,7 @@ from homeassistant.components.light import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import section
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
@@ -46,6 +47,8 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_FALSE_OFF_DELAY,
+    CONF_FILTER_AREAS,
+    CONF_FILTER_LABELS,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
@@ -60,6 +63,7 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_PRESELECT_ALL,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
@@ -731,6 +735,42 @@ def _discovery_candidates(
     return candidates
 
 
+def _filter_discovery_candidates(
+    hass: HomeAssistant,
+    candidates: dict[str, str],
+    areas: list[str],
+    labels: list[str],
+) -> dict[str, str]:
+    """Narrow discovery candidates to the given areas and/or labels.
+
+    An empty filter matches everything. With both set, a candidate must match
+    one of the areas AND carry one of the labels. Area and labels come from
+    the entity's registry entry, falling back to (for areas) or merged with
+    (for labels) its device's; entities that only exist as a state can't
+    carry either, so any active filter excludes them.
+    """
+    if not areas and not labels:
+        return candidates
+    registry = er.async_get(hass)
+    devices = dr.async_get(hass)
+    filtered: dict[str, str] = {}
+    for entity_id, name in candidates.items():
+        ent = registry.async_get(entity_id)
+        if ent is None:
+            continue
+        device = devices.async_get(ent.device_id) if ent.device_id else None
+        if areas:
+            area = ent.area_id or (device.area_id if device else None)
+            if area not in areas:
+                continue
+        if labels:
+            ent_labels = set(ent.labels) | (set(device.labels) if device else set())
+            if not ent_labels.intersection(labels):
+                continue
+        filtered[entity_id] = name
+    return filtered
+
+
 def _occupancy_payload(entity_id: str, name: str) -> dict[str, Any]:
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
@@ -802,8 +842,10 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pending: dict[str, Any] | None = None
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
-        # Stashed selection + affix + candidate map between a discovery step
-        # and its "adjust defaults" step.
+        # Stashed discovery state across the three discovery steps: the
+        # filter step sets the (narrowed) candidate map and preselect choice,
+        # the select step adds the selection and affixes, and the "adjust
+        # defaults" step consumes it all in _finish_discovery.
         self._discovery: dict[str, Any] = {}
 
     @staticmethod
@@ -969,74 +1011,146 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # Discovery — bulk-create from scanned real entities
     # ------------------------------------------------------------------
 
-    async def _async_discovery_select(
+    async def _async_discovery_filter(
         self,
         *,
         step_id: str,
         domain: str,
         device_classes: set[str] | None,
         used_key: str,
+        select_step,
+        user_input: dict[str, Any] | None,
+    ) -> config_entries.FlowResult:
+        """Optionally narrow the discovery candidates before the checklist.
+
+        Areas and labels each match through the entity's own registry
+        assignment or its device's; leaving both empty offers every
+        candidate. The preselect toggle decides whether the next step's
+        checklist starts fully checked (bulk-add) or empty (pick a few).
+        """
+        candidates = _discovery_candidates(self.hass, domain, device_classes, used_key)
+        if not candidates:
+            return self.async_abort(reason="no_candidates")
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            filtered = _filter_discovery_candidates(
+                self.hass,
+                candidates,
+                user_input.get(CONF_FILTER_AREAS, []),
+                user_input.get(CONF_FILTER_LABELS, []),
+            )
+            if filtered:
+                self._discovery = {
+                    "candidates": filtered,
+                    "preselect_all": user_input.get(CONF_PRESELECT_ALL, True),
+                }
+                return await select_step()
+            errors["base"] = "no_filter_matches"
+
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Optional(
+                            CONF_FILTER_AREAS, default=[]
+                        ): selector.AreaSelector(
+                            selector.AreaSelectorConfig(multiple=True)
+                        ),
+                        vol.Optional(
+                            CONF_FILTER_LABELS, default=[]
+                        ): selector.LabelSelector(
+                            selector.LabelSelectorConfig(multiple=True)
+                        ),
+                        vol.Required(
+                            CONF_PRESELECT_ALL, default=True
+                        ): selector.BooleanSelector(),
+                    }
+                ),
+                user_input or {},
+            ),
+            errors=errors,
+        )
+
+    async def _async_discovery_select(
+        self,
+        *,
+        step_id: str,
         defaults_step,
         user_input: dict[str, Any] | None,
     ) -> config_entries.FlowResult:
         """Show a checklist of candidate entities, then adjust their defaults.
 
+        Candidates and the preselect choice were stashed by the filter step.
         On submit the selection and affix choices are stashed and the flow
         moves to the type's defaults step, which lets the user edit the
         settings applied to every pick before the bulk-create runs.
         """
-        candidates = _discovery_candidates(self.hass, domain, device_classes, used_key)
+        candidates = self._discovery["candidates"]
 
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._discovery = {
-                "selected": user_input.get(CONF_SELECTED_ENTITIES, []),
-                # Affixes are applied verbatim (no separator inserted) so the
-                # user controls spacing; empty strings leave the name untouched.
-                # The target decides whether the affix shapes the friendly name
-                # or the entity_id only (name identical to the wrapped entity).
-                "prefix": user_input.get(CONF_AFFIX_PREFIX, ""),
-                "suffix": user_input.get(CONF_AFFIX_SUFFIX, ""),
-                "target": user_input.get(CONF_AFFIX_TARGET, AFFIX_TARGET_ENTITY_ID),
-                "candidates": candidates,
-            }
-            return await defaults_step()
-
-        if not candidates:
-            return self.async_abort(reason="no_candidates")
+            selected = user_input.get(CONF_SELECTED_ENTITIES, [])
+            if selected:
+                self._discovery.update(
+                    {
+                        "selected": selected,
+                        # Affixes are applied verbatim (no separator inserted)
+                        # so the user controls spacing; empty strings leave the
+                        # name untouched. The target decides whether the affix
+                        # shapes the friendly name or the entity_id only (name
+                        # identical to the wrapped entity).
+                        "prefix": user_input.get(CONF_AFFIX_PREFIX, ""),
+                        "suffix": user_input.get(CONF_AFFIX_SUFFIX, ""),
+                        "target": user_input.get(
+                            CONF_AFFIX_TARGET, AFFIX_TARGET_ENTITY_ID
+                        ),
+                    }
+                )
+                return await defaults_step()
+            errors["base"] = "no_entities_selected"
 
         options = [
             selector.SelectOptionDict(value=eid, label=name)
             for eid, name in sorted(candidates.items(), key=lambda kv: kv[1].lower())
         ]
+        preselected = (
+            list(candidates) if self._discovery.get("preselect_all", True) else []
+        )
         return self.async_show_form(
             step_id=step_id,
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_SELECTED_ENTITIES, default=list(candidates)
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=options,
-                            multiple=True,
-                            mode=selector.SelectSelectorMode.LIST,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_AFFIX_PREFIX, default=""
-                    ): selector.TextSelector(),
-                    vol.Optional(
-                        CONF_AFFIX_SUFFIX, default=""
-                    ): selector.TextSelector(),
-                    vol.Required(
-                        CONF_AFFIX_TARGET, default=AFFIX_TARGET_ENTITY_ID
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=AFFIX_TARGETS,
-                            translation_key=CONF_AFFIX_TARGET,
-                        )
-                    ),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_SELECTED_ENTITIES, default=preselected
+                        ): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=options,
+                                multiple=True,
+                                mode=selector.SelectSelectorMode.LIST,
+                            )
+                        ),
+                        vol.Optional(
+                            CONF_AFFIX_PREFIX, default=""
+                        ): selector.TextSelector(),
+                        vol.Optional(
+                            CONF_AFFIX_SUFFIX, default=""
+                        ): selector.TextSelector(),
+                        vol.Required(
+                            CONF_AFFIX_TARGET, default=AFFIX_TARGET_ENTITY_ID
+                        ): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=AFFIX_TARGETS,
+                                translation_key=CONF_AFFIX_TARGET,
+                            )
+                        ),
+                    }
+                ),
+                user_input or {},
             ),
+            errors=errors,
         )
 
     def _finish_discovery(
@@ -1085,12 +1199,21 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery_select(
+        return await self._async_discovery_filter(
             step_id="discover_occupancy",
             domain="binary_sensor",
             # Occupancy sensors are commonly exposed under any of these classes.
             device_classes={"occupancy", "motion", "presence"},
             used_key=CONF_OCCUPANCY_SENSOR,
+            select_step=self.async_step_discover_occupancy_select,
+            user_input=user_input,
+        )
+
+    async def async_step_discover_occupancy_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery_select(
+            step_id="discover_occupancy_select",
             defaults_step=self.async_step_discover_occupancy_defaults,
             user_input=user_input,
         )
@@ -1111,11 +1234,20 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery_select(
+        return await self._async_discovery_filter(
             step_id="discover_illuminance",
             domain="sensor",
             device_classes={"illuminance"},
             used_key=CONF_ILLUMINANCE_SENSOR,
+            select_step=self.async_step_discover_illuminance_select,
+            user_input=user_input,
+        )
+
+    async def async_step_discover_illuminance_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery_select(
+            step_id="discover_illuminance_select",
             defaults_step=self.async_step_discover_illuminance_defaults,
             user_input=user_input,
         )
@@ -1134,11 +1266,20 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        return await self._async_discovery_select(
+        return await self._async_discovery_filter(
             step_id="discover_light",
             domain="light",
             device_classes=None,
             used_key=CONF_LIGHTS,
+            select_step=self.async_step_discover_light_select,
+            user_input=user_input,
+        )
+
+    async def async_step_discover_light_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        return await self._async_discovery_select(
+            step_id="discover_light_select",
             defaults_step=self.async_step_discover_light_defaults,
             user_input=user_input,
         )

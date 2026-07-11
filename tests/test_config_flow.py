@@ -6,7 +6,10 @@ import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, section
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import label_registry as lr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.config_flow import (
@@ -35,6 +38,8 @@ from custom_components.molight.const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
+    CONF_FILTER_AREAS,
+    CONF_FILTER_LABELS,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
@@ -49,6 +54,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_PRESELECT_ALL,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
@@ -92,7 +98,10 @@ async def _start_create(hass: HomeAssistant) -> dict:
 
 
 async def _start_discovery(hass: HomeAssistant, step: str) -> dict:
-    """Init the flow and pick a discovery step from the menu."""
+    """Init the flow and pick a discovery step from the menu.
+
+    Returns the flow result at that discovery's filter step.
+    """
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -100,6 +109,20 @@ async def _start_discovery(hass: HomeAssistant, step: str) -> dict:
     return await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": step}
     )
+
+
+async def _reach_discovery_select(hass: HomeAssistant, step: str) -> dict:
+    """Advance a discovery flow past an unfiltered filter step.
+
+    Returns the flow result at the entity checklist (the '<step>_select'
+    step), with every candidate offered and pre-selected.
+    """
+    result = await _start_discovery(hass, step)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == step
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["step_id"] == f"{step}_select"
+    return result
 
 
 def _offered_candidates(result: dict) -> set[str]:
@@ -909,9 +932,8 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
     )
     existing.add_to_hass(hass)
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "discover_occupancy"
     assert _offered_candidates(result) == {
         "binary_sensor.hall_motion",
         "binary_sensor.porch_pir",
@@ -955,7 +977,7 @@ async def test_discover_affix_targets_name(
         {"device_class": "occupancy", "friendly_name": "Hall Motion"},
     )
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -995,7 +1017,7 @@ async def test_discover_affix_targets_entity_id(
         {"device_class": "occupancy", "friendly_name": "Hall Motion"},
     )
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -1041,7 +1063,7 @@ async def test_discover_illuminance_creates_with_defaults(
     # Wrong device_class.
     hass.states.async_set("sensor.office_temp", "21", {"device_class": "temperature"})
 
-    result = await _start_discovery(hass, "discover_illuminance")
+    result = await _reach_discovery_select(hass, "discover_illuminance")
     assert _offered_candidates(result) == {"sensor.office_lux"}
 
     result = await hass.config_entries.flow.async_configure(
@@ -1081,7 +1103,7 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
     existing.add_to_hass(hass)
     hass.states.async_set("light.ceiling", "off", {"friendly_name": "Ceiling"})
 
-    result = await _start_discovery(hass, "discover_light")
+    result = await _reach_discovery_select(hass, "discover_light")
     assert _offered_candidates(result) == {"light.desk"}
 
     result = await hass.config_entries.flow.async_configure(
@@ -1119,7 +1141,7 @@ async def test_discover_defaults_step_applies_overrides(hass: HomeAssistant) -> 
         {"device_class": "presence", "friendly_name": "Study Presence"},
     )
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -1153,7 +1175,7 @@ async def test_discover_light_defaults_validate_stage_transition(
     """The light defaults step enforces the same stage-transition rule."""
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
 
-    result = await _start_discovery(hass, "discover_light")
+    result = await _reach_discovery_select(hass, "discover_light")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
     )
@@ -1204,7 +1226,7 @@ async def test_discover_never_offers_molight_own_entities(
     }
     assert virtual_ids  # the virtual sensor actually created an entity
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     offered = _offered_candidates(result)
     # The real sensor is offered; none of MoLight's own entities are.
     assert "binary_sensor.garage_motion" in offered
@@ -1217,6 +1239,138 @@ async def test_discover_aborts_when_no_candidates(hass: HomeAssistant) -> None:
     result = await _start_discovery(hass, "discover_illuminance")
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "no_candidates"
+
+
+def _motion_registry_entry(hass: HomeAssistant, uid: str, object_id: str, **kwargs):
+    """Register a motion binary_sensor discovery candidate."""
+    return er.async_get(hass).async_get_or_create(
+        "binary_sensor",
+        "test",
+        uid,
+        suggested_object_id=object_id,
+        original_device_class="motion",
+        **kwargs,
+    )
+
+
+def _helper_device(hass: HomeAssistant) -> dr.DeviceEntry:
+    """A registered device for candidates that inherit area/labels from it."""
+    entry = MockConfigEntry(domain="test")
+    entry.add_to_hass(hass)
+    return dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("test", "dev")}
+    )
+
+
+@pytest.mark.asyncio
+async def test_discover_filter_by_area(hass: HomeAssistant) -> None:
+    """The area filter matches the entity's area or its device's.
+
+    Entities that only exist as a state have neither, so any active filter
+    hides them.
+    """
+    area = ar.async_get(hass).async_create("Kitchen")
+    registry = er.async_get(hass)
+    in_area = _motion_registry_entry(hass, "uid_in", "kitchen_pir")
+    registry.async_update_entity(in_area.entity_id, area_id=area.id)
+    _motion_registry_entry(hass, "uid_out", "hall_pir")
+    device = _helper_device(hass)
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
+    via_device = _motion_registry_entry(
+        hass, "uid_dev", "kitchen_dev_pir", device_id=device.id
+    )
+    # State-only candidate — would be offered unfiltered, hidden by any filter.
+    hass.states.async_set("binary_sensor.floating", "off", {"device_class": "motion"})
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_FILTER_AREAS: [area.id]}
+    )
+    assert result["step_id"] == "discover_occupancy_select"
+    assert _offered_candidates(result) == {in_area.entity_id, via_device.entity_id}
+
+
+@pytest.mark.asyncio
+async def test_discover_filter_by_label(hass: HomeAssistant) -> None:
+    """The label filter matches labels on the entity or on its device."""
+    label = lr.async_get(hass).async_create("Automate")
+    registry = er.async_get(hass)
+    tagged = _motion_registry_entry(hass, "uid_tagged", "tagged_pir")
+    registry.async_update_entity(tagged.entity_id, labels={label.label_id})
+    _motion_registry_entry(hass, "uid_plain", "plain_pir")
+    device = _helper_device(hass)
+    dr.async_get(hass).async_update_device(device.id, labels={label.label_id})
+    via_device = _motion_registry_entry(
+        hass, "uid_dev", "dev_pir", device_id=device.id
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_FILTER_LABELS: [label.label_id]}
+    )
+    assert result["step_id"] == "discover_occupancy_select"
+    assert _offered_candidates(result) == {tagged.entity_id, via_device.entity_id}
+
+
+@pytest.mark.asyncio
+async def test_discover_filter_no_matches_reshows(hass: HomeAssistant) -> None:
+    """Filters that match nothing re-show the form, keeping the user's input."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion", "off", {"device_class": "motion"}
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_FILTER_AREAS: ["nowhere"]}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_occupancy"
+    assert result["errors"] == {"base": "no_filter_matches"}
+    assert _suggested_values(result["data_schema"])[CONF_FILTER_AREAS] == ["nowhere"]
+
+    # Clearing the filters proceeds to the full checklist.
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "discover_occupancy_select"
+    assert _offered_candidates(result) == {"binary_sensor.hall_motion"}
+
+
+@pytest.mark.asyncio
+async def test_discover_preselect_none_and_empty_selection(
+    hass: HomeAssistant,
+) -> None:
+    """Preselect off starts the checklist empty; submitting nothing errors."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion", "off", {"device_class": "motion"}
+    )
+    hass.states.async_set(
+        "binary_sensor.porch_pir", "off", {"device_class": "motion"}
+    )
+
+    result = await _start_discovery(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_PRESELECT_ALL: False}
+    )
+    assert result["step_id"] == "discover_occupancy_select"
+    # Both candidates are offered, but none is pre-selected.
+    schema = result["data_schema"].schema
+    sel = next(v for k, v in schema.items() if str(k) == CONF_SELECTED_ENTITIES)
+    assert {o["value"] for o in sel.config["options"]} == {
+        "binary_sensor.hall_motion",
+        "binary_sensor.porch_pir",
+    }
+    assert _offered_candidates(result) == set()
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: []}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_occupancy_select"
+    assert result["errors"] == {"base": "no_entities_selected"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["binary_sensor.hall_motion"]}
+    )
+    assert result["step_id"] == "discover_occupancy_defaults"
 
 
 # ---------------------------------------------------------------------------
@@ -1994,7 +2148,7 @@ async def test_discover_candidates_from_registry(hass: HomeAssistant) -> None:
         "sensor", "test", "uid_lux", suggested_object_id="reg_lux"
     )
 
-    result = await _start_discovery(hass, "discover_occupancy")
+    result = await _reach_discovery_select(hass, "discover_occupancy")
     assert result["type"] == FlowResultType.FORM
     assert _offered_candidates(result) == {pir.entity_id, override.entity_id}
 

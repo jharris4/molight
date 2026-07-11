@@ -70,14 +70,16 @@ The three **Discover…** actions scan your existing entities and create a virtu
 - **Discover illuminance sensors** — every `sensor` with device class `illuminance`.
 - **Discover lights** — every `light` entity.
 
-Each shows a checklist of matching entities (all pre-selected). Only useful candidates appear: MoLight's own entities, disabled entities, and anything already wrapped are hidden — re-running discovery later only offers what's new.
+Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
+
+The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, and anything already wrapped are hidden — re-running discovery later only offers what's new.
 
 An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim (you control the spacing) to a target of your choice:
 
 - **Entity ID** (default) — only the entity ID gets the affix (`v_` → `binary_sensor.v_hallway`); the friendly name stays identical to the source.
 - **Name** — the friendly name gets the affix, and the entity ID derives from the composed name.
 
-A second form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
+A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
 
 ### Bulk assignment
 

@@ -70,7 +70,21 @@
       },
       "discover_occupancy": {
         "title": "Discover occupancy sensors",
-        "description": "Select the occupancy/motion/presence sensors to wrap in virtual occupancy sensors; the next step lets you adjust the defaults applied to all of them. Sensors already wrapped by MoLight, and disabled ones, are hidden.",
+        "description": "Optionally narrow the occupancy/motion/presence sensors offered on the next step. Leave the filters empty to see them all. Sensors already wrapped by MoLight, and disabled ones, are never offered.",
+        "data": {
+          "filter_areas": "Areas",
+          "filter_labels": "Labels",
+          "preselect_all": "Pre-select all matches"
+        },
+        "data_description": {
+          "filter_areas": "Optional. Only offer sensors in these areas (the entity's own area, or its device's).",
+          "filter_labels": "Optional. Only offer sensors carrying at least one of these labels (on the entity or its device).",
+          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+        }
+      },
+      "discover_occupancy_select": {
+        "title": "Discover occupancy sensors",
+        "description": "Select the occupancy/motion/presence sensors to wrap in virtual occupancy sensors; the next step lets you adjust the defaults applied to all of them.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix",
@@ -85,7 +99,21 @@
       },
       "discover_illuminance": {
         "title": "Discover illuminance sensors",
-        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors; the next step lets you adjust the defaults applied to all of them. Sensors already wrapped by MoLight, and disabled ones, are hidden.",
+        "description": "Optionally narrow the illuminance (lux) sensors offered on the next step. Leave the filters empty to see them all. Sensors already wrapped by MoLight, and disabled ones, are never offered.",
+        "data": {
+          "filter_areas": "Areas",
+          "filter_labels": "Labels",
+          "preselect_all": "Pre-select all matches"
+        },
+        "data_description": {
+          "filter_areas": "Optional. Only offer sensors in these areas (the entity's own area, or its device's).",
+          "filter_labels": "Optional. Only offer sensors carrying at least one of these labels (on the entity or its device).",
+          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+        }
+      },
+      "discover_illuminance_select": {
+        "title": "Discover illuminance sensors",
+        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors; the next step lets you adjust the defaults applied to all of them.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix",
@@ -100,7 +128,21 @@
       },
       "discover_light": {
         "title": "Discover lights",
-        "description": "Select the lights to wrap in virtual lights; the next step lets you adjust the defaults applied to all of them — including occupancy, illuminance, and schedule references. Lights already wrapped by MoLight, and disabled ones, are hidden.",
+        "description": "Optionally narrow the lights offered on the next step. Leave the filters empty to see them all. Lights already wrapped by MoLight, and disabled ones, are never offered.",
+        "data": {
+          "filter_areas": "Areas",
+          "filter_labels": "Labels",
+          "preselect_all": "Pre-select all matches"
+        },
+        "data_description": {
+          "filter_areas": "Optional. Only offer lights in these areas (the entity's own area, or its device's).",
+          "filter_labels": "Optional. Only offer lights carrying at least one of these labels (on the entity or its device).",
+          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+        }
+      },
+      "discover_light_select": {
+        "title": "Discover lights",
+        "description": "Select the lights to wrap in virtual lights; the next step lets you adjust the defaults applied to all of them — including occupancy, illuminance, and schedule references.",
         "data": {
           "selected_entities": "Lights to add",
           "affix_prefix": "Prefix",
@@ -460,7 +502,9 @@
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
-      "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled)."
+      "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
+      "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
+      "no_entities_selected": "Select at least one entity to add."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
