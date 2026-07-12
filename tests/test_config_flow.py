@@ -1851,6 +1851,21 @@ async def test_config_flow_combined_occupancy(hass: HomeAssistant) -> None:
         {
             CONF_NAME: "Combined",
             CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.occ_a"],
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "occupancy_sensor_role_overlap"}
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_TRIGGER_SENSORS] == ["binary_sensor.occ_a"]
+    assert suggested[CONF_MAINTAIN_SENSORS] == ["binary_sensor.occ_a"]
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"],
             CONF_MAINTAIN_SENSORS: ["binary_sensor.occ_b"],
             SECTION_ADVANCED: {},
         },
@@ -2097,6 +2112,38 @@ async def test_combined_options_allow_shared_acyclic_dependency(
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_combined_options_reject_overlapping_roles(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Options cannot assign one occupancy entity to both constituent roles."""
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, combined)
+
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "occupancy_sensor_role_overlap"}
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_TRIGGER_SENSORS] == ["binary_sensor.test_occupancy"]
+    assert suggested[CONF_MAINTAIN_SENSORS] == ["binary_sensor.test_occupancy"]
 
 
 @pytest.mark.asyncio

@@ -555,6 +555,15 @@ def _validate_light_timeout(
     return {}
 
 
+def _validate_combined_occupancy_roles(user_input: dict[str, Any]) -> dict[str, str]:
+    """Reject constituents assigned to both trigger and maintain roles."""
+    triggers = set(user_input.get(CONF_TRIGGER_SENSORS, []))
+    maintains = set(user_input.get(CONF_MAINTAIN_SENSORS, []))
+    if triggers & maintains:
+        return {"base": "occupancy_sensor_role_overlap"}
+    return {}
+
+
 def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     """Check each stage fade fits inside its stage: transition <= timeout.
 
@@ -1692,6 +1701,8 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
             if not flat.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
+            elif role_errors := _validate_combined_occupancy_roles(flat):
+                errors.update(role_errors)
             else:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -1975,6 +1986,8 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             if not user_input.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
+            elif role_errors := _validate_combined_occupancy_roles(user_input):
+                errors.update(role_errors)
             else:
                 # The new constituent set must not outgrow any dependent light:
                 # the combined sensor's effective timeout is its max constituent.
