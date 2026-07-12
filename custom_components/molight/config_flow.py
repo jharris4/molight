@@ -36,11 +36,14 @@ from .const import (
     CONF_ASSIGN_SENSOR,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_COLOR_TEMP,
+    CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_ID,
@@ -70,6 +73,7 @@ from .const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
@@ -132,6 +136,15 @@ _TRANSITION_SELECTOR = selector.NumberSelector(
         min=0, max=300, step=0.1, unit_of_measurement="s", mode="box"
     )
 )
+# Optional colors for automatic turn-ons and the warning stages. A color is
+# forwarded to every member light in one call; HA filters/converts it per
+# real light, so brightness-only members simply ignore it.
+_COLOR_TEMP_SELECTOR = selector.ColorTempSelector(
+    selector.ColorTempSelectorConfig(
+        unit=selector.ColorTempSelectorUnit.KELVIN, min=2000, max=6500
+    )
+)
+_RGB_COLOR_SELECTOR = selector.ColorRGBSelector()
 
 # ---------------------------------------------------------------------------
 # Collapsible form sections
@@ -163,15 +176,19 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_BEHAVIOR: (
         CONF_FALSE_OFF_DELAY,
         CONF_AUTO_ON_BRIGHTNESS,
+        CONF_AUTO_ON_COLOR_TEMP,
+        CONF_AUTO_ON_RGB_COLOR,
         CONF_AUTO_ON_TRANSITION,
         CONF_AUTO_OFF_TRANSITION,
     ),
     SECTION_WARNING: (
         CONF_EFFECT_TIMEOUT,
         CONF_EFFECT_BRIGHTNESS,
+        CONF_EFFECT_RGB_COLOR,
         CONF_EFFECT_TRANSITION,
         CONF_WARN_TIMEOUT,
         CONF_WARN_BRIGHTNESS,
+        CONF_WARN_RGB_COLOR,
         CONF_WARN_TRANSITION,
     ),
     SECTION_SENSORS: (
@@ -495,6 +512,26 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
+    """Check the optional color fields are coherent.
+
+    The auto-on color temp and rgb color are mutually exclusive (a turn-on
+    can only carry one color), and an effect color needs a visible effect
+    stage (effect_brightness > 0 — a blink fully off has no color to show).
+    Reported as base errors: the fields live inside collapsed sections,
+    where the frontend can't anchor a field error.
+    """
+    if user_input.get(CONF_AUTO_ON_COLOR_TEMP) and user_input.get(
+        CONF_AUTO_ON_RGB_COLOR
+    ):
+        return {"base": "auto_on_color_conflict"}
+    if user_input.get(CONF_EFFECT_RGB_COLOR) and not int(
+        user_input.get(CONF_EFFECT_BRIGHTNESS) or 0
+    ):
+        return {"base": "effect_color_requires_brightness"}
+    return {}
+
+
 # ---------------------------------------------------------------------------
 # Shared option-field schemas
 #
@@ -637,6 +674,8 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                         )
                     ),
                     vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_AUTO_ON_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
+                    vol.Optional(CONF_AUTO_ON_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
                 }
@@ -652,11 +691,13 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                     vol.Required(
                         CONF_EFFECT_BRIGHTNESS, default=DEFAULT_EFFECT_BRIGHTNESS
                     ): _EFFECT_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_EFFECT_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Required(
                         CONF_WARN_TIMEOUT, default=DEFAULT_WARN_TIMEOUT
                     ): _STAGE_TIMEOUT_SELECTOR,
                     vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_WARN_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
                 }
             ),
@@ -1297,6 +1338,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
+            errors.update(_validate_colors(flat))
             if not errors:
                 return self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
@@ -1753,6 +1795,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
+            errors.update(_validate_colors(flat))
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
@@ -2009,6 +2052,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             else:
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
+            errors.update(_validate_colors(flat))
             if not errors:
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.

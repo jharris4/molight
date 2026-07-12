@@ -51,10 +51,16 @@ Effect/warn warning
   dim brings its own brightness, which is honoured instead of the snapshot.
   Bright-forces-off (control mode) and a gate/follow window ending still turn
   the lights off during the sequence, as they would mid-countdown.
-  The pre-warning brightness is exposed as the pre_warn_brightness attribute
-  (null outside the sequence) and survives restarts: a restart landing
-  mid-warning with the lights still on restores that brightness instead of
-  adopting the stage's; lights found off stay off (the auto-off completed).
+  Each stage can also show an optional color (effect_rgb_color /
+  warn_rgb_color — e.g. a red warn stage as an unmissable cue); color-capable
+  members show it, brightness-only members just show the stage brightness. A
+  warn stage without a color of its own undoes an effect-stage recolor, and
+  every re-trigger restores the pre-warning color along with the brightness.
+  The pre-warning brightness and color are exposed as the pre_warn_brightness
+  / pre_warn_color attributes (null outside the sequence) and survive
+  restarts: a restart landing mid-warning with the lights still on restores
+  them instead of adopting the stage's; lights found off stay off (the
+  auto-off completed).
 
   any + light turned off externally
        → IDLE
@@ -79,6 +85,21 @@ Turn-on attribution
   records external changes on the real lights (and restarts a running
   ACTIVE/COUNTDOWN timer; brightness 0 counts as off, leaving 0 as on), while
   last_brightness_change_virtual records brightness set through this entity.
+  Color changes are tracked identically via last_color_change_physical /
+  last_color_change_virtual, and an external recolor restarts a running timer
+  exactly like an external dim — both are human activity.
+
+Color support
+  The virtual light derives its color capabilities from the real lights: it
+  advertises HS when any member can show a color (hs/rgb/rgbw/rgbww/xy — HA
+  converts hs to each member's native mode) and COLOR_TEMP when any member
+  supports it, falling back to brightness-only when none do. Capabilities are
+  re-derived on every member event, so members that are unavailable at startup
+  contribute theirs once they appear. Color commands are forwarded to ALL
+  members in one service call; HA filters/converts the color per real light,
+  so mixed setups (color + brightness-only members) just work — each light
+  shows what it can. The reported color mirrors the first on member that has
+  one, exactly like brightness.
 
 Maintain occupancy (when a maintain occupancy entity is configured)
   The maintain entity holds an already-on light on while it is on; it never
@@ -173,6 +194,13 @@ from datetime import datetime, timezone
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
+    ATTR_COLOR_MODE,
+    ATTR_COLOR_TEMP_KELVIN,
+    ATTR_HS_COLOR,
+    ATTR_MAX_COLOR_TEMP_KELVIN,
+    ATTR_MIN_COLOR_TEMP_KELVIN,
+    ATTR_RGB_COLOR,
+    ATTR_SUPPORTED_COLOR_MODES,
     ATTR_TRANSITION,
     ENTITY_ID_FORMAT,
     ColorMode,
@@ -198,15 +226,19 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import color as color_util
 from homeassistant.util.percentage import percentage_to_ranged_value
 
 from .const import (
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_COLOR_TEMP,
+    CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
@@ -222,6 +254,7 @@ from .const import (
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_ENABLED,
@@ -253,10 +286,25 @@ from .helpers import molight_config, suggested_entity_id
 
 _LOGGER = logging.getLogger(__name__)
 
+# Member color modes an hs command can drive (HA converts hs to each member's
+# native mode); any of them lets the virtual light advertise HS itself.
+_HS_CAPABLE_MODES = {
+    ColorMode.HS,
+    ColorMode.RGB,
+    ColorMode.RGBW,
+    ColorMode.RGBWW,
+    ColorMode.XY,
+}
+
 
 def _opt_transition(value) -> float | None:
     """Configured transition → float seconds; absent/0 = don't send one."""
     return float(value) if value else None
+
+
+def _opt_rgb_color(value) -> dict | None:
+    """Configured [r, g, b] → turn-on service data; absent = don't send one."""
+    return {ATTR_RGB_COLOR: tuple(int(c) for c in value)} if value else None
 
 
 async def async_setup_entry(
@@ -300,6 +348,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._auto_on_brightness: int | None = (
             round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
         )
+        # Optional color for automatic turn-ons, as turn-on service data
+        # (mutually exclusive keys, enforced by the config/options flows).
+        # None leaves automatic turn-ons uncolored, like auto_on_brightness.
+        kelvin = cfg.get(CONF_AUTO_ON_COLOR_TEMP)
+        self._auto_on_color: dict | None = (
+            {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
+            if kelvin
+            else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
+        )
         # True while the current on-period was started by occupancy (not by
         # the user) — the only case where a false-detection clear may cut the
         # lights short.
@@ -325,6 +382,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             if warn_pct
             else None
         )
+        # Optional stage colors, as turn-on service data. None sends no color:
+        # the effect stage then only changes brightness, and the warn stage
+        # keeps (or, after a colored effect stage, restores) the pre-warning
+        # color.
+        self._effect_color = _opt_rgb_color(cfg.get(CONF_EFFECT_RGB_COLOR))
+        self._warn_color = _opt_rgb_color(cfg.get(CONF_WARN_RGB_COLOR))
         # Optional fade times (seconds) for the service calls this light makes
         # itself: automatic turn-ons/offs and the effect/warn stage changes.
         # None (absent or 0) sends no transition attribute. Manual/physical
@@ -333,11 +396,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._auto_off_transition = _opt_transition(cfg.get(CONF_AUTO_OFF_TRANSITION))
         self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
         self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
-        # Brightness the light had when the warning sequence began, restored on
-        # any re-trigger so the effect/warn stages leave no lasting trace.
-        # Exposed as the pre_warn_brightness attribute so it survives a
-        # restart landing mid-warning.
+        # Brightness and color the light had when the warning sequence began,
+        # restored on any re-trigger so the effect/warn stages leave no
+        # lasting trace. Exposed as the pre_warn_brightness / pre_warn_color
+        # attributes so they survive a restart landing mid-warning.
         self._pre_warn_brightness: int | None = None
+        self._pre_warn_color: dict | None = None
 
         self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._maintain_entity: str | None = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
@@ -379,6 +443,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_door: datetime | None = None
         self._last_brightness_change_physical: datetime | None = None
         self._last_brightness_change_virtual: datetime | None = None
+        self._last_color_change_physical: datetime | None = None
+        self._last_color_change_virtual: datetime | None = None
 
     # ------------------------------------------------------------------
     # HA lifecycle
@@ -410,6 +476,8 @@ class VirtualLight(LightEntity, RestoreEntity):
                 ("last_brightness_change_physical", "_last_brightness_change_physical"),
                 ("last_brightness_change", "_last_brightness_change_physical"),
                 ("last_brightness_change_virtual", "_last_brightness_change_virtual"),
+                ("last_color_change_physical", "_last_color_change_physical"),
+                ("last_color_change_virtual", "_last_color_change_virtual"),
             ):
                 raw = last.attributes.get(attr)
                 if raw and getattr(self, field) is None:
@@ -420,11 +488,36 @@ class VirtualLight(LightEntity, RestoreEntity):
             raw_brightness = last.attributes.get(ATTR_BRIGHTNESS)
             if isinstance(raw_brightness, int):
                 self._attr_brightness = raw_brightness
+            # Restore the color keyed on the stored color_mode: a color_temp
+            # state also stores a derived hs_color (HA computes it for
+            # display), so the mode decides which one was authoritative.
+            # _seed_state re-derives capabilities and legalises the mode, so
+            # a restore that no longer matches the members is corrected there.
+            raw_mode = last.attributes.get(ATTR_COLOR_MODE)
+            raw_kelvin = last.attributes.get(ATTR_COLOR_TEMP_KELVIN)
+            raw_hs = last.attributes.get(ATTR_HS_COLOR)
+            if raw_mode == ColorMode.COLOR_TEMP and isinstance(raw_kelvin, int):
+                self._attr_color_mode = ColorMode.COLOR_TEMP
+                self._attr_color_temp_kelvin = raw_kelvin
+            elif (
+                raw_mode == ColorMode.HS
+                and isinstance(raw_hs, (list, tuple))
+                and len(raw_hs) == 2
+            ):
+                self._attr_color_mode = ColorMode.HS
+                self._attr_hs_color = tuple(raw_hs)
             # Non-null only when the last state was written mid effect/warn;
             # _seed_state then undoes the interrupted warning stage.
             raw_pre_warn = last.attributes.get("pre_warn_brightness")
             if isinstance(raw_pre_warn, int):
                 self._pre_warn_brightness = raw_pre_warn
+            raw_pre_warn_color = last.attributes.get("pre_warn_color")
+            if isinstance(raw_pre_warn_color, dict):
+                self._pre_warn_color = {
+                    k: raw_pre_warn_color[k]
+                    for k in (ATTR_COLOR_TEMP_KELVIN, ATTR_HS_COLOR)
+                    if k in raw_pre_warn_color
+                } or None
 
         watch = list(self._lights)
         if self._occupancy_entity:
@@ -482,6 +575,11 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
+        # Derive color capabilities from the members before anything mirrors
+        # a color (mirroring is a no-op outside the supported modes). Also
+        # legalises a restored color_mode the members no longer support.
+        self._update_capabilities()
+
         # Unavailable/unknown/missing keep-on entities count as not holding.
         self._hold_states = {
             e: (s := self.hass.states.get(e)) is not None and s.state == "on"
@@ -502,22 +600,26 @@ class VirtualLight(LightEntity, RestoreEntity):
             for e in self._lights
         )
 
-        # Match the physical brightness at startup too, overriding the value
-        # restored from our own last state, so the virtual light always tracks
-        # the real lights rather than a stale restored figure.
+        # Match the physical brightness and color at startup too, overriding
+        # the values restored from our own last state, so the virtual light
+        # always tracks the real lights rather than stale restored figures.
         if self._attr_is_on and (brightness := self._physical_brightness()):
             self._attr_brightness = brightness
+        if self._attr_is_on and (color := self._physical_color()):
+            self._set_color_state(*color)
 
-        if self._pre_warn_brightness is not None:
+        if self._pre_warn_brightness is not None or self._pre_warn_color is not None:
             if self._attr_is_on:
                 # The restart landed mid effect/warn with the lights still on:
                 # undo the warning stage like any other re-trigger, then seed
-                # normally (the warn-stage brightness must not be adopted).
+                # normally (the warn-stage brightness/color must not be
+                # adopted).
                 self._resume_lights()
             else:
                 # The lights ended up off (e.g. mid blink-off) — treat the
                 # auto-off as having completed; the room is not re-lit.
                 self._pre_warn_brightness = None
+                self._pre_warn_color = None
 
         if self._follow_schedule_seed():
             return
@@ -607,6 +709,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
         brightness = kwargs.get(ATTR_BRIGHTNESS)
+        # HA has already narrowed any color request to our advertised modes,
+        # so only the canonical hs/color-temp attributes can arrive here.
+        color: dict | None = {
+            k: kwargs[k]
+            for k in (ATTR_HS_COLOR, ATTR_COLOR_TEMP_KELVIN)
+            if k in kwargs
+        } or None
+        if color is not None:
+            self._last_color_change_virtual = now
         if brightness is not None:
             self._last_brightness_change_virtual = now
             self._attr_brightness = brightness
@@ -616,7 +727,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             brightness = self._pre_warn_brightness
             if brightness is not None:
                 self._attr_brightness = brightness
-        await self._set_lights(True, brightness=brightness)
+        if color is None and self._in_warning():
+            # Same for the color: a colored stage must leave no trace either.
+            color = self._pre_warn_color
+        await self._set_lights(True, brightness=brightness, color=color)
         self._transition_on()
 
     async def async_turn_off(self, **kwargs) -> None:
@@ -639,12 +753,20 @@ class VirtualLight(LightEntity, RestoreEntity):
         same_state = old_state is not None and old_state.state == new_state.state
 
         if entity_id in self._lights:
+            # Capabilities can appear late (members unavailable at startup):
+            # re-derive on every member event, before the echo check — our own
+            # service calls still surface a member's first real state.
+            self._update_capabilities()
             if event.context.id in self._self_context_ids:
                 return  # echo of our own service call; call sites manage state
             if same_state:
                 if new_state.state == "on":
-                    self._on_light_brightness_change(old_state, new_state)
+                    self._on_light_attrs_change(old_state, new_state)
                 return
+            if new_state.state == "on" and (color := self._member_color(new_state)):
+                # Mirror the real light's color on the off→on adoption edge,
+                # like the brightness mirror in _on_light_state_change.
+                self._set_color_state(*color)
             self._on_light_state_change(
                 new_state.state, new_state.attributes.get("brightness")
             )
@@ -685,33 +807,49 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._all_lights_off():
                 self._go_idle()
 
-    def _on_light_brightness_change(self, old_state, new_state) -> None:
-        """Handle an external brightness change on a real light (state stays on).
+    def _on_light_attrs_change(self, old_state, new_state) -> None:
+        """Handle an external brightness/color change on a real light (state
+        stays on).
 
-        Dimming is human activity: record it and restart any running
-        countdown with the full timeout. Brightness 0 means off in disguise.
+        Dimming or recoloring is human activity: record it and restart any
+        running countdown with the full timeout. Brightness 0 means off in
+        disguise.
         """
         old_b = old_state.attributes.get("brightness")
         new_b = new_state.attributes.get("brightness")
-        if new_b is None or new_b == old_b:
-            return  # some other attribute changed
+        brightness_changed = new_b is not None and new_b != old_b
 
-        self._last_brightness_change_physical = datetime.now(timezone.utc)
-        if new_b:
-            self._attr_brightness = new_b
+        new_color = self._member_color(new_state)
+        color_changed = (
+            new_color is not None and new_color != self._member_color(old_state)
+        )
+        if not brightness_changed and not color_changed:
+            return  # some other attribute changed (battery, ...)
 
-        if new_b == 0:
-            if self._all_lights_off():
-                self._go_idle()
-            else:
-                self.async_write_ha_state()
-            return
+        now = datetime.now(timezone.utc)
+        if color_changed:
+            self._last_color_change_physical = now
+            self._set_color_state(*new_color)
+        if brightness_changed:
+            self._last_brightness_change_physical = now
+            if new_b:
+                self._attr_brightness = new_b
+
+            if new_b == 0:
+                if self._all_lights_off():
+                    self._go_idle()
+                else:
+                    self.async_write_ha_state()
+                return
 
         if self._machine_state == STATE_IDLE:
-            # 0 → non-zero while we're idle is a turn-on in disguise: run the
-            # normal external turn-on logic (last_on_physical, ACTIVE/timer
-            # or rejoining an active follow window).
-            self._on_light_state_change("on")
+            if brightness_changed:
+                # 0 → non-zero while we're idle is a turn-on in disguise: run
+                # the normal external turn-on logic (last_on_physical,
+                # ACTIVE/timer or rejoining an active follow window). A
+                # color-only change on a light we consider off is just
+                # mirrored.
+                self._on_light_state_change("on")
             self.async_write_ha_state()
             return
 
@@ -721,9 +859,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             STATE_EFFECT,
             STATE_WARN,
         ):
-            # An external dim during the warning sequence is a re-trigger like
-            # any other: honour the new brightness and restart the full timer.
+            # An external dim or recolor during the warning sequence is a
+            # re-trigger like any other: honour the new brightness/color and
+            # restart the full timer.
             self._pre_warn_brightness = None
+            self._pre_warn_color = None
             self._machine_state = STATE_ACTIVE
             self._start_timer()
         self.async_write_ha_state()
@@ -745,6 +885,134 @@ class VirtualLight(LightEntity, RestoreEntity):
             if state is not None and state.state == "on":
                 if brightness := state.attributes.get("brightness"):
                     return brightness
+        return None
+
+    # ------------------------------------------------------------------
+    # Color support
+    # ------------------------------------------------------------------
+
+    def _update_capabilities(self) -> None:
+        """Derive this light's color capabilities from the real lights.
+
+        Advertises the canonical HS/COLOR_TEMP pair instead of the union of
+        member modes: HS when any member can show a color (HA converts hs to
+        each member's native rgb/rgbw/rgbww/xy on the way out) and COLOR_TEMP
+        when any member supports it, so two modes cover every member while
+        keeping this entity's own color state simple. Falls back to
+        brightness-only — the pre-color behavior — when no member reports a
+        color capability, including while members are still unavailable.
+        """
+        member_modes: set[str] = set()
+        min_kelvins: list[int] = []
+        max_kelvins: list[int] = []
+        for entity_id in self._lights:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            member_modes.update(state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ())
+            if kelvin := state.attributes.get(ATTR_MIN_COLOR_TEMP_KELVIN):
+                min_kelvins.append(kelvin)
+            if kelvin := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
+                max_kelvins.append(kelvin)
+
+        supported: set[ColorMode] = set()
+        if member_modes & _HS_CAPABLE_MODES:
+            supported.add(ColorMode.HS)
+        if ColorMode.COLOR_TEMP in member_modes:
+            supported.add(ColorMode.COLOR_TEMP)
+            # Most permissive envelope; each member clamps to its own range.
+            if min_kelvins:
+                self._attr_min_color_temp_kelvin = min(min_kelvins)
+            if max_kelvins:
+                self._attr_max_color_temp_kelvin = max(max_kelvins)
+        if not supported:
+            supported = {ColorMode.BRIGHTNESS}
+
+        changed = supported != self._attr_supported_color_modes
+        self._attr_supported_color_modes = supported
+        if self._attr_color_mode not in supported:
+            # Keep the reported mode legal for the new capability set; the
+            # value-bearing attributes only survive where they still apply.
+            if supported == {ColorMode.BRIGHTNESS}:
+                self._attr_hs_color = None
+                self._attr_color_temp_kelvin = None
+                self._attr_color_mode = ColorMode.BRIGHTNESS
+            elif self._attr_color_temp_kelvin and ColorMode.COLOR_TEMP in supported:
+                self._attr_color_mode = ColorMode.COLOR_TEMP
+            elif ColorMode.HS in supported:
+                self._attr_color_mode = ColorMode.HS
+                self._attr_color_temp_kelvin = None
+            else:
+                self._attr_color_mode = ColorMode.COLOR_TEMP
+                self._attr_hs_color = None
+            changed = True
+        if changed:
+            self.async_write_ha_state()
+
+    def _set_color_state(self, mode: ColorMode, value) -> None:
+        """Adopt a color (commanded by us or mirrored from a member) as this
+        light's own reported color. A no-op for modes we don't advertise —
+        notably everything on a brightness-only virtual light."""
+        if mode not in (self._attr_supported_color_modes or ()):
+            return
+        self._attr_color_mode = mode
+        if mode is ColorMode.COLOR_TEMP:
+            self._attr_color_temp_kelvin = int(value)
+            self._attr_hs_color = None
+        else:
+            self._attr_hs_color = tuple(value)
+            self._attr_color_temp_kelvin = None
+
+    def _adopt_color_data(self, color: dict) -> None:
+        """Mirror turn-on color service data into this light's own state."""
+        if ATTR_COLOR_TEMP_KELVIN in color:
+            self._set_color_state(
+                ColorMode.COLOR_TEMP, color[ATTR_COLOR_TEMP_KELVIN]
+            )
+        elif ATTR_HS_COLOR in color:
+            self._set_color_state(ColorMode.HS, color[ATTR_HS_COLOR])
+        elif ATTR_RGB_COLOR in color:
+            # Configured stage/auto-on colors are stored as rgb; the members
+            # get the rgb verbatim while we report its hs equivalent.
+            self._set_color_state(
+                ColorMode.HS, color_util.color_RGB_to_hs(*color[ATTR_RGB_COLOR])
+            )
+
+    def _current_color(self) -> dict | None:
+        """This light's current color as turn-on service data, or None.
+
+        The hs value is a list so the dict is JSON-serializable — it is also
+        exposed as the pre_warn_color attribute to survive restarts.
+        """
+        if self._attr_color_mode == ColorMode.COLOR_TEMP and (
+            kelvin := self._attr_color_temp_kelvin
+        ):
+            return {ATTR_COLOR_TEMP_KELVIN: kelvin}
+        if self._attr_color_mode == ColorMode.HS and (hs := self._attr_hs_color):
+            return {ATTR_HS_COLOR: list(hs)}
+        return None
+
+    def _member_color(self, state) -> tuple[ColorMode, tuple] | None:
+        """The color a real light's state reports, in our canonical terms.
+
+        A color-temp member also carries a derived hs_color, so its own
+        color_mode decides which attribute is authoritative.
+        """
+        attrs = state.attributes
+        if attrs.get(ATTR_COLOR_MODE) == ColorMode.COLOR_TEMP:
+            if kelvin := attrs.get(ATTR_COLOR_TEMP_KELVIN):
+                return (ColorMode.COLOR_TEMP, kelvin)
+        if hs := attrs.get(ATTR_HS_COLOR):
+            return (ColorMode.HS, tuple(hs))
+        return None
+
+    def _physical_color(self) -> tuple[ColorMode, tuple] | None:
+        """Color of the first on real light reporting one, else None."""
+        for entity_id in self._lights:
+            state = self.hass.states.get(entity_id)
+            if state is not None and state.state == "on":
+                if color := self._member_color(state):
+                    return color
         return None
 
     def _is_illuminance_bright(self) -> bool:
@@ -1272,6 +1540,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # A manual/physical turn-on ends any warning sequence; the caller has
         # already set the real lights, so just drop the restore snapshot.
         self._pre_warn_brightness = None
+        self._pre_warn_color = None
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
 
@@ -1309,6 +1578,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._attr_is_on = False
         self._occupancy_lit_lights = False
         self._pre_warn_brightness = None
+        self._pre_warn_color = None
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
@@ -1362,17 +1632,22 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _begin_warning(self) -> None:
         """Auto-off is due: start the effect→warn warning sequence.
 
-        Snapshots the current brightness (restored if the user re-triggers or
-        reused by a warn stage with no brightness of its own). Falls through to
-        the warn stage — and to a plain off — when the earlier stage is
-        disabled, so both timeouts at 0 behaves exactly like the old immediate
-        off.
+        Snapshots the current brightness and color (restored if the user
+        re-triggers or reused by a warn stage with no brightness/color of its
+        own). Falls through to the warn stage — and to a plain off — when the
+        earlier stage is disabled, so both timeouts at 0 behaves exactly like
+        the old immediate off.
         """
         self._pre_warn_brightness = self._attr_brightness
+        self._pre_warn_color = self._current_color()
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
             self.hass.async_create_task(
-                self._set_stage_lights(self._effect_brightness, self._effect_transition)
+                self._set_stage_lights(
+                    self._effect_brightness,
+                    self._effect_transition,
+                    self._effect_color,
+                )
             )
             self._start_timer(self._effect_timeout)
             self.async_write_ha_state()
@@ -1383,14 +1658,23 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Advance to the WARN grace period, or turn the lights off when it is
         disabled."""
         if self._warn_timeout > 0:
+            # A warn stage without a color of its own undoes an effect-stage
+            # recolor, mirroring how its brightness falls back to the
+            # pre-warning brightness.
+            effect_recolored = (
+                self._machine_state == STATE_EFFECT and self._effect_color is not None
+            )
             self._machine_state = STATE_WARN
             brightness = (
                 self._warn_brightness
                 if self._warn_brightness is not None
                 else self._pre_warn_brightness
             ) or 255
+            color = self._warn_color
+            if color is None and effect_recolored:
+                color = self._pre_warn_color
             self.hass.async_create_task(
-                self._set_stage_lights(brightness, self._warn_transition)
+                self._set_stage_lights(brightness, self._warn_transition, color)
             )
             self._start_timer(self._warn_timeout)
             self.async_write_ha_state()
@@ -1399,37 +1683,49 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._go_idle()
 
     def _resume_lights(self) -> None:
-        """Restore the real lights to their pre-warning brightness when a
-        re-trigger interrupts the effect/warn sequence. The caller sets the
-        resulting machine state. No transition: the restore must be as
+        """Restore the real lights to their pre-warning brightness and color
+        when a re-trigger interrupts the effect/warn sequence. The caller sets
+        the resulting machine state. No transition: the restore must be as
         immediate as the re-trigger that caused it."""
         brightness = self._pre_warn_brightness
+        color = self._pre_warn_color
         self._pre_warn_brightness = None
-        self.hass.async_create_task(self._set_lights(True, brightness=brightness))
+        self._pre_warn_color = None
+        self.hass.async_create_task(
+            self._set_lights(True, brightness=brightness, color=color)
+        )
 
     async def _set_stage_lights(
-        self, brightness: int, transition: float | None = None
+        self,
+        brightness: int,
+        transition: float | None = None,
+        color: dict | None = None,
     ) -> None:
         """Drive the real lights for an effect/warn stage while the virtual
-        light stays logically on. Brightness 0 blinks the real lights off."""
+        light stays logically on. Brightness 0 blinks the real lights off
+        (any stage color is moot then)."""
         context = Context()
         self._self_context_ids.append(context.id)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
         )
         if brightness:
+            color_data = color or {}
             await self.hass.services.async_call(
                 "light",
                 "turn_on",
                 {
                     "entity_id": self._lights,
                     ATTR_BRIGHTNESS: brightness,
+                    **color_data,
                     **transition_data,
                 },
                 blocking=False,
                 context=context,
             )
             self._attr_brightness = brightness
+            if color:
+                self._adopt_color_data(color)
         else:
             await self.hass.services.async_call(
                 "light",
@@ -1447,11 +1743,12 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _auto_lights_on(self):
         """Coroutine turning the real lights on for an automatic trigger,
-        with the configured auto-on brightness and transition."""
+        with the configured auto-on brightness, color and transition."""
         return self._set_lights(
             True,
             brightness=self._auto_on_brightness,
             transition=self._auto_on_transition,
+            color=self._auto_on_color,
         )
 
     def _auto_lights_off(self):
@@ -1464,6 +1761,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         on: bool,
         brightness: int | None = None,
         transition: float | None = None,
+        color: dict | None = None,
     ) -> None:
         context = Context()
         self._self_context_ids.append(context.id)
@@ -1475,6 +1773,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             # Mirror the commanded brightness so the virtual light reports it
             # (the real-light echo is ignored as a self-caused change).
             self._attr_brightness = brightness
+        if on and color:
+            # One call carries the color to every member; HA filters/converts
+            # it per real light, so mixed-capability members each show what
+            # they can.
+            service_data.update(color)
+            self._adopt_color_data(color)
         await self.hass.services.async_call(
             "light",
             "turn_on" if on else "turn_off",
@@ -1508,8 +1812,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_brightness_change_virtual": _fmt(
                 self._last_brightness_change_virtual
             ),
+            "last_color_change_physical": _fmt(self._last_color_change_physical),
+            "last_color_change_virtual": _fmt(self._last_color_change_virtual),
             # Non-null only while the effect/warn stage is showing; persisted
-            # so a restart mid-warning can restore the pre-warning brightness.
+            # so a restart mid-warning can restore the pre-warning brightness
+            # and color.
             "pre_warn_brightness": self._pre_warn_brightness,
+            "pre_warn_color": self._pre_warn_color,
             "schedule_window_start": self._schedule_window_applied,
         }

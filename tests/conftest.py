@@ -11,10 +11,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.molight.const import (
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_COLOR_TEMP,
+    CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
@@ -34,6 +37,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DOMAIN,
@@ -71,10 +75,14 @@ def make_light_entry(
     door_mode: str | None = None,
     hold_entities: list[str] | None = None,
     auto_on_brightness: int | None = None,
+    auto_on_color_temp: int | None = None,
+    auto_on_rgb_color: list[int] | None = None,
     effect_timeout: int | None = None,
     effect_brightness: int | None = None,
+    effect_rgb_color: list[int] | None = None,
     warn_timeout: int | None = None,
     warn_brightness: int | None = None,
+    warn_rgb_color: list[int] | None = None,
     auto_on_transition: float | None = None,
     auto_off_transition: float | None = None,
     effect_transition: float | None = None,
@@ -112,14 +120,22 @@ def make_light_entry(
         data[CONF_HOLD_ENTITIES] = hold_entities
     if auto_on_brightness is not None:
         data[CONF_AUTO_ON_BRIGHTNESS] = auto_on_brightness
+    if auto_on_color_temp is not None:
+        data[CONF_AUTO_ON_COLOR_TEMP] = auto_on_color_temp
+    if auto_on_rgb_color is not None:
+        data[CONF_AUTO_ON_RGB_COLOR] = auto_on_rgb_color
     if effect_timeout is not None:
         data[CONF_EFFECT_TIMEOUT] = effect_timeout
     if effect_brightness is not None:
         data[CONF_EFFECT_BRIGHTNESS] = effect_brightness
+    if effect_rgb_color is not None:
+        data[CONF_EFFECT_RGB_COLOR] = effect_rgb_color
     if warn_timeout is not None:
         data[CONF_WARN_TIMEOUT] = warn_timeout
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
+    if warn_rgb_color is not None:
+        data[CONF_WARN_RGB_COLOR] = warn_rgb_color
     if auto_on_transition is not None:
         data[CONF_AUTO_ON_TRANSITION] = auto_on_transition
     if auto_off_transition is not None:

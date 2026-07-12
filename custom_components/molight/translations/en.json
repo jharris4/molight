@@ -233,12 +233,16 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_temp": "Auto-on color temperature",
+              "auto_on_rgb_color": "Auto-on color",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -249,17 +253,21 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           }
@@ -442,12 +450,16 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_temp": "Auto-on color temperature",
+              "auto_on_rgb_color": "Auto-on color",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -458,17 +470,21 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           },
@@ -504,7 +520,9 @@
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
-      "no_entities_selected": "Select at least one entity to add."
+      "no_entities_selected": "Select at least one entity to add.",
+      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color)."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -707,12 +725,16 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_temp": "Auto-on color temperature",
+              "auto_on_rgb_color": "Auto-on color",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -723,17 +745,21 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           }
@@ -748,7 +774,9 @@
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
-      "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled)."
+      "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
+      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color)."
     }
   }
 }

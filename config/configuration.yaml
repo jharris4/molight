@@ -18,6 +18,8 @@ input_boolean:
     name: "Bedroom Light State"
   light_office:
     name: "Office Light State"
+  light_rgb:
+    name: "RGB Light State"
 
   # Bulk test lights (light.test_bulk_*)
   light_bulk_01:
@@ -109,6 +111,38 @@ input_number:
     unit_of_measurement: lx
     icon: mdi:brightness-5
 
+  light_rgb_brightness:
+    name: "RGB Light Brightness"
+    min: 0
+    max: 255
+    step: 1
+    unit_of_measurement: ""
+    icon: mdi:brightness-5
+
+  light_rgb_r:
+    name: "RGB Light Red"
+    min: 0
+    max: 255
+    step: 1
+    unit_of_measurement: ""
+    icon: mdi:palette
+
+  light_rgb_g:
+    name: "RGB Light Green"
+    min: 0
+    max: 255
+    step: 1
+    unit_of_measurement: ""
+    icon: mdi:palette
+
+  light_rgb_b:
+    name: "RGB Light Blue"
+    min: 0
+    max: 255
+    step: 1
+    unit_of_measurement: ""
+    icon: mdi:palette
+
 # Template entities
 template:
   # Test lights (light.test_*)
@@ -160,6 +194,45 @@ template:
           action: input_boolean.turn_off
           target:
             entity_id: input_boolean.light_office
+
+      - name: "Test RGB Light"
+        unique_id: test_rgb_light
+        state: "{{ states('input_boolean.light_rgb') }}"
+        level: "{{ states('input_number.light_rgb_brightness') | int }}"
+        rgb: >-
+          ({{ states('input_number.light_rgb_r') | int }},
+           {{ states('input_number.light_rgb_g') | int }},
+           {{ states('input_number.light_rgb_b') | int }})
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_rgb
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_rgb
+        set_level:
+          action: input_number.set_value
+          data:
+            value: "{{ brightness }}"
+          target:
+            entity_id: input_number.light_rgb_brightness
+        set_rgb:
+          - action: input_number.set_value
+            data:
+              value: "{{ r }}"
+            target:
+              entity_id: input_number.light_rgb_r
+          - action: input_number.set_value
+            data:
+              value: "{{ g }}"
+            target:
+              entity_id: input_number.light_rgb_g
+          - action: input_number.set_value
+            data:
+              value: "{{ b }}"
+            target:
+              entity_id: input_number.light_rgb_b
 
       - name: "Test Bulk Light 01"
         unique_id: test_light_bulk_01

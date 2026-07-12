@@ -171,13 +171,17 @@ Controls N real lights with an occupancy-aware state machine.
 | **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, a door opening, illuminance going dark, or a schedule window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
+| **Auto-on color temperature (K)** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Mutually exclusive with the auto-on color |
+| **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Mutually exclusive with the auto-on color temperature |
 | **Auto-on fade (s)** *(optional)* | Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons never get one |
 | **Auto-off fade (s)** *(optional)* | Fade time for automatic turn-offs — timer expiry, bright forcing off, a window ending. A manual off is always immediate |
 | **Effect warning duration (s)** | `0` disables. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
 | **Effect brightness (%)** | Brightness during the effect stage. `0` blinks the real lights fully off — a distinct "about to turn off" flash |
+| **Effect color** *(optional)* | RGB color during the effect stage, for members that can show it. Requires an effect brightness above `0` (a blink fully off has no color to show) |
 | **Effect fade (s)** *(optional)* | Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too) |
 | **Warning grace period (s)** | `0` disables. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
 | **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one) |
+| **Warning color** *(optional)* | RGB color during the grace period — e.g. red as an unmissable "about to turn off" cue. Blank keeps the color the lights already had |
 | **Warning fade (s)** *(optional)* | Fade into the warning brightness. Must fit within the grace period |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
@@ -199,7 +203,8 @@ Controls N real lights with an occupancy-aware state machine.
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
 | `last_on_door` | Timestamp of the last turn-on caused by the door opening |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
-| `pre_warn_brightness` | Brightness saved before an effect/warn stage, so a restart mid-warning can restore it; null except mid-sequence |
+| `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
+| `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
 
 #### State machine
@@ -238,9 +243,11 @@ By default the light turns off the instant its timer expires. Setting an **effec
 1. **Effect** — a brief cue for *effect warning duration* seconds: the real lights are driven to the *effect brightness* (`0` blinks them fully off). Skipped when its duration is `0`.
 2. **Warn** — a grace period of *warning grace period* seconds at the *warning brightness* (or the brightness the light already had, if blank), then the lights turn off. Skipped when its duration is `0`.
 
+Each stage can also show an optional **color** — a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
+
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade on a disabled stage is rejected rather than silently ignored).
 
-Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning. A re-trigger that carries no brightness of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness, so the interruption leaves no trace; a physical turn-on or an external dim brings its own brightness, which is honored instead. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning. A re-trigger that carries no brightness or color of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness and color, so the interruption leaves no trace; a physical turn-on or an external dim/recolor brings its own values, which are honored instead. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 #### Maintain occupancy sensor
 
@@ -271,16 +278,18 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
 
-#### Brightness and fades
+#### Brightness, color, and fades
 
 The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
-An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; manual and physical turn-ons are left alone, so you can dim the room by hand without it snapping back. Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions — flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
+Color works the same way, and its capabilities come from the real lights: the virtual light offers a color wheel when any member can show a color and a color-temperature slider when any member supports one, and stays brightness-only otherwise. Mixed setups need no configuration — a color command goes to *all* members in one call and Home Assistant filters/converts it per light, so the bulbs that can go red go red and the rest just dim. The virtual light mirrors the first lit member's color, and an external recolor restarts a running timer exactly like an external dim (`last_color_change_physical` / `_virtual`).
+
+An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; manual and physical turn-ons are left alone, so you can dim the room by hand without it snapping back. An **auto-on color temperature** *or* **auto-on color** does the same for color — think warm white for the night-time hallway. Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions — flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
 
 #### Restarts and unavailability
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
-- Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness.
+- Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
 
 ## Development

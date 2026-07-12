@@ -30,9 +30,12 @@ from custom_components.molight.const import (
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
     CONF_AUTO_OFF_TRANSITION,
+    CONF_AUTO_ON_COLOR_TEMP,
+    CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_ID,
@@ -61,6 +64,7 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DOMAIN,
@@ -446,6 +450,91 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_colors(hass: HomeAssistant) -> None:
+    """The auto-on and stage color fields round-trip through the create flow."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_COLOR_TEMP: 3000},
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_BRIGHTNESS: 50,
+                CONF_EFFECT_RGB_COLOR: [0, 0, 255],
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_AUTO_ON_COLOR_TEMP] == 3000
+    assert data[CONF_EFFECT_RGB_COLOR] == [0, 0, 255]
+    assert data[CONF_WARN_RGB_COLOR] == [255, 0, 0]
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_auto_on_color_conflict(
+    hass: HomeAssistant,
+) -> None:
+    """A turn-on can only carry one color: temp and rgb together are rejected."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                CONF_AUTO_ON_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "auto_on_color_conflict"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_effect_color_without_brightness(
+    hass: HomeAssistant,
+) -> None:
+    """An effect color with effect_brightness 0 (blink fully off) is rejected
+    — there would be no lit stage to show the color on."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_BRIGHTNESS: 0,
+                CONF_EFFECT_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "effect_color_requires_brightness"}
 
 
 @pytest.mark.asyncio

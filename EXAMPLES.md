@@ -104,9 +104,10 @@ Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual le
 Effect warning duration: 3        # 3s "about to turn off" cue...
 Effect brightness:       0%       # ...a blink fully off
 Warning grace period:    20       # then 20s at current brightness to re-trigger
+Warning color:           red     # optional — bulbs that can show color turn red for it
 ```
 
-Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel. Get up in that window and it's as if nothing happened — original brightness restored, no trace.
+Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel — in red on any color-capable bulb, an unmissable cue (brightness-only bulbs just hold their level). Get up in that window and it's as if nothing happened — original brightness and color restored, no trace.
 
 Use `Illuminance mode: gate` instead if your lux sensor can *see* the lights it controls (otherwise they'd oscillate).
 

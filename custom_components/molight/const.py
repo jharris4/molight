@@ -129,6 +129,15 @@ DEFAULT_LIGHT_TIMEOUT = 300
 # brightness on automatic turn-ons either (the real lights use their own
 # last/default).
 CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
+# Optional color applied when the light is turned on *automatically*, exactly
+# like auto_on_brightness (manual and physical turn-ons are never affected).
+# At most one may be set (the config/options flows enforce it):
+#   auto_on_color_temp — white color temperature in Kelvin
+#   auto_on_rgb_color  — an [r, g, b] color
+# Members that can't show the color get only the brightness — Home Assistant
+# filters/converts color parameters per real light.
+CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
+CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.
@@ -153,6 +162,14 @@ DEFAULT_EFFECT_BRIGHTNESS = 0
 CONF_WARN_TIMEOUT = "warn_timeout"
 DEFAULT_WARN_TIMEOUT = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
+# Optional [r, g, b] colors for the warning stages — e.g. a red warn stage is
+# a much clearer "lights about to go off" cue than a dim. Color-capable
+# members show the color; brightness-only members just show the stage
+# brightness. effect_rgb_color requires effect_brightness > 0 (a blink fully
+# off has no color to show; enforced by the config/options flows). Any
+# re-trigger restores the pre-warning brightness AND color.
+CONF_EFFECT_RGB_COLOR = "effect_rgb_color"
+CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # Optional fade times (seconds) sent as the transition of the service calls
 # the virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
