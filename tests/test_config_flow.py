@@ -1971,6 +1971,117 @@ async def test_combined_options_reject_constituent_above_light_timeout(
 
 
 @pytest.mark.asyncio
+async def test_combined_options_reject_direct_self_reference(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A combined occupancy sensor cannot include its own entity as a source."""
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, combined)
+
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: [
+                "binary_sensor.test_occupancy",
+                "binary_sensor.combined",
+            ],
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "combined_occupancy_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_combined_options_reject_indirect_cycle(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Editing an outer sensor cannot close a cycle through another combined."""
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    inner = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Inner",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.outer"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, outer, inner)
+
+    result = await hass.config_entries.options.async_init(outer.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.inner"],
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "combined_occupancy_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_combined_options_allow_shared_acyclic_dependency(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Two branches may share a constituent when neither points back upstream."""
+    left = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Left",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    right = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Right",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.left"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, left, right, outer)
+
+    result = await hass.config_entries.options.async_init(outer.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.left"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.right"],
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
 async def test_occupancy_options_validate_through_nested_combined(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:

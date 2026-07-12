@@ -511,6 +511,7 @@
     },
     "error": {
       "trigger_sensors_required": "At least one trigger sensor is required.",
+      "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly or through another combined sensor.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
@@ -768,6 +769,7 @@
     },
     "error": {
       "trigger_sensors_required": "At least one trigger sensor is required.",
+      "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly or through another combined sensor.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",

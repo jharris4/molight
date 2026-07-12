@@ -423,6 +423,52 @@ def _effective_occupancy_timeout(
     return None
 
 
+def _combined_occupancy_creates_cycle(
+    hass: HomeAssistant,
+    edited_entry: config_entries.ConfigEntry,
+    proposed_constituents: list[str],
+) -> bool:
+    """Return True when the proposed combined-sensor references form a cycle.
+
+    Resolve entity ids through the registry so the graph is keyed by stable config
+    entry ids. Starting from the edited entry's proposed outgoing edges, a path
+    back to that entry is either a direct self-reference or an indirect cycle.
+    """
+    registry = er.async_get(hass)
+    target_entry_id = edited_entry.entry_id
+
+    def _referenced_entries(entity_ids: list[str]) -> list[config_entries.ConfigEntry]:
+        entries = []
+        for entity_id in entity_ids:
+            reg_entry = registry.async_get(entity_id)
+            if reg_entry is None or reg_entry.config_entry_id is None:
+                continue
+            entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+            if entry is not None and entry.domain == DOMAIN:
+                entries.append(entry)
+        return entries
+
+    pending = _referenced_entries(proposed_constituents)
+    visited: set[str] = set()
+    while pending:
+        entry = pending.pop()
+        if entry.entry_id == target_entry_id:
+            return True
+        if entry.entry_id in visited:
+            continue
+        visited.add(entry.entry_id)
+
+        cfg = _molight_cfg(entry)
+        if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+            continue
+        constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
+            CONF_MAINTAIN_SENSORS, []
+        )
+        pending.extend(_referenced_entries(constituents))
+
+    return False
+
+
 def _min_dependent_light_timeout(
     hass: HomeAssistant, occupancy_entry_id: str
 ) -> int | None:
@@ -1918,18 +1964,27 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 constituents = user_input.get(
                     CONF_TRIGGER_SENSORS, []
                 ) + user_input.get(CONF_MAINTAIN_SENSORS, [])
-                timeouts = [
-                    t
-                    for e in constituents
-                    if (t := _effective_occupancy_timeout(self.hass, e)) is not None
-                ]
-                min_light = _min_dependent_light_timeout(
-                    self.hass, self._entry.entry_id
-                )
-                if timeouts and min_light is not None and max(timeouts) > min_light:
-                    errors["base"] = "occupancy_timeout_too_long"
+                if _combined_occupancy_creates_cycle(
+                    self.hass, self._entry, constituents
+                ):
+                    errors["base"] = "combined_occupancy_cycle"
                 else:
-                    return self._finish(user_input)
+                    timeouts = [
+                        t
+                        for e in constituents
+                        if (t := _effective_occupancy_timeout(self.hass, e)) is not None
+                    ]
+                    min_light = _min_dependent_light_timeout(
+                        self.hass, self._entry.entry_id
+                    )
+                    if (
+                        timeouts
+                        and min_light is not None
+                        and max(timeouts) > min_light
+                    ):
+                        errors["base"] = "occupancy_timeout_too_long"
+                    else:
+                        return self._finish(user_input)
 
         cfg = self._cfg
         schema = vol.Schema(
