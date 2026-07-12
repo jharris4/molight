@@ -795,3 +795,59 @@ async def test_brightness_zero_on_one_light_keeps_running(hass: HomeAssistant) -
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_external_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> None:
+    """An external off→on at brightness 0 is an off in disguise.
+
+    The virtual light must stay off without attributing a turn-on or starting
+    a timer — matching how a dim to 0, _all_lights_off and the startup seed
+    already treat brightness 0. The later 0 → non-zero dim is the turn-on.
+    """
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry())
+
+    hass.states.async_set(REAL, "on", {"brightness": 0})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["last_on_physical"] is None
+
+    # Brightness rising from 0 is the turn-on in disguise.
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+    assert state.attributes["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_member_on_at_brightness_zero_keeps_running_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A member appearing on at brightness 0 while another is lit must not
+    restart the running countdown — it carries no human activity."""
+    hass.states.async_set(REAL, "on", {"brightness": 100})
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    hass.states.async_set(REAL2, "on", {"brightness": 0})
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    # The original 60s timer still expires on schedule.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE

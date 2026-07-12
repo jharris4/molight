@@ -2024,6 +2024,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
+                        device_class=["occupancy", "motion", "presence"],
                         exclude_entities=source_exclusions,
                         multiple=False,
                     )

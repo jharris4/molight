@@ -656,6 +656,40 @@ async def test_combined_ignores_maintain_flap_at_startup(
 
 
 @pytest.mark.asyncio
+async def test_combined_keeps_newest_lot_over_older_clear(
+    hass: HomeAssistant,
+) -> None:
+    """A constituent clearing with an older latest_occupied_time must not
+    regress the combined sensor's own — and a cycle that advanced nothing is
+    flagged as a false detection."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    newer = datetime.now(UTC).isoformat()
+    older = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.m1", "off", {"latest_occupied_time": newer})
+    await settle(hass)
+    combined = hass.states.get("binary_sensor.seed_combined")
+    assert combined.attributes["latest_occupied_time"] == newer
+    assert combined.attributes["last_clear_false_detection"] is False
+
+    # A second cycle whose clear carries only an older lot advances nothing.
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.m1", "off", {"latest_occupied_time": older})
+    await settle(hass)
+    combined = hass.states.get("binary_sensor.seed_combined")
+    assert combined.attributes["latest_occupied_time"] == newer
+    assert combined.attributes["last_clear_false_detection"] is True
+    assert combined.attributes["false_detection_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_combined_holds_through_unavailable_constituent(
     hass: HomeAssistant,
 ) -> None:

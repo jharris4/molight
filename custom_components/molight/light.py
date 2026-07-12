@@ -797,6 +797,13 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _on_light_state_change(self, state: str, brightness: int | None = None) -> None:
         """Handle a real light being turned on/off externally."""
+        if state == "on" and brightness == 0:
+            # "On" at brightness 0 is an off in disguise, matching the dimming
+            # path, _all_lights_off and the startup seed. A later 0 → non-zero
+            # dim is then handled as the turn-on (in _on_light_attrs_change).
+            if self._all_lights_off():
+                self._go_idle()
+            return
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
             # matches it — including on this off→on adoption edge, not just on

@@ -867,6 +867,29 @@ async def test_occupancy_options_reject_molight_source_from_stale_form(
 
 
 @pytest.mark.asyncio
+async def test_occupancy_source_pickers_narrow_to_occupancy_device_classes(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Both the create and options source pickers narrow to occupancy-ish
+    device classes, so a door/contact sensor is never offered as a source."""
+    device_classes = ["occupancy", "motion", "presence"]
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
+    )
+    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["device_class"] == (
+        device_classes
+    )
+
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["device_class"] == (
+        device_classes
+    )
+
+
+@pytest.mark.asyncio
 async def test_light_flow_validates_combined_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:

@@ -105,7 +105,7 @@ Wraps a single real binary sensor (motion, presence, occupancy…). `on` mirrors
 
 | Config | Description |
 |---|---|
-| **Source sensor** | The real `binary_sensor` to wrap |
+| **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded — wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-binary-sensor) |
 | **Occupancy timeout (s)** | The source's own hold time. When it clears, `latest_occupied_time` is back-dated to `clear time − timeout` |
 | **False-detection grace (s)** | `0` disables. A cycle whose on-duration exceeds the timeout by no more than the grace contained exactly one instantaneous detection — almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
 | **Clear after unavailable (s)** | `0` disables, default `60`. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection — the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
@@ -114,7 +114,7 @@ Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_c
 
 ### Virtual Combined Occupancy Binary Sensor
 
-Combines multiple Virtual Occupancy Sensors into one.
+Combines multiple MoLight occupancy sensors into one. Constituents are usually simple Virtual Occupancy Sensors, but other combined sensors can be nested too — the flows reject self-references and cycles, and a sensor can't hold both roles at once.
 
 | Config | Description |
 |---|---|
@@ -347,4 +347,5 @@ Use `hass:up` to confirm behavior against a real, released HA build; use `dev:ha
 - A virtual entity must exist before another can reference it (sensors before the lights that use them).
 - Removing an entry strips references to its entities from the entries that survive it — a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open.
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy entity (including through a combined sensor), and raising an occupancy sensor's timeout checks every light that depends on it.
+- Reference graphs stay sane by construction: an occupancy sensor can't wrap another MoLight occupancy entity, a combined sensor can't reference itself or form a cycle through other combined sensors, and a constituent can't be both a trigger and a maintain sensor.
 - Once an entry's options have been edited, the options fully replace the original data (so cleared optional fields stay cleared).
