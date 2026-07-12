@@ -17,6 +17,7 @@ COMPONENTS = Path(homeassistant.__file__).parent / "components"
 
 
 def walk(domain: str, seen: set[str], requirements: set[str]) -> None:
+    """Collect the requirements of a domain's manifest dependency closure."""
     if domain in seen:
         return
     seen.add(domain)
@@ -30,6 +31,7 @@ def walk(domain: str, seen: set[str], requirements: set[str]) -> None:
 
 
 def main() -> None:
+    """Print the pinned requirements for the domains given on the CLI."""
     domains = sys.argv[1:] or ["default_config"]
     seen: set[str] = set()
     requirements: set[str] = set()

@@ -189,7 +189,8 @@ async def test_effect_dim_stage_commands_stage_brightness(
     assert state.attributes["molight_state"] == STATE_EFFECT
     assert state.attributes["brightness"] == 128
     dim = _real_calls(calls, "turn_on")
-    assert dim and dim[-1]["service_data"]["brightness"] == 128
+    assert dim
+    assert dim[-1]["service_data"]["brightness"] == 128
 
 
 @pytest.mark.asyncio
@@ -220,9 +221,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 
 
 @pytest.mark.asyncio
-async def test_manual_off_during_effect_goes_idle(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_manual_off_during_effect_goes_idle(hass: HomeAssistant, freezer) -> None:
     entry = make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass)
@@ -249,9 +248,7 @@ async def test_manual_off_during_effect_goes_idle(
 
 
 @pytest.mark.asyncio
-async def test_external_off_during_warn_goes_idle(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_external_off_during_warn_goes_idle(hass: HomeAssistant, freezer) -> None:
     """The real light being switched off externally mid-warn ends everything."""
     entry = make_light_entry(warn_timeout=30, warn_brightness=100)
     await setup_entries(hass, entry)
@@ -364,7 +361,8 @@ async def test_occupancy_retrigger_during_effect_restores_brightness(
     assert state.attributes["molight_state"] == STATE_OCCUPIED
     assert state.attributes["brightness"] == 200
     resume = _real_calls(calls, "turn_on")
-    assert resume and resume[-1]["service_data"]["brightness"] == 200
+    assert resume
+    assert resume[-1]["service_data"]["brightness"] == 200
 
 
 @pytest.mark.asyncio
@@ -543,9 +541,7 @@ async def test_external_dim_during_warning_honors_new_brightness(
     """An external dim mid-warning cancels the sequence and restarts the full
     timer, but keeps the dim's own brightness — the pre-warn snapshot is not
     restored over the user's explicit choice."""
-    entry = make_light_entry(
-        effect_timeout=10, effect_brightness=50, warn_timeout=15
-    )
+    entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
     await setup_entries(hass, entry)
 
     await _turn_on_virtual(hass, brightness=200)

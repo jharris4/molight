@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from typing import TYPE_CHECKING
+
 from homeassistant.helpers.entity import async_generate_entity_id
 
 from .const import CONF_ENTITY_ID, CONF_ENTITY_TYPE
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 
 def molight_config(entry: ConfigEntry) -> dict:

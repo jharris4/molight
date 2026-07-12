@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType, section
-from homeassistant.helpers import area_registry as ar
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import label_registry as lr
+from homeassistant.helpers import (
+    area_registry as ar,
+    device_registry as dr,
+    entity_registry as er,
+    label_registry as lr,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.config_flow import (
@@ -78,6 +81,9 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import setup_entries
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 # The frontend always submits every section key, even collapsed sections that
 # were never opened. The section markers have no defaults, so programmatic
@@ -208,9 +214,10 @@ async def test_occupancy_source_picker_excludes_molight_occupancy_entities(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
     )
 
-    assert set(
-        _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"]
-    ) == {"binary_sensor.combined", "binary_sensor.test_occupancy"}
+    assert set(_selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"]) == {
+        "binary_sensor.combined",
+        "binary_sensor.test_occupancy",
+    }
 
 
 @pytest.mark.asyncio
@@ -222,9 +229,7 @@ async def test_occupancy_create_rejects_molight_source_from_stale_form(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
     )
-    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)[
-        "exclude_entities"
-    ] == []
+    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"] == []
 
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.flow.async_configure(
@@ -238,9 +243,7 @@ async def test_occupancy_create_rejects_molight_source_from_stale_form(
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {
-        CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"
-    }
+    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
     assert _suggested_values(result["data_schema"])[CONF_OCCUPANCY_SENSOR] == (
         "binary_sensor.test_occupancy"
     )
@@ -860,9 +863,7 @@ async def test_occupancy_options_reject_molight_source_from_stale_form(
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {
-        CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"
-    }
+    assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
 
 
 @pytest.mark.asyncio
@@ -1493,9 +1494,7 @@ async def test_discover_filter_by_label(hass: HomeAssistant) -> None:
     _motion_registry_entry(hass, "uid_plain", "plain_pir")
     device = _helper_device(hass)
     dr.async_get(hass).async_update_device(device.id, labels={label.label_id})
-    via_device = _motion_registry_entry(
-        hass, "uid_dev", "dev_pir", device_id=device.id
-    )
+    via_device = _motion_registry_entry(hass, "uid_dev", "dev_pir", device_id=device.id)
 
     result = await _start_discovery(hass, "discover_occupancy")
     result = await hass.config_entries.flow.async_configure(
@@ -1535,9 +1534,7 @@ async def test_discover_preselect_none_and_empty_selection(
     hass.states.async_set(
         "binary_sensor.hall_motion", "off", {"device_class": "motion"}
     )
-    hass.states.async_set(
-        "binary_sensor.porch_pir", "off", {"device_class": "motion"}
-    )
+    hass.states.async_set("binary_sensor.porch_pir", "off", {"device_class": "motion"})
 
     result = await _start_discovery(hass, "discover_occupancy")
     result = await hass.config_entries.flow.async_configure(

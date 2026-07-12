@@ -18,6 +18,7 @@ import logging
 import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
@@ -99,8 +100,6 @@ def _light_entry() -> MockConfigEntry:
 
 def _entities_for(hass: HomeAssistant, entry: MockConfigEntry) -> list[str]:
     """Entity ids this entry currently owns, via the entity registry."""
-    from homeassistant.helpers import entity_registry as er
-
     registry = er.async_get(hass)
     return [
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)

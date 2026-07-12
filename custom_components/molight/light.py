@@ -188,9 +188,11 @@ Door handling (when a door entity is configured), per door_mode:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
@@ -206,7 +208,6 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
     STATE_UNAVAILABLE,
@@ -220,7 +221,6 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
@@ -284,6 +284,13 @@ from .const import (
 )
 from .helpers import molight_config, suggested_entity_id
 
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import Event, EventStateChangedData, State
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
 _LOGGER = logging.getLogger(__name__)
 
 # Member color modes an hs command can drive (HA converts hs to each member's
@@ -297,13 +304,13 @@ _HS_CAPABLE_MODES = {
 }
 
 
-def _opt_transition(value) -> float | None:
-    """Configured transition → float seconds; absent/0 = don't send one."""
+def _opt_transition(value: float | None) -> float | None:
+    """Convert a configured transition to float seconds; absent/0 = None."""
     return float(value) if value else None
 
 
-def _opt_rgb_color(value) -> dict | None:
-    """Configured [r, g, b] → turn-on service data; absent = don't send one."""
+def _opt_rgb_color(value: list | None) -> dict | None:
+    """Convert a configured [r, g, b] to turn-on service data; absent = None."""
     return {ATTR_RGB_COLOR: tuple(int(c) for c in value)} if value else None
 
 
@@ -324,10 +331,12 @@ class VirtualLight(LightEntity, RestoreEntity):
     """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
     _attr_color_mode = ColorMode.BRIGHTNESS
-    _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
+    # Reassigned per-instance by _update_capabilities, never mutated in place.
+    _attr_supported_color_modes: ClassVar[set[ColorMode]] = {ColorMode.BRIGHTNESS}
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the virtual light from its config entry."""
         self.hass = hass
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
@@ -465,10 +474,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
                 raw = last.attributes.get(f"last_on_{source}")
                 if raw:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
-                    except (ValueError, TypeError):
-                        pass
             self._schedule_window_applied = last.attributes.get("schedule_window_start")
             for attr, field in (
                 # Fall back to the pre-rename attribute name for restores
@@ -481,10 +488,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             ):
                 raw = last.attributes.get(attr)
                 if raw and getattr(self, field) is None:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         setattr(self, field, datetime.fromisoformat(raw))
-                    except (ValueError, TypeError):
-                        pass
             raw_brightness = last.attributes.get(ATTR_BRIGHTNESS)
             if isinstance(raw_brightness, int):
                 self._attr_brightness = raw_brightness
@@ -502,7 +507,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             elif (
                 raw_mode == ColorMode.HS
                 and isinstance(raw_hs, (list, tuple))
-                and len(raw_hs) == 2
+                and len(raw_hs) == 2  # noqa: PLR2004 — an hs pair is (hue, sat)
             ):
                 self._attr_color_mode = ColorMode.HS
                 self._attr_hs_color = tuple(raw_hs)
@@ -537,7 +542,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         unsub_start: CALLBACK_TYPE | None = None
 
         @callback
-        def _subscribe(_event=None) -> None:
+        def _subscribe(_event: Event | None = None) -> None:
             # When fired via async_listen_once, HA has already removed this
             # one-time listener; drop our reference so teardown doesn't try to
             # remove it a second time (that logs "unknown job listener").
@@ -697,24 +702,23 @@ class VirtualLight(LightEntity, RestoreEntity):
         return False
 
     async def async_will_remove_from_hass(self) -> None:
+        """Cancel the running countdown timer on removal."""
         self._cancel_timer()
 
     # ------------------------------------------------------------------
     # LightEntity API
     # ------------------------------------------------------------------
 
-    async def async_turn_on(self, **kwargs) -> None:
+    async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on all real lights and transition the state machine."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
         brightness = kwargs.get(ATTR_BRIGHTNESS)
         # HA has already narrowed any color request to our advertised modes,
         # so only the canonical hs/color-temp attributes can arrive here.
         color: dict | None = {
-            k: kwargs[k]
-            for k in (ATTR_HS_COLOR, ATTR_COLOR_TEMP_KELVIN)
-            if k in kwargs
+            k: kwargs[k] for k in (ATTR_HS_COLOR, ATTR_COLOR_TEMP_KELVIN) if k in kwargs
         } or None
         if color is not None:
             self._last_color_change_virtual = now
@@ -733,7 +737,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         await self._set_lights(True, brightness=brightness, color=color)
         self._transition_on()
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off all real lights and go idle."""
         await self._set_lights(False)
         self._go_idle()
@@ -743,7 +747,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     # ------------------------------------------------------------------
 
     @callback
-    def _handle_state_change(self, event) -> None:
+    def _handle_state_change(self, event: Event[EventStateChangedData]) -> None:
         """React to a tracked entity changing state."""
         entity_id: str = event.data["entity_id"]
         new_state = event.data.get("new_state")
@@ -800,16 +804,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             if brightness:
                 self._attr_brightness = brightness
             if self._machine_state == STATE_IDLE:
-                self._last_on_physical = datetime.now(timezone.utc)
+                self._last_on_physical = datetime.now(UTC)
                 self._occupancy_lit_lights = False  # the user owns this on-period
             self._transition_on()
-        else:
-            if self._all_lights_off():
-                self._go_idle()
+        elif self._all_lights_off():
+            self._go_idle()
 
-    def _on_light_attrs_change(self, old_state, new_state) -> None:
-        """Handle an external brightness/color change on a real light (state
-        stays on).
+    def _on_light_attrs_change(self, old_state: State, new_state: State) -> None:
+        """Handle an external brightness/color change on an on real light.
 
         Dimming or recoloring is human activity: record it and restart any
         running countdown with the full timeout. Brightness 0 means off in
@@ -820,13 +822,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         brightness_changed = new_b is not None and new_b != old_b
 
         new_color = self._member_color(new_state)
-        color_changed = (
-            new_color is not None and new_color != self._member_color(old_state)
+        color_changed = new_color is not None and new_color != self._member_color(
+            old_state
         )
         if not brightness_changed and not color_changed:
             return  # some other attribute changed (battery, ...)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if color_changed:
             self._last_color_change_physical = now
             self._set_color_state(*new_color)
@@ -869,7 +871,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.async_write_ha_state()
 
     def _all_lights_off(self) -> bool:
-        """True when every real light is off (brightness 0 counts as off)."""
+        """Return True when every real light is off (brightness 0 is off)."""
         for entity_id in self._lights:
             state = self.hass.states.get(entity_id)
             if state is None:
@@ -882,9 +884,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Brightness of the first on real light reporting one, else None."""
         for entity_id in self._lights:
             state = self.hass.states.get(entity_id)
-            if state is not None and state.state == "on":
-                if brightness := state.attributes.get("brightness"):
-                    return brightness
+            if (
+                state is not None
+                and state.state == "on"
+                and (brightness := state.attributes.get("brightness"))
+            ):
+                return brightness
         return None
 
     # ------------------------------------------------------------------
@@ -949,10 +954,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if changed:
             self.async_write_ha_state()
 
-    def _set_color_state(self, mode: ColorMode, value) -> None:
-        """Adopt a color (commanded by us or mirrored from a member) as this
-        light's own reported color. A no-op for modes we don't advertise —
-        notably everything on a brightness-only virtual light."""
+    def _set_color_state(self, mode: ColorMode, value: float | tuple) -> None:
+        """Adopt a commanded or mirrored color as this light's reported color.
+
+        A no-op for modes we don't advertise — notably everything on a
+        brightness-only virtual light.
+        """
         if mode not in (self._attr_supported_color_modes or ()):
             return
         self._attr_color_mode = mode
@@ -966,9 +973,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _adopt_color_data(self, color: dict) -> None:
         """Mirror turn-on color service data into this light's own state."""
         if ATTR_COLOR_TEMP_KELVIN in color:
-            self._set_color_state(
-                ColorMode.COLOR_TEMP, color[ATTR_COLOR_TEMP_KELVIN]
-            )
+            self._set_color_state(ColorMode.COLOR_TEMP, color[ATTR_COLOR_TEMP_KELVIN])
         elif ATTR_HS_COLOR in color:
             self._set_color_state(ColorMode.HS, color[ATTR_HS_COLOR])
         elif ATTR_RGB_COLOR in color:
@@ -979,7 +984,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             )
 
     def _current_color(self) -> dict | None:
-        """This light's current color as turn-on service data, or None.
+        """Return this light's current color as turn-on service data, or None.
 
         The hs value is a list so the dict is JSON-serializable — it is also
         exposed as the pre_warn_color attribute to survive restarts.
@@ -992,16 +997,17 @@ class VirtualLight(LightEntity, RestoreEntity):
             return {ATTR_HS_COLOR: list(hs)}
         return None
 
-    def _member_color(self, state) -> tuple[ColorMode, tuple] | None:
-        """The color a real light's state reports, in our canonical terms.
+    def _member_color(self, state: State) -> tuple[ColorMode, tuple] | None:
+        """Return the color a real light's state reports, in canonical terms.
 
         A color-temp member also carries a derived hs_color, so its own
         color_mode decides which attribute is authoritative.
         """
         attrs = state.attributes
-        if attrs.get(ATTR_COLOR_MODE) == ColorMode.COLOR_TEMP:
-            if kelvin := attrs.get(ATTR_COLOR_TEMP_KELVIN):
-                return (ColorMode.COLOR_TEMP, kelvin)
+        if attrs.get(ATTR_COLOR_MODE) == ColorMode.COLOR_TEMP and (
+            kelvin := attrs.get(ATTR_COLOR_TEMP_KELVIN)
+        ):
+            return (ColorMode.COLOR_TEMP, kelvin)
         if hs := attrs.get(ATTR_HS_COLOR):
             return (ColorMode.HS, tuple(hs))
         return None
@@ -1010,9 +1016,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Color of the first on real light reporting one, else None."""
         for entity_id in self._lights:
             state = self.hass.states.get(entity_id)
-            if state is not None and state.state == "on":
-                if color := self._member_color(state):
-                    return color
+            if (
+                state is not None
+                and state.state == "on"
+                and (color := self._member_color(state))
+            ):
+                return color
         return None
 
     def _is_illuminance_bright(self) -> bool:
@@ -1023,14 +1032,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         return state is not None and state.state == "on"
 
     def _gate_schedule_inactive(self) -> bool:
-        """True when a gate-mode schedule forbids activating the lights."""
+        """Return True when a gate-mode schedule forbids activating lights."""
         if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_GATE:
             return False
         state = self.hass.states.get(self._schedule_entity)
         return not (state is not None and state.state == "on")
 
-    def _follow_schedule_state(self):
-        """The schedule entity's state when in follow mode and ON, else None."""
+    def _follow_schedule_state(self) -> State | None:
+        """Return the schedule state when in follow mode and ON, else None."""
         if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return None
         state = self.hass.states.get(self._schedule_entity)
@@ -1121,7 +1130,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Schedule handling
     # ------------------------------------------------------------------
 
-    def _on_schedule_change(self, new_state) -> None:
+    def _on_schedule_change(self, new_state: State) -> None:
         """Handle the virtual schedule sensor changing."""
         if self._schedule_mode == SCHEDULE_MODE_FOLLOW:
             if new_state.state == "on":
@@ -1176,7 +1185,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             )
             occ_active = occ_state is not None and occ_state.state == "on"
             if occ_active or self._door_holds():
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 if occ_active:
                     self._last_on_occupancy = now
                 else:
@@ -1216,7 +1225,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # on; window start re-evaluates occupancy.
                 return
             was_warning = self._in_warning()
-            self._last_on_occupancy = datetime.now(timezone.utc)
+            self._last_on_occupancy = datetime.now(UTC)
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
             if was_warning:
@@ -1227,18 +1236,17 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = True
                 self.hass.async_create_task(self._auto_lights_on())
             self.async_write_ha_state()
-        else:
-            if self._machine_state == STATE_OCCUPIED:
-                if self._maintain_active() or self._door_holds():
-                    return  # maintain entity / open door holds the light on
-                self._machine_state = STATE_COUNTDOWN
-                if self._occupancy_lit_lights and self._occupancy_clear_was_false():
-                    # The whole cycle was a false detection and nobody else
-                    # asked for these lights — turn them off quickly.
-                    self._start_timer(self._false_off_delay)
-                else:
-                    self._start_timer(self._compute_occupancy_countdown())
-                self.async_write_ha_state()
+        elif self._machine_state == STATE_OCCUPIED:
+            if self._maintain_active() or self._door_holds():
+                return  # maintain entity / open door holds the light on
+            self._machine_state = STATE_COUNTDOWN
+            if self._occupancy_lit_lights and self._occupancy_clear_was_false():
+                # The whole cycle was a false detection and nobody else
+                # asked for these lights — turn them off quickly.
+                self._start_timer(self._false_off_delay)
+            else:
+                self._start_timer(self._compute_occupancy_countdown())
+            self.async_write_ha_state()
 
     def _on_maintain_change(self, maintained: bool) -> None:
         """Handle the maintain occupancy entity changing.
@@ -1281,14 +1289,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
 
     def _occupancy_active(self) -> bool:
-        """True when the regular occupancy entity is configured and on."""
+        """Return True when the regular occupancy entity is configured and on."""
         if not self._occupancy_entity:
             return False
         state = self.hass.states.get(self._occupancy_entity)
         return state is not None and state.state == "on"
 
     def _occupancy_holds(self) -> bool:
-        """True when already-active occupancy may hold an on light as OCCUPIED.
+        """Return True when active occupancy may hold an on light as OCCUPIED.
 
         Adoption is gated exactly like a turn-on (bright or outside a
         gate-mode window suppress it), unlike the maintain entity, which is
@@ -1318,14 +1326,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.async_write_ha_state()
 
     def _maintain_active(self) -> bool:
-        """True when the maintain occupancy entity is configured and on."""
+        """Return True when the maintain occupancy entity is configured and on."""
         if not self._maintain_entity:
             return False
         state = self.hass.states.get(self._maintain_entity)
         return state is not None and state.state == "on"
 
     def _door_holds(self) -> bool:
-        """True when an open_close-mode door is currently open (holds the light).
+        """Return True when an open_close-mode door is open (holds the light).
 
         Such a door holds an already-on light on with no timer, exactly like
         active occupancy or the maintain entity, and its closing starts the
@@ -1356,7 +1364,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._gate_schedule_inactive():
                 return  # outside a gate-mode schedule window
             was_warning = self._in_warning()
-            self._last_on_door = datetime.now(timezone.utc)
+            self._last_on_door = datetime.now(UTC)
             # An open_close door holds the light (no timer) like the maintain
             # entity; an already-occupied/maintained room holds it too. Only a
             # plain open-mode trigger with no other hold runs the timeout.
@@ -1395,11 +1403,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
 
     def _occupancy_clear_was_false(self) -> bool:
-        """True when the occupancy sensor flagged its clear as a false detection."""
+        """Return True when the occupancy sensor flagged a false detection."""
         return self._clear_was_false(self._occupancy_entity)
 
     def _clear_was_false(self, entity_id: str | None) -> bool:
-        """True when the given sensor flagged its clear as a false detection."""
+        """Return True when the given sensor flagged a false-detection clear."""
         if not entity_id:
             return False
         state = self.hass.states.get(entity_id)
@@ -1450,7 +1458,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             )
             occ_active = occ_state is not None and occ_state.state == "on"
             if occ_active or self._door_holds():
-                self._last_on_illuminance = datetime.now(timezone.utc)
+                self._last_on_illuminance = datetime.now(UTC)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
                 self._occupancy_lit_lights = occ_active
@@ -1459,10 +1467,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
-                    self._last_on_illuminance = datetime.now(timezone.utc)
-                    self.hass.async_create_task(
-                        self._auto_lights_on()
-                    )
+                    self._last_on_illuminance = datetime.now(UTC)
+                    self.hass.async_create_task(self._auto_lights_on())
                     if self._maintain_active():
                         # Recent history justified the turn-on; the maintain
                         # entity now holds the re-lit light.
@@ -1491,19 +1497,20 @@ class VirtualLight(LightEntity, RestoreEntity):
                 continue
             lot_str = state.attributes.get("latest_occupied_time")
             if lot_str:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     lots.append(datetime.fromisoformat(lot_str))
-                except (ValueError, TypeError):
-                    pass
         if lots:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             remaining = (max(lots) - now).total_seconds()
             return max(0, int(base + remaining))
         return base
 
     def _most_recent_on_time(self) -> datetime | None:
-        """Return the latest recorded turn-on timestamp across all sources
-        except for illuminance (which is only relevant for gating, not attribution)."""
+        """Return the latest recorded turn-on timestamp across all sources.
+
+        Illuminance is excluded — it is only relevant for gating, not
+        attribution.
+        """
         candidates = [
             t
             for t in (
@@ -1531,7 +1538,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         last_on = self._most_recent_on_time()
         if last_on is not None:
-            elapsed = (datetime.now(timezone.utc) - last_on).total_seconds()
+            elapsed = (datetime.now(UTC) - last_on).total_seconds()
             return max(0, int(self._light_timeout - elapsed))
         return self._light_timeout
 
@@ -1626,7 +1633,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     # ------------------------------------------------------------------
 
     def _in_warning(self) -> bool:
-        """True while showing the effect or warn stage before auto-off."""
+        """Return True while showing the effect or warn stage before auto-off."""
         return self._machine_state in (STATE_EFFECT, STATE_WARN)
 
     def _begin_warning(self) -> None:
@@ -1655,8 +1662,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._enter_warn()
 
     def _enter_warn(self) -> None:
-        """Advance to the WARN grace period, or turn the lights off when it is
-        disabled."""
+        """Advance to the WARN grace period, or turn off when it is disabled."""
         if self._warn_timeout > 0:
             # A warn stage without a color of its own undoes an effect-stage
             # recolor, mirroring how its brightness falls back to the
@@ -1683,10 +1689,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._go_idle()
 
     def _resume_lights(self) -> None:
-        """Restore the real lights to their pre-warning brightness and color
-        when a re-trigger interrupts the effect/warn sequence. The caller sets
-        the resulting machine state. No transition: the restore must be as
-        immediate as the re-trigger that caused it."""
+        """Restore the pre-warning brightness and color after a re-trigger.
+
+        The caller sets the resulting machine state. No transition: the
+        restore must be as immediate as the re-trigger that caused it.
+        """
         brightness = self._pre_warn_brightness
         color = self._pre_warn_color
         self._pre_warn_brightness = None
@@ -1701,9 +1708,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         transition: float | None = None,
         color: dict | None = None,
     ) -> None:
-        """Drive the real lights for an effect/warn stage while the virtual
-        light stays logically on. Brightness 0 blinks the real lights off
-        (any stage color is moot then)."""
+        """Drive the real lights for an effect/warn stage.
+
+        The virtual light stays logically on. Brightness 0 blinks the real
+        lights off (any stage color is moot then).
+        """
         context = Context()
         self._self_context_ids.append(context.id)
         transition_data = (
@@ -1741,9 +1750,11 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Real-light control
     # ------------------------------------------------------------------
 
-    def _auto_lights_on(self):
-        """Coroutine turning the real lights on for an automatic trigger,
-        with the configured auto-on brightness, color and transition."""
+    def _auto_lights_on(self) -> Coroutine[Any, Any, None]:
+        """Turn the real lights on for an automatic trigger.
+
+        Applies the configured auto-on brightness, color and transition.
+        """
         return self._set_lights(
             True,
             brightness=self._auto_on_brightness,
@@ -1751,9 +1762,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             color=self._auto_on_color,
         )
 
-    def _auto_lights_off(self):
-        """Coroutine turning the real lights off for an automatic turn-off,
-        with the configured auto-off transition. Manual offs bypass this."""
+    def _auto_lights_off(self) -> Coroutine[Any, Any, None]:
+        """Turn the real lights off for an automatic turn-off.
+
+        Applies the configured auto-off transition. Manual offs bypass this.
+        """
         return self._set_lights(False, transition=self._auto_off_transition)
 
     async def _set_lights(
@@ -1795,6 +1808,8 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return the state-machine and attribution attributes."""
+
         def _fmt(t: datetime | None) -> str | None:
             return t.isoformat() if t else None
 

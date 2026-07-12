@@ -12,6 +12,8 @@ from datetime import timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers.entity_platform import async_get_platforms
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     mock_restore_cache,
@@ -522,9 +524,6 @@ async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None
     hold before acting. Driven white-box because the ordering can't be
     arranged deterministically through the event loop.
     """
-    from homeassistant.helpers.entity_platform import async_get_platforms
-    from homeassistant.util import dt as dt_util
-
     await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)

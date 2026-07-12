@@ -12,12 +12,11 @@ ids or platform setup order.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from homeassistant.components.switch import ENTITY_ID_FORMAT, SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_OFF
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
@@ -29,6 +28,11 @@ from .const import (
     SIGNAL_AUTO_OFF_TOGGLED,
 )
 from .helpers import molight_config, suggested_entity_id
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
 async def async_setup_entry(
@@ -53,6 +57,7 @@ class AutoOffSwitch(SwitchEntity, RestoreEntity):
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the auto-off switch."""
         self.hass = hass
         self._entry_id = entry.entry_id
         cfg = molight_config(entry)
@@ -61,18 +66,21 @@ class AutoOffSwitch(SwitchEntity, RestoreEntity):
         self._attr_is_on = True
 
     async def async_added_to_hass(self) -> None:
+        """Restore the previous state and publish it to the light."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state == STATE_OFF:
             self._attr_is_on = False
             self._publish()
 
-    async def async_turn_on(self, **kwargs) -> None:
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Re-enable the light's automatic turn-offs."""
         self._attr_is_on = True
         self._publish()
         self.async_write_ha_state()
 
-    async def async_turn_off(self, **kwargs) -> None:
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Suspend the light's automatic turn-offs."""
         self._attr_is_on = False
         self._publish()
         self.async_write_ha_state()

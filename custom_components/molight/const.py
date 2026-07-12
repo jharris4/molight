@@ -66,7 +66,7 @@ ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
 # --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
-# latest_occupied_time = last_off - timeout
+# latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 DEFAULT_OCCUPANCY_TIMEOUT = 120
 # A cycle whose on-duration exceeds the timeout by no more than this many
@@ -108,7 +108,7 @@ DEFAULT_ILLUMINANCE_HYSTERESIS = 0.0
 #    "combine": "latest"|"earliest"}
 # with at least one of time/sun present. offset shifts the sun event
 # (negative = before it). When both time and sun are present, combine picks
-# which wins (e.g. start at the later of sunset−15min and 21:00).
+# which wins (e.g. start at the later of sunset-15min and 21:00).
 CONF_TIME_WINDOWS = "time_windows"
 EDGE_TIME = "time"
 EDGE_SUN = "sun"

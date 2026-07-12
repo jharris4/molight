@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.sun import get_astral_event_date
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -20,6 +20,9 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_SCHEDULE,
 )
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 def _schedule_entry(windows: list) -> MockConfigEntry:
@@ -51,7 +54,7 @@ async def test_fixed_overnight_window(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["next_transition"] == "2026-07-02T21:00:00+00:00"
 
     # Window starts at 21:00.
-    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await hass.async_block_till_done()
@@ -62,7 +65,7 @@ async def test_fixed_overnight_window(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["next_transition"] == "2026-07-03T07:00:00+00:00"
 
     # Window ends at 07:00 the next morning.
-    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await hass.async_block_till_done()
@@ -101,13 +104,13 @@ async def test_sun_anchored_edge(hass: HomeAssistant, freezer) -> None:
 
 @pytest.mark.asyncio
 async def test_sun_edge_with_offset(hass: HomeAssistant, freezer) -> None:
-    """A sun offset shifts the resolved edge (sunset − 15 min)."""
+    """A sun offset shifts the resolved edge (sunset - 15 min)."""
     day = date(2026, 7, 2)
     sunset = get_astral_event_date(hass, "sunset", day)
     assert sunset is not None
     shifted = sunset - timedelta(minutes=15)
 
-    # 5 minutes after (sunset − 15) but still before plain sunset: only the
+    # 5 minutes after (sunset - 15) but still before plain sunset: only the
     # offset edge puts us inside the window.
     freezer.move_to(shifted + timedelta(minutes=5))
     await _setup(
@@ -207,9 +210,7 @@ async def test_invalid_window_edges_never_activate(
 
 
 @pytest.mark.asyncio
-async def test_sun_edge_ignores_unparsable_offset(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_sun_edge_ignores_unparsable_offset(hass: HomeAssistant, freezer) -> None:
     """A sun edge with a non-numeric offset resolves as if it had none."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")

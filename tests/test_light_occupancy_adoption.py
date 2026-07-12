@@ -13,9 +13,9 @@ outside a gate-mode window suppress it); the maintain entity stays ungated.
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 import pytest
-from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -28,6 +28,9 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
@@ -47,9 +50,7 @@ async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_on_adopts_active_occupancy(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_manual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) -> None:
     """Turning the virtual light on while occupancy is already on → OCCUPIED."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
     hass.states.async_set(OCC, "on")
@@ -151,9 +152,7 @@ async def test_dark_adopts_active_occupancy_into_on_light(
 
 
 @pytest.mark.asyncio
-async def test_dark_without_occupancy_keeps_timer(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_dark_without_occupancy_keeps_timer(hass: HomeAssistant, freezer) -> None:
     """Dark with no active occupancy leaves a running on-period untouched."""
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
     hass.states.async_set(ILLUM, "on")  # bright

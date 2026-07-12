@@ -1,4 +1,5 @@
 pytest-homeassistant-custom-component
 pytest-asyncio
 pytest-cov
-ruff
+# Pinned: `select = ["ALL"]` means new ruff releases can add rules and break CI
+ruff==0.15.20

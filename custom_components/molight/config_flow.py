@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -12,11 +12,8 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
-from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import selector
+from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
 
 from .const import (
@@ -105,6 +102,15 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import molight_config as _molight_cfg
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from homeassistant.core import HomeAssistant
+
+    # A config-flow step handler; invoked with no arguments to (re-)show its
+    # form, since every step defaults user_input to None.
+    _StepHandler = Callable[..., Awaitable[config_entries.FlowResult]]
 
 # "none" lets a previously chosen sun anchor be cleared in the options flow —
 # a bare SelectSelector can't be un-set once it has a value.
@@ -281,7 +287,7 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
 
 
 def _window_input_provided(user_input: dict[str, Any]) -> bool:
-    """True when the user filled in any window edge field at all."""
+    """Return True when the user filled in any window edge field at all."""
     return any(
         (user_input.get(key) or {}).get(EDGE_TIME)
         or (user_input.get(key) or {}).get(EDGE_SUN) not in (None, "none")
@@ -295,7 +301,7 @@ def _window_suggested(window: dict | None) -> dict:
     Legacy plain-string edges ("HH:MM") are upgraded to time-only edge dicts.
     """
 
-    def _edge(edge) -> dict:
+    def _edge(edge: str | dict | None) -> dict:
         if isinstance(edge, str):
             return {EDGE_TIME: edge}
         return edge if isinstance(edge, dict) else {}
@@ -496,11 +502,14 @@ def _combined_occupancy_cycle_candidates(
     for entry in hass.config_entries.async_entries(DOMAIN):
         if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
             continue
-        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
-            if entity.domain == "binary_sensor" and _combined_occupancy_creates_cycle(
+        excluded.extend(
+            entity.entity_id
+            for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if entity.domain == "binary_sensor"
+            and _combined_occupancy_creates_cycle(
                 hass, edited_entry, [entity.entity_id]
-            ):
-                excluded.append(entity.entity_id)
+            )
+        )
     return sorted(excluded)
 
 
@@ -974,6 +983,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
+        """Initialize the config flow's cross-step stash."""
         self._entity_type: str | None = None
         # Set when a manual create step is re-entered from the entity_id
         # confirm step's "change" option, so the form comes back prefilled.
@@ -991,10 +1001,11 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(
         entry: config_entries.ConfigEntry,
-    ) -> "MoLightOptionsFlow":
+    ) -> MoLightOptionsFlow:
+        """Create the options flow for an existing entry."""
         return MoLightOptionsFlow(entry)
 
-    def _create_step(self, entity_type: str):
+    def _create_step(self, entity_type: str) -> _StepHandler:
         """Map an entity type to its manual create step handler."""
         return {
             ENTITY_TYPE_OCCUPANCY: self.async_step_occupancy,
@@ -1009,7 +1020,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ------------------------------------------------------------------
 
     def _entity_id_taken(self, entity_id: str) -> bool:
-        """True if entity_id is already registered or has a live state."""
+        """Return True if entity_id is already registered or has a live state."""
         return (
             er.async_get(self.hass).async_get(entity_id) is not None
             or self.hass.states.get(entity_id) is not None
@@ -1158,7 +1169,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         domain: str,
         device_classes: set[str] | None,
         used_key: str,
-        select_step,
+        select_step: _StepHandler,
         user_input: dict[str, Any] | None,
     ) -> config_entries.FlowResult:
         """Optionally narrow the discovery candidates before the checklist.
@@ -1217,7 +1228,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         *,
         step_id: str,
-        defaults_step,
+        defaults_step: _StepHandler,
         user_input: dict[str, Any] | None,
     ) -> config_entries.FlowResult:
         """Show a checklist of candidate entities, then adjust their defaults.
@@ -1294,7 +1305,9 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     def _finish_discovery(
-        self, payload, overrides: dict[str, Any]
+        self,
+        payload: Callable[[str, str], dict[str, Any]],
+        overrides: dict[str, Any],
     ) -> config_entries.FlowResult:
         """Bulk-create the stashed selection, layering the chosen settings on top.
 
@@ -1339,6 +1352,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Filter the discoverable occupancy sensors."""
         return await self._async_discovery_filter(
             step_id="discover_occupancy",
             domain="binary_sensor",
@@ -1352,6 +1366,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_occupancy_select(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Pick which discovered occupancy sensors to wrap."""
         return await self._async_discovery_select(
             step_id="discover_occupancy_select",
             defaults_step=self.async_step_discover_occupancy_defaults,
@@ -1374,6 +1389,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Filter the discoverable illuminance sensors."""
         return await self._async_discovery_filter(
             step_id="discover_illuminance",
             domain="sensor",
@@ -1386,6 +1402,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_illuminance_select(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Pick which discovered illuminance sensors to wrap."""
         return await self._async_discovery_select(
             step_id="discover_illuminance_select",
             defaults_step=self.async_step_discover_illuminance_defaults,
@@ -1406,6 +1423,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Filter the discoverable real lights."""
         return await self._async_discovery_filter(
             step_id="discover_light",
             domain="light",
@@ -1418,6 +1436,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_discover_light_select(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Pick which discovered real lights to wrap."""
         return await self._async_discovery_select(
             step_id="discover_light_select",
             defaults_step=self.async_step_discover_light_defaults,
@@ -1941,6 +1960,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     """Allow editing a MoLight entity's settings after creation."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
+        """Initialize the options flow for the given entry."""
         self._entry = entry
         self._cfg = _molight_cfg(entry)
 
@@ -1958,6 +1978,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Route to the edit step matching the entry's entity type."""
         return await {
             ENTITY_TYPE_OCCUPANCY: self.async_step_occupancy,
             ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
@@ -1973,6 +1994,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Edit a Virtual Occupancy Sensor's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -2024,6 +2046,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_combined_occupancy(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Edit a Virtual Combined Occupancy Sensor's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -2050,11 +2073,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                     min_light = _min_dependent_light_timeout(
                         self.hass, self._entry.entry_id
                     )
-                    if (
-                        timeouts
-                        and min_light is not None
-                        and max(timeouts) > min_light
-                    ):
+                    if timeouts and min_light is not None and max(timeouts) > min_light:
                         errors["base"] = "occupancy_timeout_too_long"
                     else:
                         return self._finish(user_input)
@@ -2090,9 +2109,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         )
         return self.async_show_form(
             step_id="combined_occupancy",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or {}
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
             errors=errors,
         )
 
@@ -2103,6 +2120,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Edit a Virtual Illuminance Sensor's settings."""
         if user_input is not None:
             return self._finish(user_input)
 
@@ -2133,6 +2151,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Edit a Virtual Schedule Sensor's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -2174,6 +2193,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
     async def async_step_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
+        """Edit a Virtual Light's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:

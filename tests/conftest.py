@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 import pytest
-from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
@@ -46,6 +46,9 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
 )
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 async def settle(hass: HomeAssistant) -> None:
@@ -157,7 +160,7 @@ async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable loading of custom integrations in tests."""
-    yield
+    return
 
 
 @pytest.fixture

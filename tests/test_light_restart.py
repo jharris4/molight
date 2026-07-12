@@ -9,7 +9,7 @@ exactly as they would already exist when the light entity is added.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant, State
@@ -227,7 +227,7 @@ async def test_restart_mid_countdown_adopts_active_with_full_timer(
     but the seed only looks at the current on/off state, so the light is
     adopted as ACTIVE with a fresh light_timeout.
     """
-    lot = datetime.now(timezone.utc) - timedelta(seconds=10)
+    lot = datetime.now(UTC) - timedelta(seconds=10)
     hass.states.async_set(OCC, "off", {"latest_occupied_time": lot.isoformat()})
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
@@ -420,9 +420,7 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
         [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 200})],
     )
     hass.states.async_set(REAL, "on", {"brightness": 255})  # warn stage at 100%
-    await setup_entries(
-        hass, make_light_entry(warn_timeout=30, warn_brightness=100)
-    )
+    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)
@@ -453,9 +451,7 @@ async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
     falls back to adopting the physical brightness as-is."""
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"brightness": 255})])
     hass.states.async_set(REAL, "on", {"brightness": 255})
-    await setup_entries(
-        hass, make_light_entry(warn_timeout=30, warn_brightness=100)
-    )
+    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
     await settle(hass)
 
     state = _state(hass)

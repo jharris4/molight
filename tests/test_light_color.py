@@ -65,9 +65,7 @@ def _real_on_calls(calls: list[dict]) -> list[dict]:
 
 
 async def _turn_on_virtual(hass: HomeAssistant, **data) -> None:
-    await hass.services.async_call(
-        "light", "turn_on", {"entity_id": VIRTUAL, **data}
-    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL, **data})
     await hass.async_block_till_done()
 
 
@@ -103,7 +101,8 @@ async def test_brightness_only_members_stay_brightness_only(
     calls = _record_service_calls(hass)
     await _turn_on_virtual(hass, hs_color=[30, 60])
     forwarded = _real_on_calls(calls)
-    assert forwarded and "hs_color" not in forwarded[-1]["service_data"]
+    assert forwarded
+    assert "hs_color" not in forwarded[-1]["service_data"]
     assert _state(hass).attributes.get("hs_color") is None
 
 
@@ -265,9 +264,7 @@ async def test_auto_on_color_temp_applied_to_automatic_turn_ons_only(
     """auto_on_color_temp colors occupancy turn-ons; manual turn-ons are
     untouched, mirroring auto_on_brightness."""
     hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
-    await setup_entries(
-        hass, make_light_entry(occupancy=OCC, auto_on_color_temp=3000)
-    )
+    await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_color_temp=3000))
 
     calls = _record_service_calls(hass)
     hass.states.async_set(OCC, "on")

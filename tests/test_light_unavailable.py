@@ -10,9 +10,9 @@ fresh events.
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 import pytest
-from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -33,6 +33,9 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"

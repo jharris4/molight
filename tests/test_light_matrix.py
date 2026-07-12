@@ -1,7 +1,7 @@
 """Combination-matrix tests for the MoLight Virtual Light.
 
 test_light.py covers the main end-to-end scenarios; this file sweeps the
-remaining occupancy × illuminance × schedule × light-state combinations so
+remaining occupancy x illuminance x schedule x light-state combinations so
 every gating rule of the state machine is pinned. The watched sensors are
 plain states set via hass.states.async_set — the light only reads states
 and attributes, so the tests stay independent of the virtual-sensor
@@ -10,7 +10,7 @@ implementations.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
@@ -42,7 +42,7 @@ def _state(hass: HomeAssistant):
 
 
 # ---------------------------------------------------------------------------
-# Occupancy trigger × illuminance × gate-schedule
+# Occupancy trigger x illuminance x gate-schedule
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +87,7 @@ async def test_occupancy_trigger_gating(
 
 
 # ---------------------------------------------------------------------------
-# Illuminance bright→dark activation × occupancy × gate-schedule
+# Illuminance bright→dark activation x occupancy x gate-schedule
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +124,7 @@ async def test_illuminance_dark_activation(
     if occ:
         attrs = {}
         if lot == "stale":
-            stale = datetime.now(timezone.utc) - timedelta(hours=1)
+            stale = datetime.now(UTC) - timedelta(hours=1)
             attrs["latest_occupied_time"] = stale.isoformat()
         hass.states.async_set(OCC, occ, attrs)
     if sched:
@@ -246,7 +246,7 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
 
 
 # ---------------------------------------------------------------------------
-# Gate-mode schedule boundaries × machine state
+# Gate-mode schedule boundaries x machine state
 # ---------------------------------------------------------------------------
 
 
@@ -459,7 +459,7 @@ async def test_manual_turn_on_never_gated(
 
 
 # ---------------------------------------------------------------------------
-# Occupancy × running light states
+# Occupancy x running light states
 # ---------------------------------------------------------------------------
 
 
@@ -515,7 +515,7 @@ async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     light = hass.data["entity_components"]["light"].get_entity(VIRTUAL)
-    await light._timer_expired(datetime.now(timezone.utc))
+    await light._timer_expired(datetime.now(UTC))
     await settle(hass)
 
     state = _state(hass)

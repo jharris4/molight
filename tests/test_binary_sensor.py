@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant, State
@@ -111,7 +111,7 @@ async def test_occupancy_clear_records_latest_occupied_time(
     assert state.state == "off"
 
     lot = datetime.fromisoformat(state.attributes["latest_occupied_time"])
-    expected = datetime.now(timezone.utc) - timedelta(seconds=30)
+    expected = datetime.now(UTC) - timedelta(seconds=30)
     assert abs((lot - expected).total_seconds()) < 2
     assert state.attributes["occupancy_timeout"] == 30
 
@@ -168,7 +168,7 @@ async def test_occupancy_clears_after_unavailable_timeout(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
 
-    dropout = datetime.now(timezone.utc)
+    dropout = datetime.now(UTC)
     hass.states.async_set("binary_sensor.motion_1", bad)
     await hass.async_block_till_done()
 
@@ -228,7 +228,7 @@ async def test_occupancy_dropout_recovery_to_off_is_real_clear(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
 
-    dropout = datetime.now(timezone.utc)
+    dropout = datetime.now(UTC)
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await hass.async_block_till_done()
 
@@ -268,7 +268,7 @@ async def test_occupancy_recovery_to_off_after_unavailable_clear_is_noop(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
 
-    dropout = datetime.now(timezone.utc)
+    dropout = datetime.now(UTC)
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await hass.async_block_till_done()
 
@@ -347,9 +347,7 @@ async def test_occupancy_ignores_attribute_only_updates(
 
 
 @pytest.mark.asyncio
-async def test_early_clear_is_false_detection(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_early_clear_is_false_detection(hass: HomeAssistant, freezer) -> None:
     """A clear before the sensor timeout is still a false detection."""
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -474,8 +472,8 @@ async def test_recovery_to_on_preserves_false_detection_clock(
     assert state.state == "off"
     assert state.attributes["last_clear_false_detection"] is False
     assert state.attributes["false_detection_count"] == 0
-    # latest_occupied_time advanced to clear − timeout, past the dropout mark.
-    expected = datetime.now(timezone.utc) - timedelta(seconds=30)
+    # latest_occupied_time advanced to clear - timeout, past the dropout mark.
+    expected = datetime.now(UTC) - timedelta(seconds=30)
     assert state.attributes["latest_occupied_time"] == expected.isoformat()
 
 
@@ -588,8 +586,8 @@ async def test_combined_trigger_maintain_and_lot(
     assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
 
     # Maintain clears — occupancy ends; latest_occupied_time is the max of
-    # the constituents': trigger cleared at T+10 with timeout 30 (→ T−20),
-    # maintain at T+20 with timeout 45 (→ T−25). The trigger's wins.
+    # the constituents': trigger cleared at T+10 with timeout 30 (→ T-20),
+    # maintain at T+20 with timeout 45 (→ T-25). The trigger's wins.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("binary_sensor.motion_2", "off")
     await settle(hass)

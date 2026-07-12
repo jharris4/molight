@@ -9,10 +9,10 @@ plain states set via hass.states.async_set, as in test_light_matrix.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import pytest
-from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -24,6 +24,9 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 OCC = "binary_sensor.occ"
 MAINT = "binary_sensor.maint"
@@ -210,7 +213,7 @@ async def test_maintain_clear_countdown_anchors_to_latest_occupied_time(
     hass.states.async_set(MAINT, "on")
     await settle(hass)
 
-    lot = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    lot = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
     hass.states.async_set(MAINT, "off", {"latest_occupied_time": lot})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN

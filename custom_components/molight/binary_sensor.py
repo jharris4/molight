@@ -13,17 +13,17 @@ Provides four sensor types, all created via the config flow:
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
+from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
     ENTITY_ID_FORMAT,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_point_in_time,
@@ -64,10 +64,19 @@ from .const import (
 )
 from .helpers import molight_config, suggested_entity_id
 
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import Event, EventStateChangedData, State
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+# Minimum on-time for a maintain sensor to seed occupancy after a restart;
+# filters out sensors that merely flapped on during startup itself.
+STARTUP_MAINTAIN_SEED_SECONDS = 5
+
 _LOGGER = logging.getLogger(__name__)
 
 
-def _real_state_change(event) -> bool:
+def _real_state_change(event: Event[EventStateChangedData]) -> bool:
     """Return True when the event is an actual state transition.
 
     Filters out entities going unavailable/unknown (sensor blips must not be
@@ -81,7 +90,7 @@ def _real_state_change(event) -> bool:
     return old_state is None or old_state.state != new_state.state
 
 
-def _restored_latest_occupied_time(last_state) -> datetime | None:
+def _restored_latest_occupied_time(last_state: State | None) -> datetime | None:
     """Parse latest_occupied_time from a restored state, if present and valid."""
     if last_state is None:
         return None
@@ -153,6 +162,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the virtual occupancy sensor."""
         self.hass = hass
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
@@ -179,22 +189,19 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._unavailable_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
+        """Restore state and subscribe to the source sensor."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
         if last is not None:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
-            except (ValueError, TypeError):
-                pass
             raw = last.attributes.get("last_on_time")
             if raw:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     self._last_on_time = datetime.fromisoformat(raw)
-                except (ValueError, TypeError):
-                    pass
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_sensor], self._handle_sensor_change
@@ -214,7 +221,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self.async_write_ha_state()
 
     @callback
-    def _handle_sensor_change(self, event) -> None:
+    def _handle_sensor_change(self, event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             self._on_source_unavailable()
@@ -228,7 +235,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             # clear measure the on-duration from the recovery moment and
             # misclassify a long occupancy as a false detection.
             if not self._attr_is_on:
-                self._last_on_time = datetime.now(timezone.utc)
+                self._last_on_time = datetime.now(UTC)
             self._attr_is_on = True
         else:
             if not self._attr_is_on:
@@ -237,7 +244,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                 # which would advance latest_occupied_time past the dropout
                 # and overwrite the clear's classification.
                 return
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             self._last_clear_false = self._is_false_cycle(now)
             self._last_clear_unavailable = False
             if self._last_clear_false:
@@ -263,7 +270,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             return
         # The person may have been present right up to the dropout — advance
         # latest_occupied_time now, whether or not the source recovers.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if self._latest_occupied_time is None or now > self._latest_occupied_time:
             self._latest_occupied_time = now
         self._unavailable_unsub = async_call_later(
@@ -293,6 +300,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return occupancy bookkeeping attributes."""
         lot = self._latest_occupied_time
         return {
             "latest_occupied_time": lot.isoformat() if lot else None,
@@ -328,6 +336,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the combined occupancy sensor."""
         self.hass = hass
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
@@ -341,16 +350,15 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._last_clear_false: bool = False
 
     async def async_added_to_hass(self) -> None:
+        """Restore state and subscribe to all constituent sensors."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
         if last is not None:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
-            except (ValueError, TypeError):
-                pass
         all_sensors = list(
             dict.fromkeys(self._trigger_sensors + self._maintain_sensors)
         )
@@ -370,15 +378,16 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             # already triggered before HA went down. A maintain sensor that has
             # been on for more than 5 seconds is assumed to reflect ongoing
             # occupancy from before the restart, so it seeds the sensor on
-            # (and thus can turn lights on). The 5-second minimum filters out
+            # (and thus can turn lights on). The minimum on-time filters out
             # sensors that merely flapped on during startup itself.
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for entity_id in self._maintain_sensors:
                 state = self.hass.states.get(entity_id)
                 if (
                     state
                     and state.state == "on"
-                    and (now - state.last_changed).total_seconds() > 5
+                    and (now - state.last_changed).total_seconds()
+                    > STARTUP_MAINTAIN_SEED_SECONDS
                 ):
                     self._attr_is_on = True
                     break
@@ -387,7 +396,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self.async_write_ha_state()
 
     @callback
-    def _handle_occupancy_change(self, event) -> None:
+    def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
         if not _real_state_change(event):
             return
         new_state = event.data["new_state"]
@@ -427,6 +436,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return occupancy bookkeeping attributes."""
         lot = self._latest_occupied_time
         return {
             "latest_occupied_time": lot.isoformat() if lot else None,
@@ -456,6 +466,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the virtual illuminance sensor."""
         self.hass = hass
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
@@ -472,6 +483,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         self._attr_is_on = False
 
     async def async_added_to_hass(self) -> None:
+        """Restore state and subscribe to the illuminance source."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
@@ -490,7 +502,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         self.async_write_ha_state()
 
     @callback
-    def _handle_illuminance_change(self, event) -> None:
+    def _handle_illuminance_change(self, event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return  # hold last known value while the source is unavailable
@@ -520,7 +532,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
     plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
     "offset": <minutes>, "combine": "latest"|"earliest"} — e.g. start at the
-    later of sunset−15min and 21:00. Overnight windows (end before start)
+    later of sunset-15min and 21:00. Overnight windows (end before start)
     roll the end to the next day.
 
     Rather than polling, the sensor resolves concrete boundary datetimes and
@@ -532,6 +544,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the virtual schedule sensor."""
         self.hass = hass
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
@@ -544,6 +557,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
         self._unsub_transition = None
 
     async def async_added_to_hass(self) -> None:
+        """Evaluate the schedule and arm the transition timer."""
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_transition_timer)
         self._refresh()
@@ -608,7 +622,7 @@ class VirtualScheduleSensor(BinarySensorEntity):
             return None
         return (start, end)
 
-    def _resolve_edge(self, edge, day: date) -> datetime | None:
+    def _resolve_edge(self, edge: str | dict | None, day: date) -> datetime | None:
         """Resolve an edge spec to a concrete datetime on the given day."""
         if isinstance(edge, str):
             edge = {EDGE_TIME: edge}
@@ -617,14 +631,12 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
         fixed: datetime | None = None
         if edge.get(EDGE_TIME):
-            try:
+            with contextlib.suppress(ValueError):
                 fixed = datetime.combine(
                     day,
                     time.fromisoformat(edge[EDGE_TIME]),
                     tzinfo=dt_util.DEFAULT_TIME_ZONE,
                 )
-            except ValueError:
-                pass
 
         sun: datetime | None = None
         if edge.get(EDGE_SUN) in SUN_EVENTS:
@@ -632,10 +644,8 @@ class VirtualScheduleSensor(BinarySensorEntity):
             # time (if any) then stands alone.
             sun = get_astral_event_date(self.hass, edge[EDGE_SUN], day)
             if sun is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     sun += timedelta(minutes=int(edge.get(EDGE_OFFSET, 0)))
-                except (ValueError, TypeError):
-                    pass
 
         candidates = [d for d in (fixed, sun) if d is not None]
         if not candidates:
@@ -648,6 +658,8 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """Return the schedule window attributes."""
+
         def _fmt(t: datetime | None) -> str | None:
             return t.isoformat() if t else None
 

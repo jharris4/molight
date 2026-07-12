@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
@@ -355,7 +355,7 @@ async def test_auto_on_brightness_applied_on_schedule_window(
     assert hass.states.get("light.porch_light").state == "off"
 
     # Window starts at 21:00 → automatic turn-on at the auto-on brightness.
-    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -954,7 +954,7 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     assert hass.states.get("light.porch_light").state == "off"
 
     # Window starts at 21:00.
-    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -965,14 +965,14 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["schedule_window_start"] == "2026-07-02T21:00:00+00:00"
 
     # Way past light_timeout (60s) — no timer runs in SCHEDULED.
-    t = datetime(2026, 7, 2, 23, 0, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 23, 0, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
     assert hass.states.get("light.porch_light").state == "on"
 
     # Window ends at 07:00 next morning.
-    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -1052,7 +1052,7 @@ async def test_follow_mode_manual_re_on_rejoins_window(
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
     # Well past light_timeout, still before window end — must stay on.
-    t = datetime(2026, 7, 2, 23, 30, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 23, 30, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -1085,7 +1085,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     assert hass.states.get("light.gate_light").state == "off"
 
     # Window starts — occupancy is still active, so lights come on now.
-    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -1095,7 +1095,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
     # Window ends — lights forced off even though occupancy never cleared.
-    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=timezone.utc)
+    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
@@ -1333,9 +1333,7 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
 async def test_manual_on_during_effect_resumes(hass: HomeAssistant, freezer) -> None:
     """A manual turn-on during the effect blink cancels the warning and returns
     the light to ACTIVE."""
-    entry = _warn_light_entry(
-        effect_timeout=10, effect_brightness=0, warn_timeout=10
-    )
+    entry = _warn_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=10)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()

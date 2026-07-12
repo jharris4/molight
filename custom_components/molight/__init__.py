@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from typing import TYPE_CHECKING
+
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -21,6 +21,10 @@ from .const import (
     PLATFORMS,
 )
 from .helpers import molight_config
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 # Config keys under which one MoLight entry may reference another entry's
 # entities. Cleaned up when the referenced entry is removed — a dangling
@@ -74,8 +78,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """
     registry = er.async_get(hass)
     removed = {
-        e.entity_id
-        for e in er.async_entries_for_config_entry(registry, entry.entry_id)
+        e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
     if not removed:
         return

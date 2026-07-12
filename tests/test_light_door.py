@@ -221,9 +221,7 @@ async def test_open_close_holds_while_open(hass: HomeAssistant, freezer) -> None
 @pytest.mark.asyncio
 async def test_open_close_close_defers_to_occupancy(hass: HomeAssistant) -> None:
     """Closing the door keeps the light on while occupancy is still active."""
-    entry = make_light_entry(
-        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC
-    )
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
 
     hass.states.async_set(OCC, "on")
@@ -249,9 +247,7 @@ async def test_open_close_occupancy_clear_defers_to_open_door(
     hass: HomeAssistant, freezer
 ) -> None:
     """Occupancy clearing while the door is still open keeps the light held."""
-    entry = make_light_entry(
-        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC
-    )
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
 
     hass.states.async_set(DOOR, "on")
@@ -427,9 +423,7 @@ async def test_open_close_unavailable_door_keeps_holding(
     hass: HomeAssistant, freezer
 ) -> None:
     """A held-open door that blips unavailable keeps its hold until it closes."""
-    entry = make_light_entry(
-        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC
-    )
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
 
     hass.states.async_set(OCC, "on")
