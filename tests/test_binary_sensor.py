@@ -347,6 +347,38 @@ async def test_occupancy_ignores_attribute_only_updates(
 
 
 @pytest.mark.asyncio
+async def test_early_clear_is_false_detection(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A clear before the sensor timeout is still a false detection."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Early Clear Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.early_clear_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+    assert state.attributes["latest_occupied_time"] is None
+
+
+@pytest.mark.asyncio
 async def test_false_detection_classification_and_count(
     hass: HomeAssistant, freezer
 ) -> None:
