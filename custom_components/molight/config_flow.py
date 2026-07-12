@@ -469,6 +469,23 @@ def _combined_occupancy_creates_cycle(
     return False
 
 
+def _combined_occupancy_cycle_candidates(
+    hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
+) -> list[str]:
+    """Entity ids that would create a cycle if selected by the edited entry."""
+    registry = er.async_get(hass)
+    excluded: list[str] = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+            continue
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if entity.domain == "binary_sensor" and _combined_occupancy_creates_cycle(
+                hass, edited_entry, [entity.entity_id]
+            ):
+                excluded.append(entity.entity_id)
+    return sorted(excluded)
+
+
 def _min_dependent_light_timeout(
     hass: HomeAssistant, occupancy_entry_id: str
 ) -> int | None:
@@ -1987,6 +2004,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                         return self._finish(user_input)
 
         cfg = self._cfg
+        cycle_exclusions = _combined_occupancy_cycle_candidates(self.hass, self._entry)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
@@ -1997,6 +2015,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                     selector.EntitySelectorConfig(
                         integration=DOMAIN,
                         device_class="occupancy",
+                        exclude_entities=cycle_exclusions,
                         multiple=True,
                     )
                 ),
@@ -2007,6 +2026,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                     selector.EntitySelectorConfig(
                         integration=DOMAIN,
                         device_class="occupancy",
+                        exclude_entities=cycle_exclusions,
                         multiple=True,
                     )
                 ),

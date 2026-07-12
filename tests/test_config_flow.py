@@ -150,6 +150,15 @@ def _suggested_values(schema) -> dict:
     return out
 
 
+def _selector_config(result: dict, key: str) -> dict:
+    """Return a form field's selector config."""
+    return next(
+        value.config
+        for marker, value in result["data_schema"].schema.items()
+        if str(marker) == key
+    )
+
+
 @pytest.mark.asyncio
 async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
     """Full config flow creates an occupancy sensor entry."""
@@ -1986,19 +1995,12 @@ async def test_combined_options_reject_direct_self_reference(
     await setup_entries(hass, occupancy_entry, combined)
 
     result = await hass.config_entries.options.async_init(combined.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"],
-        {
-            CONF_NAME: "Combined",
-            CONF_TRIGGER_SENSORS: [
-                "binary_sensor.test_occupancy",
-                "binary_sensor.combined",
-            ],
-        },
-    )
-
-    assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "combined_occupancy_cycle"}
+    assert _selector_config(result, CONF_TRIGGER_SENSORS)["exclude_entities"] == [
+        "binary_sensor.combined"
+    ]
+    assert _selector_config(result, CONF_MAINTAIN_SENSORS)["exclude_entities"] == [
+        "binary_sensor.combined"
+    ]
 
 
 @pytest.mark.asyncio
@@ -2019,12 +2021,25 @@ async def test_combined_options_reject_indirect_cycle(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
             CONF_NAME: "Inner",
-            CONF_TRIGGER_SENSORS: ["binary_sensor.outer"],
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
         },
     )
     await setup_entries(hass, occupancy_entry, outer, inner)
 
     result = await hass.config_entries.options.async_init(outer.entry_id)
+    assert _selector_config(result, CONF_TRIGGER_SENSORS)["exclude_entities"] == [
+        "binary_sensor.outer"
+    ]
+
+    # The form was rendered while Inner was safe. Make Inner point back to Outer
+    # before submitting to prove the flow-level validation catches stale forms.
+    hass.config_entries.async_update_entry(
+        inner,
+        options={
+            CONF_NAME: "Inner",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.outer"],
+        },
+    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -2069,6 +2084,9 @@ async def test_combined_options_allow_shared_acyclic_dependency(
     await setup_entries(hass, occupancy_entry, left, right, outer)
 
     result = await hass.config_entries.options.async_init(outer.entry_id)
+    assert _selector_config(result, CONF_TRIGGER_SENSORS)["exclude_entities"] == [
+        "binary_sensor.outer"
+    ]
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
