@@ -1704,6 +1704,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
+                        device_class=["occupancy", "motion", "presence"],
                         exclude_entities=source_exclusions,
                         multiple=False,
                     )

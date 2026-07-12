@@ -101,7 +101,7 @@ For worked examples with the exact field values to enter — a plain turn-off ti
 
 ### Virtual Occupancy Binary Sensor
 
-Wraps a single real binary sensor (motion, presence, door…). `on` mirrors the source directly; the value the rest of the system runs on is the `latest_occupied_time` attribute — the best estimate of when the person actually left.
+Wraps a single real binary sensor (motion, presence, occupancy…). `on` mirrors the source directly; the value the rest of the system runs on is the `latest_occupied_time` attribute — the best estimate of when the person actually left.
 
 | Config | Description |
 |---|---|
