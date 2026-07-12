@@ -423,6 +423,24 @@ def _effective_occupancy_timeout(
     return None
 
 
+def _molight_occupancy_entity_ids(hass: HomeAssistant) -> list[str]:
+    """Entity ids created by MoLight occupancy and combined-occupancy entries."""
+    registry = er.async_get(hass)
+    entity_ids: list[str] = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in (
+            ENTITY_TYPE_OCCUPANCY,
+            ENTITY_TYPE_COMBINED_OCCUPANCY,
+        ):
+            continue
+        entity_ids.extend(
+            entity.entity_id
+            for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+            if entity.domain == "binary_sensor"
+        )
+    return sorted(entity_ids)
+
+
 def _combined_occupancy_creates_cycle(
     hass: HomeAssistant,
     edited_entry: config_entries.ConfigEntry,
@@ -561,6 +579,15 @@ def _validate_combined_occupancy_roles(user_input: dict[str, Any]) -> dict[str, 
     maintains = set(user_input.get(CONF_MAINTAIN_SENSORS, []))
     if triggers & maintains:
         return {"base": "occupancy_sensor_role_overlap"}
+    return {}
+
+
+def _validate_occupancy_source(
+    hass: HomeAssistant, user_input: dict[str, Any]
+) -> dict[str, str]:
+    """Reject wrapping another MoLight-created occupancy entity."""
+    if user_input.get(CONF_OCCUPANCY_SENSOR) in _molight_occupancy_entity_ids(hass):
+        return {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
     return {}
 
 
@@ -1658,22 +1685,27 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
-            result, errors = await self._resolve_and_create(
-                entity_type=ENTITY_TYPE_OCCUPANCY,
-                name=flat[CONF_NAME],
-                data={CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY, **flat},
-                prefill=user_input,
-                entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
-            )
-            if result is not None:
-                return result
+            errors = _validate_occupancy_source(self.hass, flat)
+            if not errors:
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_OCCUPANCY,
+                    name=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY, **flat},
+                    prefill=user_input,
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
+                )
+                if result is not None:
+                    return result
 
+        source_exclusions = _molight_occupancy_entity_ids(self.hass)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        domain="binary_sensor", multiple=False
+                        domain="binary_sensor",
+                        exclude_entities=source_exclusions,
+                        multiple=False,
                     )
                 ),
                 **_occupancy_option_fields(with_entity_id=True),
@@ -1944,15 +1976,23 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
-            # Raising this sensor's timeout must not outgrow any virtual light
-            # that depends on it (directly or through a combined sensor).
-            min_light = _min_dependent_light_timeout(self.hass, self._entry.entry_id)
-            if min_light is not None and int(flat[CONF_OCCUPANCY_TIMEOUT]) > min_light:
-                errors[CONF_OCCUPANCY_TIMEOUT] = "occupancy_timeout_too_long"
-            else:
-                return self._finish(flat)
+            errors = _validate_occupancy_source(self.hass, flat)
+            if not errors:
+                # Raising this sensor's timeout must not outgrow any virtual light
+                # that depends on it (directly or through a combined sensor).
+                min_light = _min_dependent_light_timeout(
+                    self.hass, self._entry.entry_id
+                )
+                if (
+                    min_light is not None
+                    and int(flat[CONF_OCCUPANCY_TIMEOUT]) > min_light
+                ):
+                    errors[CONF_OCCUPANCY_TIMEOUT] = "occupancy_timeout_too_long"
+                else:
+                    return self._finish(flat)
 
         cfg = self._cfg
+        source_exclusions = _molight_occupancy_entity_ids(self.hass)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
@@ -1960,7 +2000,9 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                     CONF_OCCUPANCY_SENSOR, default=cfg.get(CONF_OCCUPANCY_SENSOR)
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        domain="binary_sensor", multiple=False
+                        domain="binary_sensor",
+                        exclude_entities=source_exclusions,
+                        multiple=False,
                     )
                 ),
                 **_occupancy_option_fields(),

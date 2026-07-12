@@ -189,6 +189,64 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_occupancy_source_picker_excludes_molight_occupancy_entities(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Simple and combined MoLight occupancy entities cannot be wrapped again."""
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, combined)
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
+    )
+
+    assert set(
+        _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"]
+    ) == {"binary_sensor.combined", "binary_sensor.test_occupancy"}
+
+
+@pytest.mark.asyncio
+async def test_occupancy_create_rejects_molight_source_from_stale_form(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Submission rechecks a MoLight source created after the form was opened."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
+    )
+    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)[
+        "exclude_entities"
+    ] == []
+
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Nested Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {},
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"
+    }
+    assert _suggested_values(result["data_schema"])[CONF_OCCUPANCY_SENSOR] == (
+        "binary_sensor.test_occupancy"
+    )
+
+
+@pytest.mark.asyncio
 async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
     """Schedule flow builds a window with sun-anchored edges."""
     result = await _start_create(hass)
@@ -768,6 +826,43 @@ async def test_occupancy_options_reject_timeout_above_light_timeout(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_occupancy_options_reject_molight_source_from_stale_form(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Options recheck a MoLight source created after the form was opened."""
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"] == [
+        "binary_sensor.test_occupancy"
+    ]
+
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Other Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.other_motion",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    await setup_entries(hass, other)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.other_occupancy",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            SECTION_ADVANCED: {},
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"
+    }
 
 
 @pytest.mark.asyncio
