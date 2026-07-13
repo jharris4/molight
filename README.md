@@ -26,6 +26,8 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 
 ## Installation
 
+Requires Home Assistant **2026.1.0** or newer.
+
 ### HACS (recommended)
 
 1. Add this repository as a custom repository in HACS.

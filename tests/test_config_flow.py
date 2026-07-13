@@ -1092,6 +1092,36 @@ async def test_schedule_options_round_trip(
 
 
 @pytest.mark.asyncio
+async def test_schedule_options_prefill_dict_edges(hass: HomeAssistant) -> None:
+    """The options form prefills a stored modern dict-edge window as-is."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Modern Schedule",
+            CONF_TIME_WINDOWS: [
+                {
+                    "start": {"time": "20:00", "sun": "sunset", "combine": "latest"},
+                    "end": {"time": "06:00"},
+                }
+            ],
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested["start"] == {
+        "time": "20:00",
+        "sun": "sunset",
+        "combine": "latest",
+    }
+    assert suggested["end"] == {"time": "06:00"}
+
+
+@pytest.mark.asyncio
 async def test_config_flow_virtual_light_requires_lights(hass: HomeAssistant) -> None:
     """Virtual light config flow rejects an empty lights list."""
     result = await _start_create(hass)
