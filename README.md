@@ -49,7 +49,7 @@ Everything is configured from the UI — no YAML. Adding an entry (the first via
 
 The usual order:
 
-1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor.
+1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time — it's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](#virtual-occupancy-binary-sensor)).
 2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. A virtual light with no sensors is still useful — it turns its lights off on a timer.
 3. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
@@ -108,9 +108,14 @@ Wraps a single real binary sensor (motion, presence, occupancy…). `on` mirrors
 | Config | Description |
 |---|---|
 | **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded — wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-binary-sensor) |
-| **Occupancy timeout (s)** | The source's own hold time. When it clears, `latest_occupied_time` is back-dated to `clear time − timeout` |
+| **Occupancy timeout (s)** | The source's own hold time — **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time − timeout` |
 | **False-detection grace (s)** | `0` disables. A cycle whose on-duration exceeds the timeout by no more than the grace contained exactly one instantaneous detection — almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
 | **Clear after unavailable (s)** | `0` disables, default `60`. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection — the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
+
+> [!IMPORTANT]
+> **Set the occupancy timeout to match the real sensor's actual hold time.** MoLight can't read this from the source — it's a value you supply, and everything downstream is anchored to it: when MoLight decides the person *actually left*, the turn-off countdown, and false-detection classification. Set it too high and genuine occupancy can be misread as a false detection (`on_duration ≤ timeout + grace`), sending the lights off early via the quick-off path; set it wrong in either direction and turn-off timing drifts from reality.
+>
+> This value **has no effect on the source sensor** — it doesn't change the real sensor's hold time, it only tells MoLight what that hold time is. The two are not linked, so if you ever change the source sensor's own timeout, update this to match by hand.
 
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
