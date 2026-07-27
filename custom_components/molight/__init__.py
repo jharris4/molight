@@ -15,12 +15,15 @@ from .const import (
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
+    CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
+    ENTITY_TYPE_REMOTE,
     PLATFORMS,
 )
 from .helpers import molight_config
+from .remote import async_setup_remote
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -41,6 +44,7 @@ _REFERENCE_LIST_KEYS = (
     CONF_TRIGGER_SENSORS,
     CONF_MAINTAIN_SENSORS,
     CONF_HOLD_ENTITIES,
+    CONF_TARGET_LIGHTS,
 )
 
 
@@ -49,6 +53,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Seeded before the platforms load so the light can always read the
     # auto-off flag; the companion switch overwrites it when it restores.
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_AUTO_OFF_ENABLED: True}
+    if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE:
+        # Remote Bindings entries create no entities — their whole runtime is
+        # the event-entity listener, torn down with the entry.
+        entry.async_on_unload(async_setup_remote(hass, entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reload the entry whenever options are updated so entities pick up new values.

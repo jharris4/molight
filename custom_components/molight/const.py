@@ -10,6 +10,7 @@ ENTITY_TYPE_COMBINED_OCCUPANCY = "combined_occupancy"
 ENTITY_TYPE_ILLUMINANCE = "illuminance"
 ENTITY_TYPE_SCHEDULE = "schedule"
 ENTITY_TYPE_LIGHT = "light"
+ENTITY_TYPE_REMOTE = "remote"
 
 ENTITY_TYPES = [
     ENTITY_TYPE_OCCUPANCY,
@@ -17,6 +18,7 @@ ENTITY_TYPES = [
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_LIGHT,
+    ENTITY_TYPE_REMOTE,
 ]
 
 # --- Shared config keys ---
@@ -248,6 +250,101 @@ DOOR_MODE_OPEN = "open"
 DOOR_MODE_OPEN_CLOSE = "open_close"
 DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
 DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
+
+# --- Remote Bindings ---
+# A Remote Bindings entry drives one or more lights from the buttons of a
+# remote control (a Lutron Pico, an IKEA Bilresa, ...). Buttons are the
+# `event` entities Home Assistant creates per physical button; every binding
+# is a (button, click) -> action pair, stored as the flat keys below. Presses
+# execute through the light domain's public services, so a bound press on a
+# MoLight virtual light gets full manual-control semantics (never gated,
+# cancels a warning sequence, restarts the timer).
+#
+# Which event_type string means a single vs. a double click differs per
+# ecosystem and is resolved per button from the event entity's advertised
+# event_types (see remote.py).
+CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
+# Percent step applied per brightness up/down press (one step per click; a
+# step below the minimum turns the light off, per the light domain's own
+# brightness_step handling — and a step on an off light turns it on dim).
+CONF_DIM_STEP = "dim_step"
+DEFAULT_DIM_STEP = 10
+
+CONF_ON_BUTTONS_SINGLE = "on_buttons_single"
+CONF_ON_BUTTONS_DOUBLE = "on_buttons_double"
+CONF_OFF_BUTTONS_SINGLE = "off_buttons_single"
+CONF_OFF_BUTTONS_DOUBLE = "off_buttons_double"
+CONF_TOGGLE_BUTTONS_SINGLE = "toggle_buttons_single"
+CONF_TOGGLE_BUTTONS_DOUBLE = "toggle_buttons_double"
+CONF_BRIGHTNESS_UP_BUTTONS_SINGLE = "brightness_up_buttons_single"
+CONF_BRIGHTNESS_UP_BUTTONS_DOUBLE = "brightness_up_buttons_double"
+CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE = "brightness_down_buttons_single"
+CONF_BRIGHTNESS_DOWN_BUTTONS_DOUBLE = "brightness_down_buttons_double"
+# Presets turn the lights on at a fixed brightness and/or color — the Pico's
+# favorite button. The color temperature and RGB color are mutually
+# exclusive, like the virtual light's auto-on color pair.
+CONF_PRESET_1_BUTTONS_SINGLE = "preset_1_buttons_single"
+CONF_PRESET_1_BUTTONS_DOUBLE = "preset_1_buttons_double"
+CONF_PRESET_1_BRIGHTNESS = "preset_1_brightness"
+CONF_PRESET_1_COLOR_TEMP = "preset_1_color_temp"
+CONF_PRESET_1_RGB_COLOR = "preset_1_rgb_color"
+CONF_PRESET_2_BUTTONS_SINGLE = "preset_2_buttons_single"
+CONF_PRESET_2_BUTTONS_DOUBLE = "preset_2_buttons_double"
+CONF_PRESET_2_BRIGHTNESS = "preset_2_brightness"
+CONF_PRESET_2_COLOR_TEMP = "preset_2_color_temp"
+CONF_PRESET_2_RGB_COLOR = "preset_2_rgb_color"
+
+# Bindable actions. The values double as the form's section keys and
+# translation keys, so they must never collide with a flat CONF_* key.
+REMOTE_ACTION_ON = "turn_on"
+REMOTE_ACTION_OFF = "turn_off"
+REMOTE_ACTION_TOGGLE = "toggle"
+REMOTE_ACTION_BRIGHTNESS_UP = "brightness_up"
+REMOTE_ACTION_BRIGHTNESS_DOWN = "brightness_down"
+REMOTE_ACTION_PRESET_1 = "preset_1"
+REMOTE_ACTION_PRESET_2 = "preset_2"
+
+# (single-click key, double-click key, action) per bindable action slot —
+# the one table the config flow, the runtime, and the cleanup all iterate.
+REMOTE_ACTION_FIELDS = (
+    (CONF_ON_BUTTONS_SINGLE, CONF_ON_BUTTONS_DOUBLE, REMOTE_ACTION_ON),
+    (CONF_OFF_BUTTONS_SINGLE, CONF_OFF_BUTTONS_DOUBLE, REMOTE_ACTION_OFF),
+    (CONF_TOGGLE_BUTTONS_SINGLE, CONF_TOGGLE_BUTTONS_DOUBLE, REMOTE_ACTION_TOGGLE),
+    (
+        CONF_BRIGHTNESS_UP_BUTTONS_SINGLE,
+        CONF_BRIGHTNESS_UP_BUTTONS_DOUBLE,
+        REMOTE_ACTION_BRIGHTNESS_UP,
+    ),
+    (
+        CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE,
+        CONF_BRIGHTNESS_DOWN_BUTTONS_DOUBLE,
+        REMOTE_ACTION_BRIGHTNESS_DOWN,
+    ),
+    (
+        CONF_PRESET_1_BUTTONS_SINGLE,
+        CONF_PRESET_1_BUTTONS_DOUBLE,
+        REMOTE_ACTION_PRESET_1,
+    ),
+    (
+        CONF_PRESET_2_BUTTONS_SINGLE,
+        CONF_PRESET_2_BUTTONS_DOUBLE,
+        REMOTE_ACTION_PRESET_2,
+    ),
+)
+
+# Preset action -> its (brightness, color temp, rgb color) value keys.
+REMOTE_PRESET_VALUE_KEYS = {
+    REMOTE_ACTION_PRESET_1: (
+        CONF_PRESET_1_BRIGHTNESS,
+        CONF_PRESET_1_COLOR_TEMP,
+        CONF_PRESET_1_RGB_COLOR,
+    ),
+    REMOTE_ACTION_PRESET_2: (
+        CONF_PRESET_2_BRIGHTNESS,
+        CONF_PRESET_2_COLOR_TEMP,
+        CONF_PRESET_2_RGB_COLOR,
+    ),
+}
 
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"

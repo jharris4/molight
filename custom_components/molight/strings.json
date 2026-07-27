@@ -500,6 +500,83 @@
           }
         }
       },
+      "remote": {
+        "title": "Remote Bindings",
+        "description": "Drive lights with the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons appear as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
+        "data": {
+          "name": "Name",
+          "target_lights": "Lights to control",
+          "dim_step": "Brightness step"
+        },
+        "data_description": {
+          "target_lights": "The lights every bound button drives — usually a MoLight virtual light, but any light works.",
+          "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
+        },
+        "sections": {
+          "turn_on": {
+            "name": "Turn on",
+            "description": "Buttons that turn the lights on.",
+            "data": {
+              "on_buttons_single": "Single-click buttons",
+              "on_buttons_double": "Double-click buttons"
+            }
+          },
+          "turn_off": {
+            "name": "Turn off",
+            "description": "Buttons that turn the lights off.",
+            "data": {
+              "off_buttons_single": "Single-click buttons",
+              "off_buttons_double": "Double-click buttons"
+            }
+          },
+          "toggle": {
+            "name": "Toggle",
+            "description": "Buttons that toggle the lights.",
+            "data": {
+              "toggle_buttons_single": "Single-click buttons",
+              "toggle_buttons_double": "Double-click buttons"
+            }
+          },
+          "brightness_up": {
+            "name": "Brightness up",
+            "description": "Buttons that step the brightness up by the brightness step. A press while the lights are off turns them on dim.",
+            "data": {
+              "brightness_up_buttons_single": "Single-click buttons",
+              "brightness_up_buttons_double": "Double-click buttons"
+            }
+          },
+          "brightness_down": {
+            "name": "Brightness down",
+            "description": "Buttons that step the brightness down by the brightness step. Stepping below the minimum turns the lights off.",
+            "data": {
+              "brightness_down_buttons_single": "Single-click buttons",
+              "brightness_down_buttons_double": "Double-click buttons"
+            }
+          },
+          "preset_1": {
+            "name": "Preset 1",
+            "description": "Buttons that turn the lights on at a fixed brightness and/or color — a Pico's favorite button. Set a color temperature or a color, not both.",
+            "data": {
+              "preset_1_buttons_single": "Single-click buttons",
+              "preset_1_buttons_double": "Double-click buttons",
+              "preset_1_brightness": "Brightness",
+              "preset_1_color_temp": "Color temperature",
+              "preset_1_rgb_color": "Color"
+            }
+          },
+          "preset_2": {
+            "name": "Preset 2",
+            "description": "A second fixed brightness/color preset. Set a color temperature or a color, not both.",
+            "data": {
+              "preset_2_buttons_single": "Single-click buttons",
+              "preset_2_buttons_double": "Double-click buttons",
+              "preset_2_brightness": "Brightness",
+              "preset_2_color_temp": "Color temperature",
+              "preset_2_rgb_color": "Color"
+            }
+          }
+        }
+      },
       "confirm_entity_id": {
         "title": "Entity ID already exists",
         "description": "An entity with the ID `{entity_id}` already exists, so Home Assistant will create `{entity_id}_2` instead. Set an Entity ID on the previous step to avoid this.",
@@ -525,7 +602,13 @@
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
-      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color)."
+      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
+      "target_lights_required": "At least one light to control is required.",
+      "buttons_required": "Bind at least one button to an action.",
+      "button_click_conflict": "The same button click is bound to more than one action.",
+      "double_click_unsupported": "A selected double-click button never reports double clicks (Pico buttons, for example, are single-click only).",
+      "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
+      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -548,7 +631,8 @@
         "combined_occupancy": "Virtual Combined Occupancy Sensor",
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
-        "light": "Virtual Light"
+        "light": "Virtual Light",
+        "remote": "Remote Bindings"
       }
     },
     "affix_target": {
@@ -767,6 +851,83 @@
             }
           }
         }
+      },
+      "remote": {
+        "title": "Remote Bindings",
+        "description": "Bind single or double clicks of remote-control buttons (their event entities) to light actions. Whether a button supports double clicks is read from the button itself.",
+        "data": {
+          "name": "Name",
+          "target_lights": "Lights to control",
+          "dim_step": "Brightness step"
+        },
+        "data_description": {
+          "target_lights": "The lights every bound button drives — usually a MoLight virtual light, but any light works.",
+          "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
+        },
+        "sections": {
+          "turn_on": {
+            "name": "Turn on",
+            "description": "Buttons that turn the lights on.",
+            "data": {
+              "on_buttons_single": "Single-click buttons",
+              "on_buttons_double": "Double-click buttons"
+            }
+          },
+          "turn_off": {
+            "name": "Turn off",
+            "description": "Buttons that turn the lights off.",
+            "data": {
+              "off_buttons_single": "Single-click buttons",
+              "off_buttons_double": "Double-click buttons"
+            }
+          },
+          "toggle": {
+            "name": "Toggle",
+            "description": "Buttons that toggle the lights.",
+            "data": {
+              "toggle_buttons_single": "Single-click buttons",
+              "toggle_buttons_double": "Double-click buttons"
+            }
+          },
+          "brightness_up": {
+            "name": "Brightness up",
+            "description": "Buttons that step the brightness up by the brightness step. A press while the lights are off turns them on dim.",
+            "data": {
+              "brightness_up_buttons_single": "Single-click buttons",
+              "brightness_up_buttons_double": "Double-click buttons"
+            }
+          },
+          "brightness_down": {
+            "name": "Brightness down",
+            "description": "Buttons that step the brightness down by the brightness step. Stepping below the minimum turns the lights off.",
+            "data": {
+              "brightness_down_buttons_single": "Single-click buttons",
+              "brightness_down_buttons_double": "Double-click buttons"
+            }
+          },
+          "preset_1": {
+            "name": "Preset 1",
+            "description": "Buttons that turn the lights on at a fixed brightness and/or color — a Pico's favorite button. Set a color temperature or a color, not both.",
+            "data": {
+              "preset_1_buttons_single": "Single-click buttons",
+              "preset_1_buttons_double": "Double-click buttons",
+              "preset_1_brightness": "Brightness",
+              "preset_1_color_temp": "Color temperature",
+              "preset_1_rgb_color": "Color"
+            }
+          },
+          "preset_2": {
+            "name": "Preset 2",
+            "description": "A second fixed brightness/color preset. Set a color temperature or a color, not both.",
+            "data": {
+              "preset_2_buttons_single": "Single-click buttons",
+              "preset_2_buttons_double": "Double-click buttons",
+              "preset_2_brightness": "Brightness",
+              "preset_2_color_temp": "Color temperature",
+              "preset_2_rgb_color": "Color"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -782,7 +943,13 @@
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
-      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color)."
+      "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
+      "target_lights_required": "At least one light to control is required.",
+      "buttons_required": "Bind at least one button to an action.",
+      "button_click_conflict": "The same button click is bound to more than one action.",
+      "double_click_unsupported": "A selected double-click button never reports double clicks (Pico buttons, for example, are single-click only).",
+      "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
+      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     }
   }
 }

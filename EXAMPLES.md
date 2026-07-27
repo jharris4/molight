@@ -9,6 +9,8 @@ The examples build on each other:
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Pantry light](#example-5--pantry-light-door-sensor) — a door/contact sensor
+6. [Pico remote](#example-6--pico-remote-for-the-closet-light-remote-bindings) — remote buttons instead of automations
+7. [Bilresa remote](#example-7--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -159,6 +161,49 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 - Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off — closing is ignored. Handy for a walk-through door where you don't want the light killed the instant it shuts.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy — no wasted light opening a pantry in daylight. In `open_close` mode, if the room turns dark while the door is still standing open, the light comes on then.
 - In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor (or a keep-on entity is holding auto-off) and it still sees someone, the lights stay on instead of dropping on a person who just shut the door behind them.
+
+---
+
+### Example 6 — Pico remote for the closet light (Remote Bindings)
+
+A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant exposes each Pico button as an `event` entity — find them on the Pico's device page:
+
+**Remote Bindings**
+
+```text
+Name:               Closet Pico
+Lights to control:  light.master_bedroom_closet   # a MoLight virtual light, or any light
+Brightness step:    10
+
+Turn on         → Single-click buttons:  event.closet_pico_on
+Turn off        → Single-click buttons:  event.closet_pico_off
+Brightness up   → Single-click buttons:  event.closet_pico_raise
+Brightness down → Single-click buttons:  event.closet_pico_lower
+Preset 1        → Single-click buttons:  event.closet_pico_favorite
+                  Brightness:            60
+```
+
+Each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a MoLight virtual light — they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
+
+---
+
+### Example 7 — Bilresa two-button remote (single vs. double click)
+
+An IKEA Bilresa (Matter over Thread) has just two buttons, so single and double clicks carry different actions:
+
+**Remote Bindings**
+
+```text
+Name:               Living Room Buttons
+Lights to control:  light.living_room             # the Example 3 virtual light
+
+Turn on         → Double-click buttons:  event.living_room_buttons_button_1
+Turn off        → Double-click buttons:  event.living_room_buttons_button_2
+Brightness up   → Single-click buttons:  event.living_room_buttons_button_1
+Brightness down → Single-click buttons:  event.living_room_buttons_button_2
+```
+
+Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons), so there's nothing to configure — and binding a double click to a button that can't do one (a Pico) is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
 
 ---
 

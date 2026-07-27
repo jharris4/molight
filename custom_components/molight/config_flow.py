@@ -37,6 +37,7 @@ from .const import (
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_DIM_STEP,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
@@ -67,6 +68,7 @@ from .const import (
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
+    CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_WARN_BRIGHTNESS,
@@ -74,6 +76,7 @@ from .const import (
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    DEFAULT_DIM_STEP,
     DEFAULT_DOOR_MODE,
     DEFAULT_EFFECT_BRIGHTNESS,
     DEFAULT_EFFECT_TIMEOUT,
@@ -96,12 +99,18 @@ from .const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODES,
+    REMOTE_ACTION_FIELDS,
+    REMOTE_ACTION_OFF,
+    REMOTE_ACTION_ON,
+    REMOTE_PRESET_VALUE_KEYS,
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
 from .helpers import molight_config as _molight_cfg
+from .remote import CLICK_DOUBLE, CLICK_SINGLE, entity_double_click_supported
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -223,6 +232,14 @@ _OCCUPANCY_SECTIONS: dict[str, tuple[str, ...]] = {
 # entity_id away; their remaining fields stay top-level.
 _ENTITY_ID_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_ADVANCED: (CONF_ENTITY_ID,),
+}
+
+# One section per bindable remote action (the action name is the section key),
+# each holding its single-/double-click button pickers; presets add their
+# brightness/color value fields.
+_REMOTE_SECTIONS: dict[str, tuple[str, ...]] = {
+    action: (single_key, double_key, *REMOTE_PRESET_VALUE_KEYS.get(action, ()))
+    for single_key, double_key, action in REMOTE_ACTION_FIELDS
 }
 
 
@@ -620,6 +637,44 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]:
+    """Check a Remote Bindings form: targets, binding conflicts, presets.
+
+    The button pickers live inside sections, where the frontend can't anchor
+    a field error, so most violations are reported as base errors.
+    """
+    if not cfg.get(CONF_TARGET_LIGHTS):
+        return {CONF_TARGET_LIGHTS: "target_lights_required"}
+    seen: set[tuple[str, str]] = set()
+    bound = False
+    for single_key, double_key, _action in REMOTE_ACTION_FIELDS:
+        for key, click in ((single_key, CLICK_SINGLE), (double_key, CLICK_DOUBLE)):
+            for entity_id in cfg.get(key) or []:
+                bound = True
+                if (entity_id, click) in seen:
+                    return {"base": "button_click_conflict"}
+                seen.add((entity_id, click))
+                if (
+                    click == CLICK_DOUBLE
+                    and entity_double_click_supported(hass, entity_id) is False
+                ):
+                    return {"base": "double_click_unsupported"}
+    if not bound:
+        return {"base": "buttons_required"}
+    for single_key, double_key, action in REMOTE_ACTION_FIELDS:
+        value_keys = REMOTE_PRESET_VALUE_KEYS.get(action)
+        if value_keys is None:
+            continue
+        _brightness_key, color_temp_key, rgb_key = value_keys
+        if cfg.get(color_temp_key) and cfg.get(rgb_key):
+            return {"base": "preset_color_conflict"}
+        has_buttons = cfg.get(single_key) or cfg.get(double_key)
+        has_values = any(cfg.get(k) not in (None, []) for k in value_keys)
+        if has_buttons and not has_values:
+            return {"base": "preset_values_required"}
+    return {}
+
+
 def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     """Check the optional color fields are coherent.
 
@@ -814,6 +869,54 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
     }
     if with_entity_id:
         fields.update(_entity_id_section())
+    return fields
+
+
+def _remote_top_fields() -> dict:
+    """Top-level Remote Bindings fields: the target lights and the dim step."""
+    return {
+        vol.Required(CONF_TARGET_LIGHTS): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="light", multiple=True)
+        ),
+        vol.Required(CONF_DIM_STEP, default=DEFAULT_DIM_STEP): (
+            selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1, max=50, step=1, unit_of_measurement="%", mode="box"
+                )
+            )
+        ),
+    }
+
+
+def _remote_option_fields() -> dict:
+    """Sectioned button bindings of a Remote Bindings entry.
+
+    One collapsible section per bindable action, each holding a single- and a
+    double-click button multi-picker (multiple remotes can drive one room);
+    the presets add their brightness/color values. Turn on and turn off start
+    expanded as the common case, everything else collapsed.
+    """
+
+    def _event_buttons_selector() -> selector.EntitySelector:
+        return selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="event", multiple=True)
+        )
+
+    expanded = {REMOTE_ACTION_ON, REMOTE_ACTION_OFF}
+    fields: dict = {}
+    for single_key, double_key, action in REMOTE_ACTION_FIELDS:
+        inner: dict = {
+            vol.Optional(single_key): _event_buttons_selector(),
+            vol.Optional(double_key): _event_buttons_selector(),
+        }
+        if value_keys := REMOTE_PRESET_VALUE_KEYS.get(action):
+            brightness_key, color_temp_key, rgb_key = value_keys
+            inner[vol.Optional(brightness_key)] = _AUTO_ON_BRIGHTNESS_SELECTOR
+            inner[vol.Optional(color_temp_key)] = _COLOR_TEMP_SELECTOR
+            inner[vol.Optional(rgb_key)] = _RGB_COLOR_SELECTOR
+        fields[vol.Required(action)] = section(
+            vol.Schema(inner), {"collapsed": action not in expanded}
+        )
     return fields
 
 
@@ -1013,6 +1116,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
+            ENTITY_TYPE_REMOTE: self.async_step_remote,
         }[entity_type]
 
     # ------------------------------------------------------------------
@@ -1150,6 +1254,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 ENTITY_TYPE_ILLUMINANCE,
                                 ENTITY_TYPE_SCHEDULE,
                                 ENTITY_TYPE_LIGHT,
+                                ENTITY_TYPE_REMOTE,
                             ],
                             translation_key=CONF_ENTITY_TYPE,
                         )
@@ -1950,6 +2055,45 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    # ------------------------------------------------------------------
+    # Remote Bindings
+    # ------------------------------------------------------------------
+
+    async def async_step_remote(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure a Remote Bindings entry.
+
+        Creates no entities, so there is no entity_id to resolve — the entry
+        is just the wiring between button event entities and target lights.
+        """
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _REMOTE_SECTIONS)
+            errors = _validate_remote(self.hass, flat)
+            if not errors:
+                # Drop empty pickers/values so unbound slots stay absent from
+                # the entry rather than being stored as [] or None.
+                data = {k: v for k, v in flat.items() if v not in (None, [])}
+                return self.async_create_entry(
+                    title=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE, **data},
+                )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                **_remote_top_fields(),
+                **_remote_option_fields(),
+            }
+        )
+        return self.async_show_form(
+            step_id="remote",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            errors=errors,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Options flow — edit an existing MoLight entity
@@ -1985,6 +2129,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
+            ENTITY_TYPE_REMOTE: self.async_step_remote,
         }[self._cfg[CONF_ENTITY_TYPE]]()
 
     # ------------------------------------------------------------------
@@ -2230,6 +2375,39 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             step_id="light",
             data_schema=self.add_suggested_values_to_schema(
                 schema, user_input or _nest_sections(cfg, _LIGHT_SECTIONS)
+            ),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Remote Bindings
+    # ------------------------------------------------------------------
+
+    async def async_step_remote(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit a Remote Bindings entry's settings."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _REMOTE_SECTIONS)
+            errors = _validate_remote(self.hass, flat)
+            if not errors:
+                clean = {k: v for k, v in flat.items() if v not in (None, [])}
+                return self._finish(clean)
+
+        cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                **_remote_top_fields(),
+                **_remote_option_fields(),
+            }
+        )
+        return self.async_show_form(
+            step_id="remote",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or _nest_sections(cfg, _REMOTE_SECTIONS)
             ),
             errors=errors,
         )
