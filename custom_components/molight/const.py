@@ -2,7 +2,7 @@
 
 DOMAIN = "molight"
 
-PLATFORMS = ["binary_sensor", "light", "switch"]
+PLATFORMS = ["binary_sensor", "light", "sensor", "switch"]
 
 # Entity type discriminator stored in config entry data
 ENTITY_TYPE_OCCUPANCY = "occupancy"
@@ -251,8 +251,8 @@ DOOR_MODE_OPEN_CLOSE = "open_close"
 DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
 DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
 
-# --- Remote Bindings ---
-# A Remote Bindings entry drives one or more lights from the buttons of a
+# --- Virtual Remote ---
+# A Virtual Remote entry drives one or more lights from the buttons of a
 # remote control (a Lutron Pico, an IKEA Bilresa, ...). Buttons are the
 # `event` entities Home Assistant creates per physical button; every binding
 # is a (button, click) -> action pair, stored as the flat keys below. Presses
@@ -331,6 +331,13 @@ REMOTE_ACTION_FIELDS = (
         REMOTE_ACTION_PRESET_2,
     ),
 )
+
+# Each Virtual Remote entry also creates a diagnostic "<name> Last Action"
+# sensor. The runtime announces every executed binding on this dispatcher
+# signal (formatted with the entry_id); the payload is a dict with the
+# executed action, the source button entity_id, the resolved click, the raw
+# event_type, and the time.
+SIGNAL_REMOTE_ACTION = DOMAIN + "_remote_action_{}"
 
 # Preset action -> its (brightness, color temp, rgb color) value keys.
 REMOTE_PRESET_VALUE_KEYS = {

@@ -501,7 +501,7 @@
         }
       },
       "remote": {
-        "title": "Remote Bindings",
+        "title": "Virtual Remote",
         "description": "Drive lights with the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons appear as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
         "data": {
           "name": "Name",
@@ -632,7 +632,7 @@
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
         "light": "Virtual Light",
-        "remote": "Remote Bindings"
+        "remote": "Virtual Remote"
       }
     },
     "affix_target": {
@@ -853,7 +853,7 @@
         }
       },
       "remote": {
-        "title": "Remote Bindings",
+        "title": "Virtual Remote",
         "description": "Bind single or double clicks of remote-control buttons (their event entities) to light actions. Whether a button supports double clicks is read from the button itself.",
         "data": {
           "name": "Name",

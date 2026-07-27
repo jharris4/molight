@@ -13,7 +13,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Illuminance Sensor](#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
 | [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | On inside time windows defined by fixed times and/or sun events |
 | [Virtual Light](#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
-| [Remote Bindings](#remote-bindings) | Binds remote-control buttons (Pico, Bilresa, …) to light actions — no automations |
+| [Virtual Remote](#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, …) to light actions — no automations |
 
 **Highlights** — everything below is covered by the automated test suite:
 
@@ -24,7 +24,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 - Optional effect/warn warning: blink or dim before an automatic turn-off, then a grace period to re-trigger, instead of sudden darkness.
 - Every virtual light gets a companion **Auto-off switch**, and any on/off entity can act as a **keep-on hold** (guest mode, movie night) that suspends automatic turn-offs.
 - Restarts and `unavailable` sources are handled everywhere: missed schedule boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion sensor can't hold lights on forever.
-- Remote Bindings replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (Lutron Pico, IKEA Bilresa, …) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
+- Virtual Remotes replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (Lutron Pico, IKEA Bilresa, …) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
 
 ## Installation
 
@@ -53,7 +53,7 @@ The usual order:
 
 1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time — it's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](#virtual-occupancy-binary-sensor)).
 2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. A virtual light with no sensors is still useful — it turns its lights off on a timer.
-3. Optionally create a **Remote Bindings** entry per remote to drive lights from its buttons (see [Remote Bindings](#remote-bindings)).
+3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
 Order matters only in that a virtual entity must exist before another can reference it. Sensors are reusable — one occupancy or illuminance sensor can serve many lights. Every entry can be edited later via its **Configure** button, or removed independently.
@@ -288,11 +288,13 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
 
-### Remote Bindings
+### Virtual Remote
 
 Drives lights from the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons Home Assistant exposes as `event` entities. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
 
-A Remote Bindings entry creates **no entities**. Presses execute through the light domain's public services, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. Targets are usually MoLight virtual lights, but any `light` entity works.
+Presses execute through the light domain's public services, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. Targets are usually MoLight virtual lights, but any `light` entity works.
+
+Each entry creates one diagnostic **`<name> Last Action` sensor** — its state is the last action the remote executed, with the source button, the resolved click (`single`/`double`), the raw `event_type`, and the time as attributes. It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts empty after a restart — a pre-restart action shown as current would be misleading.
 
 | Config | Description |
 |---|---|
@@ -383,7 +385,7 @@ Use `hass:up` to confirm behavior against a real, released HA build; use `dev:ha
 
 ## Design notes
 
-- Each virtual entity is its own config entry, so they can be created, edited, and removed independently. A Remote Bindings entry is the one entry type that creates no entities — it is pure wiring between button event entities and target lights.
+- Each virtual entity is its own config entry, so they can be created, edited, and removed independently. A Virtual Remote is mostly wiring between button event entities and target lights — its only entity is the diagnostic Last Action sensor.
 - A virtual entity must exist before another can reference it (sensors before the lights that use them).
 - Removing an entry strips references to its entities from the entries that survive it — a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open.
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy entity (including through a combined sensor), and raising an occupancy sensor's timeout checks every light that depends on it.

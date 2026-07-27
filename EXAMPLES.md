@@ -9,7 +9,7 @@ The examples build on each other:
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Pantry light](#example-5--pantry-light-door-sensor) — a door/contact sensor
-6. [Pico remote](#example-6--pico-remote-for-the-closet-light-remote-bindings) — remote buttons instead of automations
+6. [Pico remote](#example-6--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
 7. [Bilresa remote](#example-7--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
 
 See the [README](README.md#entity-reference) for the full field reference.
@@ -164,11 +164,11 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 
 ---
 
-### Example 6 — Pico remote for the closet light (Remote Bindings)
+### Example 6 — Pico remote for the closet light (Virtual Remote)
 
 A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant exposes each Pico button as an `event` entity — find them on the Pico's device page:
 
-**Remote Bindings**
+**Virtual Remote**
 
 ```text
 Name:               Closet Pico
@@ -191,7 +191,7 @@ Each raise/lower click steps the brightness by 10%; the favorite button jumps to
 
 An IKEA Bilresa (Matter over Thread) has just two buttons, so single and double clicks carry different actions:
 
-**Remote Bindings**
+**Virtual Remote**
 
 ```text
 Name:               Living Room Buttons

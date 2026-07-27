@@ -54,8 +54,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # auto-off flag; the companion switch overwrites it when it restores.
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_AUTO_OFF_ENABLED: True}
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE:
-        # Remote Bindings entries create no entities — their whole runtime is
-        # the event-entity listener, torn down with the entry.
+        # A Virtual Remote's runtime is the event-entity listener set up
+        # here (torn down with the entry); its Last Action sensor rides the
+        # normal platform forwarding below.
         entry.async_on_unload(async_setup_remote(hass, entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

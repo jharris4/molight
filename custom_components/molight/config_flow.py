@@ -638,7 +638,7 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
 
 
 def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]:
-    """Check a Remote Bindings form: targets, binding conflicts, presets.
+    """Check a Virtual Remote form: targets, binding conflicts, presets.
 
     The button pickers live inside sections, where the frontend can't anchor
     a field error, so most violations are reported as base errors.
@@ -873,7 +873,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
 
 
 def _remote_top_fields() -> dict:
-    """Top-level Remote Bindings fields: the target lights and the dim step."""
+    """Top-level Virtual Remote fields: the target lights and the dim step."""
     return {
         vol.Required(CONF_TARGET_LIGHTS): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="light", multiple=True)
@@ -889,7 +889,7 @@ def _remote_top_fields() -> dict:
 
 
 def _remote_option_fields() -> dict:
-    """Sectioned button bindings of a Remote Bindings entry.
+    """Sectioned button bindings of a Virtual Remote entry.
 
     One collapsible section per bindable action, each holding a single- and a
     double-click button multi-picker (multiple remotes can drive one room);
@@ -2056,16 +2056,17 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
-    # Remote Bindings
+    # Virtual Remote
     # ------------------------------------------------------------------
 
     async def async_step_remote(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a Remote Bindings entry.
+        """Configure a Virtual Remote entry.
 
-        Creates no entities, so there is no entity_id to resolve — the entry
-        is just the wiring between button event entities and target lights.
+        The entry is wiring between button event entities and target lights;
+        its only entity is the diagnostic Last Action sensor, whose id
+        derives from the name — so there is no entity_id field to resolve.
         """
         errors: dict[str, str] = {}
 
@@ -2380,13 +2381,13 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         )
 
     # ------------------------------------------------------------------
-    # Remote Bindings
+    # Virtual Remote
     # ------------------------------------------------------------------
 
     async def async_step_remote(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a Remote Bindings entry's settings."""
+        """Edit a Virtual Remote entry's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:

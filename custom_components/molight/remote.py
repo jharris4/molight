@@ -1,10 +1,12 @@
-"""Remote Bindings — drive lights from remote-control button event entities.
+"""Virtual Remote — drive lights from remote-control button event entities.
 
-A Remote Bindings config entry creates no entities of its own. It subscribes
-to the state changes of the `event` entities Home Assistant exposes per
-physical button (a Lutron Pico button, an IKEA Bilresa button, ...) and turns
-each configured (button, click) pair into one service call on the target
-lights. Routing through the light domain's public services means a press on a
+A Virtual Remote config entry's runtime lives here rather than in an entity
+(its only entity is the diagnostic Last Action sensor, see sensor.py). It
+subscribes to the state changes of the `event` entities Home Assistant
+exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
+...) and turns each configured (button, click) pair into one service call on
+the target lights, announcing each execution on SIGNAL_REMOTE_ACTION.
+Routing through the light domain's public services means a press on a
 MoLight virtual light behaves exactly like a dashboard tap: never gated by
 darkness or a schedule, cancels an effect/warn sequence, restarts the timer.
 
@@ -34,7 +36,9 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import CoreState, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_DIM_STEP,
@@ -46,6 +50,7 @@ from .const import (
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_TOGGLE,
     REMOTE_PRESET_VALUE_KEYS,
+    SIGNAL_REMOTE_ACTION,
 )
 from .helpers import molight_config
 
@@ -133,7 +138,7 @@ def _action_call(
 
 @callback
 def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE:
-    """Wire up a Remote Bindings entry; returns its teardown callback.
+    """Wire up a Virtual Remote entry; returns its teardown callback.
 
     Subscribing is deferred until Home Assistant has fully started, exactly
     like the virtual light's sensor subscriptions: at startup event entities
@@ -144,15 +149,16 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     targets: list[str] = cfg.get(CONF_TARGET_LIGHTS, [])
     dim_step = int(cfg.get(CONF_DIM_STEP, DEFAULT_DIM_STEP))
 
-    bindings: dict[tuple[str, str], tuple[str, dict[str, Any]]] = {}
+    # (button entity_id, click) -> (action, service, service data)
+    bindings: dict[tuple[str, str], tuple[str, str, dict[str, Any]]] = {}
     for single_key, double_key, action in REMOTE_ACTION_FIELDS:
         call = _action_call(action, cfg, dim_step)
         if call is None:
             continue
         for entity_id in cfg.get(single_key) or []:
-            bindings[(entity_id, CLICK_SINGLE)] = call
+            bindings[(entity_id, CLICK_SINGLE)] = (action, *call)
         for entity_id in cfg.get(double_key) or []:
-            bindings[(entity_id, CLICK_DOUBLE)] = call
+            bindings[(entity_id, CLICK_DOUBLE)] = (action, *call)
 
     watch = sorted({entity_id for entity_id, _ in bindings})
 
@@ -186,11 +192,23 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         binding = bindings.get((event.data["entity_id"], click))
         if binding is None:
             return
-        service, data = binding
+        action, service, data = binding
         hass.async_create_task(
             hass.services.async_call(
                 "light", service, {"entity_id": targets, **data}, blocking=False
             )
+        )
+        # Announce the executed binding to the entry's Last Action sensor.
+        async_dispatcher_send(
+            hass,
+            SIGNAL_REMOTE_ACTION.format(entry.entry_id),
+            {
+                "action": action,
+                "button": event.data["entity_id"],
+                "click": click,
+                "event_type": event_type,
+                "when": dt_util.utcnow(),
+            },
         )
 
     unsub_state: CALLBACK_TYPE | None = None

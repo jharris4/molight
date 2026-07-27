@@ -1,4 +1,4 @@
-"""Tests for MoLight Remote Bindings (runtime and config flow)."""
+"""Tests for MoLight Virtual Remote (runtime and config flow)."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_REMOTE,
+    REMOTE_ACTION_BRIGHTNESS_UP,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
@@ -370,6 +371,49 @@ async def test_removing_light_strips_remote_target(
     await settle(hass)
 
     assert molight_config(remote).get(CONF_TARGET_LIGHTS, []) == []
+
+
+@pytest.mark.asyncio
+async def test_last_action_sensor(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """The diagnostic sensor records each executed binding — and starts
+    unknown, since a pre-restart action shown as current would mislead."""
+    remote = _remote_entry(
+        **{
+            CONF_ON_BUTTONS_SINGLE: ["event.pico_on"],
+            CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    _seed(hass, "event.pico_raise", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+
+    sensor = hass.states.get("sensor.test_remote_last_action")
+    assert sensor is not None
+    assert sensor.state == "unknown"
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    sensor = hass.states.get("sensor.test_remote_last_action")
+    assert sensor.state == REMOTE_ACTION_ON
+    assert sensor.attributes["button"] == "event.pico_on"
+    assert sensor.attributes["click"] == "single"
+    assert sensor.attributes["event_type"] == "press"
+    assert sensor.attributes["time"]
+
+    # An ignored event (release) leaves the sensor untouched...
+    _fire(hass, "event.pico_on", "release", PICO_TYPES)
+    await settle(hass)
+    assert hass.states.get("sensor.test_remote_last_action").state == REMOTE_ACTION_ON
+
+    # ...and the next executed binding overwrites it.
+    _fire(hass, "event.pico_raise", "press", PICO_TYPES)
+    await settle(hass)
+    sensor = hass.states.get("sensor.test_remote_last_action")
+    assert sensor.state == REMOTE_ACTION_BRIGHTNESS_UP
+    assert sensor.attributes["button"] == "event.pico_raise"
 
 
 # ---------------------------------------------------------------------------
