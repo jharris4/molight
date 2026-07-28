@@ -24,7 +24,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 - Optional effect/warn warning: blink or dim before an automatic turn-off, then a grace period to re-trigger, instead of sudden darkness.
 - Every virtual light gets a companion **Auto-off switch**, and any on/off entity can act as a **keep-on hold** (guest mode, movie night) that suspends automatic turn-offs.
 - Restarts and `unavailable` sources are handled everywhere: missed schedule boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion sensor can't hold lights on forever.
-- Virtual Remotes replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (Lutron Pico, IKEA Bilresa, …) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
+- Virtual Remotes replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (IKEA Bilresa, Hue dimmer, … — and Lutron Picos via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
 
 ## Installation
 
@@ -292,6 +292,8 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 
 Drives lights from the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons Home Assistant exposes as `event` entities. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
 
+> **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration — it exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
+
 Presses execute through the light domain's public services, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. Targets are usually MoLight virtual lights, but any `light` entity works.
 
 Each entry creates one diagnostic **`<name> Last Action` sensor** — its state is the last action the remote executed, with the source button, the resolved click (`single`/`double`), the raw `event_type`, and the time as attributes. It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts empty after a restart — a pre-restart action shown as current would be misleading.
@@ -310,7 +312,7 @@ Each button may appear in several actions, as long as no *(button, click)* pair 
 
 - Buttons that announce `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
 - Zigbee2MQTT-style buttons with literal `single`/`double` map directly.
-- Lutron Pico buttons announce `press`/`release`: single = `press`. No double click — the form rejects a double-click binding on such a button outright.
+- Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps — a double-click binding is accepted but only fires if the bridge does.
 - Hue-style buttons (and Matter without multi-press): single = `short_release`.
 
 Two things worth knowing:

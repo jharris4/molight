@@ -166,7 +166,7 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 
 ### Example 6 — Pico remote for the closet light (Virtual Remote)
 
-A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant exposes each Pico button as an `event` entity — find them on the Pico's device page:
+A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant's own Caséta integration doesn't expose Pico buttons as `event` entities — install [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) first, and each button appears as one on the Pico's device page:
 
 **Virtual Remote**
 
@@ -179,7 +179,7 @@ Turn on         → Single-click buttons:  event.closet_pico_on
 Turn off        → Single-click buttons:  event.closet_pico_off
 Brightness up   → Single-click buttons:  event.closet_pico_raise
 Brightness down → Single-click buttons:  event.closet_pico_lower
-Preset 1        → Single-click buttons:  event.closet_pico_favorite
+Preset 1        → Single-click buttons:  event.closet_pico_stop   # the middle "favorite" button
                   Brightness:            60
 ```
 
@@ -203,7 +203,7 @@ Brightness up   → Single-click buttons:  event.living_room_buttons_button_1
 Brightness down → Single-click buttons:  event.living_room_buttons_button_2
 ```
 
-Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons), so there's nothing to configure — and binding a double click to a button that can't do one (a Pico) is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
+Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Lutron buttons), so there's nothing to configure — and binding a double click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
 
 ---
 

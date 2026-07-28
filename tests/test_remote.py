@@ -50,11 +50,14 @@ from tests.conftest import settle, setup_entries
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-# Advertised event_types of the two remote shapes under test. A Pico button
-# only knows press/release; a Bilresa (Matter multi-press) button announces a
-# completed single click as multi_press_1 and a double as multi_press_2, with
-# initial_press/short_release as constituent noise that must never fire.
+# Advertised event_types of the remote shapes under test. A Pico-style
+# button only knows press/release; a Bilresa (Matter multi-press) button
+# announces a completed single click as multi_press_1 and a double as
+# multi_press_2, with initial_press/short_release as constituent noise that
+# must never fire. A Lutron Caséta button re-exposed as an event entity (the
+# lutron-caseta-events integration) speaks press/multi_tap.
 PICO_TYPES = ["press", "release"]
+LUTRON_EVENT_TYPES = ["press", "release", "multi_tap", "long_press"]
 BILRESA_TYPES = [
     "initial_press",
     "short_release",
@@ -182,6 +185,41 @@ async def test_bilresa_single_vs_double_click(
     _fire(hass, "event.bilresa_1", "multi_press_1", BILRESA_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_lutron_event_entity_single_vs_double_click(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A Lutron button surfaced as an event entity (lutron-caseta-events)
+    resolves press as the single click and multi_tap as the double; its
+    release/long_press never fire."""
+    remote = _remote_entry(
+        **{
+            CONF_TOGGLE_BUTTONS_SINGLE: ["event.closet_pico_on"],
+            CONF_ON_BUTTONS_DOUBLE: ["event.closet_pico_on"],
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.closet_pico_on", LUTRON_EVENT_TYPES)
+    await setup_entries(hass, light_entry, remote)
+
+    _fire(hass, "event.closet_pico_on", "press", LUTRON_EVENT_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+    _fire(hass, "event.closet_pico_on", "release", LUTRON_EVENT_TYPES)
+    _fire(hass, "event.closet_pico_on", "long_press", LUTRON_EVENT_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+    _fire(hass, "event.closet_pico_on", "press", LUTRON_EVENT_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "off"
+
+    _fire(hass, "event.closet_pico_on", "multi_tap", LUTRON_EVENT_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
 
 
 @pytest.mark.asyncio

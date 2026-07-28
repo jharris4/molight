@@ -20,7 +20,10 @@ of which only one may fire the binding:
     click is `multi_press_1`, a double is `multi_press_2`; the constituent
     initial_press/short_release events are ignored.
   - Zigbee2MQTT-style: literal `single` / `double`.
-  - Lutron Pico: `press` (its `release` is ignored). No double click.
+  - Lutron Caséta buttons (event entities provided by the companion
+    lutron-caseta-events integration — HA's own lutron_caseta creates
+    none): single = `press` (`release` is ignored), double = `multi_tap`
+    where the bridge reports multi-taps.
   - Hue-style / Matter without MSM: `short_release` (preferred over
     `initial_press`, which also precedes a long press). No double click.
 """
@@ -76,7 +79,9 @@ _SINGLE_EVENT_TYPES = (
     "short_release",
     "initial_press",
 )
-_DOUBLE_EVENT_TYPES = ("multi_press_2", "double")
+# multi_tap is how Lutron buttons re-exposed as event entities (the
+# lutron-caseta-events integration) spell a double click.
+_DOUBLE_EVENT_TYPES = ("multi_press_2", "double", "multi_tap")
 
 
 def single_click_event_type(event_types: list[str]) -> str | None:
@@ -94,8 +99,8 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
 
     Resolved from the advertised event_types of the entity's current state,
     so the config flow can reject a double-click binding on a button that
-    will never emit one (a Pico). An absent state can't be judged — the
-    binding is allowed and simply never fires until the entity proves itself.
+    will never emit one. An absent state can't be judged — the binding is
+    allowed and simply never fires until the entity proves itself.
     """
     state = hass.states.get(entity_id)
     if state is None:

@@ -502,7 +502,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons appear as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
+        "description": "Drive lights with the buttons of a remote control — any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...). Lutron Caséta Picos need the lutron-caseta-events integration installed to expose their buttons as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
@@ -606,7 +606,7 @@
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
-      "double_click_unsupported": "A selected double-click button never reports double clicks (Pico buttons, for example, are single-click only).",
+      "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     },
@@ -947,7 +947,7 @@
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
-      "double_click_unsupported": "A selected double-click button never reports double clicks (Pico buttons, for example, are single-click only).",
+      "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     }
