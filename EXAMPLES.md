@@ -1,6 +1,6 @@
 # MoLight — configuration examples
 
-MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios — from the simplest case to the full toolbox. Every create form starts with a **Name** (the entity ID derives from it) and ends with an optional **Entity ID** override if you want to pin it.
+MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios — from the simplest case to the full toolbox. Every create form starts with a **Name** (the entity ID derives from it), and all but the Virtual Remote's end with an optional **Entity ID** override if you want to pin it.
 
 The examples build on each other:
 
@@ -24,7 +24,7 @@ No sensors at all — a virtual light that turns its lights off a set time after
 
 ```text
 Name:              Pantry                       # → light.pantry
-Lights:            light.pantry_real            # the real light it controls
+Lights to control: light.pantry_real            # the real light it controls
 Turn-off timeout:  300                          # off 5 min after it's turned on
 ```
 
@@ -50,7 +50,7 @@ Clear after unavailable: 60   # if the sensor dies, don't hold lights forever
 
 ```text
 Name:              Hallway                     # → light.hallway  (pin the Entity ID
-Lights:            light.hallway_real          #    field if it clashes with the real one)
+Lights to control: light.hallway_real          #    field if it clashes with the real one)
 Turn-off timeout:  60         # 60s after you actually left
 Occupancy sensor:  binary_sensor.hallway_occupancy
 ```
@@ -96,17 +96,17 @@ Hysteresis:     10     # bright at 50lx, dark below 30lx — stops flapping
 
 ```text
 Name:                   Living Room            # → light.living_room
-Lights:                 light.living_lamps
+Lights to control:      light.living_lamps
 Turn-off timeout:       180
 Occupancy sensor:       binary_sensor.living_occupancy    # regular = turns on & off
-Maintain occupancy:     binary_sensor.living_presence     # only holds an on light on
+Maintain occupancy sensor: binary_sensor.living_presence  # only holds an on light on
 Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       control   # dark gates turn-ons AND bright forces off
 Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual left alone
 Effect warning duration: 3        # 3s "about to turn off" cue...
 Effect brightness:       0%       # ...a blink fully off
 Warning grace period:    20       # then 20s at current brightness to re-trigger
-Warning color:           red     # optional — bulbs that can show color turn red for it
+Warning color:           255, 0, 0   # red — bulbs that can show color turn red for it
 ```
 
 Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel — in red on any color-capable bulb, an unmissable cue (brightness-only bulbs just hold their level). Get up in that window and it's as if nothing happened — original brightness and color restored, no trace.
@@ -117,24 +117,28 @@ Use `Illuminance mode: gate` instead if your lux sensor can *see* the lights it 
 
 ### Example 4 — Porch light (schedule follow-mode)
 
-On at the later of sunset−15 and 21:00, off at 07:00. The schedule window is just a set of fields on the form — one row for the start edge, one for the end:
+On at the later of sunset−15 and 21:00, off at 07:00. The schedule window is two sections on the form — **Window start** and **Window end**:
 
 **1. Virtual Schedule Sensor**
 
 ```text
 Name:          Porch Schedule                  # → binary_sensor.porch_schedule
-Start time:    21:00
-Start sun:     sunset
-Start offset:  -15         # minutes relative to the sun event
-Start combine: latest      # whichever of time / sun is later wins
-End time:      07:00       # (no sun anchor on this edge)
+
+Window start:
+  Time:        21:00
+  Sun event:   sunset
+  Sun offset:  -15         # minutes relative to the sun event
+  Time vs. sun: latest     # whichever of time / sun is later wins
+
+Window end:
+  Time:        07:00       # (no sun anchor on this edge)
 ```
 
 **2. Virtual Light**
 
 ```text
 Name:            Porch                          # → light.porch
-Lights:          light.porch_real
+Lights to control: light.porch_real
 Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   follow    # on at window start, off at window end
 ```
@@ -151,7 +155,8 @@ Open the pantry door → light on; close it → light off. A single entry driven
 
 ```text
 Name:              Pantry                       # → light.pantry
-Lights:            light.pantry_real
+Lights to control: light.pantry_real
+Turn-off timeout:  120                          # countdown once the door closes
 Door sensor:       binary_sensor.pantry_door    # a real contact sensor (on = open)
 Door mode:         open_close                   # on while open, off when closed
 ```

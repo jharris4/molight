@@ -798,6 +798,50 @@ async def test_false_detection_quick_off(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("delay", [30, 0], ids=["long", "immediate"])
+async def test_false_detection_off_delay_is_configurable(
+    hass: HomeAssistant, freezer, delay: int
+) -> None:
+    """The quick-off delay honors a configured value (the other quick-off
+    tests all ride the default of 5s)."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "FD Light",
+            CONF_LIGHTS: ["light.fd_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
+            "false_detection_off_delay": delay,
+        },
+    )
+    await _setup_entries(hass, _fd_occupancy_entry(), light)
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await _settle(hass)
+    assert hass.states.get("light.fd_light").state == "on"
+
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await _settle(hass)
+
+    if delay:
+        # Well past the 5s default, still inside the configured 30s.
+        freezer.tick(timedelta(seconds=10))
+        async_fire_time_changed(hass)
+        await _settle(hass)
+        assert hass.states.get("light.fd_light").state == "on"
+        freezer.tick(timedelta(seconds=21))
+    else:
+        freezer.tick(timedelta(seconds=1))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    state = hass.states.get("light.fd_light")
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_false_detection_never_cuts_manual_lights(
     hass: HomeAssistant, freezer
 ) -> None:

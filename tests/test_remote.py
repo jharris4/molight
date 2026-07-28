@@ -8,12 +8,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant import config_entries
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import callback
+from homeassistant.const import (
+    EVENT_CALL_SERVICE,
+    EVENT_HOMEASSISTANT_STARTED,
+    EntityCategory,
+)
+from homeassistant.core import CoreState, State, callback
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache,
 )
 
 from custom_components.molight.const import (
@@ -31,6 +37,8 @@ from custom_components.molight.const import (
     CONF_PRESET_1_BUTTONS_SINGLE,
     CONF_PRESET_1_COLOR_TEMP,
     CONF_PRESET_1_RGB_COLOR,
+    CONF_PRESET_2_BRIGHTNESS,
+    CONF_PRESET_2_BUTTONS_SINGLE,
     CONF_TARGET_LIGHTS,
     CONF_TOGGLE_BUTTONS_SINGLE,
     DOMAIN,
@@ -41,6 +49,7 @@ from custom_components.molight.const import (
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
     REMOTE_ACTION_PRESET_1,
+    REMOTE_ACTION_PRESET_2,
     STATE_ACTIVE,
     STATE_EFFECT,
 )
@@ -454,6 +463,250 @@ async def test_last_action_sensor(
     assert sensor.attributes["button"] == "event.pico_raise"
 
 
+@pytest.mark.asyncio
+async def test_first_press_of_a_brand_new_button_fires(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A freshly paired button (state "unknown", never fired an event) has
+    nothing stale to replay — its very first press must execute.
+
+    Regression: the guard used to swallow any transition out of "unknown",
+    so the first press of every new button did nothing.
+    """
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    hass.states.async_set("light.living_room", "off")
+    hass.states.async_set("event.pico_on", "unknown", {"event_types": PICO_TYPES})
+    await setup_entries(hass, light_entry, remote)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_remote_added_before_startup_defers_subscription(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A remote set up before HA has started only subscribes at STARTED —
+    events replayed during startup must never fire a binding."""
+    hass.set_state(CoreState.not_running)
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+
+    # Startup noise: a state change before STARTED is not even subscribed to.
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "off"
+
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await settle(hass)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_remote_without_targets_is_inert(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Buttons with no target lights never call a service (e.g. after the
+    last target light was deleted and stripped from the entry)."""
+    remote = _remote_entry(
+        **{CONF_TARGET_LIGHTS: [], CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]}
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert not [d for d in calls if d["domain"] == "light"]
+    assert hass.states.get("sensor.test_remote_last_action").state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_last_action_sensor_is_not_restored(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """The Last Action sensor deliberately forgets across restarts — a stale
+    pre-restart action shown as current would read as recent activity."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "sensor.test_remote_last_action",
+                REMOTE_ACTION_ON,
+                {"button": "event.pico_on", "click": "single"},
+            )
+        ],
+    )
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    await setup_entries(hass, light_entry, remote)
+
+    sensor = hass.states.get("sensor.test_remote_last_action")
+    assert sensor.state == "unknown"
+    assert "button" not in sensor.attributes
+    assert "click" not in sensor.attributes
+
+
+@pytest.mark.asyncio
+async def test_last_action_sensor_is_diagnostic(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """The sensor is registered as a diagnostic entity."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    await setup_entries(hass, light_entry, remote)
+
+    reg_entry = er.async_get(hass).async_get("sensor.test_remote_last_action")
+    assert reg_entry is not None
+    assert reg_entry.entity_category is EntityCategory.DIAGNOSTIC
+
+
+@pytest.mark.asyncio
+async def test_preset_with_rgb_color(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An RGB preset carries rgb_color (and never a color temp)."""
+    remote = _remote_entry(
+        **{
+            CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"],
+            CONF_PRESET_1_BRIGHTNESS: 40,
+            CONF_PRESET_1_RGB_COLOR: [255, 0, 0],
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_fav", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_fav", "press", PICO_TYPES)
+    await settle(hass)
+    preset_calls = [
+        d
+        for d in calls
+        if d["domain"] == "light" and "brightness_pct" in d["service_data"]
+    ]
+    assert preset_calls
+    data = preset_calls[-1]["service_data"]
+    assert data["brightness_pct"] == 40
+    assert data["rgb_color"] == [255, 0, 0]
+    assert "color_temp_kelvin" not in data
+
+
+@pytest.mark.asyncio
+async def test_preset_without_values_stays_inert(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A preset binding with no values (possible on a hand-built entry; the
+    flow rejects it) registers no binding at all."""
+    remote = _remote_entry(**{CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_fav", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_fav", "press", PICO_TYPES)
+    await settle(hass)
+    assert not [d for d in calls if d["domain"] == "light"]
+    assert hass.states.get("sensor.test_remote_last_action").state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_preset_2_binding_fires(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """preset_2 resolves its own value keys (a mis-keyed const table would
+    silently cross the presets)."""
+    remote = _remote_entry(
+        **{
+            CONF_PRESET_2_BUTTONS_SINGLE: ["event.pico_fav2"],
+            CONF_PRESET_2_BRIGHTNESS: 25,
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_fav2", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_fav2", "press", PICO_TYPES)
+    await settle(hass)
+    preset_calls = [
+        d
+        for d in calls
+        if d["domain"] == "light" and "brightness_pct" in d["service_data"]
+    ]
+    assert preset_calls
+    assert preset_calls[-1]["service_data"]["brightness_pct"] == 25
+    sensor = hass.states.get("sensor.test_remote_last_action")
+    assert sensor.state == REMOTE_ACTION_PRESET_2
+
+
+@pytest.mark.asyncio
+async def test_attribute_only_write_never_refires(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A same-state write (battery/attribute update) is not a new press."""
+    remote = _remote_entry(**{CONF_TOGGLE_BUTTONS_SINGLE: ["event.pico_on"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+    # Re-write the same state with an extra attribute — not a new event.
+    current = hass.states.get("event.pico_on")
+    hass.states.async_set(
+        "event.pico_on",
+        current.state,
+        {**current.attributes, "battery": 50},
+    )
+    await settle(hass)
+    assert _vlight(hass).state == "on"  # a second toggle would turn it off
+
+
+@pytest.mark.asyncio
+async def test_options_rebind_takes_effect_live(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """After an options edit the old binding is dead and the new one live
+    (the runtime builds its bindings once per setup, so this proves the
+    reload rebuilt them)."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_a"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_a", PICO_TYPES)
+    _seed(hass, "event.pico_b", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_b"]},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+
+    _fire(hass, "event.pico_a", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "off"  # old binding is gone
+
+    _fire(hass, "event.pico_b", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"  # new binding is live
+
+
 # ---------------------------------------------------------------------------
 # Config flow
 # ---------------------------------------------------------------------------
@@ -563,6 +816,59 @@ async def test_remote_flow_validation(hass: HomeAssistant) -> None:
         )
         assert result["type"] == FlowResultType.FORM
         assert result["errors"] == expected_errors
+
+
+@pytest.mark.asyncio
+async def test_double_click_binding_allowed_when_capable_or_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """A double-click binding is accepted on a button that advertises one,
+    and on a button with no state yet (it can't be judged, so it is allowed
+    and simply never fires until the entity proves itself). An advertised
+    empty event_types list is judged — and rejected."""
+    _seed(hass, "event.bilresa", BILRESA_TYPES)
+    hass.states.async_set("event.no_types", "unknown", {"event_types": []})
+    base = {
+        CONF_TARGET_LIGHTS: ["light.test_light"],
+        CONF_DIM_STEP: 10,
+        **EMPTY_REMOTE_SECTIONS,
+    }
+
+    # Advertised empty event_types → judged unsupported.
+    result = await _start_remote_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **base,
+            CONF_NAME: "No Types Remote",
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_DOUBLE: ["event.no_types"]},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "double_click_unsupported"}
+
+    # Multi-press capable → accepted.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **base,
+            CONF_NAME: "Bilresa Remote",
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_DOUBLE: ["event.bilresa"]},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+    # No state at all → can't be judged, accepted.
+    result = await _start_remote_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **base,
+            CONF_NAME: "Stateless Remote",
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_DOUBLE: ["event.never_seen"]},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.asyncio

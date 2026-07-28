@@ -130,6 +130,25 @@ async def test_switch_state_restored_across_restart(
     assert _state(hass).state == "on"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restored", ["on", "unavailable", "unknown"])
+async def test_switch_non_off_restore_defaults_to_enabled(
+    hass: HomeAssistant, freezer, restored: str
+) -> None:
+    """Only a restored 'off' suspends auto-off; anything else (on, or a
+    restart that ended with the switch unavailable) means enabled."""
+    mock_restore_cache(hass, [State(SWITCH, restored)])
+    hass.states.async_set("light.real_1", "on")
+    await setup_entries(hass, make_light_entry())
+    await settle(hass)
+
+    assert hass.states.get(SWITCH).state == "on"
+    assert _state(hass).attributes["auto_off_held"] is False
+    # The adopted light runs its normal timer.
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+
 # ---------------------------------------------------------------------------
 # Keep-on entities
 # ---------------------------------------------------------------------------

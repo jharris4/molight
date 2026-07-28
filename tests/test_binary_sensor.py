@@ -478,6 +478,43 @@ async def test_recovery_to_on_preserves_false_detection_clock(
 
 
 @pytest.mark.asyncio
+async def test_second_dropout_event_does_not_rearm_clear_timer(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
+) -> None:
+    """More unavailable/unknown events while the clear countdown is armed
+    must neither restart it nor re-advance latest_occupied_time."""
+    occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+
+    dropout = datetime.now(UTC)
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    await hass.async_block_till_done()
+
+    # 30s in, the source flaps to unknown — the countdown is already armed.
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("binary_sensor.motion_1", "unknown")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "on"
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+
+    # The original 60s countdown expires on schedule (30+31), not 30+60.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_unavailable"] is True
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_combined_counts_false_cycles(hass: HomeAssistant, freezer) -> None:
     """A combined cycle made up only of false constituent cycles is flagged."""
     occupancy = MockConfigEntry(

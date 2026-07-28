@@ -676,13 +676,15 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
 
 
 def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
-    """Check the optional color fields are coherent.
+    """Check the optional color/brightness stage fields are coherent.
 
     The auto-on color temp and rgb color are mutually exclusive (a turn-on
-    can only carry one color), and an effect color needs a visible effect
-    stage (effect_brightness > 0 — a blink fully off has no color to show).
-    Reported as base errors: the fields live inside collapsed sections,
-    where the frontend can't anchor a field error.
+    can only carry one color), an effect color needs a visible effect stage
+    (effect_brightness > 0 — a blink fully off has no color to show), and a
+    stage brightness/color on a disabled stage (timeout 0) is rejected rather
+    than silently ignored, mirroring the stage-fade rule. Reported as base
+    errors: the fields live inside collapsed sections, where the frontend
+    can't anchor a field error.
     """
     if user_input.get(CONF_AUTO_ON_COLOR_TEMP) and user_input.get(
         CONF_AUTO_ON_RGB_COLOR
@@ -692,6 +694,14 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
         user_input.get(CONF_EFFECT_BRIGHTNESS) or 0
     ):
         return {"base": "effect_color_requires_brightness"}
+    if user_input.get(CONF_EFFECT_RGB_COLOR) and not float(
+        user_input.get(CONF_EFFECT_TIMEOUT) or 0
+    ):
+        return {"base": "effect_color_requires_timeout"}
+    if (
+        user_input.get(CONF_WARN_BRIGHTNESS) or user_input.get(CONF_WARN_RGB_COLOR)
+    ) and not float(user_input.get(CONF_WARN_TIMEOUT) or 0):
+        return {"base": "warn_values_require_timeout"}
     return {}
 
 

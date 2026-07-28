@@ -78,8 +78,11 @@ Turn-on attribution
     last_on_door       — a door sensor opening triggered the lights.
 
   All are exposed as extra state attributes (ISO strings or null).
-  The most-recent value is used when computing the illuminance-dark countdown
-  in the absence of an occupancy sensor.
+  In the absence of an occupancy sensor, the illuminance-dark countdown is
+  computed from the most recent of the physical/virtual/occupancy/door
+  timestamps (last_on_illuminance is deliberately excluded: a previous dark
+  re-activation is not fresh human activity, so repeated dark/bright cycles
+  can't extend the on-period forever).
 
   Brightness changes are tracked the same way: last_brightness_change_physical
   records external changes on the real lights (and restarts a running
@@ -204,6 +207,8 @@ from homeassistant.components.light import (
     ATTR_RGB_COLOR,
     ATTR_SUPPORTED_COLOR_MODES,
     ATTR_TRANSITION,
+    DEFAULT_MAX_KELVIN,
+    DEFAULT_MIN_KELVIN,
     ENTITY_ID_FORMAT,
     ColorMode,
     LightEntity,
@@ -703,6 +708,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel the running countdown timer on removal."""
+        await super().async_will_remove_from_hass()
         self._cancel_timer()
 
     # ------------------------------------------------------------------
@@ -766,6 +772,27 @@ class VirtualLight(LightEntity, RestoreEntity):
             if same_state:
                 if new_state.state == "on":
                     self._on_light_attrs_change(old_state, new_state)
+                return
+            if (
+                (
+                    old_state is None
+                    or old_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+                )
+                and new_state.state == "on"
+                and new_state.attributes.get("brightness") != 0
+                and self._machine_state != STATE_IDLE
+            ):
+                # A member reappearing (first sighting, or recovery from
+                # unavailable) while the virtual light is already on is not
+                # human activity: mirror its brightness/color but leave the
+                # running timer, countdown, or warning sequence untouched —
+                # a bulb that blips off the mesh mid-countdown must not win
+                # itself a fresh full timer.
+                if brightness := new_state.attributes.get("brightness"):
+                    self._attr_brightness = brightness
+                if color := self._member_color(new_state):
+                    self._set_color_state(*color)
+                self.async_write_ha_state()
                 return
             if new_state.state == "on" and (color := self._member_color(new_state)):
                 # Mirror the real light's color on the off→on adoption edge,
@@ -932,15 +959,25 @@ class VirtualLight(LightEntity, RestoreEntity):
             supported.add(ColorMode.HS)
         if ColorMode.COLOR_TEMP in member_modes:
             supported.add(ColorMode.COLOR_TEMP)
-            # Most permissive envelope; each member clamps to its own range.
-            if min_kelvins:
-                self._attr_min_color_temp_kelvin = min(min_kelvins)
-            if max_kelvins:
-                self._attr_max_color_temp_kelvin = max(max_kelvins)
         if not supported:
             supported = {ColorMode.BRIGHTNESS}
 
         changed = supported != self._attr_supported_color_modes
+        # Most permissive envelope; each member clamps to its own range. Track
+        # and reset it (to HA's defaults) so a member re-appearing with a
+        # different range doesn't leave the virtual light advertising kelvins
+        # no member can hit.
+        envelope = (
+            min(min_kelvins) if min_kelvins else DEFAULT_MIN_KELVIN,
+            max(max_kelvins) if max_kelvins else DEFAULT_MAX_KELVIN,
+        )
+        if envelope != (
+            self._attr_min_color_temp_kelvin,
+            self._attr_max_color_temp_kelvin,
+        ):
+            self._attr_min_color_temp_kelvin = envelope[0]
+            self._attr_max_color_temp_kelvin = envelope[1]
+            changed = True
         self._attr_supported_color_modes = supported
         if self._attr_color_mode not in supported:
             # Keep the reported mode legal for the new capability set; the
@@ -1491,8 +1528,10 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         Anchors to the latest_occupied_time across the occupancy and maintain
         entities (whichever saw the person last) so that each sub-sensor's
-        individual timeout is respected, then adds light_timeout on top as an
-        extra grace period.
+        individual timeout is respected: the lights go off light_timeout
+        seconds after the person actually left, i.e. at
+        latest_occupied_time + light_timeout — which is why light_timeout must
+        be >= the sensor's occupancy_timeout (the flows enforce it).
         """
         base = self._light_timeout
         lots: list[datetime] = []

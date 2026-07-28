@@ -180,9 +180,12 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         old_state = event.data.get("old_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
-        if old_state is None or old_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if old_state is None or old_state.state == STATE_UNAVAILABLE:
             # The entity just appeared or recovered — its state carries its
-            # last (possibly restored, certainly stale) event; never replay it.
+            # last (possibly restored, certainly stale) event; never replay
+            # it. An "unknown" old state is different: the entity existed but
+            # had never fired an event (a freshly paired button), so this
+            # first event is genuinely fresh and must not be swallowed.
             return
         if old_state.state == new_state.state:
             return  # attribute-only write, not a new button event

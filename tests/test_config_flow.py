@@ -37,6 +37,8 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_DOOR_ENTITY,
+    CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
@@ -44,6 +46,7 @@ from custom_components.molight.const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
+    CONF_FALSE_OFF_DELAY,
     CONF_FILTER_AREAS,
     CONF_FILTER_LABELS,
     CONF_HOLD_ENTITIES,
@@ -71,6 +74,7 @@ from custom_components.molight.const import (
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DOMAIN,
+    DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
@@ -80,7 +84,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import setup_entries
+from tests.conftest import settle, setup_entries
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -605,6 +609,119 @@ async def test_light_flow_rejects_effect_color_without_brightness(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "effect_color_requires_brightness"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("warning_section", "expected_error"),
+    [
+        (
+            {
+                CONF_EFFECT_BRIGHTNESS: 30,
+                CONF_EFFECT_RGB_COLOR: [255, 0, 0],
+            },
+            "effect_color_requires_timeout",
+        ),
+        ({CONF_WARN_BRIGHTNESS: 50}, "warn_values_require_timeout"),
+        ({CONF_WARN_RGB_COLOR: [255, 0, 0]}, "warn_values_require_timeout"),
+    ],
+    ids=["effect_color", "warn_brightness", "warn_color"],
+)
+async def test_light_flow_rejects_stage_values_on_disabled_stage(
+    hass: HomeAssistant, warning_section: dict, expected_error: str
+) -> None:
+    """A stage brightness/color with the stage's timeout at 0 is rejected
+    rather than silently ignored, mirroring the stage-fade rule."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: warning_section,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": expected_error}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_door_and_false_off_delay(
+    hass: HomeAssistant,
+) -> None:
+    """The door fields and the false-detection off delay round-trip through
+    the create flow (they were previously only ever set on hand-built
+    entries)."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Pantry",
+            CONF_LIGHTS: ["light.pantry_real"],
+            CONF_LIGHT_TIMEOUT: 120,
+            SECTION_SENSORS: {
+                CONF_DOOR_ENTITY: "binary_sensor.pantry_door",
+                CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+            },
+            SECTION_BEHAVIOR: {CONF_FALSE_OFF_DELAY: 30},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_DOOR_ENTITY] == "binary_sensor.pantry_door"
+    assert data[CONF_DOOR_MODE] == DOOR_MODE_OPEN_CLOSE
+    assert data[CONF_FALSE_OFF_DELAY] == 30
+
+    # The created entity honors the door wiring end-to-end.
+    await settle(hass)
+    hass.states.async_set("light.pantry_real", "off")
+    hass.states.async_set("binary_sensor.pantry_door", "on")
+    await settle(hass)
+    assert hass.states.get("light.pantry").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
+    """Removing the door reference in options clears it (replace, not merge)."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Pantry",
+            CONF_LIGHTS: ["light.pantry_real"],
+            CONF_LIGHT_TIMEOUT: 120,
+            CONF_DOOR_ENTITY: "binary_sensor.pantry_door",
+            CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Pantry",
+            CONF_LIGHTS: ["light.pantry_real"],
+            CONF_LIGHT_TIMEOUT: 120,
+            # Door entity intentionally omitted — the user cleared it.
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    assert CONF_DOOR_ENTITY not in molight_config(light)
 
 
 @pytest.mark.asyncio
@@ -1651,6 +1768,56 @@ async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
         "binary_sensor", DOMAIN, result["result"].entry_id
     )
     assert entity_id == "binary_sensor.hall_presence"
+
+
+@pytest.mark.asyncio
+async def test_manual_explicit_entity_id_is_normalized(hass: HomeAssistant) -> None:
+    """A typed domain prefix is stripped and the rest slugified."""
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "binary_sensor.Hall Presence"},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "hall_presence"
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id("binary_sensor", DOMAIN, result["result"].entry_id)
+        == "binary_sensor.hall_presence"
+    )
+
+
+@pytest.mark.asyncio
+async def test_manual_whitespace_entity_id_treated_as_blank(
+    hass: HomeAssistant,
+) -> None:
+    """A whitespace-only entity_id behaves like leaving the field empty."""
+    result = await _reach_occupancy_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "   "},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert CONF_ENTITY_ID not in result["data"]
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get_entity_id("binary_sensor", DOMAIN, result["result"].entry_id)
+        == "binary_sensor.hall_occupancy"  # derived from the name
+    )
 
 
 @pytest.mark.asyncio

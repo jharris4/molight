@@ -11,6 +11,7 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_ENTITY,
@@ -45,6 +46,11 @@ _REFERENCE_LIST_KEYS = (
     CONF_MAINTAIN_SENSORS,
     CONF_HOLD_ENTITIES,
     CONF_TARGET_LIGHTS,
+    # A virtual light may wrap another virtual light (the member picker is any
+    # light entity). A removed member must not linger: _all_lights_off treats
+    # an unresolvable member as "maybe still on", which would pin the outer
+    # light on forever.
+    CONF_LIGHTS,
 )
 
 

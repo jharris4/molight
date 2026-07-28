@@ -22,6 +22,7 @@ from custom_components.molight.const import (
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
+    CONF_FALSE_OFF_DELAY,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
@@ -68,6 +69,7 @@ def make_light_entry(
     name: str = "Matrix Light",
     lights: list[str] | None = None,
     timeout: int = 60,
+    false_off_delay: int | None = None,
     occupancy: str | None = None,
     maintain: str | None = None,
     illuminance: str | None = None,
@@ -103,6 +105,8 @@ def make_light_entry(
         CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
         CONF_LIGHT_TIMEOUT: timeout,
     }
+    if false_off_delay is not None:
+        data[CONF_FALSE_OFF_DELAY] = false_off_delay
     if occupancy:
         data[CONF_OCCUPANCY_ENTITY] = occupancy
     if maintain:

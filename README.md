@@ -46,7 +46,7 @@ Copy `custom_components/molight/` into your HA config `custom_components/` direc
 Everything is configured from the UI — no YAML. Adding an entry (the first via **Add Integration → MoLight**, later ones via **Add Entry** on the MoLight card) opens a menu with three ways to proceed:
 
 - **Create a single entity** — pick a type and fill in its form.
-- **Discover…** — scan existing entities and bulk-create virtual ones (see [Bulk discovery](#bulk-discovery)).
+- **Discover…** — scan existing entities and bulk-create virtual ones; one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
 - **Assign a sensor to several lights** — wire one sensor into many lights at once (see [Bulk assignment](#bulk-assignment)).
 
 The usual order:
@@ -60,12 +60,12 @@ Order matters only in that a virtual entity must exist before another can refere
 
 ### Choosing the entity ID
 
-Every create form ends with an optional **Entity ID** field — handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior:
+Every create form except the Virtual Remote's ends with an optional **Entity ID** field (a remote entry's only entity is its diagnostic sensor, whose ID derives from the name) — handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior:
 
 - **Leave it blank** to derive the ID from the name. If that ID is already taken, the flow warns you and offers to proceed (HA appends `_2`) or go back, prefilled, and set one yourself.
-- **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting ID re-shows the form with an error.
+- **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting ID re-shows the form with an error. A virtual light's pinned ID also shapes its companion switch: `light.kitchen` → `switch.kitchen_auto_off`.
 
-The field only appears when creating; to rename later, use HA's own entity settings.
+The field only appears when creating. Renaming later works through each entry's **Configure** button — every edit form has a **Name** field, and the entry title follows it — while the entity ID stays put (change that via HA's own entity settings).
 
 ### Bulk discovery
 
@@ -75,13 +75,13 @@ The three **Discover…** actions scan your existing entities and create a virtu
 - **Discover illuminance sensors** — every `sensor` with device class `illuminance`.
 - **Discover lights** — every `light` entity.
 
-Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
+Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
 
 The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, and anything already wrapped are hidden — re-running discovery later only offers what's new.
 
-An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim (you control the spacing) to a target of your choice:
+An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), with a target of your choice:
 
-- **Entity ID** (default) — only the entity ID gets the affix (`v_` → `binary_sensor.v_hallway`); the friendly name stays identical to the source.
+- **Entity ID** (default) — only the entity ID gets the affix, as the slug of the composed name (`v_` on a sensor named "Hallway Motion" → `binary_sensor.v_hallway_motion`); the friendly name stays identical to the source.
 - **Name** — the friendly name gets the affix, and the entity ID derives from the composed name.
 
 A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
@@ -94,7 +94,7 @@ A final form then lets you adjust the default settings applied to every pick —
 - **Illuminance** — with its **mode** (`control` or `gate`).
 - **Schedule** — with its **mode** (`follow` or `gate`).
 
-The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports both counts.
+The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
 Because occupancy feeds the turn-off countdown, the `light_timeout >= occupancy_timeout` guard applies here too: lights whose turn-off timeout is shorter than the sensor's effective timeout are skipped and named in the summary, so you can raise their timeouts and re-run.
 
@@ -111,8 +111,8 @@ Wraps a single real binary sensor (motion, presence, occupancy…). `on` mirrors
 | Config | Description |
 |---|---|
 | **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded — wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-binary-sensor) |
-| **Occupancy timeout (s)** | The source's own hold time — **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time − timeout` |
-| **False-detection grace (s)** | `0` disables. A cycle whose on-duration exceeds the timeout by no more than the grace contained exactly one instantaneous detection — almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
+| **Occupancy timeout (s)** | Default `120`. The source's own hold time — **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time − timeout` |
+| **False-detection grace (s)** | `0` disables, default `3`. A cycle whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection — the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
 | **Clear after unavailable (s)** | `0` disables, default `60`. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection — the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
 
 > [!IMPORTANT]
@@ -145,27 +145,25 @@ Attributes: `latest_occupied_time` (max across all constituents), `last_clear_fa
 | Config | Description |
 |---|---|
 | **Source sensor** | Any real `sensor` with `device_class: illuminance` |
-| **Threshold (lx)** | The lux level at which the sensor reports `on` |
-| **Hysteresis (lx)** | `0` disables. Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold |
+| **Threshold (lx)** | Default `10`. The lux level at which the sensor reports `on` |
+| **Hysteresis (lx)** | `0` disables (the default). Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold |
 
 An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
 
-Attributes: none beyond the standard bright/dark (`on`/`off`) state.
+Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity carries `device_class: light`, so HA's UI shows it as "Light detected" / "No light".
 
 ### Virtual Schedule Binary Sensor
 
-`on` = current time is within an active window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported.
+`on` = current time is within an active window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry — create additional schedule entries for additional windows.
 
-Each window edge is a fixed time, a sun event, or both:
+The form has a **Window start** and a **Window end** section; each edge is a fixed time, a sun event, or both:
 
-```yaml
-start:
-  time: "21:00"        # fixed local time
-  sun: sunset          # or sunrise
-  offset: -15          # minutes relative to the sun event
-  combine: latest      # latest | earliest — which of time/sun wins
-end: "07:00"           # plain string = fixed time
-```
+| Field | Description |
+|---|---|
+| **Time** | Fixed local time for this edge |
+| **Sun event** | Anchor the edge to `sunset` or `sunrise` instead of — or as well as — the fixed time |
+| **Sun offset (min)** | Minutes to shift the sun event; negative is before it (`−15` = 15 min before) |
+| **Time vs. sun** | When both are set, whichever this picks wins: `latest` (the default) or `earliest` |
 
 e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone.
 
@@ -175,11 +173,13 @@ Attributes: `current_window_start` (identifies the active window; used by follow
 
 Controls N real lights with an occupancy-aware state machine.
 
+The form groups everything but the timeout into collapsible sections — *Sensors & triggers* (expanded), *Turn-on & turn-off behavior*, *Off warning sequence*, and *Advanced* (collapsed):
+
 | Config | Description |
 |---|---|
-| **Lights** | Real `light` entities to control |
-| **Turn-off timeout (s)** | Must be >= the occupancy timeout of any referenced occupancy entity |
-| **False-detection off delay (s)** | When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
+| **Lights to control** | Real `light` entities to control |
+| **Turn-off timeout (s)** | Default `300`. Must be >= the occupancy timeout of any referenced occupancy entity |
+| **False-detection off delay (s)** | Default `5`. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, a door opening, illuminance going dark, or a schedule window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
 | **Auto-on color temperature (K)** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Mutually exclusive with the auto-on color |
 | **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Mutually exclusive with the auto-on color temperature |
@@ -196,11 +196,11 @@ Controls N real lights with an occupancy-aware state machine.
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
-| **Illuminance mode** | `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
-| **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor |
-| **Schedule mode** | `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
+| **Illuminance mode** | Default `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
+| **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor. HA has no fitting device class for schedules, so this picker can only narrow to MoLight binary sensors — take care to pick the schedule one |
+| **Schedule mode** | Default `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
 | **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
-| **Door mode** | `open` — opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close` — the lights stay on while the door is open and start the countdown when it closes |
+| **Door mode** | Default `open` — opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close` — the lights stay on while the door is open and start the countdown when it closes |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)) |
 
 #### Attributes
@@ -232,7 +232,7 @@ WARN       auto-off imminent — grace period before the lights go off
 - `IDLE` + manual/external turn-on → `ACTIVE` (timer starts)
 - `IDLE`/`ACTIVE`/`COUNTDOWN` + occupancy becomes active (and it's dark / in-window) → `OCCUPIED`
 - Already-active occupancy is adopted the same way: turning the light on (manually or at the wall) while the occupancy sensor is on goes straight to `OCCUPIED`, as does illuminance turning dark or a gate-mode window opening while the light is on — a timer never expires despite presence
-- `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is the turn-off timeout anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected
+- `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected: the lights go off at `latest_occupied_time + turn-off timeout` — i.e. the wall-clock wait after the sensor clears is `turn-off timeout − occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it)
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)
 - any state + all real lights turned off externally → `IDLE`
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer
@@ -242,9 +242,12 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 **Precedence when sources conflict.** With several sources configured on one light, control resolves top-down:
 
 1. **Manual / physical control** — always wins and is never gated; a manual off turns the light off from any state. A manual off *mid follow-window* drops to `IDLE` and hands control back to the sensors until the next window boundary.
-2. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, illuminance, and door changes are ignored entirely (window start forces on, window end forces off).
-3. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy or a held-open door is active.
-4. **Occupancy and door opening** — turn the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority. An `open_close` door then holds the light like occupancy until it closes.
+2. **[Holding auto-off](#holding-auto-off)** — while the Auto-off switch is off or a keep-on entity is on, every *automatic* turn-off below (timers, forced offs, window ends) is suspended; only a manual off still turns the light off.
+3. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, illuminance, and door changes are ignored entirely (window start forces on, window end forces off).
+4. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy or a held-open door is active.
+5. **Occupancy and door opening** — turn the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority. An `open_close` door then holds the light like occupancy until it closes.
+
+**Going dark can re-light the room.** Illuminance is mostly a gate, but its `on → off` (bright → dark) edge is also a trigger while the lights are off: if occupancy is active (or an `open_close` door is open), the lights come on and are held; otherwise, if the previous on-period's countdown still has time left, the lights come back on for just that remainder (with an occupancy sensor configured, the remainder is anchored to `latest_occupied_time` as usual; without one, it is the turn-off timeout minus the time since the last manual/physical/occupancy/door turn-on). This covers the "lights forced off by morning brightness, then a dark storm rolls in" case without re-lighting long-empty rooms. Such turn-ons are stamped in `last_on_illuminance`.
 
 #### Effect / warn warning
 
@@ -273,7 +276,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 A door sensor drives the light straight from a real door/contact `binary_sensor` (`on` = open) — a pantry, closet, wardrobe, or garage light. Opening the door is a turn-on trigger, gated by illuminance and a gate-mode schedule exactly like occupancy: it only lights the room when it's dark (if an illuminance sensor is set) and inside a gate window. What happens next depends on the **door mode**:
 
 - **`open`** — opening turns the lights on with the normal turn-off timeout (`ACTIVE`), then the door is ignored: closing does nothing and the lights time out even if the door stays open. Re-opening re-triggers the timer. Use it as a momentary "someone came through here" trigger.
-- **`open_close`** — the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown. The close **defers to presence**: if a regular occupancy or maintain sensor is still active, or a keep-on entity is holding auto-off, the lights stay on — a closed door never cuts the lights over someone the room still sees. An already-on light with the door open is adopted as `OCCUPIED` at startup, and forced offs (bright in `control` mode, a gate window ending, a manual off) still win over a held-open door, just as they do over occupancy. A standing-open door is also re-evaluated when a gate lifts — the room going dark or a gate-mode window starting lights the room and holds it while the door stays open — and the door's last known state is cached, so a sensor that blips `unavailable` keeps holding until it reports closed.
+- **`open_close`** — the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown. The close **defers to presence**: if a regular occupancy or maintain sensor is still active, the lights stay `OCCUPIED` — a closed door never cuts the lights over someone the room still sees. (A [keep-on hold](#holding-auto-off) also keeps them on: the countdown state is entered but, as with every hold, no timer runs until the hold releases.) An already-on light with the door open is adopted as `OCCUPIED` at startup, and forced offs (bright in `control` mode, a gate window ending, a manual off) still win over a held-open door, just as they do over occupancy. A standing-open door is also re-evaluated when a gate lifts — the room going dark or a gate-mode window starting lights the room and holds it while the door stays open — and the door's last known state is cached, so a sensor that blips `unavailable` keeps holding until it reports closed.
 
 The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening, window) rather than to MoLight virtual sensors. The last door-driven turn-on is exposed as the `last_on_door` attribute.
 
@@ -288,40 +291,6 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
 
-### Virtual Remote
-
-Drives lights from the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons Home Assistant exposes as `event` entities. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
-
-> **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration — it exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
-
-Presses execute through the light domain's public services, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. Targets are usually MoLight virtual lights, but any `light` entity works.
-
-Each entry creates one diagnostic **`<name> Last Action` sensor** — its state is the last action the remote executed, with the source button, the resolved click (`single`/`double`), the raw `event_type`, and the time as attributes. It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts empty after a restart — a pre-restart action shown as current would be misleading.
-
-| Config | Description |
-|---|---|
-| **Lights to control** | The `light` entities every bound button drives |
-| **Brightness step (%)** | Percent added/removed per brightness up/down click (default 10). Stepping up from off turns the lights on dim; stepping below the minimum turns them off |
-| **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it |
-| **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
-| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness**, and a **color temperature** *or* an **RGB color** (not both). Think of the Pico's favorite button |
-
-Each button may appear in several actions, as long as no *(button, click)* pair is bound twice — e.g. a Bilresa button whose single click toggles and whose double click turns on.
-
-**How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is resolved per button from the event entity's advertised `event_types`:
-
-- Buttons that announce `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
-- Zigbee2MQTT-style buttons with literal `single`/`double` map directly.
-- Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps — a double-click binding is accepted but only fires if the bridge does.
-- Hue-style buttons (and Matter without multi-press): single = `short_release`.
-
-Two things worth knowing:
-
-- On a multi-press-capable button, the device only confirms a *single* click after its multi-press window (~half a second) closes, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico presses are instant.
-- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press — the guards you'd otherwise write as `trigger.from_state` template conditions are built in.
-
-Deleting a virtual light strips it from every remote's target list, like any other reference. For worked examples — a 5-button Pico and a 2-button Bilresa — see [EXAMPLES.md](EXAMPLES.md).
-
 #### Brightness, color, and fades
 
 The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
@@ -335,6 +304,40 @@ An optional **auto-on brightness** forces a level whenever the light comes on *a
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
+
+### Virtual Remote
+
+Drives lights from the buttons of a remote control — a Lutron Pico, an IKEA Bilresa, or any remote whose buttons Home Assistant exposes as `event` entities. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
+
+> **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration — it exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
+
+Presses execute through the light domain's public services, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. Targets are usually MoLight virtual lights, but any `light` entity works.
+
+Each entry creates one diagnostic **`<name> Last Action` sensor** — its state is the last action the remote executed, with the source button, the resolved click (`single`/`double`), the raw `event_type`, and the time as attributes. It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts `unknown` after a restart — a pre-restart action shown as current would be misleading.
+
+| Config | Description |
+|---|---|
+| **Lights to control** | The `light` entities every bound button drives (at least one is required) |
+| **Brightness step (%)** | Percent added/removed per brightness up/down click (default 10, range 1–50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off |
+| **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it |
+| **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
+| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness**, and a **color temperature** *or* an **RGB color** (not both). Think of the Pico's favorite button |
+
+Each button may appear in several actions, as long as no *(button, click)* pair is bound twice — e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
+
+**How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is resolved per button from the event entity's advertised `event_types`:
+
+- Buttons that announce `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
+- Zigbee2MQTT-style buttons with literal `single`/`double` map directly.
+- Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps — a double-click binding is accepted but only fires if the bridge does.
+- Hue-style buttons (and Matter without multi-press): single = `short_release`, falling back to `initial_press` for buttons that announce nothing better (it is last in priority because it also precedes a long press).
+
+Two things worth knowing:
+
+- On a multi-press-capable button, the device only confirms a *single* click after its multi-press window (~half a second) closes, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico presses are instant.
+- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press — the guards you'd otherwise write as `trigger.from_state` template conditions are built in.
+
+Deleting a virtual light strips it from every remote's target list, like any other reference. For worked examples — a 5-button Pico and a 2-button Bilresa — see [EXAMPLES.md](EXAMPLES.md).
 
 ## Development
 
@@ -361,14 +364,16 @@ npm test
 Every command below runs *inside* the dev container via `devcontainer exec`:
 
 ```bash
-npm run dev:up       # create/start the dev container (fast after first build)
-npm test             # pytest
-npm run lint         # ruff check
-npm run format       # ruff format
-npm run dev:shell    # open a bash shell inside the container
-npm run dev:stop     # stop the container, keeping it for a fast dev:up next time
-npm run dev:down     # stop and remove the container (dev:up recreates it)
-npm run dev:rebuild  # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
+npm run dev:up        # create/start the dev container (fast after first build)
+npm test              # pytest
+npm run lint          # ruff check
+npm run lint:fix      # ruff check --fix
+npm run format        # ruff format
+npm run format:check  # ruff format --check (what CI runs)
+npm run dev:shell     # open a bash shell inside the container
+npm run dev:stop      # stop the container, keeping it for a fast dev:up next time
+npm run dev:down      # stop and remove the container (dev:up recreates it)
+npm run dev:rebuild   # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
 ```
 
 ### Running Home Assistant
@@ -378,6 +383,7 @@ There are two ways to get a live HA instance, depending on what you're testing:
 ```bash
 npm run hass:up      # run stock HA (stable image) with the integration mounted read-only
 npm run hass:down    # stop it and free port 8123
+npm run hass:pull    # update the HA stable image
 
 npm run dev:hass     # run HA from source inside the dev container — code is live-editable,
                      # and debugpy is available for breakpoints

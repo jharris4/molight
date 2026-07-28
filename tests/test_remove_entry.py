@@ -26,18 +26,22 @@ from custom_components.molight.const import (
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
+    CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_ON_BUTTONS_SINGLE,
     CONF_SCHEDULE_ENTITY,
+    CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_MODE_GATE,
 )
@@ -98,6 +102,18 @@ def _light_entry() -> MockConfigEntry:
     return make_light_entry(name="Rm Light")
 
 
+def _remote_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
+            CONF_NAME: "Rm Remote",
+            CONF_TARGET_LIGHTS: ["light.rm_target"],
+            CONF_ON_BUTTONS_SINGLE: ["event.rm_button"],
+        },
+    )
+
+
 def _entities_for(hass: HomeAssistant, entry: MockConfigEntry) -> list[str]:
     """Entity ids this entry currently owns, via the entity registry."""
     registry = er.async_get(hass)
@@ -143,8 +159,16 @@ async def _remove_and_assert_clean(
         _illuminance_entry,
         _schedule_entry,
         _light_entry,
+        _remote_entry,
     ],
-    ids=["occupancy", "combined_occupancy", "illuminance", "schedule", "light"],
+    ids=[
+        "occupancy",
+        "combined_occupancy",
+        "illuminance",
+        "schedule",
+        "light",
+        "remote",
+    ],
 )
 async def test_remove_entry_is_clean(hass: HomeAssistant, caplog, make_entry) -> None:
     """Each virtual device type removes cleanly once HA is running."""
@@ -196,6 +220,29 @@ async def test_remove_light_added_before_startup_never_started_is_clean(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("started", [True, False], ids=["started", "never_started"])
+async def test_remove_remote_added_before_startup_is_clean(
+    hass: HomeAssistant, caplog, started: bool
+) -> None:
+    """The remote defers its button subscription behind the same one-time
+    EVENT_HOMEASSISTANT_STARTED listener as the light; both the fired and
+    the never-fired variants must tear down exactly once."""
+    hass.set_state(CoreState.not_running)
+
+    entry = _remote_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    if started:
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await settle(hass)
+
+    await _remove_and_assert_clean(hass, entry, caplog)
+
+
+@pytest.mark.asyncio
 async def test_remove_entry_strips_references_from_dependents(
     hass: HomeAssistant,
 ) -> None:
@@ -242,6 +289,32 @@ async def test_remove_entry_strips_references_from_dependents(
     await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
     assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+
+
+@pytest.mark.asyncio
+async def test_remove_wrapped_virtual_light_strips_member_reference(
+    hass: HomeAssistant,
+) -> None:
+    """A virtual light wrapping another virtual light loses the member when
+    the inner entry is removed.
+
+    Regression: CONF_LIGHTS was missing from the reference cleanup, and
+    _all_lights_off treats an unresolvable member as "maybe still on" — the
+    dangling id would have pinned the outer light on forever.
+    """
+    inner = make_light_entry(name="Rm Inner", lights=["light.inner_real"])
+    outer = make_light_entry(
+        name="Rm Outer", lights=["light.rm_inner", "light.outer_real"]
+    )
+    for entry in (inner, outer):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(inner.entry_id)
+    await settle(hass)
+
+    assert molight_config(outer)[CONF_LIGHTS] == ["light.outer_real"]
 
 
 @pytest.mark.asyncio

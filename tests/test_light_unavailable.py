@@ -78,6 +78,62 @@ async def test_real_light_blip_and_recovery(hass: HomeAssistant, bad: str) -> No
 
 
 @pytest.mark.asyncio
+async def test_real_light_recovery_keeps_running_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A member blip/recovery mid-countdown must not win a fresh full timer.
+
+    Regression: unavailable → on used to be handled as an external turn-on,
+    replacing an occupancy-anchored countdown with a full ACTIVE timer — a
+    bulb that blips off the mesh every few minutes never turned off.
+    """
+    await setup_entries(hass, make_light_entry(occupancy=OCC, timeout=60))
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # 30s into the 60s countdown the bulb drops off the mesh and rejoins.
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # The original countdown completes on schedule — 31s later, not 60s.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_real_light_recovery_mirrors_brightness(hass: HomeAssistant) -> None:
+    """The recovery adoption still mirrors the member's brightness/color."""
+    await setup_entries(hass, make_light_entry())
+
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await settle(hass)
+    assert _state(hass).attributes["brightness"] == 200
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+
+
+@pytest.mark.asyncio
 async def test_real_light_recovers_directly_to_off(hass: HomeAssistant) -> None:
     """unavailable → off counts as a real off and releases the virtual light."""
     await setup_entries(hass, make_light_entry())

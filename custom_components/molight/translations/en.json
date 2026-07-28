@@ -603,6 +603,8 @@
       "no_entities_selected": "Select at least one entity to add.",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
+      "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
+      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
@@ -677,6 +679,7 @@
     "step": {
       "occupancy": {
         "title": "Virtual Occupancy Sensor",
+        "description": "Wraps one real motion/presence sensor and estimates when the person actually left, for accurate light countdowns.",
         "data": {
           "name": "Name",
           "occupancy_sensor": "Source sensor",
@@ -703,6 +706,7 @@
       },
       "combined_occupancy": {
         "title": "Virtual Combined Occupancy Sensor",
+        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's own timeout.",
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
@@ -715,6 +719,7 @@
       },
       "illuminance": {
         "title": "Virtual Illuminance Sensor",
+        "description": "Turns a lux reading into a steady bright/dark signal that gates when lights may turn on.",
         "data": {
           "name": "Name",
           "illuminance_sensor": "Source sensor",
@@ -770,6 +775,7 @@
       },
       "light": {
         "title": "Virtual Light",
+        "description": "Controls one or more real lights with automatic turn-off, optionally driven by occupancy, illuminance, and schedule sensors. Use it in dashboards in place of the real lights.",
         "data": {
           "name": "Name",
           "lights": "Lights to control",
@@ -944,6 +950,8 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
+      "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
+      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
