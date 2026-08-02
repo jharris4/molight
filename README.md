@@ -32,10 +32,11 @@ Requires Home Assistant **2026.1.0** or newer.
 
 ### HACS (recommended)
 
-1. Add this repository as a custom repository in HACS.
-2. Install **MoLight**.
-3. Restart Home Assistant.
-4. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**.
+MoLight is available in the HACS default repository list.
+
+1. In HACS, search for **MoLight** and install it.
+2. Restart Home Assistant.
+3. Go to **Settings → Devices & Services → Add Integration** and search for **MoLight**.
 
 ### Manual
 
