@@ -37,6 +37,8 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -92,6 +94,8 @@ def make_light_entry(
     auto_off_transition: float | None = None,
     effect_transition: float | None = None,
     warn_transition: float | None = None,
+    turn_on_select_entity: str | None = None,
+    turn_on_select_option: str | None = None,
 ) -> MockConfigEntry:
     """Build a virtual-light entry wired to arbitrary entity ids.
 
@@ -151,6 +155,10 @@ def make_light_entry(
         data[CONF_EFFECT_TRANSITION] = effect_transition
     if warn_transition is not None:
         data[CONF_WARN_TRANSITION] = warn_transition
+    if turn_on_select_entity is not None:
+        data[CONF_TURN_ON_SELECT_ENTITY] = turn_on_select_entity
+    if turn_on_select_option is not None:
+        data[CONF_TURN_ON_SELECT_OPTION] = turn_on_select_option
     return MockConfigEntry(domain=DOMAIN, data=data)
 
 

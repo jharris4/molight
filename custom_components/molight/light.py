@@ -214,7 +214,9 @@ from homeassistant.components.light import (
     LightEntity,
 )
 from homeassistant.const import (
+    ATTR_OPTION,
     EVENT_HOMEASSISTANT_STARTED,
+    SERVICE_SELECT_OPTION,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
@@ -225,6 +227,7 @@ from homeassistant.core import (
     HomeAssistant,
     callback,
 )
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_call_later,
@@ -258,6 +261,8 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -370,6 +375,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
             if kelvin
             else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
+        )
+        self._turn_on_select_entity: str | None = cfg.get(
+            CONF_TURN_ON_SELECT_ENTITY
+        )
+        self._turn_on_select_option: str | None = cfg.get(
+            CONF_TURN_ON_SELECT_OPTION
         )
         # True while the current on-period was started by occupancy (not by
         # the user) — the only case where a false-detection clear may cut the
@@ -740,7 +751,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if color is None and self._in_warning():
             # Same for the color: a colored stage must leave no trace either.
             color = self._pre_warn_color
-        await self._set_lights(True, brightness=brightness, color=color)
+        await self._set_lights(
+            True,
+            brightness=brightness,
+            color=color,
+            apply_turn_on_selection=True,
+        )
         self._transition_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -1806,6 +1822,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             brightness=self._auto_on_brightness,
             transition=self._auto_on_transition,
             color=self._auto_on_color,
+            apply_turn_on_selection=True,
         )
 
     def _auto_lights_off(self) -> Coroutine[Any, Any, None]:
@@ -1821,9 +1838,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         brightness: int | None = None,
         transition: float | None = None,
         color: dict | None = None,
+        apply_turn_on_selection: bool = False,
     ) -> None:
+        was_off = not self._attr_is_on
         context = Context()
         self._self_context_ids.append(context.id)
+        if on and was_off and apply_turn_on_selection:
+            await self._apply_turn_on_selection(context)
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:
             service_data[ATTR_TRANSITION] = transition
@@ -1847,6 +1868,32 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._attr_is_on = on
         self.async_write_ha_state()
+
+    async def _apply_turn_on_selection(self, context: Context) -> None:
+        """Apply the configured select option before an off-to-on command."""
+        if not self._turn_on_select_entity or not self._turn_on_select_option:
+            return
+        try:
+            await self.hass.services.async_call(
+                "select",
+                SERVICE_SELECT_OPTION,
+                {
+                    "entity_id": self._turn_on_select_entity,
+                    ATTR_OPTION: self._turn_on_select_option,
+                },
+                blocking=True,
+                context=context,
+            )
+        except HomeAssistantError:
+            # Turn-on selections are an enhancement; a missing select or a
+            # renamed option must never leave the room dark.
+            _LOGGER.warning(
+                "Unable to apply turn-on selection option %r using %s; turning on the "
+                "lights without it",
+                self._turn_on_select_option,
+                self._turn_on_select_entity,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Extra state attributes

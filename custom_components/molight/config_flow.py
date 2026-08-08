@@ -12,6 +12,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
+from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
@@ -71,6 +72,8 @@ from .const import (
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -193,6 +196,8 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_AUTO_ON_BRIGHTNESS,
         CONF_AUTO_ON_COLOR_TEMP,
         CONF_AUTO_ON_RGB_COLOR,
+        CONF_TURN_ON_SELECT_ENTITY,
+        CONF_TURN_ON_SELECT_OPTION,
         CONF_AUTO_ON_TRANSITION,
         CONF_AUTO_OFF_TRANSITION,
     ),
@@ -599,6 +604,28 @@ def _validate_light_timeout(
     return {}
 
 
+def _validate_turn_on_selection(
+    hass: HomeAssistant, user_input: dict[str, Any]
+) -> dict[str, str]:
+    """Validate and normalize a Virtual Light's optional turn-on selection."""
+    entity_id = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
+    option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "").strip()
+
+    if not entity_id and not option:
+        user_input.pop(CONF_TURN_ON_SELECT_ENTITY, None)
+        user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
+        return {}
+    if not entity_id or not option:
+        return {"base": "turn_on_selection_incomplete"}
+
+    user_input[CONF_TURN_ON_SELECT_OPTION] = option
+    state = hass.states.get(entity_id)
+    options = state.attributes.get(ATTR_OPTIONS) if state is not None else None
+    if isinstance(options, (list, tuple)) and option not in options:
+        return {"base": "turn_on_selection_invalid_option"}
+    return {}
+
+
 def _validate_combined_occupancy_roles(user_input: dict[str, Any]) -> dict[str, str]:
     """Reject constituents assigned to both trigger and maintain roles."""
     triggers = set(user_input.get(CONF_TRIGGER_SENSORS, []))
@@ -849,6 +876,12 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                     vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_RGB_COLOR): _RGB_COLOR_SELECTOR,
+                    vol.Optional(
+                        CONF_TURN_ON_SELECT_ENTITY
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="select", multiple=False)
+                    ),
+                    vol.Optional(CONF_TURN_ON_SELECT_OPTION): selector.TextSelector(),
                     vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
                 }
@@ -1572,6 +1605,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
                 return self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
@@ -2037,6 +2071,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
@@ -2361,6 +2396,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.

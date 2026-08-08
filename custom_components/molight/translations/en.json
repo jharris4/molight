@@ -229,12 +229,14 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
+              "turn_on_select_entity": "Turn-on selection entity",
+              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -243,6 +245,8 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
+              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -446,12 +450,14 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
+              "turn_on_select_entity": "Turn-on selection entity",
+              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -460,6 +466,8 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
+              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -602,6 +610,8 @@
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "turn_on_selection_incomplete": "Choose both a turn-on selection entity and an option, or leave both blank.",
+      "turn_on_selection_invalid_option": "That turn-on selection option is not currently offered by the selected entity. Enter an exact option from the entity's options list.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
       "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",
@@ -814,12 +824,14 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, and the quick-off delay after a false detection. Manual control is never affected.",
+            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
+              "turn_on_select_entity": "Turn-on selection entity",
+              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -828,6 +840,8 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
+              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -949,6 +963,8 @@
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "turn_on_selection_incomplete": "Choose both a turn-on selection entity and an option, or leave both blank.",
+      "turn_on_selection_invalid_option": "That turn-on selection option is not currently offered by the selected entity. Enter an exact option from the entity's options list.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
       "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",

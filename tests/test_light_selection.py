@@ -1,0 +1,150 @@
+"""Tests for Virtual Light turn-on selections."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+import pytest
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
+
+from tests.conftest import make_light_entry, settle, setup_entries
+
+if TYPE_CHECKING:
+    from homeassistant.core import Event, HomeAssistant, ServiceCall
+
+
+def _selection_entry(**kwargs: Any):
+    """Build a Virtual Light configured with a turn-on selection."""
+    return make_light_entry(
+        name="Selection Light",
+        lights=["light.ambient"],
+        turn_on_select_entity="select.ambient_theme",
+        turn_on_select_option="Cozy",
+        **kwargs,
+    )
+
+
+@pytest.mark.asyncio
+async def test_manual_turn_on_applies_selection_first_with_same_context(
+    hass: HomeAssistant,
+) -> None:
+    """An off-to-on command selects the option before driving the light."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    await setup_entries(hass, _selection_entry())
+
+    calls: list[tuple[str, str | list[str], str]] = []
+
+    @callback
+    def record_call(event: Event) -> None:
+        data = event.data["service_data"]
+        entity_id = data.get("entity_id")
+        if event.data["domain"] == "select" or entity_id == ["light.ambient"]:
+            calls.append((event.data["domain"], entity_id, event.context.id))
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_call)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Cozy"]
+    assert [call[0] for call in calls] == ["select", "light"]
+    assert calls[0][1] == "select.ambient_theme"
+    assert calls[0][2] == calls[1][2]
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_selection_is_not_reapplied_while_already_on(
+    hass: HomeAssistant,
+) -> None:
+    """Brightness/color adjustments while on do not reset the selection."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    await setup_entries(hass, _selection_entry())
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.selection_light", "brightness": 100},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Cozy"]
+
+
+@pytest.mark.asyncio
+async def test_automatic_turn_on_applies_selection(hass: HomeAssistant) -> None:
+    """Occupancy-driven turn-ons use the same selection path as manual ones."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("binary_sensor.occupancy", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(occupancy="binary_sensor.occupancy"),
+    )
+
+    hass.states.async_set("binary_sensor.occupancy", "on")
+    await settle(hass)
+
+    assert selected == ["Cozy"]
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) -> None:
+    """An underlying member turned on externally retains its chosen state."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 200})
+    await settle(hass)
+
+    assert selected == []
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_selection_failure_does_not_prevent_turn_on(
+    hass: HomeAssistant, caplog
+) -> None:
+    """A missing/renamed selection is non-fatal to primary light control."""
+
+    async def select_option(_call: ServiceCall) -> None:
+        raise HomeAssistantError
+
+    hass.services.async_register("select", "select_option", select_option)
+    await setup_entries(hass, _selection_entry())
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get("light.selection_light").state == "on"
+    assert "Unable to apply turn-on selection" in caplog.text

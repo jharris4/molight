@@ -103,6 +103,8 @@ Maintain occupancy sensor: binary_sensor.living_presence  # only holds an on lig
 Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       control   # dark gates turn-ons AND bright forces off
 Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual left alone
+Turn-on selection entity: select.living_wled_preset
+Turn-on selection option: Warm White Solid  # selected before each MoLight off-to-on
 Effect warning duration: 3        # 3s "about to turn off" cue...
 Effect brightness:       0%       # ...a blink fully off
 Warning grace period:    20       # then 20s at current brightness to re-trigger

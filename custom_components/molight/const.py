@@ -140,6 +140,13 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # filters/converts color parameters per real light.
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
+# Optional select entity and option applied immediately before MoLight turns an
+# off Virtual Light on. This is intentionally generic rather than WLED-specific:
+# WLED presets are exposed as select entities, and the same mechanism works for
+# any integration with a select-backed scene/preset. Both keys must be present;
+# absent = no turn-on selection. Physical member-light turn-ons are not affected.
+CONF_TURN_ON_SELECT_ENTITY = "turn_on_select_entity"
+CONF_TURN_ON_SELECT_OPTION = "turn_on_select_option"
 # When occupancy clears and the sensor flags the cycle as a false detection,
 # lights that were lit BY that cycle turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.

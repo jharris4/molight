@@ -69,6 +69,8 @@ from custom_components.molight.const import (
     CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -369,6 +371,118 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     assert result["data"][CONF_EFFECT_TIMEOUT] == 0
     assert result["data"][CONF_WARN_TIMEOUT] == 0
     assert CONF_WARN_BRIGHTNESS not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
+    """A select-backed preset round-trips through the create flow."""
+    hass.states.async_set(
+        "select.wled_preset",
+        "Warm White",
+        {"options": ["Warm White", "Christmas"]},
+    )
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {
+                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
+                CONF_TURN_ON_SELECT_OPTION: "  Christmas  ",
+            },
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TURN_ON_SELECT_ENTITY] == "select.wled_preset"
+    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "Christmas"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("behavior", "error"),
+    [
+        (
+            {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            "turn_on_selection_incomplete",
+        ),
+        (
+            {
+                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
+                CONF_TURN_ON_SELECT_OPTION: "Missing",
+            },
+            "turn_on_selection_invalid_option",
+        ),
+    ],
+)
+async def test_light_flow_validates_turn_on_selection(
+    hass: HomeAssistant, behavior: dict, error: str
+) -> None:
+    """Preset configuration is paired and uses an advertised option."""
+    hass.states.async_set(
+        "select.wled_preset",
+        "Christmas",
+        {"options": ["Christmas", "Warm White"]},
+    )
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: behavior,
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": error}
+
+
+@pytest.mark.asyncio
+async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) -> None:
+    """Omitting both optional preset fields disables the feature again."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECT_OPTION: "Christmas",
+        },
+    )
+    light.add_to_hass(hass)
+    await hass.config_entries.async_setup(light.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    cfg = molight_config(light)
+    assert CONF_TURN_ON_SELECT_ENTITY not in cfg
+    assert CONF_TURN_ON_SELECT_OPTION not in cfg
 
 
 @pytest.mark.asyncio
