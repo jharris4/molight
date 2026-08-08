@@ -378,12 +378,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             if kelvin
             else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
         )
-        self._turn_on_select_entity: str | None = cfg.get(
-            CONF_TURN_ON_SELECT_ENTITY
-        )
-        self._turn_on_select_option: str | None = cfg.get(
-            CONF_TURN_ON_SELECT_OPTION
-        )
+        self._turn_on_select_entity: str | None = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
+        self._turn_on_select_option: str | None = cfg.get(CONF_TURN_ON_SELECT_OPTION)
         self._turn_on_select_source_entity: str | None = cfg.get(
             CONF_TURN_ON_SELECT_SOURCE_ENTITY
         )
@@ -1882,11 +1878,18 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
         option, source = self._resolve_turn_on_selection()
         if option is None:
+            parts = []
+            if self._turn_on_select_source_entity:
+                parts.append(f"the source {self._turn_on_select_source_entity}")
+            if self._turn_on_select_option:
+                parts.append(f"the fixed fallback {self._turn_on_select_option!r}")
             _LOGGER.warning(
-                "Unable to resolve a turn-on selection option from %s and no "
-                "usable fixed fallback is configured; turning on the lights "
-                "without a selection",
-                self._turn_on_select_source_entity,
+                "Unable to resolve a turn-on selection option for %s: %s; "
+                "turning on the lights without one",
+                self._turn_on_select_entity,
+                " and ".join(parts) + " yielded no option the target currently offers"
+                if parts
+                else "no source or fixed fallback is configured",
             )
             return
         try:
@@ -1919,9 +1922,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         candidates: list[tuple[str, str]] = []
         if self._turn_on_select_source_entity:
             source_state = self.hass.states.get(self._turn_on_select_source_entity)
-            if (
-                source_state is not None
-                and source_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, "")
+            if source_state is not None and source_state.state not in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+                "",
             ):
                 candidates.append(
                     (source_state.state, self._turn_on_select_source_entity)

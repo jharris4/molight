@@ -395,9 +395,7 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
-            },
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
@@ -441,9 +439,7 @@ async def test_light_flow_rejects_invalid_turn_on_fallback(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
-            },
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
     )
     assert result["step_id"] == "light_selection"
@@ -480,9 +476,7 @@ async def test_light_flow_stores_turn_on_selection_source(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
-            },
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
     )
     source_selector = _selector_config(result, CONF_TURN_ON_SELECT_SOURCE_ENTITY)
@@ -522,9 +516,7 @@ async def test_light_flow_rejects_selection_target_as_source(
     )
 
     assert errors == {
-        CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
-            "turn_on_selection_source_same_as_target"
-        )
+        CONF_TURN_ON_SELECT_SOURCE_ENTITY: ("turn_on_selection_source_same_as_target")
     }
 
 
@@ -552,9 +544,7 @@ async def test_light_flow_rejects_source_without_matching_options(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
-            },
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
     )
 
@@ -645,9 +635,7 @@ async def test_light_options_prefill_and_update_turn_on_selection(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
-            },
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
     )
 

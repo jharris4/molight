@@ -632,9 +632,7 @@ def _validate_turn_on_selection(
     user_input[CONF_TURN_ON_SELECT_OPTION] = option
     target_state = hass.states.get(entity_id)
     target_options = (
-        target_state.attributes.get(ATTR_OPTIONS)
-        if target_state is not None
-        else None
+        target_state.attributes.get(ATTR_OPTIONS) if target_state is not None else None
     )
     if isinstance(target_options, (list, tuple)) and option not in target_options:
         return {"base": "turn_on_selection_invalid_option"}
@@ -909,9 +907,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                     vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_RGB_COLOR): _RGB_COLOR_SELECTOR,
-                    vol.Optional(
-                        CONF_TURN_ON_SELECT_ENTITY
-                    ): selector.EntitySelector(
+                    vol.Optional(CONF_TURN_ON_SELECT_ENTITY): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="select", multiple=False)
                     ),
                     vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
