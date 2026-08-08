@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType, section
 from homeassistant.helpers import (
@@ -20,6 +21,7 @@ from custom_components.molight.config_flow import (
     SECTION_BEHAVIOR,
     SECTION_SENSORS,
     SECTION_WARNING,
+    _validate_turn_on_selection,
 )
 from custom_components.molight.const import (
     AFFIX_TARGET_ENTITY_ID,
@@ -399,6 +401,12 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
         },
     )
     assert result["step_id"] == "light_selection"
+    option_marker = next(
+        marker
+        for marker in result["data_schema"].schema
+        if str(marker) == CONF_TURN_ON_SELECT_OPTION
+    )
+    assert isinstance(option_marker, vol.Required)
     option_selector = _selector_config(result, CONF_TURN_ON_SELECT_OPTION)
     assert option_selector["entity_id"] == "select.wled_preset"
     assert option_selector["hide_states"] == ["unavailable", "unknown"]
@@ -413,20 +421,10 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("selection", "error"),
-    [
-        ({}, "turn_on_selection_incomplete"),
-        (
-            {CONF_TURN_ON_SELECT_OPTION: "Missing"},
-            "turn_on_selection_invalid_option",
-        ),
-    ],
-)
-async def test_light_flow_validates_turn_on_selection(
-    hass: HomeAssistant, selection: dict, error: str
+async def test_light_flow_rejects_invalid_turn_on_fallback(
+    hass: HomeAssistant,
 ) -> None:
-    """A selection needs a source/fallback and validates the fixed option."""
+    """The required fixed fallback must be offered by the target."""
     hass.states.async_set(
         "select.wled_preset",
         "Christmas",
@@ -451,20 +449,25 @@ async def test_light_flow_validates_turn_on_selection(
     assert result["step_id"] == "light_selection"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], selection
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Missing"}
     )
 
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": error}
+    assert result["errors"] == {"base": "turn_on_selection_invalid_option"}
 
 
 @pytest.mark.asyncio
 async def test_light_flow_stores_turn_on_selection_source(
     hass: HomeAssistant,
 ) -> None:
-    """A source entity can provide the option without a fixed fallback."""
+    """A compatible source entity and mandatory fixed fallback are stored."""
     hass.states.async_set(
         "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
+    )
+    hass.states.async_set(
+        "input_select.outdoor_theme",
+        "Christmas",
+        {"options": ["Christmas", "Game Night"]},
     )
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -484,17 +487,91 @@ async def test_light_flow_stores_turn_on_selection_source(
     )
     source_selector = _selector_config(result, CONF_TURN_ON_SELECT_SOURCE_ENTITY)
     assert source_selector["domain"] == ["input_select", "select"]
+    assert source_selector["exclude_entities"] == ["select.wled_preset"]
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.outdoor_theme"},
+        {
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.outdoor_theme",
+            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+        },
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TURN_ON_SELECT_SOURCE_ENTITY] == (
         "input_select.outdoor_theme"
     )
-    assert CONF_TURN_ON_SELECT_OPTION not in result["data"]
+    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "Warm White"
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_selection_target_as_source(
+    hass: HomeAssistant,
+) -> None:
+    """Validation rejects stale/bypassed data that uses the target as source."""
+    hass.states.async_set(
+        "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
+    )
+    errors = _validate_turn_on_selection(
+        hass,
+        {
+            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+        },
+    )
+
+    assert errors == {
+        CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+            "turn_on_selection_source_same_as_target"
+        )
+    }
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_source_without_matching_options(
+    hass: HomeAssistant,
+) -> None:
+    """A source whose advertised options can never reach the target is rejected."""
+    hass.states.async_set(
+        "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
+    )
+    hass.states.async_set(
+        "input_select.outdoor_theme",
+        "Game Night",
+        {"options": ["Game Night", "Playoffs"]},
+    )
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {
+                CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"
+            },
+        },
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.outdoor_theme",
+            CONF_TURN_ON_SELECT_OPTION: "Warm White",
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+            "turn_on_selection_source_no_matching_options"
+        )
+    }
 
 
 @pytest.mark.asyncio

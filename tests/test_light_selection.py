@@ -226,34 +226,6 @@ async def test_source_without_fallback_can_skip_selection(
 
 
 @pytest.mark.asyncio
-async def test_target_can_also_be_the_source(hass: HomeAssistant) -> None:
-    """Re-selecting the target's current option is a supported dynamic mode."""
-    selected: list[str] = []
-
-    async def select_option(call: ServiceCall) -> None:
-        selected.append(call.data["option"])
-
-    hass.services.async_register("select", "select_option", select_option)
-    hass.states.async_set(
-        "select.ambient_theme", "Game Night", {"options": ["Cozy", "Game Night"]}
-    )
-    await setup_entries(
-        hass,
-        _selection_entry(
-            fixed_option=None,
-            source_entity="select.ambient_theme",
-        ),
-    )
-
-    await hass.services.async_call(
-        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
-    )
-    await hass.async_block_till_done()
-
-    assert selected == ["Game Night"]
-
-
-@pytest.mark.asyncio
 async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) -> None:
     """An underlying member turned on externally retains its chosen state."""
     selected: list[str] = []

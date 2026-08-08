@@ -620,17 +620,42 @@ def _validate_turn_on_selection(
         user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
         user_input.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
         return {}
-    if not entity_id or (not option and not source_entity):
+    if not entity_id or not option:
         return {"base": "turn_on_selection_incomplete"}
+    if source_entity == entity_id:
+        return {
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+                "turn_on_selection_source_same_as_target"
+            )
+        }
 
-    if option:
-        user_input[CONF_TURN_ON_SELECT_OPTION] = option
-        state = hass.states.get(entity_id)
-        options = state.attributes.get(ATTR_OPTIONS) if state is not None else None
-        if isinstance(options, (list, tuple)) and option not in options:
-            return {"base": "turn_on_selection_invalid_option"}
-    else:
-        user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
+    user_input[CONF_TURN_ON_SELECT_OPTION] = option
+    target_state = hass.states.get(entity_id)
+    target_options = (
+        target_state.attributes.get(ATTR_OPTIONS)
+        if target_state is not None
+        else None
+    )
+    if isinstance(target_options, (list, tuple)) and option not in target_options:
+        return {"base": "turn_on_selection_invalid_option"}
+
+    if source_entity:
+        source_state = hass.states.get(source_entity)
+        source_options = (
+            source_state.attributes.get(ATTR_OPTIONS)
+            if source_state is not None
+            else None
+        )
+        if (
+            isinstance(target_options, (list, tuple))
+            and isinstance(source_options, (list, tuple))
+            and not any(value in target_options for value in source_options)
+        ):
+            return {
+                CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
+                    "turn_on_selection_source_no_matching_options"
+                )
+            }
     return {}
 
 
@@ -927,10 +952,12 @@ def _turn_on_selection_fields(target_entity: str) -> dict:
     return {
         vol.Optional(CONF_TURN_ON_SELECT_SOURCE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(
-                domain=["input_select", "select"], multiple=False
+                domain=["input_select", "select"],
+                exclude_entities=[target_entity],
+                multiple=False,
             )
         ),
-        vol.Optional(CONF_TURN_ON_SELECT_OPTION): selector.StateSelector(
+        vol.Required(CONF_TURN_ON_SELECT_OPTION): selector.StateSelector(
             selector.StateSelectorConfig(
                 entity_id=target_entity,
                 hide_states=[STATE_UNAVAILABLE, STATE_UNKNOWN],
