@@ -229,7 +229,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -450,7 +450,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -824,7 +824,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional selection, brightness, and fade behavior for turn-ons and turn-offs. The selection applies to MoLight-commanded off-to-on transitions; physical member-light turn-ons are unaffected.",
+            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
