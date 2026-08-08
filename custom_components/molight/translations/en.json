@@ -236,7 +236,6 @@
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
-              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -245,8 +244,7 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
-              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
-              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Continue to choose a source and/or a fixed fallback from its available options.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -457,7 +455,6 @@
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
-              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -466,8 +463,7 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
-              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
-              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Continue to choose a source and/or a fixed fallback from its available options.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -506,6 +502,18 @@
               "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
+        }
+      },
+      "light_selection": {
+        "title": "Turn-on selection",
+        "description": "Choose how MoLight resolves the option sent to {entity_id}. The source entity wins when usable; the fixed option is its fallback.",
+        "data": {
+          "turn_on_select_source_entity": "Option source entity",
+          "turn_on_select_option": "Fixed/fallback option"
+        },
+        "data_description": {
+          "turn_on_select_source_entity": "Optional. At each off-to-on transition, copy the current state of this input_select or select into the target. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Optional when a source is set; otherwise required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
         }
       },
       "remote": {
@@ -610,7 +618,7 @@
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
-      "turn_on_selection_incomplete": "Choose both a turn-on selection entity and an option, or leave both blank.",
+      "turn_on_selection_incomplete": "Choose an option source and/or a fixed fallback for the turn-on selection entity, or go back and clear the target entity.",
       "turn_on_selection_invalid_option": "That turn-on selection option is not currently offered by the selected entity. Enter an exact option from the entity's options list.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
@@ -831,7 +839,6 @@
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
-              "turn_on_select_option": "Turn-on selection option",
               "auto_on_transition": "Auto-on fade",
               "auto_off_transition": "Auto-off fade"
             },
@@ -840,8 +847,7 @@
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
-              "turn_on_select_entity": "Optional. A select entity whose option should be applied before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Also enter the exact option below.",
-              "turn_on_select_option": "The exact option to select. It is applied before manual Virtual Light and automatic off-to-on commands, but not physical member-light turn-ons or adjustments while already on.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. Continue to choose a source and/or a fixed fallback from its available options.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
             }
@@ -870,6 +876,18 @@
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           }
+        }
+      },
+      "light_selection": {
+        "title": "Turn-on selection",
+        "description": "Choose how MoLight resolves the option sent to {entity_id}. The source entity wins when usable; the fixed option is its fallback.",
+        "data": {
+          "turn_on_select_source_entity": "Option source entity",
+          "turn_on_select_option": "Fixed/fallback option"
+        },
+        "data_description": {
+          "turn_on_select_source_entity": "Optional. At each off-to-on transition, copy the current state of this input_select or select into the target. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Optional when a source is set; otherwise required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
         }
       },
       "remote": {
@@ -963,7 +981,7 @@
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
-      "turn_on_selection_incomplete": "Choose both a turn-on selection entity and an option, or leave both blank.",
+      "turn_on_selection_incomplete": "Choose an option source and/or a fixed fallback for the turn-on selection entity, or go back and clear the target entity.",
       "turn_on_selection_invalid_option": "That turn-on selection option is not currently offered by the selected entity. Enter an exact option from the entity's options list.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",

@@ -213,6 +213,7 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
 )
+from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import (
     ATTR_OPTION,
     EVENT_HOMEASSISTANT_STARTED,
@@ -263,6 +264,7 @@ from .const import (
     CONF_SCHEDULE_MODE,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -382,6 +384,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._turn_on_select_option: str | None = cfg.get(
             CONF_TURN_ON_SELECT_OPTION
         )
+        self._turn_on_select_source_entity: str | None = cfg.get(
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY
+        )
+        self._last_turn_on_selection_option: str | None = None
+        self._last_turn_on_selection_source: str | None = None
         # True while the current on-period was started by occupancy (not by
         # the user) — the only case where a false-detection clear may cut the
         # lights short.
@@ -1871,7 +1878,16 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     async def _apply_turn_on_selection(self, context: Context) -> None:
         """Apply the configured select option before an off-to-on command."""
-        if not self._turn_on_select_entity or not self._turn_on_select_option:
+        if not self._turn_on_select_entity:
+            return
+        option, source = self._resolve_turn_on_selection()
+        if option is None:
+            _LOGGER.warning(
+                "Unable to resolve a turn-on selection option from %s and no "
+                "usable fixed fallback is configured; turning on the lights "
+                "without a selection",
+                self._turn_on_select_source_entity,
+            )
             return
         try:
             await self.hass.services.async_call(
@@ -1879,7 +1895,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 SERVICE_SELECT_OPTION,
                 {
                     "entity_id": self._turn_on_select_entity,
-                    ATTR_OPTION: self._turn_on_select_option,
+                    ATTR_OPTION: option,
                 },
                 blocking=True,
                 context=context,
@@ -1890,10 +1906,42 @@ class VirtualLight(LightEntity, RestoreEntity):
             _LOGGER.warning(
                 "Unable to apply turn-on selection option %r using %s; turning on the "
                 "lights without it",
-                self._turn_on_select_option,
+                option,
                 self._turn_on_select_entity,
                 exc_info=True,
             )
+        else:
+            self._last_turn_on_selection_option = option
+            self._last_turn_on_selection_source = source
+
+    def _resolve_turn_on_selection(self) -> tuple[str | None, str | None]:
+        """Resolve the source state, falling back to the configured option."""
+        candidates: list[tuple[str, str]] = []
+        if self._turn_on_select_source_entity:
+            source_state = self.hass.states.get(self._turn_on_select_source_entity)
+            if (
+                source_state is not None
+                and source_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, "")
+            ):
+                candidates.append(
+                    (source_state.state, self._turn_on_select_source_entity)
+                )
+        if self._turn_on_select_option:
+            candidates.append((self._turn_on_select_option, "fixed"))
+
+        target_state = self.hass.states.get(self._turn_on_select_entity)
+        target_options = (
+            target_state.attributes.get(ATTR_OPTIONS)
+            if target_state is not None
+            else None
+        )
+        for option, source in candidates:
+            if (
+                not isinstance(target_options, (list, tuple))
+                or option in target_options
+            ):
+                return option, source
+        return None, None
 
     # ------------------------------------------------------------------
     # Extra state attributes
@@ -1922,6 +1970,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             ),
             "last_color_change_physical": _fmt(self._last_color_change_physical),
             "last_color_change_virtual": _fmt(self._last_color_change_virtual),
+            "last_turn_on_selection_option": self._last_turn_on_selection_option,
+            "last_turn_on_selection_source": self._last_turn_on_selection_source,
             # Non-null only while the effect/warn stage is showing; persisted
             # so a restart mid-warning can restore the pre-warning brightness
             # and color.

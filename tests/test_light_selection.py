@@ -15,13 +15,19 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant, ServiceCall
 
 
-def _selection_entry(**kwargs: Any):
+def _selection_entry(
+    *,
+    fixed_option: str | None = "Cozy",
+    source_entity: str | None = None,
+    **kwargs: Any,
+):
     """Build a Virtual Light configured with a turn-on selection."""
     return make_light_entry(
         name="Selection Light",
         lights=["light.ambient"],
         turn_on_select_entity="select.ambient_theme",
-        turn_on_select_option="Cozy",
+        turn_on_select_option=fixed_option,
+        turn_on_select_source_entity=source_entity,
         **kwargs,
     )
 
@@ -108,6 +114,143 @@ async def test_automatic_turn_on_applies_selection(hass: HomeAssistant) -> None:
 
     assert selected == ["Cozy"]
     assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_source_entity_is_resolved_at_each_turn_on(hass: HomeAssistant) -> None:
+    """The source overrides the fallback and is read fresh for every on-cycle."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set(
+        "select.ambient_theme",
+        "Cozy",
+        {"options": ["Cozy", "Game Night", "Holiday"]},
+    )
+    hass.states.async_set("input_select.desired_theme", "Game Night")
+    await setup_entries(
+        hass,
+        _selection_entry(source_entity="input_select.desired_theme"),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Game Night"]
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    hass.states.async_set("input_select.desired_theme", "Holiday")
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Game Night", "Holiday"]
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["last_turn_on_selection_option"] == "Holiday"
+    assert state.attributes["last_turn_on_selection_source"] == (
+        "input_select.desired_theme"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_state",
+    ["unavailable", "Not Offered"],
+)
+async def test_unusable_source_falls_back_to_fixed_option(
+    hass: HomeAssistant, source_state: str
+) -> None:
+    """Unavailable and target-invalid source values use the fixed fallback."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set(
+        "select.ambient_theme", "Cozy", {"options": ["Cozy", "Game Night"]}
+    )
+    hass.states.async_set("input_select.desired_theme", source_state)
+    await setup_entries(
+        hass,
+        _selection_entry(source_entity="input_select.desired_theme"),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Cozy"]
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+    assert state.attributes["last_turn_on_selection_source"] == "fixed"
+
+
+@pytest.mark.asyncio
+async def test_source_without_fallback_can_skip_selection(
+    hass: HomeAssistant, caplog
+) -> None:
+    """An unavailable source without a fallback never blocks the light."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("input_select.desired_theme", "unavailable")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            fixed_option=None,
+            source_entity="input_select.desired_theme",
+        ),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == []
+    assert hass.states.get("light.selection_light").state == "on"
+    assert "Unable to resolve a turn-on selection" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_target_can_also_be_the_source(hass: HomeAssistant) -> None:
+    """Re-selecting the target's current option is a supported dynamic mode."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set(
+        "select.ambient_theme", "Game Night", {"options": ["Cozy", "Game Night"]}
+    )
+    await setup_entries(
+        hass,
+        _selection_entry(
+            fixed_option=None,
+            source_entity="select.ambient_theme",
+        ),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+    assert selected == ["Game Night"]
 
 
 @pytest.mark.asyncio

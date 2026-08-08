@@ -13,6 +13,7 @@ from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
 from homeassistant.components.select import ATTR_OPTIONS
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
@@ -74,6 +75,7 @@ from .const import (
     CONF_TRIGGER_SENSORS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
@@ -198,6 +200,7 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_AUTO_ON_RGB_COLOR,
         CONF_TURN_ON_SELECT_ENTITY,
         CONF_TURN_ON_SELECT_OPTION,
+        CONF_TURN_ON_SELECT_SOURCE_ENTITY,
         CONF_AUTO_ON_TRANSITION,
         CONF_AUTO_OFF_TRANSITION,
     ),
@@ -610,19 +613,24 @@ def _validate_turn_on_selection(
     """Validate and normalize a Virtual Light's optional turn-on selection."""
     entity_id = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
     option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "").strip()
+    source_entity = user_input.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
 
-    if not entity_id and not option:
+    if not entity_id and not option and not source_entity:
         user_input.pop(CONF_TURN_ON_SELECT_ENTITY, None)
         user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
+        user_input.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
         return {}
-    if not entity_id or not option:
+    if not entity_id or (not option and not source_entity):
         return {"base": "turn_on_selection_incomplete"}
 
-    user_input[CONF_TURN_ON_SELECT_OPTION] = option
-    state = hass.states.get(entity_id)
-    options = state.attributes.get(ATTR_OPTIONS) if state is not None else None
-    if isinstance(options, (list, tuple)) and option not in options:
-        return {"base": "turn_on_selection_invalid_option"}
+    if option:
+        user_input[CONF_TURN_ON_SELECT_OPTION] = option
+        state = hass.states.get(entity_id)
+        options = state.attributes.get(ATTR_OPTIONS) if state is not None else None
+        if isinstance(options, (list, tuple)) and option not in options:
+            return {"base": "turn_on_selection_invalid_option"}
+    else:
+        user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
     return {}
 
 
@@ -881,7 +889,6 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
                     ): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="select", multiple=False)
                     ),
-                    vol.Optional(CONF_TURN_ON_SELECT_OPTION): selector.TextSelector(),
                     vol.Optional(CONF_AUTO_ON_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Optional(CONF_AUTO_OFF_TRANSITION): _TRANSITION_SELECTOR,
                 }
@@ -913,6 +920,24 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
     if with_entity_id:
         fields.update(_entity_id_section())
     return fields
+
+
+def _turn_on_selection_fields(target_entity: str) -> dict:
+    """Fields shown after a Virtual Light's target select is known."""
+    return {
+        vol.Optional(CONF_TURN_ON_SELECT_SOURCE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain=["input_select", "select"], multiple=False
+            )
+        ),
+        vol.Optional(CONF_TURN_ON_SELECT_OPTION): selector.StateSelector(
+            selector.StateSelectorConfig(
+                entity_id=target_entity,
+                hide_states=[STATE_UNAVAILABLE, STATE_UNKNOWN],
+                multiple=False,
+            )
+        ),
+    }
 
 
 def _remote_top_fields() -> dict:
@@ -1136,6 +1161,11 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._prefill: dict[str, Any] | None = None
         # Stashed create payload while the entity_id confirm step is shown.
         self._pending: dict[str, Any] | None = None
+        # Stashed Virtual Light form while its target-dependent turn-on
+        # selection step is shown. Selection values are kept separately so a
+        # trip through the entity-id collision menu can prefill them again.
+        self._light_pending: dict[str, Any] | None = None
+        self._light_selection_values: dict[str, Any] = {}
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
         # Stashed discovery state across the three discovery steps: the
@@ -1605,8 +1635,11 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
-            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._light_pending = {"kind": "discovery", "flat": flat}
+                    return await self.async_step_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
                 return self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
             step_id="discover_light_defaults",
@@ -2071,8 +2104,20 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
-            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
+                _, entity_errors, _, _ = self._resolve_entity_id(
+                    flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
+                )
+                errors.update(entity_errors)
+            if not errors:
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._light_pending = {
+                        "kind": "create",
+                        "flat": flat,
+                        "prefill": user_input,
+                    }
+                    return await self.async_step_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
                     name=flat[CONF_NAME],
@@ -2098,6 +2143,54 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 schema, user_input or self._prefill or {}
             ),
             errors=errors,
+        )
+
+    async def async_step_light_selection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure a target-dependent fixed/source turn-on selection."""
+        pending = self._light_pending
+        flat = dict(pending["flat"])
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            flat.update(user_input)
+            errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors:
+                self._light_selection_values = {
+                    key: flat[key]
+                    for key in (
+                        CONF_TURN_ON_SELECT_OPTION,
+                        CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+                    )
+                    if key in flat
+                }
+                if pending["kind"] == "discovery":
+                    return self._finish_discovery(_light_payload, flat)
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_LIGHT,
+                    name=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
+                    prefill=pending["prefill"],
+                    entity_id_format=LIGHT_ENTITY_ID_FORMAT,
+                )
+                if result is not None:
+                    return result
+
+        target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        schema = vol.Schema(_turn_on_selection_fields(target))
+        return self.async_show_form(
+            step_id="light_selection",
+            data_schema=self.add_suggested_values_to_schema(
+                schema,
+                (
+                    user_input
+                    if user_input is not None
+                    else self._light_selection_values
+                ),
+            ),
+            errors=errors,
+            description_placeholders={"entity_id": target},
         )
 
     # ------------------------------------------------------------------
@@ -2153,6 +2246,15 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
         """Initialize the options flow for the given entry."""
         self._entry = entry
         self._cfg = _molight_cfg(entry)
+        self._light_pending: dict[str, Any] | None = None
+        self._light_selection_values = {
+            key: self._cfg[key]
+            for key in (
+                CONF_TURN_ON_SELECT_OPTION,
+                CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+            )
+            if key in self._cfg
+        }
 
     def _finish(self, data: dict[str, Any]) -> config_entries.FlowResult:
         """Store the edited options, syncing the entry title to the new name.
@@ -2396,8 +2498,11 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
-            errors.update(_validate_turn_on_selection(self.hass, flat))
             if not errors:
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._light_pending = {"flat": flat}
+                    return await self.async_step_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
                 # Drop None values so absent optional entity fields are simply
                 # missing from entry.options rather than stored as None.
                 clean = {k: v for k, v in flat.items() if v is not None}
@@ -2424,6 +2529,36 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
                 schema, user_input or _nest_sections(cfg, _LIGHT_SECTIONS)
             ),
             errors=errors,
+        )
+
+    async def async_step_light_selection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit a target-dependent fixed/source turn-on selection."""
+        flat = dict(self._light_pending["flat"])
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            flat.update(user_input)
+            errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors:
+                clean = {k: v for k, v in flat.items() if v is not None}
+                return self._finish(clean)
+
+        target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        schema = vol.Schema(_turn_on_selection_fields(target))
+        return self.async_show_form(
+            step_id="light_selection",
+            data_schema=self.add_suggested_values_to_schema(
+                schema,
+                (
+                    user_input
+                    if user_input is not None
+                    else self._light_selection_values
+                ),
+            ),
+            errors=errors,
+            description_placeholders={"entity_id": target},
         )
 
     # ------------------------------------------------------------------

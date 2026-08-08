@@ -104,7 +104,8 @@ Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       control   # dark gates turn-ons AND bright forces off
 Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual left alone
 Turn-on selection entity: select.living_wled_preset
-Turn-on selection option: Warm White Solid  # selected before each MoLight off-to-on
+Option source entity:      input_select.living_theme  # changed by calendar/automations
+Fixed/fallback option:     Warm White Solid           # picked from WLED's offered options
 Effect warning duration: 3        # 3s "about to turn off" cue...
 Effect brightness:       0%       # ...a blink fully off
 Warning grace period:    20       # then 20s at current brightness to re-trigger
@@ -112,6 +113,8 @@ Warning color:           255, 0, 0   # red — bulbs that can show color turn re
 ```
 
 Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel — in red on any color-capable bulb, an unmissable cue (brightness-only bulbs just hold their level). Get up in that window and it's as if nothing happened — original brightness and color restored, no trace.
+
+At each MoLight off-to-on transition, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Omit the source for a permanently fixed selection.
 
 Use `Illuminance mode: gate` instead if your lux sensor can *see* the lights it controls (otherwise they'd oscillate).
 
