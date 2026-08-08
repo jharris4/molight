@@ -143,8 +143,32 @@ input_number:
     unit_of_measurement: ""
     icon: mdi:palette
 
+# Backing state for the turn-on selection test entity
+input_select:
+  turn_on_selection:
+    name: "Turn-on Selection State"
+    options:
+      - Cozy
+      - Focus
+      - Night
+    initial: Focus
+    icon: mdi:theme-light-dark
+
 # Template entities
 template:
+  # Select used to test a Virtual Light's turn-on selection
+  - select:
+      - name: "Test Turn-on Selection"
+        unique_id: test_turn_on_selection
+        state: "{{ states('input_select.turn_on_selection') }}"
+        options: "{{ state_attr('input_select.turn_on_selection', 'options') }}"
+        select_option:
+          action: input_select.select_option
+          target:
+            entity_id: input_select.turn_on_selection
+          data:
+            option: "{{ option }}"
+
   # Test lights (light.test_*)
   - light:
       - name: "Test Living Room Light"
