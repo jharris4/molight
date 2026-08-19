@@ -2300,6 +2300,12 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._scheduled_light_shared_input = user_input
                 return await self.async_step_scheduled_light_outside()
 
+        return self._show_scheduled_light_form(user_input, errors)
+
+    def _show_scheduled_light_form(
+        self, user_input: dict[str, Any] | None, errors: dict[str, str]
+    ) -> config_entries.FlowResult:
+        """Render the shared first form, prefilled from input or the stash."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
@@ -2330,11 +2336,13 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = _validate_light_settings(self.hass, flat)
             if not errors:
                 _carry_turn_on_selection(flat, self._outside_schedule_settings)
-                self._outside_schedule_settings = _clean_optional_values(flat)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._outside_schedule_settings = _clean_optional_values(flat)
                     self._scheduled_light_pending_side = CONF_OUTSIDE_SCHEDULE_SETTINGS
                     return await self.async_step_scheduled_light_selection()
+                # No selection target: drop any stale option/source before storing.
                 _validate_turn_on_selection(self.hass, flat)
+                self._outside_schedule_settings = _clean_optional_values(flat)
                 return await self.async_step_scheduled_light_inside()
 
         schema = vol.Schema(_light_option_fields(with_schedule=False))
@@ -2364,11 +2372,13 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._inside_schedule_settings or self._outside_schedule_settings
                 )
                 _carry_turn_on_selection(flat, previous)
-                self._inside_schedule_settings = _clean_optional_values(flat)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._inside_schedule_settings = _clean_optional_values(flat)
                     self._scheduled_light_pending_side = CONF_INSIDE_SCHEDULE_SETTINGS
                     return await self.async_step_scheduled_light_selection()
+                # No selection target: drop any stale option/source before storing.
                 _validate_turn_on_selection(self.hass, flat)
+                self._inside_schedule_settings = _clean_optional_values(flat)
                 return await self._finish_scheduled_light()
 
         # On creation, copy the completed outside-schedule settings.
@@ -2446,11 +2456,14 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             prefill=self._scheduled_light_shared_input,
             entity_id_format=LIGHT_ENTITY_ID_FORMAT,
         )
-        # An explicit collision was already checked on the first step. The
-        # remaining path is either creation or the normal derived-id menu.
         if result is not None:
             return result
-        return self.async_abort(reason=next(iter(errors.values())))
+        # The explicit entity_id was free on the first step but has been taken
+        # since (a race with another flow): send the user back to that form
+        # with the collision error, keeping both completed settings forms.
+        return self._show_scheduled_light_form(
+            self._scheduled_light_shared_input, errors
+        )
 
     # ------------------------------------------------------------------
     # Virtual Remote
@@ -2872,11 +2885,13 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             errors = _validate_light_settings(self.hass, flat)
             if not errors:
                 _carry_turn_on_selection(flat, previous)
-                self._outside_schedule_settings = _clean_optional_values(flat)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._outside_schedule_settings = _clean_optional_values(flat)
                     self._scheduled_light_pending_side = CONF_OUTSIDE_SCHEDULE_SETTINGS
                     return await self.async_step_scheduled_light_selection()
+                # No selection target: drop any stale option/source before storing.
                 _validate_turn_on_selection(self.hass, flat)
+                self._outside_schedule_settings = _clean_optional_values(flat)
                 return await self.async_step_scheduled_light_inside()
 
         settings = self._outside_schedule_settings or previous
@@ -2900,11 +2915,13 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             errors = _validate_light_settings(self.hass, flat)
             if not errors:
                 _carry_turn_on_selection(flat, previous)
-                self._inside_schedule_settings = _clean_optional_values(flat)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._inside_schedule_settings = _clean_optional_values(flat)
                     self._scheduled_light_pending_side = CONF_INSIDE_SCHEDULE_SETTINGS
                     return await self.async_step_scheduled_light_selection()
+                # No selection target: drop any stale option/source before storing.
                 _validate_turn_on_selection(self.hass, flat)
+                self._inside_schedule_settings = _clean_optional_values(flat)
                 return self._finish_scheduled_light()
 
         settings = self._inside_schedule_settings or previous
