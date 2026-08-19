@@ -762,17 +762,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             # normal off-light path below so the outside profile's active
             # sensors are checked exactly as with the keep action. After a
             # forced off the room stays dark until the next sensor edge.
+            if not self._held:
+                self._finish_schedule_end_off()
+                return
             self._schedule_end_off_pending = True
             self._cancel_timer()
-            if self._held:
-                if self._in_warning():
-                    self._machine_state = STATE_ACTIVE
-                    self._resume_lights()
-                self.async_write_ha_state()
-                return
-            self._schedule_end_off_pending = False
-            self.hass.async_create_task(self._scheduled_end_lights_off())
-            self._go_idle()
+            if self._in_warning():
+                self._machine_state = STATE_ACTIVE
+                self._resume_lights()
+            self.async_write_ha_state()
             return
 
         if not self._attr_is_on:
@@ -872,11 +870,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self.async_write_ha_state()
                 return
             else:
-                self._schedule_end_off_pending = False
-                self._pre_warn_brightness = None
-                self._pre_warn_color = None
-                self.hass.async_create_task(self._scheduled_end_lights_off())
-                self._go_idle()
+                self._finish_schedule_end_off()
                 return
 
         if self._pre_warn_brightness is not None or self._pre_warn_color is not None:
@@ -1426,9 +1420,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return  # lights-off transitions were never suppressed
 
         if self._schedule_end_off_pending:
-            self._schedule_end_off_pending = False
-            self.hass.async_create_task(self._scheduled_end_lights_off())
-            self._go_idle()
+            self._finish_schedule_end_off()
             return
 
         sched = self._follow_schedule_state()
@@ -1923,6 +1915,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         # activity and extends the on-period.
         self._start_timer()
         self.async_write_ha_state()
+
+    def _finish_schedule_end_off(self) -> None:
+        """Apply a scheduled light's end-boundary off now.
+
+        Fades the lights off with the profile being left and goes idle, which
+        also clears the pending flag.
+        """
+        self.hass.async_create_task(self._scheduled_end_lights_off())
+        self._go_idle()
 
     def _go_idle(self) -> None:
         """Cancel any timer and move to IDLE."""
