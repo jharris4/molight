@@ -979,15 +979,18 @@ class VirtualLight(LightEntity, RestoreEntity):
                 new_state.state, new_state.attributes.get("brightness")
             )
             return
-        if entity_id == self._settings_schedule_entity:
-            if not same_state and new_state.state in ("on", "off"):
-                self._switch_scheduled_settings(new_state.state == "on")
-            return
         if same_state:
             return  # attribute-only change (battery, ...)
         # One entity may serve several roles (e.g. as both the occupancy and
         # the maintain entity), so the role checks are independent, not
-        # exclusive.
+        # exclusive. A scheduled light's schedule switches settings first, so
+        # any further role it plays is judged against the newly active side
+        # (whose seeding in _switch_scheduled_settings already read it).
+        if entity_id == self._settings_schedule_entity and new_state.state in (
+            "on",
+            "off",
+        ):
+            self._switch_scheduled_settings(new_state.state == "on")
         if entity_id == self._occupancy_entity:
             self._on_occupancy_change(new_state.state == "on")
         if entity_id == self._maintain_entity:

@@ -353,6 +353,44 @@ async def test_schedule_change_hold_mid_warning_restores_light(
 
 
 @pytest.mark.asyncio
+async def test_schedule_may_also_serve_as_a_keep_on_entity(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The settings schedule can double as a role entity on one side."""
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 10},
+        inside={CONF_LIGHT_TIMEOUT: 10, CONF_HOLD_ENTITIES: [SCHEDULE]},
+    )
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).attributes["auto_off_held"] is False
+
+    # Entering the schedule selects the inside side, where the schedule
+    # itself is the keep-on entity — and it is on.
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert state.attributes["auto_off_held"] is True
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    # Leaving it drops both the side and the hold; a fresh timeout runs.
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["auto_off_held"] is False
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_schedule_change_hold_cancels_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
