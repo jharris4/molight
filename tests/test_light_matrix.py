@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    DOOR_MODE_OPEN_CLOSE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -426,6 +427,43 @@ async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
+async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """gate_keep gates an off light but lets an open door hold an on light."""
+    door = "binary_sensor.door"
+    entry = make_light_entry(
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE_KEEP,
+        door=door,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+    )
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(door, "off")
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(door, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(door, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio

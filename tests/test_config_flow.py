@@ -3553,6 +3553,39 @@ async def _reach_conversion(hass: HomeAssistant, direction: str) -> dict:
 
 
 @pytest.mark.asyncio
+async def test_conversion_picker_labels_and_sorts_lights(hass: HomeAssistant) -> None:
+    """The picker shows friendly light and schedule names in light-name order."""
+    hass.states.async_set(
+        "binary_sensor.night", "off", {"friendly_name": "Night Schedule"}
+    )
+    hass.states.async_set(
+        "binary_sensor.dusk", "off", {"friendly_name": "Dusk Schedule"}
+    )
+    await setup_entries(
+        hass,
+        _light_entry(
+            "Zulu",
+            "zulu",
+            schedule_entity="binary_sensor.night",
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+        _light_entry(
+            "Alpha",
+            "alpha",
+            schedule_entity="binary_sensor.dusk",
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+    )
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+
+    assert _selector_config(result, CONF_CONVERT_LIGHTS)["options"] == [
+        {"value": "light.alpha", "label": "Alpha — Dusk Schedule"},
+        {"value": "light.zulu", "label": "Zulu — Night Schedule"},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_convert_gated_light_to_scheduled_in_place(
     hass: HomeAssistant,
 ) -> None:
@@ -3862,6 +3895,46 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
     assert dict(kitchen.options) == kitchen_options
     assert molight_config(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
     assert molight_config(pantry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+
+
+@pytest.mark.asyncio
+async def test_bulk_conversion_is_atomic_when_target_is_removed(
+    hass: HomeAssistant,
+) -> None:
+    """A removed target aborts before any surviving entry is rewritten."""
+    kitchen = _light_entry(
+        "Kitchen",
+        "kitchen",
+        schedule_entity="binary_sensor.night",
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    pantry = _light_entry(
+        "Pantry",
+        "pantry",
+        schedule_entity="binary_sensor.dusk",
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, kitchen, pantry)
+    kitchen_data = dict(kitchen.data)
+    kitchen_options = dict(kitchen.options)
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_CONVERT_LIGHTS: ["light.kitchen", "light.pantry"]},
+    )
+    assert result["step_id"] == "confirm_convert_to_scheduled"
+
+    assert await hass.config_entries.async_remove(pantry.entry_id)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "conversion_targets_changed"
+    assert dict(kitchen.data) == kitchen_data
+    assert dict(kitchen.options) == kitchen_options
+    assert molight_config(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
 # ---------------------------------------------------------------------------

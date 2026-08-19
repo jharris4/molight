@@ -699,6 +699,40 @@ async def test_schedule_change_hold_mid_warning_restores_light(
 
 
 @pytest.mark.asyncio
+async def test_held_schedule_end_mid_warning_restores_then_turns_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A held turn_off boundary aborts warning before applying on release."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside=_WARNING_OUTSIDE,
+    )
+    await setup_entries(hass, entry)
+    await _run_into_warn_stage(hass, freezer)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
 async def test_schedule_may_also_serve_as_a_keep_on_entity(
     hass: HomeAssistant, freezer
 ) -> None:
