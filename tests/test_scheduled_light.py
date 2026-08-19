@@ -930,6 +930,34 @@ async def test_restart_catches_up_missed_schedule_end_off(
 
 
 @pytest.mark.asyncio
+async def test_restored_pending_off_is_dropped_when_action_is_keep(
+    hass: HomeAssistant,
+) -> None:
+    """A boundary off deferred under turn_off dies with a reload to keep."""
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_OUTSIDE,
+                    ATTR_SCHEDULE_END_OFF_PENDING: True,
+                },
+            )
+        ],
+    )
+    await setup_entries(hass, make_scheduled_light_entry())
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("bad_state", [None, "unavailable", "unknown"])
 async def test_first_start_without_usable_schedule_defaults_outside(
     hass: HomeAssistant, bad_state: str | None

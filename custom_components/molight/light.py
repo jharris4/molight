@@ -560,8 +560,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
                 if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
                     self._restored_inside_schedule = active == ACTIVE_SETTINGS_INSIDE
-                self._schedule_end_off_pending = bool(
-                    last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING)
+                # A boundary off deferred under a previous configuration no
+                # longer applies once the end action is "keep".
+                self._schedule_end_off_pending = (
+                    self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
+                    and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
                 )
             # Restore turn-on attribution so the illuminance re-activation
             # countdown keeps working across a restart.
