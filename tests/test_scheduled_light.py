@@ -33,6 +33,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_END_ACTION,
+    CONF_SCHEDULE_ENTITY,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
@@ -1068,6 +1069,45 @@ async def test_restart_catches_up_missed_schedule_end_off(
     assert state.state == "off"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_options_reload_swapping_schedule_does_not_turn_light_off(
+    hass: HomeAssistant,
+) -> None:
+    """Pointing an on light at a schedule that is off crosses no boundary."""
+    other = "binary_sensor.other_schedule"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(other, "off")
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] == SCHEDULE
+
+    options = {
+        key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
+    }
+    options[CONF_SCHEDULE_ENTITY] = other
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] == other
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    # The new schedule's own boundary still applies.
+    hass.states.async_set(other, "on")
+    await settle(hass)
+    hass.states.async_set(other, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio
