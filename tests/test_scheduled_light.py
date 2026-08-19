@@ -32,12 +32,14 @@ from custom_components.molight.const import (
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_END_ACTION,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -1142,6 +1144,43 @@ async def test_restored_pending_off_is_dropped_when_action_is_keep(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_options_reload_to_keep_drops_deferred_schedule_end_off(
+    hass: HomeAssistant,
+) -> None:
+    """Changing the end action to keep releases a boundary held by a keep-on."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    options = {
+        key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
+    }
+    options[CONF_SCHEDULE_END_ACTION] = SCHEDULE_END_ACTION_KEEP
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
