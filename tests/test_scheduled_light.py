@@ -14,6 +14,8 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_DOOR_ENTITY,
+    CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
@@ -24,10 +26,14 @@ from custom_components.molight.const import (
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    CONF_WARN_BRIGHTNESS,
+    CONF_WARN_TIMEOUT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_OCCUPIED,
+    STATE_WARN,
 )
 from tests.conftest import make_scheduled_light_entry, settle, setup_entries
 
@@ -247,6 +253,170 @@ async def test_schedule_change_applies_selected_illuminance_mode(
     state = hass.states.get(VIRTUAL)
     assert state.attributes["active_settings"] == "inside_schedule"
     assert state.state == expected_state
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_bright_sensor_leaves_off_light_off(
+    hass: HomeAssistant,
+) -> None:
+    """A newly selected bright sensor blocks the new side's active occupancy."""
+    occupancy = "binary_sensor.inside_occupancy"
+    illuminance = "binary_sensor.inside_illuminance"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(occupancy, "on")
+    hass.states.async_set(illuminance, "on")
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.state == "off"
+
+    # Going dark under the new settings lets the still-active occupancy fire.
+    hass.states.async_set(illuminance, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+
+async def _run_into_warn_stage(hass: HomeAssistant, freezer) -> None:
+    """Turn the virtual light on and advance past its effect stage into WARN."""
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["molight_state"] == STATE_WARN
+    assert state.attributes["pre_warn_brightness"] == 200
+
+
+_WARNING_OUTSIDE = {
+    CONF_LIGHT_TIMEOUT: 60,
+    CONF_EFFECT_TIMEOUT: 10,
+    CONF_EFFECT_BRIGHTNESS: 0,
+    CONF_WARN_TIMEOUT: 30,
+    CONF_WARN_BRIGHTNESS: 100,
+}
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_hold_mid_warning_restores_light(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A keep-on entity from the new side aborts a running warning sequence."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        outside=_WARNING_OUTSIDE,
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+    )
+    await setup_entries(hass, entry)
+    await _run_into_warn_stage(hass, freezer)
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.state == "on"
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    # The pre-warning brightness is restored and the snapshot cleared.
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    # Held: the interrupted grace period never expires the light.
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_hold_cancels_running_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A keep-on entity from the new side suspends a plain running timeout."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 10},
+        inside={CONF_LIGHT_TIMEOUT: 10, CONF_HOLD_ENTITIES: [hold]},
+    )
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_ACTIVE
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    # Releasing the hold under the new side starts a fresh full timeout.
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_occupancy_mid_warning_adopts_light(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Active occupancy from the new side rescues a light mid-warning."""
+    occupancy = "binary_sensor.inside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(occupancy, "on")
+    entry = make_scheduled_light_entry(
+        outside=_WARNING_OUTSIDE,
+        inside={CONF_LIGHT_TIMEOUT: 10, CONF_OCCUPANCY_ENTITY: occupancy},
+    )
+    await setup_entries(hass, entry)
+    await _run_into_warn_stage(hass, freezer)
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    # Occupancy clearing starts the new side's own (short) timeout.
+    hass.states.async_set(occupancy, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_COUNTDOWN
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio
