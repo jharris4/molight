@@ -239,6 +239,9 @@ from homeassistant.util import color as color_util
 from homeassistant.util.percentage import percentage_to_ranged_value
 
 from .const import (
+    ACTIVE_SETTINGS_INSIDE,
+    ACTIVE_SETTINGS_OUTSIDE,
+    ATTR_ACTIVE_SETTINGS,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_COLOR_TEMP,
@@ -524,9 +527,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         last = await self.async_get_last_state()
         if last is not None:
             if self._is_scheduled_light:
-                active = last.attributes.get("active_settings")
-                if active in ("inside_schedule", "outside_schedule"):
-                    self._restored_inside_schedule = active == "inside_schedule"
+                active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
+                if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
+                    self._restored_inside_schedule = active == ACTIVE_SETTINGS_INSIDE
             # Restore turn-on attribution so the illuminance re-activation
             # countdown keeps working across a restart.
             for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
@@ -2143,7 +2146,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             "schedule_window_start": self._schedule_window_applied,
         }
         if self._is_scheduled_light:
-            attributes["active_settings"] = (
-                "inside_schedule" if self._inside_schedule else "outside_schedule"
+            attributes[ATTR_ACTIVE_SETTINGS] = (
+                ACTIVE_SETTINGS_INSIDE
+                if self._inside_schedule
+                else ACTIVE_SETTINGS_OUTSIDE
             )
         return attributes

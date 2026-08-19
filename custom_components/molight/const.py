@@ -129,6 +129,11 @@ CONF_LIGHTS = "lights"  # list of real light entity_ids
 # The schedule's binary state selects outside (off) vs inside (on).
 CONF_OUTSIDE_SCHEDULE_SETTINGS = "outside_schedule_settings"
 CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
+# State attribute naming the settings mapping a Virtual Scheduled Light is
+# currently using; also what it restores from while the schedule is unusable.
+ATTR_ACTIVE_SETTINGS = "active_settings"
+ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
+ACTIVE_SETTINGS_INSIDE = "inside_schedule"
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on

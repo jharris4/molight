@@ -22,6 +22,9 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
+    ACTIVE_SETTINGS_INSIDE,
+    ACTIVE_SETTINGS_OUTSIDE,
+    ATTR_ACTIVE_SETTINGS,
     CONF_DOOR_ENTITY,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
@@ -339,8 +342,8 @@ async def test_remove_entry_strips_scheduled_light_references(
     assert await hass.config_entries.async_setup(light.entry_id)
     await settle(hass)
     assert (
-        hass.states.get("light.rm_scheduled_light").attributes["active_settings"]
-        == "inside_schedule"
+        hass.states.get("light.rm_scheduled_light").attributes[ATTR_ACTIVE_SETTINGS]
+        == ACTIVE_SETTINGS_INSIDE
     )
 
     await hass.config_entries.async_remove(occupancy.entry_id)
@@ -369,7 +372,7 @@ async def test_remove_entry_strips_scheduled_light_references(
     assert CONF_SCHEDULE_ENTITY not in molight_config(light)
     state = hass.states.get("light.rm_scheduled_light")
     assert state is not None
-    assert state.attributes["active_settings"] == "outside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
 
     # The missing schedule is a configuration problem, not a reason to make
     # the surviving light unusable by dashboards or voice control.

@@ -12,6 +12,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    ACTIVE_SETTINGS_INSIDE,
+    ACTIVE_SETTINGS_OUTSIDE,
+    ATTR_ACTIVE_SETTINGS,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_DOOR_ENTITY,
     CONF_EFFECT_BRIGHTNESS,
@@ -68,7 +71,7 @@ async def test_schedule_selects_settings_for_automatic_turn_on(
     await setup_entries(hass, entry)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "outside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
 
     hass.states.async_set(outside_occupancy, "on")
     await settle(hass)
@@ -87,7 +90,7 @@ async def test_schedule_selects_settings_for_automatic_turn_on(
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["brightness"] == 51
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
 
 
 @pytest.mark.asyncio
@@ -217,7 +220,7 @@ async def test_schedule_change_does_not_restyle_an_on_light(
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.attributes["brightness"] == 180
 
 
@@ -251,7 +254,7 @@ async def test_schedule_change_applies_selected_illuminance_mode(
     await settle(hass)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == expected_state
 
 
@@ -280,7 +283,7 @@ async def test_schedule_change_bright_sensor_leaves_off_light_off(
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == "off"
 
     # Going dark under the new settings lets the still-active occupancy fire.
@@ -334,7 +337,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == "on"
     assert state.attributes["auto_off_held"] is True
     assert state.attributes["molight_state"] == STATE_ACTIVE
@@ -487,7 +490,7 @@ async def test_options_reload_uses_current_schedule_side(
     await settle(hass)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.attributes["brightness"] == 180
 
     freezer.tick(timedelta(seconds=11))
@@ -528,7 +531,7 @@ async def test_rapid_schedule_changes_finish_with_latest_settings(
     await settle(hass)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == "on"
     assert state.attributes["brightness"] == 51
 
@@ -560,7 +563,10 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
 
     hass.states.async_set(SCHEDULE, bad_state)
     await settle(hass)
-    assert hass.states.get(VIRTUAL).attributes["active_settings"] == "inside_schedule"
+    assert (
+        hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS]
+        == ACTIVE_SETTINGS_INSIDE
+    )
 
     # The inactive outside sensor is still subscribed, but must be ignored.
     hass.states.async_set(outside_occupancy, "on")
@@ -577,8 +583,8 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
     # Recovery to a valid opposite state switches normally.
     hass.states.async_set(SCHEDULE, "off")
     await settle(hass)
-    assert hass.states.get(VIRTUAL).attributes["active_settings"] == (
-        "outside_schedule"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_OUTSIDE
     )
 
 
@@ -613,8 +619,8 @@ async def test_schedule_blip_does_not_restart_running_timeout(
 @pytest.mark.parametrize(
     ("schedule_state", "restored", "expected", "expected_brightness"),
     [
-        ("on", "outside_schedule", "inside_schedule", 51),
-        ("off", "inside_schedule", "outside_schedule", 204),
+        ("on", ACTIVE_SETTINGS_OUTSIDE, ACTIVE_SETTINGS_INSIDE, 51),
+        ("off", ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE, 204),
     ],
 )
 async def test_restart_valid_schedule_state_overrides_restore(
@@ -631,7 +637,7 @@ async def test_restart_valid_schedule_state_overrides_restore(
     hass.states.async_set(SCHEDULE, schedule_state)
     hass.states.async_set(outside_occupancy, "on")
     hass.states.async_set(inside_occupancy, "on")
-    mock_restore_cache(hass, [State(VIRTUAL, "off", {"active_settings": restored})])
+    mock_restore_cache(hass, [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: restored})])
     entry = make_scheduled_light_entry(
         outside={
             CONF_LIGHT_TIMEOUT: 60,
@@ -647,7 +653,7 @@ async def test_restart_valid_schedule_state_overrides_restore(
     await setup_entries(hass, entry)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == expected
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == expected
     assert state.state == "on"
     assert state.attributes["brightness"] == expected_brightness
 
@@ -674,14 +680,14 @@ async def test_first_start_without_usable_schedule_defaults_outside(
     await setup_entries(hass, entry)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "outside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
     assert state.state == "on"
     assert state.attributes["brightness"] == 204
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_state", [None, "unavailable", "unknown"])
-@pytest.mark.parametrize("restored", ["inside_schedule", "outside_schedule"])
+@pytest.mark.parametrize("restored", [ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE])
 async def test_restart_uses_restored_settings_while_schedule_unavailable(
     hass: HomeAssistant,
     bad_state: str | None,
@@ -693,7 +699,7 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
         hass.states.async_set(SCHEDULE, bad_state)
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "off", {"active_settings": restored})],
+        [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: restored})],
     )
     entry = make_scheduled_light_entry(
         outside={CONF_LIGHT_TIMEOUT: 60},
@@ -704,7 +710,7 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
     )
     await setup_entries(hass, entry)
 
-    assert hass.states.get(VIRTUAL).attributes["active_settings"] == restored
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == restored
 
 
 @pytest.mark.asyncio
@@ -718,7 +724,7 @@ async def test_restart_unavailable_does_not_apply_other_side_sensors(
     hass.states.async_set(outside_occupancy, "on")
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "off", {"active_settings": "inside_schedule"})],
+        [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE})],
     )
     entry = make_scheduled_light_entry(
         outside={
@@ -731,7 +737,7 @@ async def test_restart_unavailable_does_not_apply_other_side_sensors(
     await setup_entries(hass, entry)
 
     state = hass.states.get(VIRTUAL)
-    assert state.attributes["active_settings"] == "inside_schedule"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == "off"
 
 
