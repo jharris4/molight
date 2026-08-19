@@ -244,6 +244,7 @@ from .const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
+    ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
@@ -401,6 +402,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._inside_schedule = False
         self._restored_inside_schedule: bool | None = None
+        self._restored_settings_schedule: str | None = None
         # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
         # Persisted as a state attribute so a restart cannot lose the pending
         # boundary; returning inside the schedule cancels it.
@@ -560,6 +562,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
                 if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
                     self._restored_inside_schedule = active == ACTIVE_SETTINGS_INSIDE
+                self._restored_settings_schedule = last.attributes.get(
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE
+                )
                 # A boundary off deferred under a previous configuration no
                 # longer applies once the end action is "keep".
                 self._schedule_end_off_pending = (
@@ -697,10 +702,13 @@ class VirtualLight(LightEntity, RestoreEntity):
             schedule is not None
             and schedule.state == "off"
             and self._restored_inside_schedule is True
+            and self._restored_settings_schedule == self._settings_schedule_entity
             and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
         ):
-            # The schedule ended while Home Assistant was down. _seed_state
-            # applies this once after it has restored the physical/hold state.
+            # The schedule we were inside ended while Home Assistant was down.
+            # _seed_state applies this once after it has restored the
+            # physical/hold state. A reload that switched to a different
+            # schedule entity has crossed no boundary of that schedule.
             self._schedule_end_off_pending = True
         if not self._settings_schedule_entity:
             _LOGGER.warning(
@@ -2262,4 +2270,5 @@ class VirtualLight(LightEntity, RestoreEntity):
                 else ACTIVE_SETTINGS_OUTSIDE
             )
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = self._schedule_end_off_pending
+            attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity
         return attributes

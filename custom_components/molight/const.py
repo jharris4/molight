@@ -268,6 +268,9 @@ DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
 # gate behaviour by turning it off on the on -> off schedule boundary.
 CONF_SCHEDULE_END_ACTION = "schedule_end_action"
 ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
+# The schedule entity active_settings was last derived from; a missed
+# boundary is only caught up at startup when it is still the same schedule.
+ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
 SCHEDULE_END_ACTION_KEEP = "keep"
 SCHEDULE_END_ACTION_TURN_OFF = "turn_off"
 SCHEDULE_END_ACTIONS = [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_TURN_OFF]

@@ -16,6 +16,7 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
+    ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
@@ -976,7 +977,16 @@ async def test_restart_catches_up_missed_schedule_end_off(
     hass.states.async_set(SCHEDULE, "off")
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "on", {ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE})],
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
     )
     entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
     await setup_entries(hass, entry)
@@ -984,6 +994,37 @@ async def test_restart_catches_up_missed_schedule_end_off(
     state = hass.states.get(VIRTUAL)
     assert state.state == "off"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_reload_with_different_schedule_does_not_catch_up_boundary(
+    hass: HomeAssistant,
+) -> None:
+    """Switching to a schedule that is currently off crosses no boundary."""
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: "binary_sensor.old_schedule",
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] == SCHEDULE
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
 
 
