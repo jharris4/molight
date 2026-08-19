@@ -694,7 +694,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = False
         elif schedule is not None and schedule.state in ("on", "off"):
             inside = schedule.state == "on"
-        elif self._restored_inside_schedule is not None:
+        elif (
+            self._restored_inside_schedule is not None
+            and self._restored_settings_schedule == self._settings_schedule_entity
+        ):
             inside = self._restored_inside_schedule
         else:
             inside = False

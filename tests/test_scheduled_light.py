@@ -1111,6 +1111,82 @@ async def test_options_reload_swapping_schedule_does_not_turn_light_off(
 
 
 @pytest.mark.asyncio
+async def test_options_reload_to_unavailable_schedule_does_not_invent_boundary(
+    hass: HomeAssistant,
+) -> None:
+    """A different schedule recovering as off was never observed to end."""
+    other = "binary_sensor.other_schedule"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(other, "unavailable")
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_INSIDE
+    )
+
+    options = {
+        key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
+    }
+    options[CONF_SCHEDULE_ENTITY] = other
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] == other
+
+    hass.states.async_set(other, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_schedule_swap_preserves_already_pending_boundary(
+    hass: HomeAssistant,
+) -> None:
+    """A boundary actually observed before a schedule edit remains due."""
+    other = "binary_sensor.other_schedule"
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(other, "off")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    options = {
+        key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
+    }
+    options[CONF_SCHEDULE_ENTITY] = other
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] == other
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_restart_with_held_pending_off_reports_maintained_hold(
     hass: HomeAssistant,
 ) -> None:
@@ -1293,7 +1369,16 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
         hass.states.async_set(SCHEDULE, bad_state)
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: restored})],
+        [
+            State(
+                VIRTUAL,
+                "off",
+                {
+                    ATTR_ACTIVE_SETTINGS: restored,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
     )
     entry = make_scheduled_light_entry(
         outside={CONF_LIGHT_TIMEOUT: 60},
@@ -1318,7 +1403,16 @@ async def test_restart_unavailable_does_not_apply_other_side_sensors(
     hass.states.async_set(outside_occupancy, "on")
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE})],
+        [
+            State(
+                VIRTUAL,
+                "off",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
     )
     entry = make_scheduled_light_entry(
         outside={
