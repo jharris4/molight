@@ -1897,6 +1897,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
         self._occupancy_lit_lights = False
+        # A deferred schedule-end off only applies to the on-period it
+        # interrupted; any off consumes it.
+        self._schedule_end_off_pending = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         self.async_write_ha_state()

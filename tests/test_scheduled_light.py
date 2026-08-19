@@ -273,9 +273,7 @@ async def test_auto_off_switch_defers_schedule_end_until_reenabled(
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
-    entry = make_scheduled_light_entry(
-        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF
-    )
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
@@ -295,6 +293,46 @@ async def test_auto_off_switch_defers_schedule_end_until_reenabled(
     state = hass.states.get(VIRTUAL)
     assert state.state == "off"
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_manual_off_consumes_deferred_schedule_end_off(
+    hass: HomeAssistant,
+) -> None:
+    """Turning the light off while a boundary off is held discards that off."""
+    switch = "switch.scheduled_light_auto_off"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    # A later manual on-period, still outside the window, must not be cut by
+    # the stale boundary when the hold cycles again.
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
