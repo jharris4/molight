@@ -170,16 +170,15 @@ async def test_schedule_end_defaults_to_preserving_state(
 async def test_schedule_end_off_waits_for_hold_release(
     hass: HomeAssistant,
 ) -> None:
-    """A held end boundary is applied once the keep-on entity releases."""
+    """A keep-on entity from the newly active outside profile defers the off."""
     hold = "input_boolean.keep_on"
-    settings = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]}
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(hold, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside=settings,
-        inside=settings,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -193,6 +192,43 @@ async def test_schedule_end_off_waits_for_hold_release(
     hass.states.async_set(hold, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_returning_inside_cancels_deferred_schedule_end_off(
+    hass: HomeAssistant,
+) -> None:
+    """Reopening the schedule invalidates a held off from its prior boundary."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    # Releasing a now-inactive outside hold must not apply the old boundary.
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
 
 
 @pytest.mark.asyncio

@@ -302,23 +302,47 @@ async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
 async def test_state_preserving_gate_keeps_on_period_at_window_end(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer, origin: str
 ) -> None:
-    """The soft gate blocks later activations without ejecting current occupancy."""
+    """The soft gate preserves every running state and its existing timer."""
     entry = make_light_entry(
         occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_KEEP
     )
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
-    hass.states.async_set(OCC, "on")
-    await settle(hass)
+
+    if origin == "manual":
+        await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+        await settle(hass)
+        expected_state = STATE_ACTIVE
+    else:
+        hass.states.async_set(OCC, "on")
+        await settle(hass)
+        expected_state = STATE_OCCUPIED
+        if origin == "countdown":
+            hass.states.async_set(OCC, "off")
+            await settle(hass)
+            expected_state = STATE_COUNTDOWN
+            # Let half the existing countdown elapse before the boundary.
+            freezer.tick(timedelta(seconds=30))
+            async_fire_time_changed(hass)
+            await settle(hass)
 
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
-    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["molight_state"] == expected_state
+
+    if origin == "countdown":
+        # The boundary must not restart the 60-second countdown.
+        freezer.tick(timedelta(seconds=31))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert _state(hass).state == "off"
+        return
 
     # Once this on-period ends, another occupancy edge remains gated.
     hass.states.async_set(OCC, "off")

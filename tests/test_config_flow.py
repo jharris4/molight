@@ -95,6 +95,7 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_TURN_OFF,
+    SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
 )
@@ -3715,6 +3716,51 @@ async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> No
     result = await _reach_conversion(hass, "convert_to_scheduled")
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "no_gated_lights"
+
+
+@pytest.mark.asyncio
+async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
+    hass: HomeAssistant,
+) -> None:
+    """A stale target aborts before any of the selected entries are rewritten."""
+    kitchen = _light_entry(
+        "Kitchen",
+        "kitchen",
+        schedule_entity="binary_sensor.night",
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    pantry = _light_entry(
+        "Pantry",
+        "pantry",
+        schedule_entity="binary_sensor.dusk",
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, kitchen, pantry)
+    kitchen_data = dict(kitchen.data)
+    kitchen_options = dict(kitchen.options)
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_CONVERT_LIGHTS: ["light.kitchen", "light.pantry"]},
+    )
+    assert result["step_id"] == "confirm_conversion"
+
+    # Simulate an options/config edit after selection but before confirmation.
+    hass.config_entries.async_update_entry(
+        pantry,
+        data={**pantry.data, CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "conversion_targets_changed"
+    assert dict(kitchen.data) == kitchen_data
+    assert dict(kitchen.options) == kitchen_options
+    assert molight_config(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert molight_config(pantry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
 # ---------------------------------------------------------------------------
