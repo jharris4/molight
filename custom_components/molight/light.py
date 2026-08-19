@@ -404,7 +404,6 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._inside_schedule = False
         self._restored_inside_schedule: bool | None = None
-        self._restored_settings_schedule: str | None = None
         # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
         # Persisted as a state attribute so a restart cannot lose the pending
         # boundary; returning inside the schedule cancels it.
@@ -561,12 +560,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         last = await self.async_get_last_state()
         if last is not None:
             if self._is_scheduled_light:
-                active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
-                if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
-                    self._restored_inside_schedule = active == ACTIVE_SETTINGS_INSIDE
-                self._restored_settings_schedule = last.attributes.get(
-                    ATTR_ACTIVE_SETTINGS_SCHEDULE
-                )
+                # A restored choice only belongs to the currently configured
+                # schedule; a reload that switched schedules discards it here
+                # so no consumer can act on the stale value.
+                if (
+                    last.attributes.get(ATTR_ACTIVE_SETTINGS_SCHEDULE)
+                    == self._settings_schedule_entity
+                ):
+                    active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
+                    if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
+                        self._restored_inside_schedule = (
+                            active == ACTIVE_SETTINGS_INSIDE
+                        )
                 # A boundary off deferred under a previous configuration no
                 # longer applies once the end action is "keep".
                 self._schedule_end_off_pending = (
@@ -694,10 +699,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = False
         elif schedule is not None and schedule.state in ("on", "off"):
             inside = schedule.state == "on"
-        elif (
-            self._restored_inside_schedule is not None
-            and self._restored_settings_schedule == self._settings_schedule_entity
-        ):
+        elif self._restored_inside_schedule is not None:
             inside = self._restored_inside_schedule
         else:
             inside = False
@@ -707,7 +709,6 @@ class VirtualLight(LightEntity, RestoreEntity):
             schedule is not None
             and schedule.state == "off"
             and self._restored_inside_schedule is True
-            and self._restored_settings_schedule == self._settings_schedule_entity
             and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
         ):
             # The schedule we were inside ended while Home Assistant was down.
