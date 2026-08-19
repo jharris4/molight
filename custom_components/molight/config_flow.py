@@ -39,6 +39,8 @@ from .const import (
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_CONFIRM_CONVERSION,
+    CONF_CONVERT_LIGHTS,
     CONF_DIM_STEP,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
@@ -69,6 +71,7 @@ from .const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
+    CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
@@ -94,6 +97,7 @@ from .const import (
     DEFAULT_ILLUMINANCE_THRESHOLD,
     DEFAULT_LIGHT_TIMEOUT,
     DEFAULT_OCCUPANCY_TIMEOUT,
+    DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_WARN_TIMEOUT,
     DOMAIN,
@@ -114,6 +118,11 @@ from .const import (
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
     REMOTE_PRESET_VALUE_KEYS,
+    SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_TURN_OFF,
+    SCHEDULE_END_ACTIONS,
+    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
@@ -1203,7 +1212,7 @@ def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
 
 
 def _molight_light_entries(
-    hass: HomeAssistant,
+    hass: HomeAssistant, entity_types: tuple[str, ...] = (ENTITY_TYPE_LIGHT,)
 ) -> dict[str, config_entries.ConfigEntry]:
     """Map each virtual light's entity_id to its config entry.
 
@@ -1214,7 +1223,7 @@ def _molight_light_entries(
     registry = er.async_get(hass)
     result: dict[str, config_entries.ConfigEntry] = {}
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT:
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in entity_types:
             continue
         for ent in er.async_entries_for_config_entry(registry, entry.entry_id):
             if ent.domain == "light":
@@ -1378,6 +1387,8 @@ class MoLightConfigFlow(
         self._init_scheduled_light_steps()
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
+        # Direction and selected entry ids awaiting a bulk-conversion review.
+        self._conversion: dict[str, Any] = {}
         # Stashed discovery state across the three discovery steps: the
         # filter step sets the (narrowed) candidate map and preselect choice,
         # the select step adds the selection and affixes, and the "adjust
@@ -1515,6 +1526,7 @@ class MoLightConfigFlow(
                 "discover_illuminance",
                 "discover_light",
                 "assign_sensor",
+                "convert_lights",
             ],
         )
 
@@ -1866,6 +1878,269 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Create a single entry from a discovery selection (defaults applied)."""
         return self.async_create_entry(title=import_data[CONF_NAME], data=import_data)
+
+    # ------------------------------------------------------------------
+    # Convert existing Virtual Lights in place
+    # ------------------------------------------------------------------
+
+    async def async_step_convert_lights(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose the direction of an in-place light conversion."""
+        return self.async_show_menu(
+            step_id="convert_lights",
+            menu_options=["convert_to_scheduled", "convert_to_regular"],
+        )
+
+    def _conversion_candidates(
+        self, *, to_scheduled: bool
+    ) -> dict[str, config_entries.ConfigEntry]:
+        """Return entity-id keyed entries eligible for one conversion direction."""
+        entity_type = ENTITY_TYPE_LIGHT if to_scheduled else ENTITY_TYPE_SCHEDULED_LIGHT
+        entries = _molight_light_entries(self.hass, (entity_type,))
+        if to_scheduled:
+            return {
+                entity_id: entry
+                for entity_id, entry in entries.items()
+                if (cfg := _molight_cfg(entry)).get(CONF_SCHEDULE_ENTITY)
+                and cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+                in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
+            }
+        return {
+            entity_id: entry
+            for entity_id, entry in entries.items()
+            if _molight_cfg(entry).get(CONF_SCHEDULE_ENTITY)
+        }
+
+    def _conversion_option(
+        self, entity_id: str, entry: config_entries.ConfigEntry
+    ) -> selector.SelectOptionDict:
+        """Build a labeled conversion choice including its retained schedule."""
+        cfg = _molight_cfg(entry)
+        schedule_id = cfg[CONF_SCHEDULE_ENTITY]
+        schedule = self.hass.states.get(schedule_id)
+        schedule_name = schedule.name if schedule and schedule.name else schedule_id
+        return selector.SelectOptionDict(
+            value=entity_id,
+            label=f"{self._light_label(entity_id)} — {schedule_name}",
+        )
+
+    async def _async_conversion_select(
+        self, *, to_scheduled: bool, user_input: dict[str, Any] | None
+    ) -> config_entries.FlowResult:
+        """Choose one or more eligible lights, then show the review step."""
+        candidates = self._conversion_candidates(to_scheduled=to_scheduled)
+        if not candidates:
+            return self.async_abort(
+                reason=("no_gated_lights" if to_scheduled else "no_scheduled_lights")
+            )
+
+        errors: dict[str, str] = {}
+        step_id = "convert_to_scheduled" if to_scheduled else "convert_to_regular"
+        if user_input is not None:
+            selected = user_input.get(CONF_CONVERT_LIGHTS, [])
+            entry_ids = [
+                candidates[entity_id].entry_id
+                for entity_id in selected
+                if entity_id in candidates
+            ]
+            if entry_ids:
+                self._conversion = {
+                    "to_scheduled": to_scheduled,
+                    "entry_ids": entry_ids,
+                    "lights": ", ".join(
+                        self._light_label(entity_id)
+                        for entity_id in selected
+                        if entity_id in candidates
+                    ),
+                }
+                return await self.async_step_confirm_conversion()
+            errors[CONF_CONVERT_LIGHTS] = "no_entities_selected"
+
+        options = [
+            self._conversion_option(entity_id, entry)
+            for entity_id, entry in sorted(
+                candidates.items(), key=lambda item: self._light_label(item[0]).lower()
+            )
+        ]
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CONVERT_LIGHTS): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_convert_to_scheduled(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Select gated Virtual Lights to promote to scheduled lights."""
+        return await self._async_conversion_select(
+            to_scheduled=True, user_input=user_input
+        )
+
+    async def async_step_convert_to_regular(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Select Virtual Scheduled Lights to return to regular gated lights."""
+        return await self._async_conversion_select(
+            to_scheduled=False, user_input=user_input
+        )
+
+    @staticmethod
+    def _converted_scheduled_data(
+        entry: config_entries.ConfigEntry, cfg: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Map one gated Virtual Light into two scheduled settings profiles."""
+        inside = {
+            key: value
+            for key, value in cfg.items()
+            if key
+            not in (
+                CONF_ENTITY_TYPE,
+                CONF_ENTITY_ID,
+                CONF_NAME,
+                CONF_LIGHTS,
+                CONF_SCHEDULE_ENTITY,
+                CONF_SCHEDULE_MODE,
+            )
+        }
+        # Outside the former gate, retain manual behavior/timing but remove
+        # every input that could activate or indefinitely hold the light.
+        outside = {
+            key: value
+            for key, value in inside.items()
+            if key
+            not in (
+                CONF_OCCUPANCY_ENTITY,
+                CONF_MAINTAIN_OCCUPANCY_ENTITY,
+                CONF_ILLUMINANCE_ENTITY,
+                CONF_DOOR_ENTITY,
+            )
+        }
+        data = {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: cfg[CONF_NAME],
+            CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
+            CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
+            CONF_SCHEDULE_END_ACTION: (
+                SCHEDULE_END_ACTION_TURN_OFF
+                if cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+                == SCHEDULE_MODE_GATE
+                else SCHEDULE_END_ACTION_KEEP
+            ),
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: outside,
+            CONF_INSIDE_SCHEDULE_SETTINGS: inside,
+        }
+        if entity_id := entry.data.get(CONF_ENTITY_ID):
+            data[CONF_ENTITY_ID] = entity_id
+        return data
+
+    @staticmethod
+    def _converted_regular_data(
+        entry: config_entries.ConfigEntry, cfg: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Map a scheduled light's inside profile back to a gated light."""
+        inside = {
+            key: value
+            for key, value in cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS, {}).items()
+            if key
+            not in (
+                CONF_ENTITY_TYPE,
+                CONF_ENTITY_ID,
+                CONF_NAME,
+                CONF_LIGHTS,
+                CONF_SCHEDULE_ENTITY,
+                CONF_SCHEDULE_END_ACTION,
+                CONF_SCHEDULE_MODE,
+                CONF_OUTSIDE_SCHEDULE_SETTINGS,
+                CONF_INSIDE_SCHEDULE_SETTINGS,
+            )
+        }
+        data = {
+            **inside,
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: cfg[CONF_NAME],
+            CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
+            CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
+            CONF_SCHEDULE_MODE: (
+                SCHEDULE_MODE_GATE
+                if cfg.get(CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION)
+                == SCHEDULE_END_ACTION_TURN_OFF
+                else SCHEDULE_MODE_GATE_KEEP
+            ),
+        }
+        if entity_id := entry.data.get(CONF_ENTITY_ID):
+            data[CONF_ENTITY_ID] = entity_id
+        return data
+
+    async def async_step_confirm_conversion(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Review and rewrite the selected config entries in place."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not user_input.get(CONF_CONFIRM_CONVERSION):
+                errors[CONF_CONFIRM_CONVERSION] = "confirmation_required"
+            else:
+                prepared: list[tuple[config_entries.ConfigEntry, dict[str, Any]]] = []
+                for entry_id in self._conversion["entry_ids"]:
+                    entry = self.hass.config_entries.async_get_entry(entry_id)
+                    if entry is None:
+                        return self.async_abort(reason="conversion_targets_changed")
+                    cfg = _molight_cfg(entry)
+                    if self._conversion["to_scheduled"]:
+                        if (
+                            cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT
+                            or not cfg.get(CONF_SCHEDULE_ENTITY)
+                            or cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+                            not in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
+                        ):
+                            return self.async_abort(reason="conversion_targets_changed")
+                        data = self._converted_scheduled_data(entry, cfg)
+                    else:
+                        if cfg.get(
+                            CONF_ENTITY_TYPE
+                        ) != ENTITY_TYPE_SCHEDULED_LIGHT or not cfg.get(
+                            CONF_SCHEDULE_ENTITY
+                        ):
+                            return self.async_abort(reason="conversion_targets_changed")
+                        data = self._converted_regular_data(entry, cfg)
+                    prepared.append((entry, data))
+
+                for entry, data in prepared:
+                    # Canonicalize the converted entry in data and clear its
+                    # old complete-form options in the same update. Keeping
+                    # the config entry preserves all entity registry ids.
+                    self.hass.config_entries.async_update_entry(
+                        entry, data=data, options={}
+                    )
+                return self.async_abort(
+                    reason="conversion_done",
+                    description_placeholders={"count": str(len(prepared))},
+                )
+
+        return self.async_show_form(
+            step_id="confirm_conversion",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_CONFIRM_CONVERSION, default=False): bool}
+            ),
+            errors=errors,
+            description_placeholders={
+                "lights": self._conversion.get("lights", ""),
+                "direction": (
+                    "scheduled" if self._conversion.get("to_scheduled") else "regular"
+                ),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Bulk-assign a virtual sensor to many virtual lights at once
@@ -2443,6 +2718,14 @@ class MoLightConfigFlow(
                 vol.Required(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
                     _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
                 ),
+                vol.Required(
+                    CONF_SCHEDULE_END_ACTION, default=DEFAULT_SCHEDULE_END_ACTION
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=SCHEDULE_END_ACTIONS,
+                        translation_key=CONF_SCHEDULE_END_ACTION,
+                    )
+                ),
                 **_entity_id_section(),
             }
         )
@@ -2883,6 +3166,17 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 vol.Required(
                     CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)
                 ): selector.EntitySelector(_LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]),
+                vol.Required(
+                    CONF_SCHEDULE_END_ACTION,
+                    default=cfg.get(
+                        CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION
+                    ),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=SCHEDULE_END_ACTIONS,
+                        translation_key=CONF_SCHEDULE_END_ACTION,
+                    )
+                ),
             }
         )
         return self.async_show_form(

@@ -45,11 +45,12 @@ Copy `custom_components/molight/` into your HA config `custom_components/` direc
 
 ## Getting started
 
-Everything is configured from the UI — no YAML. Adding an entry (the first via **Add Integration → MoLight**, later ones via **Add Entry** on the MoLight card) opens a menu with three ways to proceed:
+Everything is configured from the UI — no YAML. Adding an entry (the first via **Add Integration → MoLight**, later ones via **Add Entry** on the MoLight card) opens a menu with four ways to proceed:
 
 - **Create a single entity** — pick a type and fill in its form.
 - **Discover…** — scan existing entities and bulk-create virtual ones; one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
 - **Assign a sensor to several lights** — wire one sensor into many lights at once (see [Bulk assignment](#bulk-assignment)).
+- **Convert virtual lights** — promote existing gated lights to two schedule profiles, or return scheduled lights to one gated profile (see [Light conversion](#light-conversion)).
 
 The usual order:
 
@@ -86,7 +87,7 @@ An optional **prefix**/**suffix** distinguishes the virtual entities from the re
 - **Entity ID** (default) — only the entity ID gets the affix, as the slug of the composed name (`v_` on a sensor named "Hallway Motion" → `binary_sensor.v_hallway_motion`); the friendly name stays identical to the source.
 - **Name** — the friendly name gets the affix, and the entity ID derives from the composed name.
 
-A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**. Discovery creates regular Virtual Lights; Virtual Scheduled Lights are created only through **Add entry**.
+A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**. Discovery creates regular Virtual Lights; eligible gated lights can then be promoted through **Convert virtual lights**.
 
 ### Bulk assignment
 
@@ -94,13 +95,22 @@ A final form then lets you adjust the default settings applied to every pick —
 
 - **Occupancy** — with a **role**: *regular* (turns lights on and off) or *maintain* (only holds an already-on light on).
 - **Illuminance** — with its **mode** (`control` or `gate`).
-- **Schedule** — with its **mode** (`follow` or `gate`).
+- **Schedule** — with its **behavior** (`follow`, hard gate, or state-preserving gate).
 
 The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
 Because occupancy feeds the turn-off countdown, the `light_timeout >= occupancy_timeout` guard applies here too: lights whose turn-off timeout is shorter than the sensor's effective timeout are skipped and named in the summary, so you can raise their timeouts and re-run.
 
 Bulk assignment currently applies only to regular Virtual Lights. Configure the sensors for a Virtual Scheduled Light in its outside- and inside-schedule settings instead.
+
+### Light conversion
+
+**Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references.
+
+- **Gated → scheduled** — available for Virtual Lights with either gate behavior and a schedule sensor. Each light retains its own schedule. Its current settings become the inside-schedule profile; the outside profile keeps its timing, appearance, warnings, turn-on selection, and keep-on entities but starts without occupancy, maintain, illuminance, or door inputs. A hard gate becomes **turn off at schedule end**; a state-preserving gate becomes **keep current state**.
+- **Scheduled → gated** — the inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the outside-schedule profile is discarded after confirmation. The schedule-end action selects the corresponding hard or state-preserving gate behavior.
+
+Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting a settings policy.
 
 ## Examples
 
@@ -205,7 +215,7 @@ The form groups everything but the timeout into collapsible sections — *Sensor
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | Default `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor. HA has no fitting device class for schedules, so this picker can only narrow to MoLight binary sensors — take care to pick the schedule one |
-| **Schedule mode** | Default `follow` — lights turn on at window start and off at window end (porch lights). `gate` — occupancy may only activate lights inside the window; window end forces lights off |
+| **Schedule behavior** | Default `follow` — lights turn on at window start and off at window end (porch lights). **Gate and turn off** — automatic activation only works inside the window and its end forces off. **Gate and keep state** — applies the same activation gate but leaves an existing on-period, sensor hold, countdown, or warning running at the window end |
 | **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
 | **Door mode** | Default `open` — opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close` — the lights stay on while the door is open and start the countdown when it closes |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)) |
@@ -251,7 +261,7 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 1. **Manual / physical control** — always wins and is never gated; a manual off turns the light off from any state. A manual off *mid follow-window* drops to `IDLE` and hands control back to the sensors until the next window boundary.
 2. **[Holding auto-off](#holding-auto-off)** — while the Auto-off switch is off or a keep-on entity is on, every *automatic* turn-off below (timers, forced offs, window ends) is suspended; only a manual off still turns the light off.
 3. **Follow-mode schedule window** — while `SCHEDULED`, the window owns the light: occupancy, maintain, illuminance, and door changes are ignored entirely (window start forces on, window end forces off).
-4. **Forced offs** — bright in illuminance `control` mode, and a gate-mode window ending, both turn the light off even while occupancy or a held-open door is active.
+4. **Forced offs** — bright in illuminance `control` mode and a **Gate and turn off** window ending both turn the light off even while occupancy or a held-open door is active.
 5. **Occupancy and door opening** — turn the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority. An `open_close` door then holds the light like occupancy until it closes.
 
 **Going dark can re-light the room.** Illuminance is mostly a gate, but its `on → off` (bright → dark) edge is also a trigger while the lights are off: if occupancy is active (or an `open_close` door is open), the lights come on and are held; otherwise, if the previous on-period's countdown still has time left, the lights come back on for just that remainder (with an occupancy sensor configured, the remainder is anchored to `latest_occupied_time` as usual; without one, it is the turn-off timeout minus the time since the last manual/physical/occupancy/door turn-on). This covers the "lights forced off by morning brightness, then a dark storm rolls in" case without re-lighting long-empty rooms. Such turn-ons are stamped in `last_on_illuminance`.
@@ -267,7 +277,7 @@ Each stage can also show an optional **color** — a red warn stage is a much cl
 
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade on a disabled stage is rejected rather than silently ignored).
 
-Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning. A re-trigger that carries no brightness or color of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness and color, so the interruption leaves no trace; a physical turn-on or an external dim/recolor brings its own values, which are honored instead. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running** — occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning. A re-trigger that carries no brightness or color of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness and color, so the interruption leaves no trace; a physical turn-on or an external dim/recolor brings its own values, which are honored instead. The restore is deliberately immediate (no fade). Holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in `control` mode, a hard-gate/follow window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 #### Maintain occupancy sensor
 
@@ -275,7 +285,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 
 - The light being on with the maintain sensor on means `OCCUPIED` — whether the sensor turns on later, was already on at turn-on time, or both were already on at startup. Illuminance/schedule gating doesn't apply, since this is not a turn-on.
 - The countdown starts only when the regular occupancy sensor *and* the maintain sensor are both clear, anchored to the latest `latest_occupied_time` of the two.
-- Forced offs still win, exactly as they do over regular occupancy: bright in `control` mode, a gate-mode window ending, and a manual off all turn the light off immediately; a follow-mode window owns the light entirely.
+- Forced offs still win, exactly as they do over regular occupancy: bright in `control` mode, a hard-gate window ending, and a manual off all turn the light off immediately; a follow-mode window owns the light entirely.
 - The false-detection quick off fires on a maintain clear only when *both* sensors flagged their clears false — genuine presence on either side earns the normal countdown.
 
 #### Door sensor
@@ -283,7 +293,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 A door sensor drives the light straight from a real door/contact `binary_sensor` (`on` = open) — a pantry, closet, wardrobe, or garage light. Opening the door is a turn-on trigger, gated by illuminance and a gate-mode schedule exactly like occupancy: it only lights the room when it's dark (if an illuminance sensor is set) and inside a gate window. What happens next depends on the **door mode**:
 
 - **`open`** — opening turns the lights on with the normal turn-off timeout (`ACTIVE`), then the door is ignored: closing does nothing and the lights time out even if the door stays open. Re-opening re-triggers the timer. Use it as a momentary "someone came through here" trigger.
-- **`open_close`** — the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown. The close **defers to presence**: if a regular occupancy or maintain sensor is still active, the lights stay `OCCUPIED` — a closed door never cuts the lights over someone the room still sees. (A [keep-on hold](#holding-auto-off) also keeps them on: the countdown state is entered but, as with every hold, no timer runs until the hold releases.) An already-on light with the door open is adopted as `OCCUPIED` at startup, and forced offs (bright in `control` mode, a gate window ending, a manual off) still win over a held-open door, just as they do over occupancy. A standing-open door is also re-evaluated when a gate lifts — the room going dark or a gate-mode window starting lights the room and holds it while the door stays open — and the door's last known state is cached, so a sensor that blips `unavailable` keeps holding until it reports closed.
+- **`open_close`** — the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown. The close **defers to presence**: if a regular occupancy or maintain sensor is still active, the lights stay `OCCUPIED` — a closed door never cuts the lights over someone the room still sees. (A [keep-on hold](#holding-auto-off) also keeps them on: the countdown state is entered but, as with every hold, no timer runs until the hold releases.) An already-on light with the door open is adopted as `OCCUPIED` at startup, and forced offs (bright in `control` mode, a hard-gate window ending, a manual off) still win over a held-open door, just as they do over occupancy. A standing-open door is also re-evaluated when a gate lifts — the room going dark or a gate-mode window starting lights the room and holds it while the door stays open — and the door's last known state is cached, so a sensor that blips `unavailable` keeps holding until it reports closed.
 
 The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening, window) rather than to MoLight virtual sensors. The last door-driven turn-on is exposed as the `last_on_door` attribute.
 
@@ -293,7 +303,7 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 - Every automatic turn-off is suspended — the timer, the false-detection quick off, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
 - Turn-ons are unaffected (occupancy, going dark, and window starts still light the room), and a manual off always works.
-- When the last hold releases, the light re-evaluates its rules: a follow window that ended while held turns it off now, as does being outside a gate window or bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
+- When the last hold releases, the light re-evaluates its rules: a follow or hard-gate window that ended while held turns it off now, as does being bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
 - A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The switch state survives restarts, and a held light adopted at startup won't start a timer.
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
@@ -324,17 +334,19 @@ A Virtual Scheduled Light controls the same kinds of real lights and has the sam
 
 Creation uses three main forms:
 
-1. Choose the name, lights, required schedule sensor, and optional Entity ID.
+1. Choose the name, lights, required schedule sensor, what happens when that schedule ends, and optional Entity ID.
 2. Configure the outside-schedule settings.
 3. Configure the inside-schedule settings, initially copied from the completed outside-schedule settings.
 
 If either settings set uses a turn-on selection entity, its usual selection form appears immediately after that settings form. Editing uses the same sequence, but preserves the two saved settings sets independently.
 
-Changing schedule state switches which settings are used and immediately checks the newly selected sensors. It does not by itself change an already-on light's brightness, color, or fade, and a countdown or warning already running keeps its original duration — the new turn-off timeout applies from the next on-period. This is deliberate: a shorter timeout on the new side must never turn a light off the moment the schedule flips, which is what re-evaluating a running timer against it would do. If the old occupancy settings were holding the light and the new settings are not, the new timeout starts; newly selected active occupancy or an open door can turn on an off light, and a newly selected illuminance sensor in `control` mode can force an on light off.
+Changing schedule state switches which settings are used and immediately checks the newly selected sensors. By default it does not itself change an already-on light's brightness, color, or fade, and a countdown or warning already running keeps its original duration — the new turn-off timeout applies from the next on-period. This is deliberate: a shorter timeout on the new side must never turn a light off the moment the schedule flips, which is what re-evaluating a running timer against it would do. If the old occupancy settings were holding the light and the new settings are not, the new timeout starts; newly selected active occupancy or an open door can turn on an off light, and a newly selected illuminance sensor in `control` mode can force an on light off.
 
-The `active_settings` attribute reports `outside_schedule` or `inside_schedule`. On restart, a valid schedule state wins. While the schedule is unavailable or unknown, the last restored choice is kept; on a first start with no usable state, outside-schedule settings are used. If the schedule entry is deleted, the reference is removed, outside-schedule settings are used, and the light remains manually usable until a new schedule is chosen in **Configure**.
+The shared **At schedule end** setting can instead turn the lights off on the schedule's `on → off` boundary, using the inside profile's automatic-off fade as the outside profile takes over. This automatic off respects Auto-off and the newly active outside profile's keep-on entities; a held boundary is applied when the hold releases, and a boundary missed during a restart is caught up exactly once. Manual turn-ons outside the schedule remain allowed.
 
-This first version has one settings-switching behavior; it does not include a separate follow mode. Create it through the normal **Add entry** flow. Bulk discovery and bulk sensor assignment do not create or modify Virtual Scheduled Lights.
+The `active_settings` attribute reports `outside_schedule` or `inside_schedule`; `schedule_end_off_pending` reports whether an end-boundary off is waiting for an Auto-off/keep-on hold to release. On restart, a valid schedule state wins. While the schedule is unavailable or unknown, the last restored choice is kept; on a first start with no usable state, outside-schedule settings are used. If the schedule entry is deleted, the reference is removed, outside-schedule settings are used, and the light remains manually usable until a new schedule is chosen in **Configure**.
+
+This settings selector does not include a separate follow mode. Create it through the normal **Add entry** flow or promote an existing gated light through **Convert virtual lights**. Bulk discovery and bulk sensor assignment do not directly create or modify Virtual Scheduled Lights.
 
 ### Virtual Remote
 

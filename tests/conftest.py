@@ -38,6 +38,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -214,21 +215,25 @@ def make_scheduled_light_entry(
     name: str = "Scheduled Light",
     lights: list[str] | None = None,
     schedule: str = "binary_sensor.settings_schedule",
+    schedule_end_action: str | None = None,
     outside: dict | None = None,
     inside: dict | None = None,
 ) -> MockConfigEntry:
     """Build a Virtual Scheduled Light entry with two flat settings mappings."""
     default_settings = {CONF_LIGHT_TIMEOUT: 60}
+    data = {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+        CONF_NAME: name,
+        CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
+        CONF_SCHEDULE_ENTITY: schedule,
+        CONF_OUTSIDE_SCHEDULE_SETTINGS: outside or default_settings,
+        CONF_INSIDE_SCHEDULE_SETTINGS: inside or default_settings,
+    }
+    if schedule_end_action is not None:
+        data[CONF_SCHEDULE_END_ACTION] = schedule_end_action
     return MockConfigEntry(
         domain=DOMAIN,
-        data={
-            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
-            CONF_NAME: name,
-            CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
-            CONF_SCHEDULE_ENTITY: schedule,
-            CONF_OUTSIDE_SCHEDULE_SETTINGS: outside or default_settings,
-            CONF_INSIDE_SCHEDULE_SETTINGS: inside or default_settings,
-        },
+        data=data,
     )
 
 

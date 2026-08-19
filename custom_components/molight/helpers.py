@@ -19,7 +19,8 @@ def molight_config(entry: ConfigEntry) -> dict:
     Options flows store the complete edited form, so once options exist they
     fully replace the original data — merging the two would resurrect
     optional fields the user cleared (e.g. removing a light's occupancy
-    reference). entity_type is immutable and only lives in data.
+    reference). entity_type is authoritative in data (and is changed only by
+    the explicit light-conversion flow), never by ordinary options edits.
     """
     cfg = dict(entry.options) if entry.options else dict(entry.data)
     cfg[CONF_ENTITY_TYPE] = entry.data[CONF_ENTITY_TYPE]
@@ -36,8 +37,8 @@ def suggested_entity_id(
 
     Honored only at first registration — HA uniquifies with _2 on a clash and
     the registry pins the id thereafter. The object_id is read straight from
-    entry.data (it is immutable and absent from molight_config once options
-    exist). `suffix` lets the companion switch parallel its light, e.g.
+    entry.data (the entity id is immutable and absent from molight_config once
+    options exist). `suffix` lets the companion switch parallel its light, e.g.
     light.kitchen -> switch.kitchen_auto_off.
     """
     obj = entry.data.get(CONF_ENTITY_ID)

@@ -49,7 +49,7 @@ Effect/warn warning
   brightness, a gate lifting, auto-off becoming held) restore the pre-warning
   brightness so the warning is transparent; a physical turn-on or an external
   dim brings its own brightness, which is honoured instead of the snapshot.
-  Bright-forces-off (control mode) and a gate/follow window ending still turn
+  Bright-forces-off (control mode) and a hard-gate/follow window ending still turn
   the lights off during the sequence, as they would mid-countdown.
   Each stage can also show an optional color (effect_rgb_color /
   warn_rgb_color — e.g. a red warn stage as an unmissable cue); color-capable
@@ -113,7 +113,7 @@ Maintain occupancy (when a maintain occupancy entity is configured)
 
   • Maintain ON while the light is on (ACTIVE/COUNTDOWN) → OCCUPIED, timer
     cancelled. Illuminance/schedule gating does not apply: it is not a
-    turn-on. Forced offs (bright in control mode, gate window end) still win,
+    turn-on. Forced offs (bright in control mode, hard-gate window end) still win,
     exactly as they do over regular occupancy.
   • Occupancy clearing while maintain is on keeps the light OCCUPIED.
   • The countdown starts only when both the regular occupancy entity and the
@@ -146,9 +146,9 @@ Holding auto-off
   State-machine transitions keep happening; they just never arm a timer.
 
   When the last hold releases, the light re-evaluates its rules from current
-  conditions: a follow-mode window that ended while held turns it off now
-  (the window marker is kept while held for exactly this), as does being
-  outside a gate-mode window or bright in illuminance control mode; active
+  conditions: a follow-mode or hard-gate window that ended while held turns it
+  off now (the window marker/pending boundary is kept while held for exactly
+  this), as does being bright in illuminance control mode; active
   occupancy keeps it on (OCCUPIED); an active follow window keeps it
   SCHEDULED; otherwise a fresh full timer starts (ACTIVE).
 
@@ -166,6 +166,8 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
   • gate — occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
+  • gate_keep — the same activation gate, but window end preserves the current
+    on-period, including its sensor hold, countdown or warning.
 
 Door handling (when a door entity is configured), per door_mode:
   Opening the door (state on) is a turn-on trigger, gated by illuminance and
@@ -180,7 +182,7 @@ Door handling (when a door entity is configured), per door_mode:
     entity or keep-on hold so a closed door never cuts the lights over someone
     still present. A held-open door survives a restart the same way a
     maintained light does: an already-on light with the door open is adopted
-    as OCCUPIED. Forced offs (bright in control mode, a gate window ending)
+    as OCCUPIED. Forced offs (bright in control mode, a hard-gate window ending)
     still win over a held-open door, as they do over occupancy.
     A standing-open door is re-evaluated when a gate lifts, exactly like
     already-active occupancy: illuminance going dark or a gate-mode window
@@ -242,6 +244,7 @@ from .const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
+    ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_COLOR_TEMP,
@@ -265,6 +268,7 @@ from .const import (
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -281,6 +285,7 @@ from .const import (
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_MODE,
     DEFAULT_LIGHT_TIMEOUT,
+    DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_WARN_TIMEOUT,
     DOMAIN,
@@ -289,8 +294,10 @@ from .const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
     SIGNAL_AUTO_OFF_TOGGLED,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -383,6 +390,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._settings_schedule_entity: str | None = (
             entry_cfg.get(CONF_SCHEDULE_ENTITY) if self._is_scheduled_light else None
         )
+        self._schedule_end_action = entry_cfg.get(
+            CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION
+        )
         self._outside_schedule_settings: dict[str, Any] = entry_cfg.get(
             CONF_OUTSIDE_SCHEDULE_SETTINGS, {}
         )
@@ -391,6 +401,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._inside_schedule = False
         self._restored_inside_schedule: bool | None = None
+        # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
+        # Persisted as a state attribute so a restart cannot lose the pending
+        # boundary; returning inside the schedule cancels it.
+        self._schedule_end_off_pending = False
         # Every settings mapping this light may run under — both sides of a
         # scheduled light, or the regular light's own config — so the entity
         # references of all of them can be subscribed to up front.
@@ -546,6 +560,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
                 if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
                     self._restored_inside_schedule = active == ACTIVE_SETTINGS_INSIDE
+                self._schedule_end_off_pending = bool(
+                    last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING)
+                )
             # Restore turn-on attribution so the illuminance re-activation
             # countdown keeps working across a restart.
             for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
@@ -671,6 +688,17 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = self._restored_inside_schedule
         else:
             inside = False
+        if inside:
+            self._schedule_end_off_pending = False
+        elif (
+            schedule is not None
+            and schedule.state == "off"
+            and self._restored_inside_schedule is True
+            and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
+        ):
+            # The schedule ended while Home Assistant was down. _seed_state
+            # applies this once after it has restored the physical/hold state.
+            self._schedule_end_off_pending = True
         if not self._settings_schedule_entity:
             _LOGGER.warning(
                 "Virtual Scheduled Light %s has no schedule; "
@@ -688,6 +716,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Select and reconcile a Virtual Scheduled Light settings mapping."""
         if not self._is_scheduled_light or inside == self._inside_schedule:
             return
+        leaving_inside = self._inside_schedule and not inside
+        if inside:
+            # A held end boundary no longer applies once the same schedule
+            # window becomes active again.
+            self._schedule_end_off_pending = False
         self._inside_schedule = inside
         self._apply_light_settings(
             self._inside_schedule_settings
@@ -706,6 +739,24 @@ class VirtualLight(LightEntity, RestoreEntity):
         }
         old_held = self._held
         self._held = self._compute_held()
+
+        if leaving_inside and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
+            if not self._attr_is_on:
+                self._schedule_end_off_pending = False
+                self.async_write_ha_state()
+                return
+            self._schedule_end_off_pending = True
+            self._cancel_timer()
+            if self._held:
+                if self._in_warning():
+                    self._machine_state = STATE_ACTIVE
+                    self._resume_lights()
+                self.async_write_ha_state()
+                return
+            self._schedule_end_off_pending = False
+            self.hass.async_create_task(self._scheduled_end_lights_off())
+            self._go_idle()
+            return
 
         if not self._attr_is_on:
             if self._is_illuminance_bright():
@@ -784,6 +835,23 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._attr_brightness = brightness
         if self._attr_is_on and (color := self._physical_color()):
             self._set_color_state(*color)
+
+        if self._schedule_end_off_pending:
+            if not self._attr_is_on:
+                self._schedule_end_off_pending = False
+            elif self._held:
+                if self._pre_warn_brightness is not None or self._pre_warn_color:
+                    self._resume_lights()
+                self._machine_state = STATE_ACTIVE
+                self.async_write_ha_state()
+                return
+            else:
+                self._schedule_end_off_pending = False
+                self._pre_warn_brightness = None
+                self._pre_warn_color = None
+                self.hass.async_create_task(self._scheduled_end_lights_off())
+                self._go_idle()
+                return
 
         if self._pre_warn_brightness is not None or self._pre_warn_color is not None:
             if self._attr_is_on:
@@ -1256,10 +1324,19 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _gate_schedule_inactive(self) -> bool:
         """Return True when a gate-mode schedule forbids activating lights."""
-        if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_GATE:
+        if not self._schedule_entity or self._schedule_mode not in (
+            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_KEEP,
+        ):
             return False
         state = self.hass.states.get(self._schedule_entity)
         return not (state is not None and state.state == "on")
+
+    def _hard_gate_schedule_inactive(self) -> bool:
+        """Return True when the original hard gate currently requires off."""
+        return (
+            self._schedule_mode == SCHEDULE_MODE_GATE and self._gate_schedule_inactive()
+        )
 
     def _follow_schedule_state(self) -> State | None:
         """Return the schedule state when in follow mode and ON, else None."""
@@ -1306,14 +1383,20 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Return to normal behaviour when the last hold releases.
 
         Automatic turn-offs suppressed while held are applied from current
-        conditions: a follow window that ended, being outside a gate window,
-        or bright in control mode turn the lights off now; an active follow
+        conditions: a follow/hard-gate window that ended, or bright in control
+        mode, turns the lights off now; an active follow
         window or active occupancy (gated like any adoption — suppressed when
         bright or outside a gate window) keeps them on without a timer;
         otherwise a fresh full timer starts.
         """
         if not self._attr_is_on:
             return  # lights-off transitions were never suppressed
+
+        if self._schedule_end_off_pending:
+            self._schedule_end_off_pending = False
+            self.hass.async_create_task(self._scheduled_end_lights_off())
+            self._go_idle()
+            return
 
         sched = self._follow_schedule_state()
         if sched is not None:
@@ -1331,7 +1414,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._go_idle()
             return
 
-        if self._gate_schedule_inactive() or (
+        if self._hard_gate_schedule_inactive() or (
             self._is_illuminance_bright()
             and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
         ):
@@ -1384,11 +1467,16 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._go_idle()
             return
 
-        # Gate mode: window end forces lights off; window start re-evaluates
-        # occupancy and a held-open door the same way illuminance going dark
-        # does.
+        # Both gate modes block automatic activation outside the window and
+        # re-evaluate occupancy/a held-open door when it starts. The original
+        # hard gate also forces off at the end; gate_keep leaves the current
+        # on-period and its timer/holds alone.
         if new_state.state != "on":
-            if self._machine_state != STATE_IDLE and not self._held:
+            if (
+                self._schedule_mode == SCHEDULE_MODE_GATE
+                and self._machine_state != STATE_IDLE
+                and not self._held
+            ):
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
         else:
@@ -1995,6 +2083,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         return self._set_lights(False, transition=self._auto_off_transition)
 
+    def _scheduled_end_lights_off(self) -> Coroutine[Any, Any, None]:
+        """Turn off at a scheduled-light boundary using the outgoing profile."""
+        transition = _opt_transition(
+            self._inside_schedule_settings.get(CONF_AUTO_OFF_TRANSITION)
+        )
+        return self._set_lights(False, transition=transition)
+
     async def _set_lights(
         self,
         on: bool,
@@ -2149,4 +2244,5 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if self._inside_schedule
                 else ACTIVE_SETTINGS_OUTSIDE
             )
+            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = self._schedule_end_off_pending
         return attributes

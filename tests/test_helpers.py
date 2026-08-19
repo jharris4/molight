@@ -73,7 +73,7 @@ def test_molight_config_options_fully_replace_data() -> None:
 
 
 def test_molight_config_entity_type_always_comes_from_data() -> None:
-    """entity_type is immutable: even a corrupt options value cannot change it."""
+    """entry.data remains authoritative over a corrupt options type value."""
     entry = _entry(
         {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, CONF_NAME: "Kitchen"},
         options={CONF_ENTITY_TYPE: "occupancy", CONF_NAME: "Kitchen"},

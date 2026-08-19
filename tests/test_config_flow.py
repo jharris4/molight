@@ -40,6 +40,8 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_CONFIRM_CONVERSION,
+    CONF_CONVERT_LIGHTS,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
@@ -69,6 +71,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
+    CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_SELECTED_ENTITIES,
@@ -90,7 +93,10 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import settle, setup_entries
@@ -430,6 +436,7 @@ async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
     data = result["data"]
     assert data[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
     assert data[CONF_ENTITY_ID] == "scheduled_hallway"
+    assert data[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
     assert "outside_schedule_settings" in data
     assert "inside_schedule_settings" in data
     assert "outside_settings" not in data
@@ -522,12 +529,16 @@ async def test_scheduled_light_options_edit_both_settings(
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["step_id"] == "scheduled_light"
+    assert (
+        result["data_schema"]({})[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
+    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
             CONF_NAME: "Hallway Updated",
             CONF_LIGHTS: ["light.hallway"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_TURN_OFF,
         },
     )
     assert result["step_id"] == "scheduled_light_outside"
@@ -553,6 +564,7 @@ async def test_scheduled_light_options_edit_both_settings(
 
     cfg = molight_config(entry)
     assert cfg[CONF_NAME] == "Hallway Updated"
+    assert cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_TURN_OFF
     assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 240
     assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 45
     assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_AUTO_ON_BRIGHTNESS] == 15
@@ -3518,6 +3530,191 @@ async def test_assign_schedule_sets_mode(
     cfg = molight_config(light)
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.test_schedule"
     assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+
+
+# ---------------------------------------------------------------------------
+# In-place Virtual Light type conversion
+# ---------------------------------------------------------------------------
+
+
+async def _reach_conversion(hass: HomeAssistant, direction: str) -> dict:
+    """Start the add-entry flow and choose one conversion direction."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "convert_lights"}
+    )
+    assert result["step_id"] == "convert_lights"
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": direction}
+    )
+
+
+@pytest.mark.asyncio
+async def test_convert_gated_light_to_scheduled_in_place(
+    hass: HomeAssistant,
+) -> None:
+    """Conversion retains identity and maps gate settings into two profiles."""
+    source = _light_entry(
+        "Kitchen",
+        "kitchen",
+        schedule_entity="binary_sensor.night",
+        schedule_mode=SCHEDULE_MODE_GATE,
+        occupancy_entity="binary_sensor.occupancy",
+        maintain_occupancy_entity="binary_sensor.maintain",
+        illuminance_entity="binary_sensor.illuminance",
+        door_entity="binary_sensor.door",
+        hold_entities=["input_boolean.guest"],
+    )
+    # Exercise conversion from the effective options configuration, not just
+    # untouched creation data.
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data=dict(source.data),
+        options={
+            key: value
+            for key, value in source.data.items()
+            if key not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID)
+        },
+    )
+    soft_gate = _light_entry(
+        "Pantry",
+        "pantry",
+        schedule_entity="binary_sensor.dusk",
+        schedule_mode=SCHEDULE_MODE_GATE_KEEP,
+    )
+    hass.states.async_set("binary_sensor.night", "off", {"friendly_name": "Night"})
+    hass.states.async_set("binary_sensor.dusk", "off", {"friendly_name": "Dusk"})
+    await setup_entries(hass, light, soft_gate)
+    original_entry_id = light.entry_id
+    original_entities = {
+        entity.entity_id
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), light.entry_id
+        )
+    }
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    assert result["step_id"] == "convert_to_scheduled"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_CONVERT_LIGHTS: ["light.kitchen", "light.pantry"]},
+    )
+    assert result["step_id"] == "confirm_conversion"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: False}
+    )
+    assert result["step_id"] == "confirm_conversion"
+    assert result["errors"] == {CONF_CONFIRM_CONVERSION: "confirmation_required"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "conversion_done"
+    assert result["description_placeholders"] == {"count": "2"}
+    await hass.async_block_till_done()
+
+    assert light.entry_id == original_entry_id
+    assert light.options == {}
+    cfg = molight_config(light)
+    assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert cfg[CONF_ENTITY_ID] == "kitchen"
+    assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.night"
+    assert cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_TURN_OFF
+    inside = cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    outside = cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert inside[CONF_OCCUPANCY_ENTITY] == "binary_sensor.occupancy"
+    assert inside[CONF_MAINTAIN_OCCUPANCY_ENTITY] == "binary_sensor.maintain"
+    assert inside[CONF_ILLUMINANCE_ENTITY] == "binary_sensor.illuminance"
+    assert inside[CONF_DOOR_ENTITY] == "binary_sensor.door"
+    for key in (
+        CONF_OCCUPANCY_ENTITY,
+        CONF_MAINTAIN_OCCUPANCY_ENTITY,
+        CONF_ILLUMINANCE_ENTITY,
+        CONF_DOOR_ENTITY,
+    ):
+        assert key not in outside
+    assert outside[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
+    assert {
+        entity.entity_id
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), light.entry_id
+        )
+    } == original_entities
+    soft_cfg = molight_config(soft_gate)
+    assert soft_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert soft_cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.dusk"
+    assert soft_cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("end_action", "expected_mode"),
+    [
+        (SCHEDULE_END_ACTION_KEEP, SCHEDULE_MODE_GATE_KEEP),
+        (SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_MODE_GATE),
+    ],
+)
+async def test_convert_scheduled_light_back_to_gate(
+    hass: HomeAssistant, end_action: str, expected_mode: str
+) -> None:
+    """Reverse conversion keeps the inside profile and maps the end action."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_ENTITY_ID: "hall",
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night",
+            CONF_SCHEDULE_END_ACTION: end_action,
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 45,
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.hall_occupancy",
+            },
+        },
+    )
+    hass.states.async_set("binary_sensor.night", "on")
+    await setup_entries(hass, entry)
+
+    result = await _reach_conversion(hass, "convert_to_regular")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONVERT_LIGHTS: ["light.hall"]}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
+    )
+    assert result["reason"] == "conversion_done"
+    await hass.async_block_till_done()
+
+    cfg = molight_config(entry)
+    assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert cfg[CONF_ENTITY_ID] == "hall"
+    assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.night"
+    assert cfg[CONF_SCHEDULE_MODE] == expected_mode
+    assert cfg[CONF_LIGHT_TIMEOUT] == 45
+    assert cfg[CONF_OCCUPANCY_ENTITY] == "binary_sensor.hall_occupancy"
+    assert CONF_OUTSIDE_SCHEDULE_SETTINGS not in cfg
+    assert CONF_INSIDE_SCHEDULE_SETTINGS not in cfg
+
+
+@pytest.mark.asyncio
+async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> None:
+    """Follow schedules cannot be reinterpreted as settings selectors."""
+    await setup_entries(
+        hass,
+        _light_entry(
+            "Porch",
+            "porch",
+            schedule_entity="binary_sensor.night",
+            schedule_mode="follow",
+        ),
+    )
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_gated_lights"
 
 
 # ---------------------------------------------------------------------------

@@ -3,13 +3,49 @@
     "step": {
       "user": {
         "title": "Add MoLight entities",
-        "description": "Create a single virtual entity, discover existing entities to wrap in bulk, or wire one sensor into several lights at once.",
+        "description": "Create a virtual entity, discover entities to wrap in bulk, wire one sensor into several lights, or convert existing virtual lights.",
         "menu_options": {
           "create": "Create a single entity",
           "discover_occupancy": "Discover occupancy sensors",
           "discover_illuminance": "Discover illuminance sensors",
           "discover_light": "Discover lights",
-          "assign_sensor": "Assign a sensor to several lights"
+          "assign_sensor": "Assign a sensor to several lights",
+          "convert_lights": "Convert virtual lights"
+        }
+      },
+      "convert_lights": {
+        "title": "Convert virtual lights",
+        "description": "Change existing virtual lights in place without changing their entity IDs, history, dashboard cards, or references.",
+        "menu_options": {
+          "convert_to_scheduled": "Convert gated lights to scheduled lights",
+          "convert_to_regular": "Convert scheduled lights to gated lights"
+        }
+      },
+      "convert_to_scheduled": {
+        "title": "Convert gated lights",
+        "description": "Select one or more gated Virtual Lights. Each light keeps its own schedule. Its current settings become the inside-schedule profile; its outside profile retains manual behavior but starts without automatic sensor inputs.",
+        "data": {
+          "convert_lights": "Gated lights"
+        },
+        "data_description": {
+          "convert_lights": "Each choice shows the light followed by the schedule that will select its profiles."
+        }
+      },
+      "convert_to_regular": {
+        "title": "Convert scheduled lights",
+        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule profile becomes the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings will be discarded.",
+        "data": {
+          "convert_lights": "Scheduled lights"
+        },
+        "data_description": {
+          "convert_lights": "Each choice shows the light followed by the schedule that will be retained as its gate."
+        }
+      },
+      "confirm_conversion": {
+        "title": "Review light conversion",
+        "description": "The following lights will be converted in place to the {direction} type: {lights}. Their entity IDs and references will not change.",
+        "data": {
+          "confirm_conversion": "I understand and want to convert these lights"
         }
       },
       "assign_sensor": {
@@ -51,7 +87,7 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window."
+          "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off."
         }
       },
       "assign_lights": {
@@ -221,7 +257,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
@@ -440,7 +476,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
@@ -510,11 +546,13 @@
         "data": {
           "name": "Name",
           "lights": "Lights to control",
-          "schedule_entity": "Schedule sensor"
+          "schedule_entity": "Schedule sensor",
+          "schedule_end_action": "At schedule end"
         },
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
-          "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used."
+          "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
+          "schedule_end_action": "Choose whether the ending boundary only switches settings or also turns the lights off. An automatic off respects Auto-off and the outside settings' keep-on entities."
         },
         "sections": {
           "advanced": {
@@ -823,14 +861,19 @@
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
-      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
+      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
+      "confirmation_required": "Confirm the conversion to continue."
     },
     "abort": {
       "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
       "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
-      "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}."
+      "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}.",
+      "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
+      "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
+      "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
+      "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved."
     }
   },
   "selector": {
@@ -860,7 +903,14 @@
     "schedule_mode": {
       "options": {
         "follow": "Follow — turn on at window start, off at window end",
-        "gate": "Gate — occupancy only works inside the window"
+        "gate": "Gate and turn off — automatic activation only inside the window; off at the end",
+        "gate_keep": "Gate and keep state — automatic activation only inside the window"
+      }
+    },
+    "schedule_end_action": {
+      "options": {
+        "keep": "Apply outside settings and keep the current light state",
+        "turn_off": "Turn off using the inside settings, then apply outside settings"
       }
     },
     "sun_event": {
@@ -897,11 +947,13 @@
         "data": {
           "name": "Name",
           "lights": "Lights to control",
-          "schedule_entity": "Schedule sensor"
+          "schedule_entity": "Schedule sensor",
+          "schedule_end_action": "At schedule end"
         },
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
-          "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used."
+          "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
+          "schedule_end_action": "Choose whether the ending boundary only switches settings or also turns the lights off. An automatic off respects Auto-off and the outside settings' keep-on entities."
         }
       },
       "scheduled_light_outside": {
@@ -1201,7 +1253,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow: on at window start, off at window end (porch lights). Gate: occupancy may only activate the lights inside the window.",
+              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."

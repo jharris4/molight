@@ -64,6 +64,8 @@ AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
 CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
 CONF_ASSIGN_LIGHTS = "assign_lights"  # target virtual light entity_ids
+CONF_CONVERT_LIGHTS = "convert_lights"  # virtual light entity_ids to convert
+CONF_CONFIRM_CONVERSION = "confirm_conversion"
 ASSIGN_ROLE_REGULAR = "regular"
 ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
@@ -249,12 +251,27 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How a referenced schedule entity affects the light:
 #   follow — lights turn on at window start and off at window end (porch lights)
-#   gate   — occupancy may only activate lights inside the window
+#   gate        — occupancy may only activate lights inside the window; the
+#                 window end forces the lights off (the original behaviour)
+#   gate_keep   — the same activation gate, but the window end leaves an
+#                 already-on light under its current state-machine policy
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
 SCHEDULE_MODE_GATE = "gate"
-SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE]
+SCHEDULE_MODE_GATE_KEEP = "gate_keep"
+SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP]
 DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
+
+# A Virtual Scheduled Light's shared schedule selects its inside/outside
+# settings. Unlike a regular light's schedule mode, selecting a profile does
+# not inherently command the light; this action optionally preserves the hard
+# gate behaviour by turning it off on the on -> off schedule boundary.
+CONF_SCHEDULE_END_ACTION = "schedule_end_action"
+ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
+SCHEDULE_END_ACTION_KEEP = "keep"
+SCHEDULE_END_ACTION_TURN_OFF = "turn_off"
+SCHEDULE_END_ACTIONS = [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_TURN_OFF]
+DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 
 # Optional real door/contact binary_sensor (on = open) that drives the light.
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly

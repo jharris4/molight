@@ -196,6 +196,7 @@ Window end:
 Name:              Hallway                       # → light.hallway
 Lights to control: light.hallway_real
 Schedule sensor:   binary_sensor.night           # required; off = outside, on = inside
+At schedule end:   Apply outside settings and keep the current light state
 ```
 
 **3. Outside-schedule settings** (daytime and evening — schedule *off*)
@@ -217,7 +218,7 @@ Auto-on color temperature: 2200                  # warm night light
 
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
-- Switching settings never restyles a light that is already on — brightness and color only apply on the *next* automatic turn-on. A countdown already running keeps its original duration.
+- With the selected schedule-end behavior, switching settings never restyles or turns off a light that is already on — brightness and color only apply on the *next* automatic turn-on. A countdown already running keeps its original duration. Choose **Turn off using the inside settings** instead when the end of the night window should be an automatic off boundary.
 - Every setting can differ per side, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one side and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
 

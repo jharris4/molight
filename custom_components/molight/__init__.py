@@ -128,8 +128,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 cleaned[side] = settings
         if cleaned == cfg:
             continue
-        # Stored options fully replace data; entity_type/entity_id are
-        # immutable and live only in entry.data (as everywhere else).
+        # Stored options fully replace data; authoritative entity_type and the
+        # immutable entity_id live only in entry.data (as everywhere else).
         cleaned = {
             k: v
             for k, v in cleaned.items()

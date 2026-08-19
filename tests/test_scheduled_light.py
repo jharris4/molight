@@ -15,6 +15,7 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
+    ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_DOOR_ENTITY,
     CONF_EFFECT_BRIGHTNESS,
@@ -33,6 +34,7 @@ from custom_components.molight.const import (
     CONF_WARN_TIMEOUT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_END_ACTION_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_OCCUPIED,
@@ -120,6 +122,77 @@ async def test_schedule_change_rechecks_already_active_occupancy(
     assert state.state == "on"
     assert state.attributes["brightness"] == 64
     assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
+    """The explicit end action turns off before leaving the inside profile."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 30},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_defaults_to_preserving_state(
+    hass: HomeAssistant,
+) -> None:
+    """An absent action retains the pre-feature Scheduled Light behavior."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    await setup_entries(hass, make_scheduled_light_entry())
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_off_waits_for_hold_release(
+    hass: HomeAssistant,
+) -> None:
+    """A held end boundary is applied once the keep-on entity releases."""
+    hold = "input_boolean.keep_on"
+    settings = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]}
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside=settings,
+        inside=settings,
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING]
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio
@@ -694,6 +767,26 @@ async def test_restart_valid_schedule_state_overrides_restore(
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == expected
     assert state.state == "on"
     assert state.attributes["brightness"] == expected_brightness
+
+
+@pytest.mark.asyncio
+async def test_restart_catches_up_missed_schedule_end_off(
+    hass: HomeAssistant,
+) -> None:
+    """A restored inside profile plus an off schedule applies the missed edge."""
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    mock_restore_cache(
+        hass,
+        [State(VIRTUAL, "on", {ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE})],
+    )
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
 
 
 @pytest.mark.asyncio

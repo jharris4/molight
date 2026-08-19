@@ -20,6 +20,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -298,6 +299,34 @@ async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_state_preserving_gate_keeps_on_period_at_window_end(
+    hass: HomeAssistant,
+) -> None:
+    """The soft gate blocks later activations without ejecting current occupancy."""
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_KEEP
+    )
+    hass.states.async_set(SCHED, "on")
+    await setup_entries(hass, entry)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    # Once this on-period ends, another occupancy edge remains gated.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio
