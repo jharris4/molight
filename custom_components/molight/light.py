@@ -429,16 +429,28 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_color_change_virtual: datetime | None = None
 
     def _apply_light_settings(self, cfg: dict[str, Any]) -> None:
-        """Load one flat Virtual Light settings mapping."""
+        """Load one flat Virtual Light settings mapping.
+
+        A regular Virtual Light applies its entry config once; a Virtual
+        Scheduled Light applies its outside- or inside-schedule mapping and
+        re-applies the other one on every schedule edge, so everything set
+        here must be derivable from the mapping alone.
+        """
         self._light_timeout = int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
         self._false_off_delay = int(
             cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
         )
 
+        # Brightness (0-255) for automatic turn-ons, converted from the stored
+        # percentage with HA's own percent→brightness scaling. None leaves
+        # automatic turn-ons unqualified.
         pct = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
         self._auto_on_brightness = (
             round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
         )
+        # Optional color for automatic turn-ons, as turn-on service data
+        # (mutually exclusive keys, enforced by the config/options flows).
+        # None leaves automatic turn-ons uncolored, like auto_on_brightness.
         kelvin = cfg.get(CONF_AUTO_ON_COLOR_TEMP)
         self._auto_on_color = (
             {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
@@ -449,6 +461,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._turn_on_select_option = cfg.get(CONF_TURN_ON_SELECT_OPTION)
         self._turn_on_select_source_entity = cfg.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
 
+        # Effect/warn warning sequence run at auto-off instead of an immediate
+        # off. Timeouts of 0 disable each stage; effect_brightness is a 0-255
+        # value (0 = blink fully off); warn_brightness is None to keep whatever
+        # brightness the light had before the warning began.
         self._effect_timeout = int(cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT))
         self._effect_brightness = round(
             percentage_to_ranged_value(
@@ -463,13 +479,24 @@ class VirtualLight(LightEntity, RestoreEntity):
             if warn_pct
             else None
         )
+        # Optional stage colors, as turn-on service data. None sends no color:
+        # the effect stage then only changes brightness, and the warn stage
+        # keeps (or, after a colored effect stage, restores) the pre-warning
+        # color.
         self._effect_color = _opt_rgb_color(cfg.get(CONF_EFFECT_RGB_COLOR))
         self._warn_color = _opt_rgb_color(cfg.get(CONF_WARN_RGB_COLOR))
+        # Optional fade times (seconds) for the service calls this light makes
+        # itself: automatic turn-ons/offs and the effect/warn stage changes.
+        # None (absent or 0) sends no transition attribute. Manual/physical
+        # turn-ons and a manual off are never given a transition.
         self._auto_on_transition = _opt_transition(cfg.get(CONF_AUTO_ON_TRANSITION))
         self._auto_off_transition = _opt_transition(cfg.get(CONF_AUTO_OFF_TRANSITION))
         self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
         self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
 
+        # Sensor wiring. The schedule fields only ever come from a regular
+        # Virtual Light's config — a Virtual Scheduled Light's settings forms
+        # omit them (its schedule selects settings rather than gating them).
         self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._maintain_entity = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
         self._illuminance_entity = cfg.get(CONF_ILLUMINANCE_ENTITY)
