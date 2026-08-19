@@ -396,6 +396,47 @@ async def test_manual_off_consumes_deferred_schedule_end_off(
 
 
 @pytest.mark.asyncio
+async def test_manual_off_discards_deferred_schedule_end_off_across_restart(
+    hass: HomeAssistant,
+) -> None:
+    """The boundary consumed by a manual off cannot be restored after a reload."""
+    switch = "switch.scheduled_light_auto_off"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    # A later manual on-period is what the restart finds: still held, so a
+    # surviving boundary would park it and cut it on release.
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.states.async_set(REAL, "on")  # no light platform: mirror the turn-on
+    await settle(hass)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
 async def test_schedule_change_rechecks_already_open_door(
     hass: HomeAssistant,
 ) -> None:
