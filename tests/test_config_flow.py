@@ -3602,11 +3602,11 @@ async def test_convert_gated_light_to_scheduled_in_place(
         result["flow_id"],
         {CONF_CONVERT_LIGHTS: ["light.kitchen", "light.pantry"]},
     )
-    assert result["step_id"] == "confirm_conversion"
+    assert result["step_id"] == "confirm_convert_to_scheduled"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_CONFIRM_CONVERSION: False}
     )
-    assert result["step_id"] == "confirm_conversion"
+    assert result["step_id"] == "confirm_convert_to_scheduled"
     assert result["errors"] == {CONF_CONFIRM_CONVERSION: "confirmation_required"}
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
@@ -3684,6 +3684,8 @@ async def test_convert_scheduled_light_back_to_gate(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_CONVERT_LIGHTS: ["light.hall"]}
     )
+    assert result["step_id"] == "confirm_convert_to_regular"
+    assert result["description_placeholders"] == {"lights": "Hall"}
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
     )
@@ -3740,7 +3742,7 @@ async def test_conversion_requires_at_least_one_selected_light(
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "convert_to_scheduled"
-    assert result["errors"] == {CONF_CONVERT_LIGHTS: "no_entities_selected"}
+    assert result["errors"] == {CONF_CONVERT_LIGHTS: "no_lights_selected"}
 
 
 @pytest.mark.asyncio
@@ -3782,7 +3784,7 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
         result["flow_id"],
         {CONF_CONVERT_LIGHTS: ["light.kitchen", "light.pantry"]},
     )
-    assert result["step_id"] == "confirm_conversion"
+    assert result["step_id"] == "confirm_convert_to_scheduled"
 
     # Simulate an options/config edit after selection but before confirmation.
     hass.config_entries.async_update_entry(

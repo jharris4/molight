@@ -41,9 +41,16 @@
           "convert_lights": "Each choice shows the light followed by the schedule that will be retained as its gate."
         }
       },
-      "confirm_conversion": {
+      "confirm_convert_to_scheduled": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to the {direction} type: {lights}. Their entity IDs and references will not change.",
+        "description": "The following lights will be converted in place to Virtual Scheduled Lights: {lights}. Their entity IDs and references will not change.",
+        "data": {
+          "confirm_conversion": "I understand and want to convert these lights"
+        }
+      },
+      "confirm_convert_to_regular": {
+        "title": "Review light conversion",
+        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
@@ -848,6 +855,7 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
+      "no_lights_selected": "Select at least one light to convert.",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
       "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
       "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",

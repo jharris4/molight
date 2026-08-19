@@ -1970,8 +1970,8 @@ class MoLightConfigFlow(
                     "entry_ids": [candidates[e].entry_id for e in selected],
                     "lights": ", ".join(labels[e] for e in selected),
                 }
-                return await self.async_step_confirm_conversion()
-            errors[CONF_CONVERT_LIGHTS] = "no_entities_selected"
+                return await self._async_confirm_conversion(user_input=None)
+            errors[CONF_CONVERT_LIGHTS] = "no_lights_selected"
 
         options = [
             self._conversion_option(entity_id, labels[entity_id], candidates[entity_id])
@@ -2065,10 +2065,25 @@ class MoLightConfigFlow(
             ),
         }
 
-    async def async_step_confirm_conversion(
+    async def async_step_confirm_convert_to_scheduled(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Review and rewrite the selected config entries in place."""
+        """Review gated → scheduled conversions."""
+        return await self._async_confirm_conversion(user_input=user_input)
+
+    async def async_step_confirm_convert_to_regular(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Review scheduled → gated conversions."""
+        return await self._async_confirm_conversion(user_input=user_input)
+
+    async def _async_confirm_conversion(
+        self, *, user_input: dict[str, Any] | None
+    ) -> config_entries.FlowResult:
+        """Review and rewrite the selected config entries in place.
+
+        One step id per direction so the review text is fully translatable.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
             if not user_input.get(CONF_CONFIRM_CONVERSION):
@@ -2107,17 +2122,16 @@ class MoLightConfigFlow(
                 )
 
         return self.async_show_form(
-            step_id="confirm_conversion",
+            step_id=(
+                "confirm_convert_to_scheduled"
+                if self._conversion.get("to_scheduled")
+                else "confirm_convert_to_regular"
+            ),
             data_schema=vol.Schema(
                 {vol.Required(CONF_CONFIRM_CONVERSION, default=False): bool}
             ),
             errors=errors,
-            description_placeholders={
-                "lights": self._conversion.get("lights", ""),
-                "direction": (
-                    "scheduled" if self._conversion.get("to_scheduled") else "regular"
-                ),
-            },
+            description_placeholders={"lights": self._conversion.get("lights", "")},
         )
 
     # ------------------------------------------------------------------
