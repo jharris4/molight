@@ -48,7 +48,9 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from tests.conftest import settle
+from tests.conftest import light_behavior_entry, settle
+
+pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 
 def _gated_light_entry() -> MockConfigEntry:
@@ -68,8 +70,9 @@ def _gated_light_entry() -> MockConfigEntry:
 
 async def _setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     for entry in entries:
-        entry.add_to_hass(hass)
-        assert await hass.config_entries.async_setup(entry.entry_id)
+        behavior_entry = light_behavior_entry(entry)
+        behavior_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(behavior_entry.entry_id)
     await hass.async_block_till_done()
 
 

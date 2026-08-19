@@ -7,20 +7,24 @@ from typing import TYPE_CHECKING
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
+    CONF_DOOR_ENTITY,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_ENTITY,
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     PLATFORMS,
 )
 from .helpers import molight_config
@@ -36,6 +40,7 @@ if TYPE_CHECKING:
 # entity no longer exists would read the gate as permanently closed and
 # silently stop automating).
 _REFERENCE_KEYS = (
+    CONF_DOOR_ENTITY,
     CONF_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_ILLUMINANCE_ENTITY,
@@ -110,6 +115,17 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
             values = cleaned.get(key)
             if values and any(e in removed for e in values):
                 cleaned[key] = [e for e in values if e not in removed]
+        if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT:
+            for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
+                settings = dict(cleaned.get(side, {}))
+                for key in _REFERENCE_KEYS:
+                    if settings.get(key) in removed:
+                        del settings[key]
+                for key in _REFERENCE_LIST_KEYS:
+                    values = settings.get(key)
+                    if values and any(e in removed for e in values):
+                        settings[key] = [e for e in values if e not in removed]
+                cleaned[side] = settings
         if cleaned == cfg:
             continue
         # Stored options fully replace data; entity_type/entity_id are

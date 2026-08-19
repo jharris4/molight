@@ -255,11 +255,13 @@ from .const import (
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -281,6 +283,7 @@ from .const import (
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_LIGHT,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
@@ -332,7 +335,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up MoLight light entities from a config entry."""
-    if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
+    if entry.data[CONF_ENTITY_TYPE] in (
+        ENTITY_TYPE_LIGHT,
+        ENTITY_TYPE_SCHEDULED_LIGHT,
+    ):
         entity = VirtualLight(hass, entry)
         if entity_id := suggested_entity_id(hass, entry, ENTITY_ID_FORMAT):
             entity.entity_id = entity_id
@@ -350,39 +356,32 @@ class VirtualLight(LightEntity, RestoreEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual light from its config entry."""
         self.hass = hass
-        cfg = molight_config(entry)
-        self._attr_name = cfg[CONF_NAME]
+        entry_cfg = molight_config(entry)
+        self._attr_name = entry_cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
 
-        self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
-        self._light_timeout: int = int(
-            cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)
+        self._lights: list[str] = entry_cfg.get(CONF_LIGHTS, [])
+        self._is_scheduled_light = (
+            entry_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
         )
-        self._false_off_delay: int = int(
-            cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
+        self._settings_schedule_entity: str | None = (
+            entry_cfg.get(CONF_SCHEDULE_ENTITY) if self._is_scheduled_light else None
         )
-        # Brightness (0-255) for automatic turn-ons, converted from the stored
-        # percentage with HA's own percent→brightness scaling. None leaves
-        # automatic turn-ons unqualified, as before.
-        pct = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
-        self._auto_on_brightness: int | None = (
-            round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
+        self._outside_schedule_settings: dict[str, Any] = entry_cfg.get(
+            CONF_OUTSIDE_SCHEDULE_SETTINGS, {}
         )
-        # Optional color for automatic turn-ons, as turn-on service data
-        # (mutually exclusive keys, enforced by the config/options flows).
-        # None leaves automatic turn-ons uncolored, like auto_on_brightness.
-        kelvin = cfg.get(CONF_AUTO_ON_COLOR_TEMP)
-        self._auto_on_color: dict | None = (
-            {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
-            if kelvin
-            else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
+        self._inside_schedule_settings: dict[str, Any] = entry_cfg.get(
+            CONF_INSIDE_SCHEDULE_SETTINGS, {}
         )
-        self._turn_on_select_entity: str | None = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
-        self._turn_on_select_option: str | None = cfg.get(CONF_TURN_ON_SELECT_OPTION)
-        self._turn_on_select_source_entity: str | None = cfg.get(
-            CONF_TURN_ON_SELECT_SOURCE_ENTITY
+        self._inside_schedule = False
+        self._restored_inside_schedule: bool | None = None
+
+        settings = (
+            self._outside_schedule_settings if self._is_scheduled_light else entry_cfg
         )
+        self._apply_light_settings(settings)
+
         self._last_turn_on_selection_option: str | None = None
         self._last_turn_on_selection_source: str | None = None
         # True while the current on-period was started by occupancy (not by
@@ -390,40 +389,6 @@ class VirtualLight(LightEntity, RestoreEntity):
         # lights short.
         self._occupancy_lit_lights: bool = False
 
-        # Effect/warn warning sequence run at auto-off instead of an immediate
-        # off. Timeouts of 0 disable each stage; effect_brightness is a 0-255
-        # value (0 = blink fully off); warn_brightness is None to keep whatever
-        # brightness the light had before the warning began.
-        self._effect_timeout: int = int(
-            cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT)
-        )
-        self._effect_brightness: int = round(
-            percentage_to_ranged_value(
-                (1, 255),
-                int(cfg.get(CONF_EFFECT_BRIGHTNESS, DEFAULT_EFFECT_BRIGHTNESS)),
-            )
-        )
-        self._warn_timeout: int = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
-        warn_pct = cfg.get(CONF_WARN_BRIGHTNESS)
-        self._warn_brightness: int | None = (
-            round(percentage_to_ranged_value((1, 255), int(warn_pct)))
-            if warn_pct
-            else None
-        )
-        # Optional stage colors, as turn-on service data. None sends no color:
-        # the effect stage then only changes brightness, and the warn stage
-        # keeps (or, after a colored effect stage, restores) the pre-warning
-        # color.
-        self._effect_color = _opt_rgb_color(cfg.get(CONF_EFFECT_RGB_COLOR))
-        self._warn_color = _opt_rgb_color(cfg.get(CONF_WARN_RGB_COLOR))
-        # Optional fade times (seconds) for the service calls this light makes
-        # itself: automatic turn-ons/offs and the effect/warn stage changes.
-        # None (absent or 0) sends no transition attribute. Manual/physical
-        # turn-ons and a manual off are never given a transition.
-        self._auto_on_transition = _opt_transition(cfg.get(CONF_AUTO_ON_TRANSITION))
-        self._auto_off_transition = _opt_transition(cfg.get(CONF_AUTO_OFF_TRANSITION))
-        self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
-        self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
         # Brightness and color the light had when the warning sequence began,
         # restored on any re-trigger so the effect/warn stages leave no
         # lasting trace. Exposed as the pre_warn_brightness / pre_warn_color
@@ -431,21 +396,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._pre_warn_brightness: int | None = None
         self._pre_warn_color: dict | None = None
 
-        self._occupancy_entity: str | None = cfg.get(CONF_OCCUPANCY_ENTITY)
-        self._maintain_entity: str | None = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
-        self._illuminance_entity: str | None = cfg.get(CONF_ILLUMINANCE_ENTITY)
-        self._illuminance_mode: str = cfg.get(
-            CONF_ILLUMINANCE_MODE, DEFAULT_ILLUMINANCE_MODE
-        )
-        self._schedule_entity: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
-        self._schedule_mode: str = cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
-        self._door_entity: str | None = cfg.get(CONF_DOOR_ENTITY)
-        self._door_mode: str = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
         # Last known open/closed of the door — kept ourselves so a briefly
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.
         self._door_open: bool = False
-        self._hold_entities: list[str] = cfg.get(CONF_HOLD_ENTITIES, [])
         # Last known on/off of each keep-on entity — kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
         self._hold_states: dict[str, bool] = {}
@@ -474,6 +428,60 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_color_change_physical: datetime | None = None
         self._last_color_change_virtual: datetime | None = None
 
+    def _apply_light_settings(self, cfg: dict[str, Any]) -> None:
+        """Load one flat Virtual Light settings mapping."""
+        self._light_timeout = int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+        self._false_off_delay = int(
+            cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
+        )
+
+        pct = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
+        self._auto_on_brightness = (
+            round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
+        )
+        kelvin = cfg.get(CONF_AUTO_ON_COLOR_TEMP)
+        self._auto_on_color = (
+            {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
+            if kelvin
+            else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
+        )
+        self._turn_on_select_entity = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
+        self._turn_on_select_option = cfg.get(CONF_TURN_ON_SELECT_OPTION)
+        self._turn_on_select_source_entity = cfg.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
+
+        self._effect_timeout = int(cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT))
+        self._effect_brightness = round(
+            percentage_to_ranged_value(
+                (1, 255),
+                int(cfg.get(CONF_EFFECT_BRIGHTNESS, DEFAULT_EFFECT_BRIGHTNESS)),
+            )
+        )
+        self._warn_timeout = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
+        warn_pct = cfg.get(CONF_WARN_BRIGHTNESS)
+        self._warn_brightness = (
+            round(percentage_to_ranged_value((1, 255), int(warn_pct)))
+            if warn_pct
+            else None
+        )
+        self._effect_color = _opt_rgb_color(cfg.get(CONF_EFFECT_RGB_COLOR))
+        self._warn_color = _opt_rgb_color(cfg.get(CONF_WARN_RGB_COLOR))
+        self._auto_on_transition = _opt_transition(cfg.get(CONF_AUTO_ON_TRANSITION))
+        self._auto_off_transition = _opt_transition(cfg.get(CONF_AUTO_OFF_TRANSITION))
+        self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
+        self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
+
+        self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)
+        self._maintain_entity = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
+        self._illuminance_entity = cfg.get(CONF_ILLUMINANCE_ENTITY)
+        self._illuminance_mode = cfg.get(
+            CONF_ILLUMINANCE_MODE, DEFAULT_ILLUMINANCE_MODE
+        )
+        self._schedule_entity = cfg.get(CONF_SCHEDULE_ENTITY)
+        self._schedule_mode = cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+        self._door_entity = cfg.get(CONF_DOOR_ENTITY)
+        self._door_mode = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
+        self._hold_entities = cfg.get(CONF_HOLD_ENTITIES, [])
+
     # ------------------------------------------------------------------
     # HA lifecycle
     # ------------------------------------------------------------------
@@ -488,6 +496,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None:
+            if self._is_scheduled_light:
+                active = last.attributes.get("active_settings")
+                if active in ("inside_schedule", "outside_schedule"):
+                    self._restored_inside_schedule = active == "inside_schedule"
             # Restore turn-on attribution so the illuminance re-activation
             # countdown keeps working across a restart.
             for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
@@ -544,17 +556,36 @@ class VirtualLight(LightEntity, RestoreEntity):
                 } or None
 
         watch = list(self._lights)
-        if self._occupancy_entity:
-            watch.append(self._occupancy_entity)
-        if self._maintain_entity:
-            watch.append(self._maintain_entity)
-        if self._illuminance_entity:
-            watch.append(self._illuminance_entity)
-        if self._schedule_entity:
-            watch.append(self._schedule_entity)
-        if self._door_entity:
-            watch.append(self._door_entity)
-        watch.extend(self._hold_entities)
+        if self._is_scheduled_light:
+            if self._settings_schedule_entity:
+                watch.append(self._settings_schedule_entity)
+            for settings in (
+                self._outside_schedule_settings,
+                self._inside_schedule_settings,
+            ):
+                watch.extend(
+                    settings.get(key)
+                    for key in (
+                        CONF_OCCUPANCY_ENTITY,
+                        CONF_MAINTAIN_OCCUPANCY_ENTITY,
+                        CONF_ILLUMINANCE_ENTITY,
+                        CONF_DOOR_ENTITY,
+                    )
+                    if settings.get(key)
+                )
+                watch.extend(settings.get(CONF_HOLD_ENTITIES, []))
+        else:
+            if self._occupancy_entity:
+                watch.append(self._occupancy_entity)
+            if self._maintain_entity:
+                watch.append(self._maintain_entity)
+            if self._illuminance_entity:
+                watch.append(self._illuminance_entity)
+            if self._schedule_entity:
+                watch.append(self._schedule_entity)
+            if self._door_entity:
+                watch.append(self._door_entity)
+            watch.extend(self._hold_entities)
         # One entity may serve several roles — subscribe to it only once.
         watch = list(dict.fromkeys(watch))
 
@@ -579,6 +610,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._on_auto_off_toggled,
                 )
             )
+            self._select_initial_settings()
             self._seed_state()
 
         if self.hass.state is CoreState.running:
@@ -596,6 +628,102 @@ class VirtualLight(LightEntity, RestoreEntity):
                     unsub_start()
 
             self.async_on_remove(_cancel_start)
+
+    def _select_initial_settings(self) -> None:
+        """Choose a scheduled light's settings once startup state is stable."""
+        if not self._is_scheduled_light:
+            return
+        schedule = (
+            self.hass.states.get(self._settings_schedule_entity)
+            if self._settings_schedule_entity
+            else None
+        )
+        if not self._settings_schedule_entity:
+            inside = False
+        elif schedule is not None and schedule.state in ("on", "off"):
+            inside = schedule.state == "on"
+        elif self._restored_inside_schedule is not None:
+            inside = self._restored_inside_schedule
+        else:
+            inside = False
+        if not self._settings_schedule_entity:
+            _LOGGER.warning(
+                "Virtual Scheduled Light %s has no schedule; "
+                "using outside-schedule settings",
+                self._attr_name,
+            )
+        self._inside_schedule = inside
+        self._apply_light_settings(
+            self._inside_schedule_settings
+            if inside
+            else self._outside_schedule_settings
+        )
+
+    def _switch_scheduled_settings(self, inside: bool) -> None:
+        """Select and reconcile a Virtual Scheduled Light settings mapping."""
+        if not self._is_scheduled_light or inside == self._inside_schedule:
+            return
+        self._inside_schedule = inside
+        self._apply_light_settings(
+            self._inside_schedule_settings
+            if inside
+            else self._outside_schedule_settings
+        )
+
+        # Seed stateful inputs from their current values. Inactive settings
+        # entities remain subscribed but are ignored by _handle_state_change.
+        door = self.hass.states.get(self._door_entity) if self._door_entity else None
+        self._door_open = door is not None and door.state == "on"
+        self._hold_states = {
+            entity_id: (state := self.hass.states.get(entity_id)) is not None
+            and state.state == "on"
+            for entity_id in self._hold_entities
+        }
+        old_held = self._held
+        self._held = self._compute_held()
+
+        if not self._attr_is_on:
+            if self._is_illuminance_bright():
+                self.async_write_ha_state()
+                return
+            if self._occupancy_active():
+                self._on_occupancy_change(occupied=True)
+            elif self._door_open:
+                self._on_door_change(True)
+            else:
+                self.async_write_ha_state()
+            return
+
+        if self._held and not old_held:
+            self._cancel_timer()
+            if self._in_warning():
+                self._machine_state = STATE_ACTIVE
+                self._resume_lights()
+            self.async_write_ha_state()
+            return
+
+        if old_held and not self._held:
+            self._resume_after_hold_release()
+            self.async_write_ha_state()
+            return
+
+        if (
+            self._is_illuminance_bright()
+            and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
+            and not self._held
+        ):
+            self.hass.async_create_task(self._auto_lights_off())
+            self._go_idle()
+            return
+
+        if self._occupancy_holds() or self._maintain_active() or self._door_holds():
+            self._adopt_active_occupancy()
+        elif self._machine_state == STATE_OCCUPIED:
+            # The previous settings held the light indefinitely; the new ones
+            # do not, so begin their normal timeout now.
+            self._machine_state = STATE_COUNTDOWN
+            self._start_timer()
+        self.async_write_ha_state()
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
@@ -820,6 +948,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._on_light_state_change(
                 new_state.state, new_state.attributes.get("brightness")
             )
+            return
+        if entity_id == self._settings_schedule_entity:
+            if not same_state and new_state.state in ("on", "off"):
+                self._switch_scheduled_settings(new_state.state == "on")
             return
         if same_state:
             return  # attribute-only change (battery, ...)
@@ -1958,7 +2090,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         def _fmt(t: datetime | None) -> str | None:
             return t.isoformat() if t else None
 
-        return {
+        attributes = {
             "molight_state": self._machine_state,
             "auto_off_held": self._held,
             "last_on_physical": _fmt(self._last_on_physical),
@@ -1983,3 +2115,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             "pre_warn_color": self._pre_warn_color,
             "schedule_window_start": self._schedule_window_applied,
         }
+        if self._is_scheduled_light:
+            attributes["active_settings"] = (
+                "inside_schedule" if self._inside_schedule else "outside_schedule"
+            )
+        return attributes

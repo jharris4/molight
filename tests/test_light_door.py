@@ -39,6 +39,8 @@ from custom_components.molight.const import (
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
+pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
+
 DOOR = "binary_sensor.door"
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"

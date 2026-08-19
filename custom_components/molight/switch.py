@@ -25,6 +25,7 @@ from .const import (
     DATA_AUTO_OFF_ENABLED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     SIGNAL_AUTO_OFF_TOGGLED,
 )
 from .helpers import molight_config, suggested_entity_id
@@ -41,7 +42,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the companion switch for a Virtual Light entry."""
-    if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT:
+    if entry.data[CONF_ENTITY_TYPE] in (
+        ENTITY_TYPE_LIGHT,
+        ENTITY_TYPE_SCHEDULED_LIGHT,
+    ):
         entity = AutoOffSwitch(hass, entry)
         # Parallel the light's explicit id: light.kitchen -> switch.kitchen_auto_off.
         if entity_id := suggested_entity_id(

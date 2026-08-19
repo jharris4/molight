@@ -13,6 +13,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Illuminance Sensor](#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
 | [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | On inside time windows defined by fixed times and/or sun events |
 | [Virtual Light](#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
+| [Virtual Scheduled Light](#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it |
 | [Virtual Remote](#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, …) to light actions — no automations |
 
 **Highlights** — everything below is covered by the automated test suite:
@@ -53,7 +54,7 @@ Everything is configured from the UI — no YAML. Adding an entry (the first via
 The usual order:
 
 1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time — it's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](#virtual-occupancy-binary-sensor)).
-2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. A virtual light with no sensors is still useful — it turns its lights off on a timer.
+2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful — it turns its lights off on a timer.
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
@@ -85,7 +86,7 @@ An optional **prefix**/**suffix** distinguishes the virtual entities from the re
 - **Entity ID** (default) — only the entity ID gets the affix, as the slug of the composed name (`v_` on a sensor named "Hallway Motion" → `binary_sensor.v_hallway_motion`); the friendly name stays identical to the source.
 - **Name** — the friendly name gets the affix, and the entity ID derives from the composed name.
 
-A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
+A final form then lets you adjust the default settings applied to every pick — for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**. Discovery creates regular Virtual Lights; Virtual Scheduled Lights are created only through **Add entry**.
 
 ### Bulk assignment
 
@@ -98,6 +99,8 @@ A final form then lets you adjust the default settings applied to every pick —
 The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
 Because occupancy feeds the turn-off countdown, the `light_timeout >= occupancy_timeout` guard applies here too: lights whose turn-off timeout is shorter than the sensor's effective timeout are skipped and named in the summary, so you can raise their timeouts and re-run.
+
+Bulk assignment currently applies only to regular Virtual Lights. Configure the sensors for a Virtual Scheduled Light in its outside- and inside-schedule settings instead.
 
 ## Examples
 
@@ -314,6 +317,24 @@ An optional **auto-on brightness** forces a level whenever the light comes on *a
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
+
+### Virtual Scheduled Light
+
+A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen Virtual Schedule Sensor selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
+
+Creation uses three main forms:
+
+1. Choose the name, lights, required schedule sensor, and optional Entity ID.
+2. Configure the outside-schedule settings.
+3. Configure the inside-schedule settings, initially copied from the completed outside-schedule settings.
+
+If either settings set uses a turn-on selection entity, its usual selection form appears immediately after that settings form. Editing uses the same sequence, but preserves the two saved settings sets independently.
+
+Changing schedule state switches which settings are used and immediately checks the newly selected sensors. It does not by itself change an already-on light's brightness, color, or fade. If the old occupancy settings were holding the light and the new settings are not, the new timeout starts; newly selected active occupancy or an open door can turn on an off light, and a newly selected illuminance sensor in `control` mode can force an on light off.
+
+The `active_settings` attribute reports `outside_schedule` or `inside_schedule`. On restart, a valid schedule state wins. While the schedule is unavailable or unknown, the last restored choice is kept; on a first start with no usable state, outside-schedule settings are used. If the schedule entry is deleted, the reference is removed, outside-schedule settings are used, and the light remains manually usable until a new schedule is chosen in **Configure**.
+
+This first version has one settings-switching behavior; it does not include a separate follow mode. Create it through the normal **Add entry** flow. Bulk discovery and bulk sensor assignment do not create or modify Virtual Scheduled Lights.
 
 ### Virtual Remote
 

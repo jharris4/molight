@@ -22,6 +22,8 @@ from custom_components.molight.const import (
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
+pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
+
 OCC = "binary_sensor.occ"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"

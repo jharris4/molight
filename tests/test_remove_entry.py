@@ -22,17 +22,22 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
+    CONF_DOOR_ENTITY,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
+    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHTS,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_ENTITY,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
@@ -46,7 +51,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import make_light_entry, settle
+from tests.conftest import make_light_entry, make_scheduled_light_entry, settle
 
 REMOVE_ERROR = "Unable to remove unknown job listener"
 
@@ -100,6 +105,12 @@ def _schedule_entry() -> MockConfigEntry:
 
 def _light_entry() -> MockConfigEntry:
     return make_light_entry(name="Rm Light")
+
+
+def _scheduled_light_entry() -> MockConfigEntry:
+    return make_scheduled_light_entry(
+        name="Rm Scheduled Light", schedule="binary_sensor.rm_schedule"
+    )
 
 
 def _remote_entry() -> MockConfigEntry:
@@ -159,6 +170,7 @@ async def _remove_and_assert_clean(
         _illuminance_entry,
         _schedule_entry,
         _light_entry,
+        _scheduled_light_entry,
         _remote_entry,
     ],
     ids=[
@@ -167,6 +179,7 @@ async def _remove_and_assert_clean(
         "illuminance",
         "schedule",
         "light",
+        "scheduled_light",
         "remote",
     ],
 )
@@ -289,6 +302,82 @@ async def test_remove_entry_strips_references_from_dependents(
     await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
     assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_strips_scheduled_light_references(
+    hass: HomeAssistant,
+) -> None:
+    """Shared and per-side references are cleaned from a scheduled light."""
+    occupancy = _occupancy_entry()
+    illuminance = _illuminance_entry()
+    schedule = _schedule_entry()
+    inner = make_light_entry(name="Rm Inner", lights=["light.inner_real"])
+    light = make_scheduled_light_entry(
+        name="Rm Scheduled Light",
+        lights=["light.rm_inner", "light.real_1"],
+        schedule="binary_sensor.rm_schedule",
+        outside={
+            CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy",
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.rm_illuminance",
+            CONF_HOLD_ENTITIES: ["binary_sensor.rm_occupancy", "input_boolean.guest"],
+        },
+        inside={
+            CONF_DOOR_ENTITY: "binary_sensor.rm_occupancy",
+            CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy",
+            CONF_ILLUMINANCE_ENTITY: "binary_sensor.rm_illuminance",
+        },
+    )
+    for entry in (occupancy, illuminance, schedule, inner):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    # Pin the selected side before loading the light; deleting the schedule
+    # must visibly move an inside-schedule light to its outside settings.
+    hass.states.async_set("binary_sensor.rm_schedule", "on")
+    light.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(light.entry_id)
+    await settle(hass)
+    assert (
+        hass.states.get("light.rm_scheduled_light").attributes["active_settings"]
+        == "inside_schedule"
+    )
+
+    await hass.config_entries.async_remove(occupancy.entry_id)
+    await settle(hass)
+
+    cfg = molight_config(light)
+    assert CONF_OCCUPANCY_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_DOOR_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert CONF_MAINTAIN_OCCUPANCY_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_HOLD_ENTITIES] == [
+        "input_boolean.guest"
+    ]
+
+    await hass.config_entries.async_remove(illuminance.entry_id)
+    await settle(hass)
+    cfg = molight_config(light)
+    assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+
+    await hass.config_entries.async_remove(inner.entry_id)
+    await settle(hass)
+    assert molight_config(light)[CONF_LIGHTS] == ["light.real_1"]
+
+    await hass.config_entries.async_remove(schedule.entry_id)
+    await settle(hass)
+    assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+    state = hass.states.get("light.rm_scheduled_light")
+    assert state is not None
+    assert state.attributes["active_settings"] == "outside_schedule"
+
+    # The missing schedule is a configuration problem, not a reason to make
+    # the surviving light unusable by dashboards or voice control.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.rm_scheduled_light"}
+    )
+    await settle(hass)
+    assert hass.states.get("light.rm_scheduled_light").state == "on"
 
 
 @pytest.mark.asyncio

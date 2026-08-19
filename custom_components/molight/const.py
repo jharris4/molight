@@ -10,6 +10,7 @@ ENTITY_TYPE_COMBINED_OCCUPANCY = "combined_occupancy"
 ENTITY_TYPE_ILLUMINANCE = "illuminance"
 ENTITY_TYPE_SCHEDULE = "schedule"
 ENTITY_TYPE_LIGHT = "light"
+ENTITY_TYPE_SCHEDULED_LIGHT = "scheduled_light"
 ENTITY_TYPE_REMOTE = "remote"
 
 ENTITY_TYPES = [
@@ -18,6 +19,7 @@ ENTITY_TYPES = [
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_LIGHT,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     ENTITY_TYPE_REMOTE,
 ]
 
@@ -122,6 +124,11 @@ SUN_EVENTS = ["sunset", "sunrise"]
 
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
+# A Virtual Scheduled Light keeps its shared identity/targets/schedule at the
+# entry's top level and stores two complete Virtual Light settings mappings.
+# The schedule's binary state selects outside (off) vs inside (on).
+CONF_OUTSIDE_SCHEDULE_SETTINGS = "outside_schedule_settings"
+CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on

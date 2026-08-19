@@ -19,8 +19,12 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_ENTITY_TYPE,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_ENTITY,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -31,6 +35,8 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
+
+pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 OCC = "binary_sensor.occ"
 SCHED = "binary_sensor.sched"
@@ -50,7 +56,15 @@ def _mstate(hass: HomeAssistant) -> str:
 async def _update_options(hass: HomeAssistant, entry, **overrides) -> None:
     """Simulate the options flow: full config stored as options, then reload."""
     opts = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
-    opts.update(overrides)
+    if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
+        settings_key = (
+            CONF_INSIDE_SCHEDULE_SETTINGS
+            if hass.states.is_state(entry.data[CONF_SCHEDULE_ENTITY], "on")
+            else CONF_OUTSIDE_SCHEDULE_SETTINGS
+        )
+        opts[settings_key] = {**opts[settings_key], **overrides}
+    else:
+        opts.update(overrides)
     # The options flow drops cleared (None) fields entirely.
     opts = {k: v for k, v in opts.items() if v is not None}
     hass.config_entries.async_update_entry(entry, options=opts)

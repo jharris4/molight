@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 import pytest
@@ -28,6 +29,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
@@ -35,6 +37,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -49,10 +52,50 @@ from custom_components.molight.const import (
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
 )
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+
+
+_LIGHT_BEHAVIOR_VARIANT: ContextVar[str] = ContextVar(
+    "light_behavior_variant", default="regular"
+)
+_BEHAVIOR_SCHEDULE = "binary_sensor.virtual_light_behavior_schedule"
+
+
+def light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
+    """Adapt a regular Virtual Light entry for the shared behavior suite."""
+    variant = _LIGHT_BEHAVIOR_VARIANT.get()
+    if variant == "regular" or entry.data.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT:
+        return entry
+    if CONF_SCHEDULE_ENTITY in entry.data or CONF_SCHEDULE_MODE in entry.data:
+        pytest.skip("Regular Virtual Light schedule modes do not apply")
+
+    settings = {
+        key: value
+        for key, value in entry.data.items()
+        if key not in (CONF_ENTITY_TYPE, CONF_NAME, CONF_LIGHTS)
+    }
+    # Deliberately make the inactive side unlike the active one. This ensures
+    # the shared behavior tests fail if a scheduled light loads the wrong map.
+    inactive_settings = {CONF_LIGHT_TIMEOUT: 9999}
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: entry.data[CONF_NAME],
+            CONF_LIGHTS: entry.data[CONF_LIGHTS],
+            CONF_SCHEDULE_ENTITY: _BEHAVIOR_SCHEDULE,
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: (
+                settings if variant == "scheduled_outside" else inactive_settings
+            ),
+            CONF_INSIDE_SCHEDULE_SETTINGS: (
+                settings if variant == "scheduled_inside" else inactive_settings
+            ),
+        },
+    )
 
 
 async def settle(hass: HomeAssistant) -> None:
@@ -163,7 +206,30 @@ def make_light_entry(
         data[CONF_TURN_ON_SELECT_OPTION] = turn_on_select_option
     if turn_on_select_source_entity is not None:
         data[CONF_TURN_ON_SELECT_SOURCE_ENTITY] = turn_on_select_source_entity
-    return MockConfigEntry(domain=DOMAIN, data=data)
+    return light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
+
+
+def make_scheduled_light_entry(
+    *,
+    name: str = "Scheduled Light",
+    lights: list[str] | None = None,
+    schedule: str = "binary_sensor.settings_schedule",
+    outside: dict | None = None,
+    inside: dict | None = None,
+) -> MockConfigEntry:
+    """Build a Virtual Scheduled Light entry with two flat settings mappings."""
+    default_settings = {CONF_LIGHT_TIMEOUT: 60}
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: name,
+            CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
+            CONF_SCHEDULE_ENTITY: schedule,
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: outside or default_settings,
+            CONF_INSIDE_SCHEDULE_SETTINGS: inside or default_settings,
+        },
+    )
 
 
 async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
@@ -177,6 +243,23 @@ async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable loading of custom integrations in tests."""
     return
+
+
+@pytest.fixture(
+    params=["regular", "scheduled_outside", "scheduled_inside"],
+    ids=["regular", "scheduled-outside", "scheduled-inside"],
+)
+def virtual_light_behavior_variant(request, hass: HomeAssistant):
+    """Run common Virtual Light behavior against all applicable entry types."""
+    variant = request.param
+    token = _LIGHT_BEHAVIOR_VARIANT.set(variant)
+    if variant != "regular":
+        hass.states.async_set(
+            _BEHAVIOR_SCHEDULE,
+            "on" if variant == "scheduled_inside" else "off",
+        )
+    yield variant
+    _LIGHT_BEHAVIOR_VARIANT.reset(token)
 
 
 @pytest.fixture
@@ -223,12 +306,14 @@ def schedule_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def light_entry() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
-            CONF_NAME: "Test Light",
-            CONF_LIGHTS: ["light.living_room"],
-            CONF_LIGHT_TIMEOUT: 60,
-        },
+    return light_behavior_entry(
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+                CONF_NAME: "Test Light",
+                CONF_LIGHTS: ["light.living_room"],
+                CONF_LIGHT_TIMEOUT: 60,
+            },
+        )
     )

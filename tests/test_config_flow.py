@@ -35,6 +35,7 @@ from custom_components.molight.const import (
     CONF_ASSIGN_ROLE,
     CONF_ASSIGN_SENSOR,
     CONF_AUTO_OFF_TRANSITION,
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
@@ -57,6 +58,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
@@ -65,6 +67,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
@@ -85,6 +88,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_GATE,
 )
@@ -374,6 +378,365 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     assert result["data"][CONF_EFFECT_TIMEOUT] == 0
     assert result["data"][CONF_WARN_TIMEOUT] == 0
     assert CONF_WARN_BRIGHTNESS not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
+    """The three main forms store two independent Virtual Light settings maps."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    assert result["step_id"] == "scheduled_light"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "scheduled_hallway"},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.day_occupancy"},
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 80},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_LIGHT_TIMEOUT] == 300
+    assert suggested[SECTION_SENSORS][CONF_OCCUPANCY_ENTITY] == (
+        "binary_sensor.day_occupancy"
+    )
+    assert suggested[SECTION_BEHAVIOR][CONF_AUTO_ON_BRIGHTNESS] == 80
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.night_occupancy"},
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 20},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert data[CONF_ENTITY_ID] == "scheduled_hallway"
+    assert "outside_schedule_settings" in data
+    assert "inside_schedule_settings" in data
+    assert "outside_settings" not in data
+    assert "inside_settings" not in data
+    assert data[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 300
+    assert data[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_AUTO_ON_BRIGHTNESS] == 80
+    assert data[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 60
+    assert data[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_AUTO_ON_BRIGHTNESS] == 20
+    assert CONF_SCHEDULE_ENTITY not in data[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_SCHEDULE_ENTITY not in data[CONF_INSIDE_SCHEDULE_SETTINGS]
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_turn_on_selection_for_each_side(
+    hass: HomeAssistant,
+) -> None:
+    """Each settings map gets its own generic turn-on selection page."""
+    hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_selection"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Day"}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_selection"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Night"}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert (
+        result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION]
+        == "Day"
+    )
+    assert (
+        result["data"][CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION]
+        == "Night"
+    )
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_edit_both_settings(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow uses the same three main forms and preserves each side."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_AUTO_ON_BRIGHTNESS: 20,
+            },
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["step_id"] == "scheduled_light"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway Updated",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 240},
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_LIGHT_TIMEOUT] == 60
+    assert suggested[SECTION_BEHAVIOR][CONF_AUTO_ON_BRIGHTNESS] == 20
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 45,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 15},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    cfg = molight_config(entry)
+    assert cfg[CONF_NAME] == "Hallway Updated"
+    assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 240
+    assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 45
+    assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_AUTO_ON_BRIGHTNESS] == 15
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_requires_replacing_deleted_schedule(
+    hass: HomeAssistant,
+) -> None:
+    """A removed shared schedule cannot be saved as an empty selection."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    schedule_marker = next(
+        marker
+        for marker in result["data_schema"].schema
+        if str(marker) == CONF_SCHEDULE_ENTITY
+    )
+    assert isinstance(schedule_marker, vol.Required)
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_validates_each_side_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Both settings forms enforce the referenced occupancy timeout."""
+    await setup_entries(hass, occupancy_entry)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+
+    too_short = {
+        **EMPTY_LIGHT_SECTIONS,
+        CONF_LIGHT_TIMEOUT: 20,
+        SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], too_short
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+
+    valid = {**too_short, CONF_LIGHT_TIMEOUT: 60}
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], valid)
+    assert result["step_id"] == "scheduled_light_inside"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], too_short
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], valid)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_occupancy_edit_checks_both_scheduled_light_sides(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Raising an occupancy timeout respects the shorter settings side."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            },
+            CONF_INSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 30,
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
+            },
+        },
+    )
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 45,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["errors"] == {CONF_OCCUPANCY_TIMEOUT: "occupancy_timeout_too_long"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 25,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_derived_id_collision_can_go_back(
+    hass: HomeAssistant,
+) -> None:
+    """The late collision prompt preserves all three completed forms."""
+    hass.states.async_set("light.hallway", "off")
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    shared = {
+        CONF_NAME: "Hallway",
+        CONF_LIGHTS: ["light.real_hallway"],
+        CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+        SECTION_ADVANCED: {},
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], shared)
+    outside = {
+        **EMPTY_LIGHT_SECTIONS,
+        CONF_LIGHT_TIMEOUT: 300,
+        SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 80},
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], outside)
+    inside = {
+        **EMPTY_LIGHT_SECTIONS,
+        CONF_LIGHT_TIMEOUT: 60,
+        SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 20},
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], inside)
+    assert result["step_id"] == "confirm_entity_id"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_change"}
+    )
+    assert result["step_id"] == "scheduled_light"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "Hallway"
+    assert suggested[CONF_LIGHTS] == ["light.real_hallway"]
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **shared,
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "scheduled_hallway"},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_LIGHT_TIMEOUT] == 300
+    assert suggested[SECTION_BEHAVIOR][CONF_AUTO_ON_BRIGHTNESS] == 80
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], outside)
+    assert result["step_id"] == "scheduled_light_inside"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_LIGHT_TIMEOUT] == 60
+    assert suggested[SECTION_BEHAVIOR][CONF_AUTO_ON_BRIGHTNESS] == 20
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], inside)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "scheduled_hallway"
 
 
 @pytest.mark.asyncio

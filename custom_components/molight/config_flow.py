@@ -58,6 +58,7 @@ from .const import (
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
@@ -66,6 +67,7 @@ from .const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
@@ -106,6 +108,7 @@ from .const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODES,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
@@ -578,11 +581,22 @@ def _min_dependent_light_timeout(
     timeouts = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         cfg = _molight_cfg(entry)
-        if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and (
-            cfg.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
-            or cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in dependent_ids
-        ):
-            timeouts.append(int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)))
+        settings_sets = []
+        if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT:
+            settings_sets.append(cfg)
+        elif cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT:
+            settings_sets.extend(
+                (
+                    cfg.get(CONF_OUTSIDE_SCHEDULE_SETTINGS, {}),
+                    cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS, {}),
+                )
+            )
+        timeouts.extend(
+            int(settings.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+            for settings in settings_sets
+            if settings.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
+            or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in dependent_ids
+        )
     return min(timeouts, default=None)
 
 
@@ -763,6 +777,34 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_light_settings(
+    hass: HomeAssistant, settings: dict[str, Any]
+) -> dict[str, str]:
+    """Validate one flat Virtual Light settings mapping."""
+    errors = _validate_light_timeout(hass, settings)
+    errors.update(_validate_stage_transitions(settings))
+    errors.update(_validate_colors(settings))
+    return errors
+
+
+def _clean_optional_values(values: dict[str, Any]) -> dict[str, Any]:
+    """Drop cleared optional form values before storing a settings mapping."""
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def _carry_turn_on_selection(
+    values: dict[str, Any], previous: dict[str, Any] | None
+) -> None:
+    """Keep hidden selection-step values while its target stays unchanged."""
+    if not previous or values.get(CONF_TURN_ON_SELECT_ENTITY) != previous.get(
+        CONF_TURN_ON_SELECT_ENTITY
+    ):
+        return
+    for key in (CONF_TURN_ON_SELECT_OPTION, CONF_TURN_ON_SELECT_SOURCE_ENTITY):
+        if key in previous:
+            values[key] = previous[key]
+
+
 # ---------------------------------------------------------------------------
 # Shared option-field schemas
 #
@@ -827,7 +869,9 @@ def _illuminance_option_fields() -> dict:
     }
 
 
-def _light_option_fields(*, with_entity_id: bool = False) -> dict:
+def _light_option_fields(
+    *, with_entity_id: bool = False, with_schedule: bool = True
+) -> dict:
     """Sectioned settings of a virtual light.
 
     Only the turn-off timeout stays top-level; everything else is grouped:
@@ -835,6 +879,59 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
     fine to start with), the sensor wiring expanded since it is the point of
     a virtual light. Each mode dropdown sits next to its entity picker.
     """
+    sensor_fields: dict = {
+        vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
+        ),
+        vol.Optional(CONF_MAINTAIN_OCCUPANCY_ENTITY): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_MAINTAIN_OCCUPANCY_ENTITY]
+        ),
+        vol.Optional(CONF_ILLUMINANCE_ENTITY): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
+        ),
+        vol.Required(
+            CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=ILLUMINANCE_MODES,
+                translation_key=CONF_ILLUMINANCE_MODE,
+            )
+        ),
+    }
+    if with_schedule:
+        sensor_fields.update(
+            {
+                vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
+                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                ),
+                vol.Required(
+                    CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=SCHEDULE_MODES,
+                        translation_key=CONF_SCHEDULE_MODE,
+                    )
+                ),
+            }
+        )
+    sensor_fields.update(
+        {
+            vol.Optional(CONF_DOOR_ENTITY): selector.EntitySelector(
+                _LIGHT_REF_SELECTORS[CONF_DOOR_ENTITY]
+            ),
+            vol.Required(CONF_DOOR_MODE, default=DEFAULT_DOOR_MODE): (
+                selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=DOOR_MODES, translation_key=CONF_DOOR_MODE
+                    )
+                )
+            ),
+            vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
+                _LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES]
+            ),
+        }
+    )
+
     fields: dict = {
         vol.Required(
             CONF_LIGHT_TIMEOUT, default=DEFAULT_LIGHT_TIMEOUT
@@ -844,52 +941,7 @@ def _light_option_fields(*, with_entity_id: bool = False) -> dict:
             )
         ),
         vol.Required(SECTION_SENSORS): section(
-            vol.Schema(
-                {
-                    vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
-                    ),
-                    vol.Optional(
-                        CONF_MAINTAIN_OCCUPANCY_ENTITY
-                    ): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_MAINTAIN_OCCUPANCY_ENTITY]
-                    ),
-                    vol.Optional(CONF_ILLUMINANCE_ENTITY): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
-                    ),
-                    vol.Required(
-                        CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=ILLUMINANCE_MODES,
-                            translation_key=CONF_ILLUMINANCE_MODE,
-                        )
-                    ),
-                    vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
-                    ),
-                    vol.Required(
-                        CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=SCHEDULE_MODES, translation_key=CONF_SCHEDULE_MODE
-                        )
-                    ),
-                    vol.Optional(CONF_DOOR_ENTITY): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_DOOR_ENTITY]
-                    ),
-                    vol.Required(
-                        CONF_DOOR_MODE, default=DEFAULT_DOOR_MODE
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=DOOR_MODES, translation_key=CONF_DOOR_MODE
-                        )
-                    ),
-                    vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
-                        _LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES]
-                    ),
-                }
-            ),
+            vol.Schema(sensor_fields),
             {"collapsed": False},
         ),
         vol.Required(SECTION_BEHAVIOR): section(
@@ -1189,6 +1241,13 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # trip through the entity-id collision menu can prefill them again.
         self._light_pending: dict[str, Any] | None = None
         self._light_selection_values: dict[str, Any] = {}
+        # Cross-step state for the Virtual Scheduled Light's shared form and
+        # its outside-schedule/inside-schedule Virtual Light settings forms.
+        self._scheduled_light_shared: dict[str, Any] | None = None
+        self._scheduled_light_shared_input: dict[str, Any] | None = None
+        self._outside_schedule_settings: dict[str, Any] | None = None
+        self._inside_schedule_settings: dict[str, Any] | None = None
+        self._scheduled_light_pending_side: str | None = None
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
         # Stashed discovery state across the three discovery steps: the
@@ -1212,6 +1271,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
+            ENTITY_TYPE_SCHEDULED_LIGHT: self.async_step_scheduled_light,
             ENTITY_TYPE_REMOTE: self.async_step_remote,
         }[entity_type]
 
@@ -1350,6 +1410,7 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 ENTITY_TYPE_ILLUMINANCE,
                                 ENTITY_TYPE_SCHEDULE,
                                 ENTITY_TYPE_LIGHT,
+                                ENTITY_TYPE_SCHEDULED_LIGHT,
                                 ENTITY_TYPE_REMOTE,
                             ],
                             translation_key=CONF_ENTITY_TYPE,
@@ -2217,6 +2278,181 @@ class MoLightConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------
+    # Virtual Scheduled Light
+    # ------------------------------------------------------------------
+
+    async def async_step_scheduled_light(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose the shared identity, targets and schedule."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            if not flat.get(CONF_LIGHTS):
+                errors[CONF_LIGHTS] = "lights_required"
+            if not errors:
+                _, entity_errors, _, _ = self._resolve_entity_id(
+                    flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
+                )
+                errors.update(entity_errors)
+            if not errors:
+                self._scheduled_light_shared = flat
+                self._scheduled_light_shared_input = user_input
+                return await self.async_step_scheduled_light_outside()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_LIGHTS): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                ),
+                vol.Required(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
+                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                ),
+                **_entity_id_section(),
+            }
+        )
+        return self.async_show_form(
+            step_id="scheduled_light",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or self._prefill or {}
+            ),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_outside(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure settings used outside the schedule."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            errors = _validate_light_settings(self.hass, flat)
+            if not errors:
+                _carry_turn_on_selection(flat, self._outside_schedule_settings)
+                self._outside_schedule_settings = _clean_optional_values(flat)
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._scheduled_light_pending_side = CONF_OUTSIDE_SCHEDULE_SETTINGS
+                    return await self.async_step_scheduled_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
+                return await self.async_step_scheduled_light_inside()
+
+        schema = vol.Schema(_light_option_fields(with_schedule=False))
+        suggested = (
+            _nest_sections(self._outside_schedule_settings, _LIGHT_SECTIONS)
+            if self._outside_schedule_settings
+            else {}
+        )
+        return self.async_show_form(
+            step_id="scheduled_light_outside",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or suggested
+            ),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_inside(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure settings used inside the schedule."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            errors = _validate_light_settings(self.hass, flat)
+            if not errors:
+                previous = (
+                    self._inside_schedule_settings or self._outside_schedule_settings
+                )
+                _carry_turn_on_selection(flat, previous)
+                self._inside_schedule_settings = _clean_optional_values(flat)
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._scheduled_light_pending_side = CONF_INSIDE_SCHEDULE_SETTINGS
+                    return await self.async_step_scheduled_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
+                return await self._finish_scheduled_light()
+
+        # On creation, copy the completed outside-schedule settings.
+        suggested_settings = (
+            self._inside_schedule_settings or self._outside_schedule_settings
+        )
+        suggested = (
+            _nest_sections(suggested_settings, _LIGHT_SECTIONS)
+            if suggested_settings
+            else {}
+        )
+        schema = vol.Schema(_light_option_fields(with_schedule=False))
+        return self.async_show_form(
+            step_id="scheduled_light_inside",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or suggested
+            ),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_selection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose the turn-on selection values for one settings mapping."""
+        side = self._scheduled_light_pending_side
+        current = (
+            self._outside_schedule_settings
+            if side == CONF_OUTSIDE_SCHEDULE_SETTINGS
+            else self._inside_schedule_settings
+        )
+        flat = dict(current)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flat.update(user_input)
+            errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors:
+                if side == CONF_OUTSIDE_SCHEDULE_SETTINGS:
+                    self._outside_schedule_settings = _clean_optional_values(flat)
+                    return await self.async_step_scheduled_light_inside()
+                self._inside_schedule_settings = _clean_optional_values(flat)
+                return await self._finish_scheduled_light()
+
+        target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {
+            key: flat[key]
+            for key in (
+                CONF_TURN_ON_SELECT_OPTION,
+                CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+            )
+            if key in flat
+        }
+        return self.async_show_form(
+            step_id="scheduled_light_selection",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_turn_on_selection_fields(target)),
+                user_input or suggested,
+            ),
+            errors=errors,
+            description_placeholders={"entity_id": target},
+        )
+
+    async def _finish_scheduled_light(self) -> config_entries.FlowResult:
+        """Create the entry after both settings mappings are complete."""
+        shared = dict(self._scheduled_light_shared)
+        data = {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            **shared,
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: self._outside_schedule_settings,
+            CONF_INSIDE_SCHEDULE_SETTINGS: self._inside_schedule_settings,
+        }
+        result, errors = await self._resolve_and_create(
+            entity_type=ENTITY_TYPE_SCHEDULED_LIGHT,
+            name=shared[CONF_NAME],
+            data=data,
+            prefill=self._scheduled_light_shared_input,
+            entity_id_format=LIGHT_ENTITY_ID_FORMAT,
+        )
+        # An explicit collision was already checked on the first step. The
+        # remaining path is either creation or the normal derived-id menu.
+        if result is not None:
+            return result
+        return self.async_abort(reason=next(iter(errors.values())))
+
+    # ------------------------------------------------------------------
     # Virtual Remote
     # ------------------------------------------------------------------
 
@@ -2278,6 +2514,10 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             )
             if key in self._cfg
         }
+        self._scheduled_light_shared: dict[str, Any] | None = None
+        self._outside_schedule_settings: dict[str, Any] | None = None
+        self._inside_schedule_settings: dict[str, Any] | None = None
+        self._scheduled_light_pending_side: str | None = None
 
     def _finish(self, data: dict[str, Any]) -> config_entries.FlowResult:
         """Store the edited options, syncing the entry title to the new name.
@@ -2300,6 +2540,7 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
+            ENTITY_TYPE_SCHEDULED_LIGHT: self.async_step_scheduled_light,
             ENTITY_TYPE_REMOTE: self.async_step_remote,
         }[self._cfg[CONF_ENTITY_TYPE]]()
 
@@ -2582,6 +2823,150 @@ class MoLightOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
             description_placeholders={"entity_id": target},
+        )
+
+    # ------------------------------------------------------------------
+    # Virtual Scheduled Light
+    # ------------------------------------------------------------------
+
+    async def async_step_scheduled_light(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit the shared identity, targets and schedule."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not user_input.get(CONF_LIGHTS):
+                errors[CONF_LIGHTS] = "lights_required"
+            if not errors:
+                self._scheduled_light_shared = dict(user_input)
+                return await self.async_step_scheduled_light_outside()
+
+        cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                ),
+                vol.Required(
+                    CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)
+                ): selector.EntitySelector(_LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]),
+            }
+        )
+        return self.async_show_form(
+            step_id="scheduled_light",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or cfg),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_outside(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit settings used outside the schedule."""
+        errors: dict[str, str] = {}
+        previous = self._cfg.get(CONF_OUTSIDE_SCHEDULE_SETTINGS, {})
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            errors = _validate_light_settings(self.hass, flat)
+            if not errors:
+                _carry_turn_on_selection(flat, previous)
+                self._outside_schedule_settings = _clean_optional_values(flat)
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._scheduled_light_pending_side = CONF_OUTSIDE_SCHEDULE_SETTINGS
+                    return await self.async_step_scheduled_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
+                return await self.async_step_scheduled_light_inside()
+
+        settings = self._outside_schedule_settings or previous
+        return self.async_show_form(
+            step_id="scheduled_light_outside",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_light_option_fields(with_schedule=False)),
+                user_input or _nest_sections(settings, _LIGHT_SECTIONS),
+            ),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_inside(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit settings used inside the schedule."""
+        errors: dict[str, str] = {}
+        previous = self._cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS, {})
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            errors = _validate_light_settings(self.hass, flat)
+            if not errors:
+                _carry_turn_on_selection(flat, previous)
+                self._inside_schedule_settings = _clean_optional_values(flat)
+                if flat.get(CONF_TURN_ON_SELECT_ENTITY):
+                    self._scheduled_light_pending_side = CONF_INSIDE_SCHEDULE_SETTINGS
+                    return await self.async_step_scheduled_light_selection()
+                _validate_turn_on_selection(self.hass, flat)
+                return self._finish_scheduled_light()
+
+        settings = self._inside_schedule_settings or previous
+        return self.async_show_form(
+            step_id="scheduled_light_inside",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_light_option_fields(with_schedule=False)),
+                user_input or _nest_sections(settings, _LIGHT_SECTIONS),
+            ),
+            errors=errors,
+        )
+
+    async def async_step_scheduled_light_selection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit turn-on selection values for one settings mapping."""
+        side = self._scheduled_light_pending_side
+        current = (
+            self._outside_schedule_settings
+            if side == CONF_OUTSIDE_SCHEDULE_SETTINGS
+            else self._inside_schedule_settings
+        )
+        flat = dict(current)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flat.update(user_input)
+            errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors:
+                if side == CONF_OUTSIDE_SCHEDULE_SETTINGS:
+                    self._outside_schedule_settings = _clean_optional_values(flat)
+                    return await self.async_step_scheduled_light_inside()
+                self._inside_schedule_settings = _clean_optional_values(flat)
+                return self._finish_scheduled_light()
+
+        target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {
+            key: flat[key]
+            for key in (
+                CONF_TURN_ON_SELECT_OPTION,
+                CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+            )
+            if key in flat
+        }
+        return self.async_show_form(
+            step_id="scheduled_light_selection",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_turn_on_selection_fields(target)),
+                user_input or suggested,
+            ),
+            errors=errors,
+            description_placeholders={"entity_id": target},
+        )
+
+    def _finish_scheduled_light(self) -> config_entries.FlowResult:
+        """Store both settings mappings as one complete options payload."""
+        shared = self._scheduled_light_shared
+        return self._finish(
+            {
+                **shared,
+                CONF_OUTSIDE_SCHEDULE_SETTINGS: self._outside_schedule_settings,
+                CONF_INSIDE_SCHEDULE_SETTINGS: self._inside_schedule_settings,
+            }
         )
 
     # ------------------------------------------------------------------

@@ -34,6 +34,8 @@ from custom_components.molight.const import (
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
+pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
