@@ -332,6 +332,18 @@ def _opt_rgb_color(value: list | None) -> dict | None:
     return {ATTR_RGB_COLOR: tuple(int(c) for c in value)} if value else None
 
 
+# Single-entity settings references a light subscribes to. A scheduled light
+# subscribes to both sides' references; events from the inactive side simply
+# match no role in _handle_state_change.
+_WATCHED_REFERENCE_KEYS = (
+    CONF_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_ILLUMINANCE_ENTITY,
+    CONF_SCHEDULE_ENTITY,
+    CONF_DOOR_ENTITY,
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -379,11 +391,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._inside_schedule = False
         self._restored_inside_schedule: bool | None = None
-
-        settings = (
-            self._outside_schedule_settings if self._is_scheduled_light else entry_cfg
+        # Every settings mapping this light may run under — both sides of a
+        # scheduled light, or the regular light's own config — so the entity
+        # references of all of them can be subscribed to up front.
+        self._settings_sets: tuple[dict[str, Any], ...] = (
+            (self._outside_schedule_settings, self._inside_schedule_settings)
+            if self._is_scheduled_light
+            else (entry_cfg,)
         )
-        self._apply_light_settings(settings)
+        self._apply_light_settings(self._settings_sets[0])
 
         self._last_turn_on_selection_option: str | None = None
         self._last_turn_on_selection_source: str | None = None
@@ -586,36 +602,15 @@ class VirtualLight(LightEntity, RestoreEntity):
                 } or None
 
         watch = list(self._lights)
-        if self._is_scheduled_light:
-            if self._settings_schedule_entity:
-                watch.append(self._settings_schedule_entity)
-            for settings in (
-                self._outside_schedule_settings,
-                self._inside_schedule_settings,
-            ):
-                watch.extend(
-                    settings.get(key)
-                    for key in (
-                        CONF_OCCUPANCY_ENTITY,
-                        CONF_MAINTAIN_OCCUPANCY_ENTITY,
-                        CONF_ILLUMINANCE_ENTITY,
-                        CONF_DOOR_ENTITY,
-                    )
-                    if settings.get(key)
-                )
-                watch.extend(settings.get(CONF_HOLD_ENTITIES, []))
-        else:
-            if self._occupancy_entity:
-                watch.append(self._occupancy_entity)
-            if self._maintain_entity:
-                watch.append(self._maintain_entity)
-            if self._illuminance_entity:
-                watch.append(self._illuminance_entity)
-            if self._schedule_entity:
-                watch.append(self._schedule_entity)
-            if self._door_entity:
-                watch.append(self._door_entity)
-            watch.extend(self._hold_entities)
+        if self._settings_schedule_entity:
+            watch.append(self._settings_schedule_entity)
+        for settings in self._settings_sets:
+            watch.extend(
+                entity_id
+                for key in _WATCHED_REFERENCE_KEYS
+                if (entity_id := settings.get(key))
+            )
+            watch.extend(settings.get(CONF_HOLD_ENTITIES, []))
         # One entity may serve several roles — subscribe to it only once.
         watch = list(dict.fromkeys(watch))
 
