@@ -183,6 +183,35 @@ async def test_schedule_end_off_still_checks_outside_sensors_for_off_light(
 
 
 @pytest.mark.asyncio
+async def test_schedule_end_off_still_checks_outside_door_for_off_light(
+    hass: HomeAssistant,
+) -> None:
+    """turn_off on an already-off light also honours an open outside door."""
+    door = "binary_sensor.outside_door"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(door, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_DOOR_ENTITY: door,
+            CONF_AUTO_ON_BRIGHTNESS: 25,
+        },
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 64
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_off_leaves_forced_off_light_off(
     hass: HomeAssistant,
 ) -> None:
