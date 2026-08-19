@@ -1232,6 +1232,21 @@ def _molight_light_entries(
     return result
 
 
+def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
+    """Return True when a light config may be converted in the given direction.
+
+    Gated → scheduled needs a regular light with a schedule in either gate
+    mode; scheduled → gated needs a scheduled light with a schedule.
+    """
+    if not cfg.get(CONF_SCHEDULE_ENTITY):
+        return False
+    if to_scheduled:
+        return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and cfg.get(
+            CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE
+        ) in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
+    return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT
+
+
 _SCHEDULED_LIGHT_SIDES = (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS)
 _SCHEDULED_LIGHT_STEP_IDS = {
     CONF_OUTSIDE_SCHEDULE_SETTINGS: "scheduled_light_outside",
@@ -1897,19 +1912,12 @@ class MoLightConfigFlow(
     ) -> dict[str, config_entries.ConfigEntry]:
         """Return entity-id keyed entries eligible for one conversion direction."""
         entity_type = ENTITY_TYPE_LIGHT if to_scheduled else ENTITY_TYPE_SCHEDULED_LIGHT
-        entries = _molight_light_entries(self.hass, (entity_type,))
-        if to_scheduled:
-            return {
-                entity_id: entry
-                for entity_id, entry in entries.items()
-                if (cfg := _molight_cfg(entry)).get(CONF_SCHEDULE_ENTITY)
-                and cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
-                in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
-            }
         return {
             entity_id: entry
-            for entity_id, entry in entries.items()
-            if _molight_cfg(entry).get(CONF_SCHEDULE_ENTITY)
+            for entity_id, entry in _molight_light_entries(
+                self.hass, (entity_type,)
+            ).items()
+            if _conversion_eligible(_molight_cfg(entry), to_scheduled=to_scheduled)
         }
 
     def _conversion_option(
@@ -2097,23 +2105,14 @@ class MoLightConfigFlow(
                     if entry is None:
                         return self.async_abort(reason="conversion_targets_changed")
                     cfg = _molight_cfg(entry)
-                    if self._conversion["to_scheduled"]:
-                        if (
-                            cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT
-                            or not cfg.get(CONF_SCHEDULE_ENTITY)
-                            or cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
-                            not in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
-                        ):
-                            return self.async_abort(reason="conversion_targets_changed")
-                        data = self._converted_scheduled_data(entry, cfg)
-                    else:
-                        if cfg.get(
-                            CONF_ENTITY_TYPE
-                        ) != ENTITY_TYPE_SCHEDULED_LIGHT or not cfg.get(
-                            CONF_SCHEDULE_ENTITY
-                        ):
-                            return self.async_abort(reason="conversion_targets_changed")
-                        data = self._converted_regular_data(entry, cfg)
+                    to_scheduled = self._conversion["to_scheduled"]
+                    if not _conversion_eligible(cfg, to_scheduled=to_scheduled):
+                        return self.async_abort(reason="conversion_targets_changed")
+                    data = (
+                        self._converted_scheduled_data(entry, cfg)
+                        if to_scheduled
+                        else self._converted_regular_data(entry, cfg)
+                    )
                     prepared.append((entry, data))
 
                 for entry, data in prepared:
