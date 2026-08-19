@@ -743,11 +743,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         old_held = self._held
         self._held = self._compute_held()
 
-        if leaving_inside and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
-            if not self._attr_is_on:
-                self._schedule_end_off_pending = False
-                self.async_write_ha_state()
-                return
+        if (
+            leaving_inside
+            and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
+            and self._attr_is_on
+        ):
+            # An already-off light has nothing to turn off: it takes the
+            # normal off-light path below so the outside profile's active
+            # sensors are checked exactly as with the keep action. After a
+            # forced off the room stays dark until the next sensor edge.
             self._schedule_end_off_pending = True
             self._cancel_timer()
             if self._held:
