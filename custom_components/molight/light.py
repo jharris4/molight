@@ -166,8 +166,10 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
   • gate — occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
-  • gate_keep — the same activation gate, but window end preserves the current
-    on-period, including its sensor hold, countdown or warning.
+  • gate_keep — the same gate for turning an OFF light on; once the lights
+    are on, occupancy and the door behave as inside the window (adopt, hold,
+    re-hold), and window end preserves the current on-period, including its
+    sensor hold, countdown or warning.
 
 Door handling (when a door entity is configured), per door_mode:
   Opening the door (state on) is a turn-on trigger, gated by illuminance and

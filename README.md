@@ -215,7 +215,7 @@ The form groups everything but the timeout into collapsible sections — *Sensor
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | Default `control` — dark gates turn-ons AND turning bright forces the lights off. `gate` — dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor. HA has no fitting device class for schedules, so this picker can only narrow to MoLight binary sensors — take care to pick the schedule one |
-| **Schedule behavior** | Default `follow` — lights turn on at window start and off at window end (porch lights). **Gate and turn off** — automatic activation only works inside the window and its end forces off. **Gate and keep state** — applies the same activation gate but leaves an existing on-period, sensor hold, countdown, or warning running at the window end |
+| **Schedule behavior** | Default `follow` — lights turn on at window start and off at window end (porch lights). **Gate and turn off** — automatic activation only works inside the window and its end forces off. **Gate and keep state** — gates turning an *off* light on the same way, but once the light is on, occupancy and the door behave as inside the window (adopt, hold, re-hold), and the window end leaves an existing on-period, sensor hold, countdown, or warning running |
 | **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
 | **Door mode** | Default `open` — opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close` — the lights stay on while the door is open and start the countdown when it closes |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)) |
@@ -248,7 +248,7 @@ WARN       auto-off imminent — grace period before the lights go off
 
 - `IDLE` + manual/external turn-on → `ACTIVE` (timer starts)
 - `IDLE`/`ACTIVE`/`COUNTDOWN` + occupancy becomes active (and it's dark / in-window) → `OCCUPIED`
-- Already-active occupancy is adopted the same way: turning the light on (manually or at the wall) while the occupancy sensor is on goes straight to `OCCUPIED`, as does illuminance turning dark or a gate-mode window opening while the light is on — a timer never expires despite presence
+- Already-active occupancy is adopted the same way: turning the light on (manually or at the wall) while the occupancy sensor is on goes straight to `OCCUPIED`, as does illuminance turning dark or a gate-mode window opening while the light is on — a timer never expires despite presence. A **Gate and keep state** schedule only gates turning an off light on, so it never blocks this adoption while the light is on
 - `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected: the lights go off at `latest_occupied_time + turn-off timeout` — i.e. the wall-clock wait after the sensor clears is `turn-off timeout − occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it)
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)
 - any state + all real lights turned off externally → `IDLE`
@@ -303,7 +303,7 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 
 - Every automatic turn-off is suspended — the timer, the false-detection quick off, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
 - Turn-ons are unaffected (occupancy, going dark, and window starts still light the room), and a manual off always works.
-- When the last hold releases, the light re-evaluates its rules: a follow or hard-gate window that ended while held turns it off now, as does being bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
+- When the last hold releases, the light re-evaluates its rules: a follow or hard-gate window that ended while held turns it off now, as does being bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption — a **Gate and keep state** window is not required once the light is on); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
 - A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The switch state survives restarts, and a held light adopted at startup won't start a timer.
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
