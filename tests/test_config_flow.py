@@ -3703,6 +3703,67 @@ async def test_convert_scheduled_light_back_to_gate(
     assert CONF_INSIDE_SCHEDULE_SETTINGS not in cfg
 
 
+async def _convert(hass: HomeAssistant, direction: str, light: str) -> None:
+    """Run one light through a conversion direction to completion."""
+    result = await _reach_conversion(hass, direction)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONVERT_LIGHTS: [light]}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONFIRM_CONVERSION: True}
+    )
+    assert result["reason"] == "conversion_done"
+    await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP])
+async def test_conversion_round_trip_restores_flat_config(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """Gated → scheduled → gated is lossless and leaks no top-level keys."""
+    source = _light_entry(
+        "Kitchen",
+        "kitchen",
+        timeout=45,
+        schedule_entity="binary_sensor.night",
+        schedule_mode=mode,
+        occupancy_entity="binary_sensor.occupancy",
+        maintain_occupancy_entity="binary_sensor.maintain",
+        illuminance_entity="binary_sensor.illuminance",
+        door_entity="binary_sensor.door",
+        hold_entities=["input_boolean.guest"],
+    )
+    original = dict(source.data)
+    hass.states.async_set("binary_sensor.night", "off")
+    await setup_entries(hass, source)
+
+    await _convert(hass, "convert_to_scheduled", "light.kitchen")
+    cfg = molight_config(source)
+    assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    for profile in (CONF_INSIDE_SCHEDULE_SETTINGS, CONF_OUTSIDE_SCHEDULE_SETTINGS):
+        for key in (
+            CONF_ENTITY_TYPE,
+            CONF_ENTITY_ID,
+            CONF_NAME,
+            CONF_LIGHTS,
+            CONF_SCHEDULE_ENTITY,
+            CONF_SCHEDULE_MODE,
+            CONF_SCHEDULE_END_ACTION,
+            CONF_INSIDE_SCHEDULE_SETTINGS,
+            CONF_OUTSIDE_SCHEDULE_SETTINGS,
+        ):
+            assert key not in cfg[profile], (profile, key)
+    assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS] == {
+        CONF_LIGHT_TIMEOUT: 45,
+        CONF_HOLD_ENTITIES: ["input_boolean.guest"],
+    }
+
+    await _convert(hass, "convert_to_regular", "light.kitchen")
+    assert source.options == {}
+    assert molight_config(source) == original
+
+
 @pytest.mark.asyncio
 async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> None:
     """Follow schedules cannot be reinterpreted as settings selectors."""
