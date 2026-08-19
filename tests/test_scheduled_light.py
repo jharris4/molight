@@ -29,6 +29,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_MODE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
+    CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -995,6 +996,52 @@ async def test_restart_catches_up_missed_schedule_end_off(
     assert state.state == "off"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_restart_with_held_pending_off_reports_maintained_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A held pending boundary seeds OCCUPIED under a maintain hold, then applies."""
+    hold = "input_boolean.keep_on"
+    maintain = "binary_sensor.maintain"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(hold, "on")
+    hass.states.async_set(maintain, "on")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_OUTSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    ATTR_SCHEDULE_END_OFF_PENDING: True,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_HOLD_ENTITIES: [hold],
+            CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+        },
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio

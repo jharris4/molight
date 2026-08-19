@@ -859,7 +859,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             elif self._held:
                 if self._pre_warn_brightness is not None or self._pre_warn_color:
                     self._resume_lights()
-                self._machine_state = STATE_ACTIVE
+                # Report the same state the normal seed would: a hold that
+                # would otherwise adopt the light keeps it OCCUPIED until the
+                # pending boundary applies on release.
+                self._machine_state = (
+                    STATE_OCCUPIED
+                    if self._occupancy_holds()
+                    or self._maintain_active()
+                    or self._door_holds()
+                    else STATE_ACTIVE
+                )
                 self.async_write_ha_state()
                 return
             else:
