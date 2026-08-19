@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import HomeAssistant, ServiceCall, State
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
@@ -16,6 +17,7 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
     ATTR_SCHEDULE_END_OFF_PENDING,
+    CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_DOOR_ENTITY,
     CONF_EFFECT_BRIGHTNESS,
@@ -148,6 +150,38 @@ async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_schedule_end_off_uses_outgoing_profile_transition(
+    hass: HomeAssistant,
+) -> None:
+    """The boundary off fades with the inside profile being left."""
+    calls: list[dict] = []
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 1},
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 4},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.bus.async_listen(EVENT_CALL_SERVICE, lambda event: calls.append(event.data))
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+
+    off_calls = [
+        call
+        for call in calls
+        if call["domain"] == "light"
+        and call["service"] == "turn_off"
+        and REAL in call["service_data"].get("entity_id", [])
+    ]
+    assert off_calls
+    assert off_calls[-1]["service_data"]["transition"] == 4.0
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_defaults_to_preserving_state(
     hass: HomeAssistant,
 ) -> None:
@@ -229,6 +263,38 @@ async def test_returning_inside_cancels_deferred_schedule_end_off(
     hass.states.async_set(hold, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_auto_off_switch_defers_schedule_end_until_reenabled(
+    hass: HomeAssistant,
+) -> None:
+    """The shared companion switch holds and later applies a boundary off."""
+    switch = "switch.scheduled_light_auto_off"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["auto_off_held"] is True
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
 
 
 @pytest.mark.asyncio

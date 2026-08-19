@@ -3719,6 +3719,44 @@ async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> No
 
 
 @pytest.mark.asyncio
+async def test_conversion_requires_at_least_one_selected_light(
+    hass: HomeAssistant,
+) -> None:
+    """Submitting an empty eligible-light selection stays on the form."""
+    await setup_entries(
+        hass,
+        _light_entry(
+            "Kitchen",
+            "kitchen",
+            schedule_entity="binary_sensor.night",
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+    )
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_CONVERT_LIGHTS: []}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "convert_to_scheduled"
+    assert result["errors"] == {CONF_CONVERT_LIGHTS: "no_entities_selected"}
+
+
+@pytest.mark.asyncio
+async def test_convert_to_regular_aborts_without_scheduled_lights(
+    hass: HomeAssistant,
+) -> None:
+    """Reverse conversion reports when there are no eligible lights."""
+    await setup_entries(hass, _light_entry("Kitchen", "kitchen"))
+
+    result = await _reach_conversion(hass, "convert_to_regular")
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_scheduled_lights"
+
+
+@pytest.mark.asyncio
 async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
     hass: HomeAssistant,
 ) -> None:
