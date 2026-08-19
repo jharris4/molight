@@ -1248,6 +1248,22 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
 
 
 _SCHEDULED_LIGHT_SIDES = (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS)
+# Keys that live at the top level of a light entry (identity, members, the
+# schedule and its policy, the two profiles) rather than inside a settings
+# profile; conversion strips them when lifting a flat config into a profile
+# and when flattening a profile back out.
+_LIGHT_ENTRY_KEYS = frozenset(
+    {
+        CONF_ENTITY_TYPE,
+        CONF_ENTITY_ID,
+        CONF_NAME,
+        CONF_LIGHTS,
+        CONF_SCHEDULE_ENTITY,
+        CONF_SCHEDULE_MODE,
+        CONF_SCHEDULE_END_ACTION,
+        *_SCHEDULED_LIGHT_SIDES,
+    }
+)
 _SCHEDULED_LIGHT_STEP_IDS = {
     CONF_OUTSIDE_SCHEDULE_SETTINGS: "scheduled_light_outside",
     CONF_INSIDE_SCHEDULE_SETTINGS: "scheduled_light_inside",
@@ -2004,22 +2020,10 @@ class MoLightConfigFlow(
         )
 
     @staticmethod
-    def _converted_scheduled_data(
-        entry: config_entries.ConfigEntry, cfg: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _converted_scheduled_data(cfg: dict[str, Any]) -> dict[str, Any]:
         """Map one gated Virtual Light into two scheduled settings profiles."""
         inside = {
-            key: value
-            for key, value in cfg.items()
-            if key
-            not in (
-                CONF_ENTITY_TYPE,
-                CONF_ENTITY_ID,
-                CONF_NAME,
-                CONF_LIGHTS,
-                CONF_SCHEDULE_ENTITY,
-                CONF_SCHEDULE_MODE,
-            )
+            key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
         # Outside the former gate, retain manual behavior/timing but remove
         # every input that could activate or indefinitely hold the light.
@@ -2034,7 +2038,7 @@ class MoLightConfigFlow(
                 CONF_DOOR_ENTITY,
             )
         }
-        data = {
+        return {
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: cfg[CONF_NAME],
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
@@ -2048,32 +2052,16 @@ class MoLightConfigFlow(
             CONF_OUTSIDE_SCHEDULE_SETTINGS: outside,
             CONF_INSIDE_SCHEDULE_SETTINGS: inside,
         }
-        if entity_id := entry.data.get(CONF_ENTITY_ID):
-            data[CONF_ENTITY_ID] = entity_id
-        return data
 
     @staticmethod
-    def _converted_regular_data(
-        entry: config_entries.ConfigEntry, cfg: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _converted_regular_data(cfg: dict[str, Any]) -> dict[str, Any]:
         """Map a scheduled light's inside profile back to a gated light."""
         inside = {
             key: value
             for key, value in cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS, {}).items()
-            if key
-            not in (
-                CONF_ENTITY_TYPE,
-                CONF_ENTITY_ID,
-                CONF_NAME,
-                CONF_LIGHTS,
-                CONF_SCHEDULE_ENTITY,
-                CONF_SCHEDULE_END_ACTION,
-                CONF_SCHEDULE_MODE,
-                CONF_OUTSIDE_SCHEDULE_SETTINGS,
-                CONF_INSIDE_SCHEDULE_SETTINGS,
-            )
+            if key not in _LIGHT_ENTRY_KEYS
         }
-        data = {
+        return {
             **inside,
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: cfg[CONF_NAME],
@@ -2086,9 +2074,6 @@ class MoLightConfigFlow(
                 else SCHEDULE_MODE_GATE_KEEP
             ),
         }
-        if entity_id := entry.data.get(CONF_ENTITY_ID):
-            data[CONF_ENTITY_ID] = entity_id
-        return data
 
     async def async_step_confirm_conversion(
         self, user_input: dict[str, Any] | None = None
@@ -2109,10 +2094,14 @@ class MoLightConfigFlow(
                     if not _conversion_eligible(cfg, to_scheduled=to_scheduled):
                         return self.async_abort(reason="conversion_targets_changed")
                     data = (
-                        self._converted_scheduled_data(entry, cfg)
+                        self._converted_scheduled_data(cfg)
                         if to_scheduled
-                        else self._converted_regular_data(entry, cfg)
+                        else self._converted_regular_data(cfg)
                     )
+                    # The chosen entity ID is identity, not settings: it
+                    # survives conversion in either direction.
+                    if entity_id := entry.data.get(CONF_ENTITY_ID):
+                        data[CONF_ENTITY_ID] = entity_id
                     prepared.append((entry, data))
 
                 for entry, data in prepared:
