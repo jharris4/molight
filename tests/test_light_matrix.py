@@ -402,6 +402,33 @@ async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
 
 
 @pytest.mark.asyncio
+async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A gate_keep light turned on while occupied outside is held, not timed."""
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_KEEP
+    )
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "on")
+    await setup_entries(hass, entry)
+    assert _state(hass).state == "off"  # the activation gate still holds
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    # Occupancy clearing starts the normal countdown.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
 async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> None:
     """Window start with occupancy active but bright stays off; dark then lights."""
     entry = make_light_entry(
