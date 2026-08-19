@@ -1326,11 +1326,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         return state is not None and state.state == "on"
 
     def _gate_schedule_inactive(self) -> bool:
-        """Return True when a gate-mode schedule forbids activating lights."""
+        """Return True when a gate-mode schedule forbids activating lights.
+
+        gate_keep gates activation only: once the lights are on, occupancy
+        and the door behave as inside the window (adopt, hold, re-hold), so
+        an on-period preserved past the window end keeps its sensor hold.
+        """
         if not self._schedule_entity or self._schedule_mode not in (
             SCHEDULE_MODE_GATE,
             SCHEDULE_MODE_GATE_KEEP,
         ):
+            return False
+        if self._schedule_mode == SCHEDULE_MODE_GATE_KEEP and self._attr_is_on:
             return False
         state = self.hass.states.get(self._schedule_entity)
         return not (state is not None and state.state == "on")
@@ -1866,13 +1873,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._pre_warn_color = None
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
+        # Set before the hold checks: a gate_keep schedule only gates turning
+        # an off light on, so occupancy may hold this turn-on outside it.
+        self._attr_is_on = True
 
         # Turned back on during an active follow-mode window (after a manual
         # off): rejoin the window instead of running the auto-off timer, so
         # the light stays on until the window ends.
         sched = self._follow_schedule_state()
         if sched is not None:
-            self._attr_is_on = True
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
 
@@ -1882,13 +1891,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         # running a timer that would expire despite presence.
         if self._maintain_active() or self._occupancy_holds() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
-            self._attr_is_on = True
             self._cancel_timer()
             self.async_write_ha_state()
             return
 
         self._machine_state = STATE_ACTIVE
-        self._attr_is_on = True
         # Restart even when already ACTIVE: turning on / dimming again is
         # activity and extends the on-period.
         self._start_timer()

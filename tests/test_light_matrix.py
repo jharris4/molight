@@ -354,6 +354,54 @@ async def test_state_preserving_gate_keeps_on_period_at_window_end(
 
 
 @pytest.mark.asyncio
+async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Once on, a gate_keep light is held and re-held by occupancy outside."""
+    switch = "switch.matrix_light_auto_off"
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_KEEP
+    )
+    hass.states.async_set(SCHED, "on")
+    await setup_entries(hass, entry)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Releasing the hold with the occupant still present keeps the hold.
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # Occupancy returning mid-countdown re-holds the preserved on-period.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    # The activation gate itself is unchanged for an off light.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> None:
     """Window start with occupancy active but bright stays off; dark then lights."""
     entry = make_light_entry(
