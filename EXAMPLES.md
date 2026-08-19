@@ -9,8 +9,9 @@ The examples build on each other:
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Pantry light](#example-5--pantry-light-door-sensor) — a door/contact sensor
-6. [Pico remote](#example-6--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
-7. [Bilresa remote](#example-7--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
+6. [Hallway night light](#example-6--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
+7. [Pico remote](#example-7--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
+8. [Bilresa remote](#example-8--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -174,7 +175,55 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 
 ---
 
-### Example 6 — Pico remote for the closet light (Virtual Remote)
+### Example 6 — Hallway night light (Virtual Scheduled Light)
+
+Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviours; the schedule sensor decides which set is active. It's three forms in a row:
+
+**1. Virtual Schedule Sensor** (the "night" window)
+
+```text
+Name:          Night                             # → binary_sensor.night
+
+Window start:
+  Time:        23:00
+Window end:
+  Time:        06:30
+```
+
+**2. Virtual Scheduled Light — shared form**
+
+```text
+Name:              Hallway                       # → light.hallway
+Lights to control: light.hallway_real
+Schedule sensor:   binary_sensor.night           # required; off = outside, on = inside
+```
+
+**3. Outside-schedule settings** (daytime and evening — schedule *off*)
+
+```text
+Turn-off timeout:  300
+Occupancy sensor:  binary_sensor.hallway_occupancy   # from Example 2
+Auto-on brightness: 100
+```
+
+**4. Inside-schedule settings** (night — schedule *on*; the form opens prefilled with the values you just entered, so only change what differs)
+
+```text
+Turn-off timeout:  60
+Occupancy sensor:  binary_sensor.hallway_occupancy
+Auto-on brightness: 15
+Auto-on color temperature: 2200                  # warm night light
+```
+
+At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
+
+- Switching settings never restyles a light that is already on — brightness and color only apply on the *next* automatic turn-on. A countdown already running keeps its original duration.
+- Every setting can differ per side, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one side and motion simply does nothing there.
+- The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
+
+---
+
+### Example 7 — Pico remote for the closet light (Virtual Remote)
 
 A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant's own Caséta integration doesn't expose Pico buttons as `event` entities — install [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) first, and each button appears as one on the Pico's device page:
 
@@ -197,7 +246,7 @@ Each raise/lower click steps the brightness by 10%; the favorite button jumps to
 
 ---
 
-### Example 7 — Bilresa two-button remote (single vs. double click)
+### Example 8 — Bilresa two-button remote (single vs. double click)
 
 An IKEA Bilresa (Matter over Thread) has just two buttons, so single and double clicks carry different actions:
 
