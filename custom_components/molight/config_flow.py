@@ -1937,16 +1937,12 @@ class MoLightConfigFlow(
         }
 
     def _conversion_option(
-        self, entity_id: str, entry: config_entries.ConfigEntry
+        self, entity_id: str, label: str, entry: config_entries.ConfigEntry
     ) -> selector.SelectOptionDict:
         """Build a labeled conversion choice including its retained schedule."""
-        cfg = _molight_cfg(entry)
-        schedule_id = cfg[CONF_SCHEDULE_ENTITY]
-        schedule = self.hass.states.get(schedule_id)
-        schedule_name = schedule.name if schedule and schedule.name else schedule_id
+        schedule_name = self._entity_label(_molight_cfg(entry)[CONF_SCHEDULE_ENTITY])
         return selector.SelectOptionDict(
-            value=entity_id,
-            label=f"{self._light_label(entity_id)} — {schedule_name}",
+            value=entity_id, label=f"{label} — {schedule_name}"
         )
 
     async def _async_conversion_select(
@@ -1959,33 +1955,27 @@ class MoLightConfigFlow(
                 reason=("no_gated_lights" if to_scheduled else "no_scheduled_lights")
             )
 
+        labels = {entity_id: self._entity_label(entity_id) for entity_id in candidates}
         errors: dict[str, str] = {}
         step_id = "convert_to_scheduled" if to_scheduled else "convert_to_regular"
         if user_input is not None:
-            selected = user_input.get(CONF_CONVERT_LIGHTS, [])
-            entry_ids = [
-                candidates[entity_id].entry_id
-                for entity_id in selected
+            selected = [
+                entity_id
+                for entity_id in user_input.get(CONF_CONVERT_LIGHTS, [])
                 if entity_id in candidates
             ]
-            if entry_ids:
+            if selected:
                 self._conversion = {
                     "to_scheduled": to_scheduled,
-                    "entry_ids": entry_ids,
-                    "lights": ", ".join(
-                        self._light_label(entity_id)
-                        for entity_id in selected
-                        if entity_id in candidates
-                    ),
+                    "entry_ids": [candidates[e].entry_id for e in selected],
+                    "lights": ", ".join(labels[e] for e in selected),
                 }
                 return await self.async_step_confirm_conversion()
             errors[CONF_CONVERT_LIGHTS] = "no_entities_selected"
 
         options = [
-            self._conversion_option(entity_id, entry)
-            for entity_id, entry in sorted(
-                candidates.items(), key=lambda item: self._light_label(item[0]).lower()
-            )
+            self._conversion_option(entity_id, labels[entity_id], candidates[entity_id])
+            for entity_id in sorted(candidates, key=lambda e: labels[e].lower())
         ]
         return self.async_show_form(
             step_id=step_id,
@@ -2245,8 +2235,8 @@ class MoLightConfigFlow(
         )
         return self.async_show_form(step_id="assign_schedule", data_schema=schema)
 
-    def _light_label(self, entity_id: str) -> str:
-        """Friendly name of a virtual light, falling back to its entity_id."""
+    def _entity_label(self, entity_id: str) -> str:
+        """Friendly name of an entity, falling back to its entity_id."""
         state = self.hass.states.get(entity_id)
         return state.name if state and state.name else entity_id
 
@@ -2323,7 +2313,7 @@ class MoLightConfigFlow(
             }
             if skipped:
                 placeholders["skipped"] = ", ".join(
-                    sorted(self._light_label(eid) for eid in skipped)
+                    sorted(self._entity_label(eid) for eid in skipped)
                 )
                 return self.async_abort(
                     reason="assign_done_skipped",
