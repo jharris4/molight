@@ -502,6 +502,45 @@ async def test_source_schedule_restores_marker_through_restart_outage(
 
 
 @pytest.mark.asyncio
+async def test_source_schedule_restores_marker_when_source_is_on(
+    hass: HomeAssistant,
+) -> None:
+    """An active source at startup keeps the restored effective-window marker."""
+    source = "binary_sensor.house_mode"
+    entity_id = "binary_sensor.house_mode_schedule"
+    marker = "2026-07-02T21:00:00+00:00"
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                entity_id,
+                "on",
+                {
+                    "current_window_start": marker,
+                    "source_entity": source,
+                    "inverted": False,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(source, "on")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: source,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
 async def test_source_schedule_does_not_restore_marker_from_previous_source(
     hass: HomeAssistant,
 ) -> None:
