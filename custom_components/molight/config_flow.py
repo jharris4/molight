@@ -119,10 +119,12 @@ from .const import (
     REMOTE_ACTION_ON,
     REMOTE_PRESET_VALUE_KEYS,
     SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_END_ACTIONS,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
@@ -1235,7 +1237,7 @@ def _molight_light_entries(
 def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     """Return True when a light config may be converted in the given direction.
 
-    Gated → scheduled needs a regular light with a schedule in either gate
+    Gated → scheduled needs a regular light with a schedule in any gate
     mode; scheduled → gated needs a scheduled light with a schedule.
     """
     if not cfg.get(CONF_SCHEDULE_ENTITY):
@@ -1243,7 +1245,11 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     if to_scheduled:
         return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and cfg.get(
             CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE
-        ) in (SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP)
+        ) in (
+            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_SWITCH,
+            SCHEDULE_MODE_GATE_KEEP,
+        )
     return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT
 
 
@@ -2033,12 +2039,11 @@ class MoLightConfigFlow(
             CONF_NAME: cfg[CONF_NAME],
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
             CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
-            CONF_SCHEDULE_END_ACTION: (
-                SCHEDULE_END_ACTION_TURN_OFF
-                if cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
-                == SCHEDULE_MODE_GATE
-                else SCHEDULE_END_ACTION_KEEP
-            ),
+            CONF_SCHEDULE_END_ACTION: {
+                SCHEDULE_MODE_GATE: SCHEDULE_END_ACTION_TURN_OFF,
+                SCHEDULE_MODE_GATE_SWITCH: SCHEDULE_END_ACTION_SWITCH,
+                SCHEDULE_MODE_GATE_KEEP: SCHEDULE_END_ACTION_KEEP,
+            }[cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)],
             CONF_OUTSIDE_SCHEDULE_SETTINGS: outside,
             CONF_INSIDE_SCHEDULE_SETTINGS: inside,
         }
@@ -2057,12 +2062,11 @@ class MoLightConfigFlow(
             CONF_NAME: cfg[CONF_NAME],
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
             CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
-            CONF_SCHEDULE_MODE: (
-                SCHEDULE_MODE_GATE
-                if cfg.get(CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION)
-                == SCHEDULE_END_ACTION_TURN_OFF
-                else SCHEDULE_MODE_GATE_KEEP
-            ),
+            CONF_SCHEDULE_MODE: {
+                SCHEDULE_END_ACTION_TURN_OFF: SCHEDULE_MODE_GATE,
+                SCHEDULE_END_ACTION_SWITCH: SCHEDULE_MODE_GATE_SWITCH,
+                SCHEDULE_END_ACTION_KEEP: SCHEDULE_MODE_GATE_KEEP,
+            }[cfg.get(CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION)],
         }
 
     async def async_step_confirm_convert_to_scheduled(

@@ -50,7 +50,7 @@
       },
       "confirm_convert_to_regular": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change.",
+        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. Each inside-schedule profile will become the regular light settings; every outside-schedule profile will be permanently discarded.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
@@ -94,7 +94,7 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off."
+          "schedule_mode": "Follow owns the window. All Gate behaviors restrict automatic activation to the window; choose whether its end turns off, recalculates, or preserves an already-on light."
         }
       },
       "assign_lights": {
@@ -264,7 +264,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
+              "schedule_mode": "Follow owns the window. All Gate behaviors restrict automatic activation to the window; choose whether its end turns off, recalculates, or preserves an already-on light.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
@@ -483,7 +483,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
+              "schedule_mode": "Follow owns the window. All Gate behaviors restrict automatic activation to the window; choose whether its end turns off, recalculates, or preserves an already-on light.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
@@ -559,7 +559,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "Choose whether the ending boundary only switches settings or also turns the lights off. An automatic off respects Auto-off and the outside settings' keep-on entities."
+          "schedule_end_action": "Choose whether the ending boundary turns off the light, recalculates it from the outside settings, or keeps its running state and timer."
         },
         "sections": {
           "advanced": {
@@ -912,13 +912,15 @@
       "options": {
         "follow": "Follow — turn on at window start, off at window end",
         "gate": "Gate and turn off — automatic activation only inside the window; off at the end",
-        "gate_keep": "Gate and keep state — automatic activation only inside the window"
+        "gate_switch": "Gate and switch state — automatic activation only inside the window; recalculate at the end",
+        "gate_keep": "Gate and keep state — automatic activation only inside the window; preserve state and timer at the end"
       }
     },
     "schedule_end_action": {
       "options": {
-        "keep": "Apply outside settings and keep the current light state",
-        "turn_off": "Turn off using the inside settings, then apply outside settings"
+        "turn_off": "Turn off using the inside settings, then apply outside settings",
+        "switch": "Apply outside settings and switch state",
+        "keep": "Apply outside settings and keep the running state and timer"
       }
     },
     "sun_event": {
@@ -961,7 +963,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "Choose whether the ending boundary only switches settings or also turns the lights off. An automatic off respects Auto-off and the outside settings' keep-on entities."
+          "schedule_end_action": "Choose whether the ending boundary turns off the light, recalculates it from the outside settings, or keeps its running state and timer."
         }
       },
       "scheduled_light_outside": {
@@ -1261,7 +1263,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights by time window, per the schedule mode.",
-              "schedule_mode": "Follow owns the window. Both Gate behaviors restrict automatic activation to the window; choose whether its end also forces the lights off.",
+              "schedule_mode": "Follow owns the window. All Gate behaviors restrict automatic activation to the window; choose whether its end turns off, recalculates, or preserves an already-on light.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."

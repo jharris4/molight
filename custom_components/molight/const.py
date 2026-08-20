@@ -253,27 +253,40 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 #   follow — lights turn on at window start and off at window end (porch lights)
 #   gate        — occupancy may only activate lights inside the window; the
 #                 window end forces the lights off (the original behaviour)
+#   gate_switch — the same activation gate, but the window end reconciles an
+#                 already-on light from current sensor state and history
 #   gate_keep   — the same activation gate, but the window end leaves an
 #                 already-on light under its current state-machine policy
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
 SCHEDULE_MODE_GATE = "gate"
+SCHEDULE_MODE_GATE_SWITCH = "gate_switch"
 SCHEDULE_MODE_GATE_KEEP = "gate_keep"
-SCHEDULE_MODES = [SCHEDULE_MODE_FOLLOW, SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP]
+SCHEDULE_MODES = [
+    SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_MODE_GATE_KEEP,
+]
 DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
 
 # A Virtual Scheduled Light's shared schedule selects its inside/outside
-# settings. Unlike a regular light's schedule mode, selecting a profile does
-# not inherently command the light; this action optionally preserves the hard
-# gate behaviour by turning it off on the on -> off schedule boundary.
+# settings. Its end action chooses whether the on -> off boundary turns an on
+# light off, recalculates it from the outside profile, or preserves its running
+# state/timer while the outside profile takes over.
 CONF_SCHEDULE_END_ACTION = "schedule_end_action"
 ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
 # The schedule entity active_settings was last derived from; a missed
 # boundary is only caught up at startup when it is still the same schedule.
 ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
 SCHEDULE_END_ACTION_KEEP = "keep"
+SCHEDULE_END_ACTION_SWITCH = "switch"
 SCHEDULE_END_ACTION_TURN_OFF = "turn_off"
-SCHEDULE_END_ACTIONS = [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_TURN_OFF]
+SCHEDULE_END_ACTIONS = [
+    SCHEDULE_END_ACTION_TURN_OFF,
+    SCHEDULE_END_ACTION_SWITCH,
+    SCHEDULE_END_ACTION_KEEP,
+]
 DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 
 # Optional real door/contact binary_sensor (on = open) that drives the light.

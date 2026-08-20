@@ -166,6 +166,10 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
   • gate — occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
+  • gate_switch — the same activation gate for an OFF light. Window end keeps
+    an ON light on but recalculates its state and timer from current occupancy
+    history; active presence adopts it, while an expired timeout applies the
+    configured effect/warn/off behavior.
   • gate_keep — the same gate for turning an OFF light on; once the lights
     are on, occupancy and the door behave as inside the window (adopt, hold,
     re-hold), and window end preserves the current on-period, including its
@@ -297,10 +301,12 @@ from .const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     SIGNAL_AUTO_OFF_TOGGLED,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -408,6 +414,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Persisted as a state attribute so a restart cannot lose the pending
         # boundary; returning inside the schedule cancels it.
         self._schedule_end_off_pending = False
+        # Ephemeral startup catch-up for a switch-state boundary missed while
+        # Home Assistant was down. The restored active side proves whether the
+        # configured schedule actually crossed from inside to outside.
+        self._schedule_end_switch_pending = False
         # Every settings mapping this light may run under — both sides of a
         # scheduled light, or the regular light's own config — so the entity
         # references of all of them can be subscribed to up front.
@@ -705,17 +715,20 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = False
         if inside:
             self._schedule_end_off_pending = False
+            self._schedule_end_switch_pending = False
         elif (
             schedule is not None
             and schedule.state == "off"
             and self._restored_inside_schedule is True
-            and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
         ):
             # The schedule we were inside ended while Home Assistant was down.
-            # _seed_state applies this once after it has restored the
-            # physical/hold state. A reload that switched to a different
-            # schedule entity has crossed no boundary of that schedule.
-            self._schedule_end_off_pending = True
+            # _seed_state applies its selected policy once after restoring the
+            # physical/hold state. A reload that changed schedule entity has
+            # crossed no boundary of the newly configured schedule.
+            if self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
+                self._schedule_end_off_pending = True
+            elif self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH:
+                self._schedule_end_switch_pending = True
         if not self._settings_schedule_entity:
             _LOGGER.warning(
                 "Virtual Scheduled Light %s has no schedule; "
@@ -738,6 +751,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # A held end boundary no longer applies once the same schedule
             # window becomes active again.
             self._schedule_end_off_pending = False
+            self._schedule_end_switch_pending = False
         self._inside_schedule = inside
         self._apply_light_settings(
             self._inside_schedule_settings
@@ -775,6 +789,17 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_ACTIVE
                 self._resume_lights()
             self.async_write_ha_state()
+            return
+
+        if (
+            leaving_inside
+            and self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH
+            and self._attr_is_on
+        ):
+            # The outside profile is now fully active. Recalculate an on
+            # light's state and deadline from its sensors/history instead of
+            # preserving the timer that belonged to the inside profile.
+            self._switch_running_state()
             return
 
         if not self._attr_is_on:
@@ -875,6 +900,15 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
             else:
                 self._finish_schedule_end_off()
+                return
+
+        if self._schedule_end_switch_pending:
+            self._schedule_end_switch_pending = False
+            if self._attr_is_on:
+                if self._pre_warn_brightness is not None or self._pre_warn_color:
+                    self._machine_state = STATE_ACTIVE
+                    self._resume_lights()
+                self._switch_running_state()
                 return
 
         if self._pre_warn_brightness is not None or self._pre_warn_color is not None:
@@ -1349,16 +1383,21 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _gate_schedule_inactive(self) -> bool:
         """Return True when a gate-mode schedule forbids activating lights.
 
-        gate_keep gates activation only: once the lights are on, occupancy
-        and the door behave as inside the window (adopt, hold, re-hold), so
-        an on-period preserved past the window end keeps its sensor hold.
+        gate_switch and gate_keep gate activation only: once the lights are
+        on, occupancy and the door behave as inside the window (adopt, hold,
+        re-hold). Their difference is whether the window-end boundary
+        recalculates or preserves the running state/timer.
         """
         if not self._schedule_entity or self._schedule_mode not in (
             SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_SWITCH,
             SCHEDULE_MODE_GATE_KEEP,
         ):
             return False
-        if self._schedule_mode == SCHEDULE_MODE_GATE_KEEP and self._attr_is_on:
+        if (
+            self._schedule_mode in (SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP)
+            and self._attr_is_on
+        ):
             return False
         state = self.hass.states.get(self._schedule_entity)
         return not (state is not None and state.state == "on")
@@ -1465,6 +1504,60 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Schedule handling
     # ------------------------------------------------------------------
 
+    def _switch_running_state(self) -> None:
+        """Reconcile an already-on light and replace its running deadline.
+
+        Used by the explicit switch-state schedule policies. The applicable
+        settings have already been selected. Active presence adopts the light;
+        otherwise a configured occupancy/maintain sensor contributes its
+        latest-occupied timestamp, with a fresh full timeout when no usable
+        history exists. With no such sensor there is likewise no trustworthy
+        departure anchor, so the new settings receive a fresh full timeout.
+        """
+        if not self._attr_is_on:
+            return
+
+        was_warning = self._in_warning()
+        self._cancel_timer()
+        if was_warning:
+            # Discard an outgoing profile's warning presentation before the
+            # newly applicable settings decide whether/how auto-off is due.
+            self._machine_state = STATE_ACTIVE
+            self._resume_lights()
+
+        if (
+            self._is_illuminance_bright()
+            and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
+            and not self._held
+        ):
+            self.hass.async_create_task(self._auto_lights_off())
+            self._go_idle()
+            return
+
+        if self._occupancy_holds() or self._maintain_active() or self._door_holds():
+            self._machine_state = STATE_OCCUPIED
+            self.async_write_ha_state()
+            return
+
+        has_presence_history = bool(self._occupancy_entity or self._maintain_entity)
+        self._machine_state = STATE_COUNTDOWN if has_presence_history else STATE_ACTIVE
+        duration = (
+            self._compute_occupancy_countdown()
+            if has_presence_history
+            else self._light_timeout
+        )
+        if self._held:
+            # The state switches now, while the usual hold policy suppresses
+            # the newly calculated automatic off until the hold is released.
+            self.async_write_ha_state()
+        elif duration <= 0:
+            # Auto-off is already due. The now-active effect/warn settings
+            # decide whether this is immediate or enters a warning sequence.
+            self._begin_warning()
+        else:
+            self._start_timer(duration)
+            self.async_write_ha_state()
+
     def _on_schedule_change(self, new_state: State) -> None:
         """Handle the virtual schedule sensor changing."""
         if self._schedule_mode == SCHEDULE_MODE_FOLLOW:
@@ -1496,10 +1589,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._go_idle()
             return
 
-        # Both gate modes block automatic activation outside the window and
-        # re-evaluate occupancy/a held-open door when it starts. The original
-        # hard gate also forces off at the end; gate_keep leaves the current
-        # on-period and its timer/holds alone.
+        # All gate modes block automatic activation outside the window and
+        # re-evaluate occupancy/a held-open door when it starts. At the end,
+        # the original hard gate forces off, gate_switch recalculates an on
+        # light from current sensor history, and gate_keep leaves its current
+        # state/timer alone.
         if new_state.state != "on":
             if (
                 self._schedule_mode == SCHEDULE_MODE_GATE
@@ -1508,6 +1602,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             ):
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
+            elif self._schedule_mode == SCHEDULE_MODE_GATE_SWITCH and self._attr_is_on:
+                self._switch_running_state()
         else:
             if self._machine_state != STATE_IDLE:
                 # Lights already on: the window opening lifts the gate that
@@ -1892,7 +1988,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._pre_warn_color = None
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
-        # Set before the hold checks: a gate_keep schedule only gates turning
+        # Set before the hold checks: activation-only gate modes only gate turning
         # an off light on, so occupancy may hold this turn-on outside it.
         self._attr_is_on = True
 

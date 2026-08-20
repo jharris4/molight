@@ -196,7 +196,7 @@ Window end:
 Name:              Hallway                       # → light.hallway
 Lights to control: light.hallway_real
 Schedule sensor:   binary_sensor.night           # required; off = outside, on = inside
-At schedule end:   Apply outside settings and keep the current light state
+At schedule end:   Apply outside settings and keep the running state and timer
 ```
 
 **3. Outside-schedule settings** (daytime and evening — schedule *off*)

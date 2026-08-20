@@ -22,6 +22,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -300,6 +301,64 @@ async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_switching_gate_recalculates_from_occupancy_history(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Switch-state replaces a manual timer with occupancy-based remaining time."""
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_SWITCH
+    )
+    hass.states.async_set(SCHED, "on")
+    cleared = datetime.now(UTC) - timedelta(seconds=120)
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": cleared.isoformat()})
+    await setup_entries(hass, entry)
+
+    # A manual on-period has a fresh timer, but the switch-state boundary
+    # replaces it with the already-expired occupancy-based deadline.
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_switching_gate_adopts_active_occupancy_at_window_end(
+    hass: HomeAssistant,
+) -> None:
+    """An already-on switch-state light remains occupied across the boundary."""
+    entry = make_light_entry(
+        occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_SWITCH
+    )
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "on")
+    await setup_entries(hass, entry)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # The still-on light can be released and re-held, but after its on-period
+    # ends the inactive schedule continues to gate fresh activation.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio

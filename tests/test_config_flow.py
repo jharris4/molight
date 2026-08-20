@@ -94,10 +94,12 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import settle, setup_entries
@@ -3687,6 +3689,7 @@ async def test_convert_gated_light_to_scheduled_in_place(
     ("end_action", "expected_mode"),
     [
         (SCHEDULE_END_ACTION_KEEP, SCHEDULE_MODE_GATE_KEEP),
+        (SCHEDULE_END_ACTION_SWITCH, SCHEDULE_MODE_GATE_SWITCH),
         (SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_MODE_GATE),
     ],
 )
@@ -3750,7 +3753,10 @@ async def _convert(hass: HomeAssistant, direction: str, light: str) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_KEEP])
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
 async def test_conversion_round_trip_restores_flat_config(
     hass: HomeAssistant, mode: str
 ) -> None:
@@ -3774,6 +3780,14 @@ async def test_conversion_round_trip_restores_flat_config(
     await _convert(hass, "convert_to_scheduled", "light.kitchen")
     cfg = molight_config(source)
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert (
+        cfg[CONF_SCHEDULE_END_ACTION]
+        == {
+            SCHEDULE_MODE_GATE: SCHEDULE_END_ACTION_TURN_OFF,
+            SCHEDULE_MODE_GATE_SWITCH: SCHEDULE_END_ACTION_SWITCH,
+            SCHEDULE_MODE_GATE_KEEP: SCHEDULE_END_ACTION_KEEP,
+        }[mode]
+    )
     for profile in (CONF_INSIDE_SCHEDULE_SETTINGS, CONF_OUTSIDE_SCHEDULE_SETTINGS):
         for key in (
             CONF_ENTITY_TYPE,

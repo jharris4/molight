@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
@@ -41,6 +41,7 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_END_ACTION_KEEP,
+    SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -289,6 +290,165 @@ async def test_schedule_end_defaults_to_preserving_state(
 
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switches_state_from_outside_occupancy_history(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Switch-state replaces the inside timer with the outside deadline."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    cleared = datetime.now(UTC) - timedelta(seconds=120)
+    hass.states.async_set(
+        occupancy, "off", {"latest_occupied_time": cleared.isoformat()}
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_without_history_uses_full_outside_timeout(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Missing incoming occupancy history earns one fresh outside timeout."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(occupancy, "off")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=29))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_adopts_active_outside_occupancy(
+    hass: HomeAssistant,
+) -> None:
+    """The fully selected outside profile holds an already-on light."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(occupancy, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_uses_outside_warning_settings(
+    hass: HomeAssistant,
+) -> None:
+    """An already-due switched deadline enters the incoming warning policy."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    cleared = datetime.now(UTC) - timedelta(seconds=120)
+    hass.states.async_set(
+        occupancy, "off", {"latest_occupied_time": cleared.isoformat()}
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_WARN_TIMEOUT: 10,
+            CONF_WARN_BRIGHTNESS: 25,
+        },
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_WARN
+    assert state.attributes["brightness"] == 64
+
+
+@pytest.mark.asyncio
+async def test_restart_catches_up_missed_schedule_end_switch(
+    hass: HomeAssistant,
+) -> None:
+    """A restored inside side proves an offline switch-state boundary occurred."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    cleared = datetime.now(UTC) - timedelta(seconds=120)
+    hass.states.async_set(
+        occupancy, "off", {"latest_occupied_time": cleared.isoformat()}
+    )
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+
+    await setup_entries(hass, entry)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
 
 
