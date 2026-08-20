@@ -8,10 +8,11 @@ The examples build on each other:
 2. [Simple occupancy](#example-2--simple-occupancy-case) — one motion sensor
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
-5. [Pantry light](#example-5--pantry-light-door-sensor) — a door/contact sensor
-6. [Hallway night light](#example-6--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
-7. [Pico remote](#example-7--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
-8. [Bilresa remote](#example-8--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
+5. [Home-only lighting](#example-5--home-only-lighting-source-backed-inverted-schedule) — an inverted schedule derived from an away-mode binary sensor
+6. [Pantry light](#example-6--pantry-light-door-sensor) — a door/contact sensor
+7. [Hallway night light](#example-7--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
+8. [Pico remote](#example-8--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
+9. [Bilresa remote](#example-9--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -153,7 +154,36 @@ Schedule mode:   follow    # on at window start, off at window end
 
 ---
 
-### Example 5 — Pantry light (door sensor)
+### Example 5 — Home-only lighting (source-backed inverted schedule)
+
+Suppose a template or integration provides `binary_sensor.away_mode`: it is `on` while the house is away and `off` while someone is home. To let occupancy automate a light only while the house is home, promote that sensor into MoLight's schedule picker and invert it.
+
+**1. Virtual Schedule Sensor** — first choose **Binary sensor — mirror an existing sensor** as the schedule definition, then enter:
+
+```text
+Name:                 Home Schedule              # → binary_sensor.home_schedule
+Source binary sensor: binary_sensor.away_mode
+Invert output:        on                         # schedule on while away_mode is off
+```
+
+The resulting schedule is `on` while the source is `off` (home) and `off` while the source is `on` (away). If the source is missing, `unknown`, or `unavailable`, the schedule becomes unavailable—it is never inverted into a false `on`.
+
+**2. Virtual Light**
+
+```text
+Name:              Entryway                      # → light.entryway
+Lights to control: light.entryway_real
+Turn-off timeout:  120
+Occupancy sensor:  binary_sensor.entryway_occupancy
+Schedule sensor:   binary_sensor.home_schedule
+Schedule mode:     Gate and turn off
+```
+
+While someone is home, occupancy can turn the entryway light on normally. When away mode turns on, the inverted schedule turns off and **Gate and turn off** switches the light off. If the source becomes unavailable, the gate blocks new automatic activation but does not invent a schedule-end transition for a light that is already on.
+
+---
+
+### Example 6 — Pantry light (door sensor)
 
 Open the pantry door → light on; close it → light off. A single entry driven by a real door/contact sensor:
 
@@ -175,7 +205,7 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 
 ---
 
-### Example 6 — Hallway night light (Virtual Scheduled Light)
+### Example 7 — Hallway night light (Virtual Scheduled Light)
 
 Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviours; the schedule sensor decides which set is active. It's three forms in a row:
 
@@ -225,7 +255,7 @@ At 23:00 the schedule turns on and the light silently switches to the inside set
 
 ---
 
-### Example 7 — Pico remote for the closet light (Virtual Remote)
+### Example 8 — Pico remote for the closet light (Virtual Remote)
 
 A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant's own Caséta integration doesn't expose Pico buttons as `event` entities — install [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) first, and each button appears as one on the Pico's device page:
 
@@ -248,7 +278,7 @@ Each raise/lower click steps the brightness by 10%; the favorite button jumps to
 
 ---
 
-### Example 8 — Bilresa two-button remote (single vs. double click)
+### Example 9 — Bilresa two-button remote (single vs. double click)
 
 An IKEA Bilresa (Matter over Thread) has just two buttons, so single and double clicks carry different actions:
 
