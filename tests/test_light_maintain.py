@@ -337,6 +337,7 @@ async def test_bright_forces_off_while_maintained(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_end_forces_off_while_maintained(
     hass: HomeAssistant,
 ) -> None:
@@ -362,6 +363,7 @@ async def test_gate_window_end_forces_off_while_maintained(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_scheduled_ignores_maintain(hass: HomeAssistant) -> None:
     """A follow-mode window owns the lights; maintain changes are ignored."""
     entry = make_light_entry(

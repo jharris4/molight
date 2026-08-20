@@ -252,6 +252,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_options_reload_while_scheduled_stays_scheduled(
     hass: HomeAssistant, freezer
 ) -> None:

@@ -222,6 +222,7 @@ async def test_illuminance_blip_holds_state(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
     """A follow-mode schedule dropping out mid-window keeps the lights on."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -246,6 +247,7 @@ async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
     """A schedule blip mid-window must not re-light a manually turned-off light.
 
@@ -377,6 +379,7 @@ async def test_light_with_no_state_never_counts_as_off(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_schedule_recovery_readopts_externally_relit_light(
     hass: HomeAssistant, freezer
 ) -> None:

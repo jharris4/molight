@@ -165,6 +165,7 @@ async def test_restart_occupied_with_illuminance_state_missing(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_occupied_outside_gate_window_adopts_active(
     hass: HomeAssistant,
 ) -> None:
@@ -186,6 +187,7 @@ async def test_restart_occupied_outside_gate_window_adopts_active(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_occupied_inside_gate_window_goes_occupied(
     hass: HomeAssistant,
 ) -> None:
@@ -255,6 +257,7 @@ def _follow_entry():
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
     """Window ended while HA was down → the off boundary is applied at startup."""
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
@@ -270,6 +273,7 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_missed_window_end_with_lights_already_off(
     hass: HomeAssistant,
 ) -> None:
@@ -287,6 +291,7 @@ async def test_restart_missed_window_end_with_lights_already_off(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_outside_window_no_marker_adopts_active(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -307,6 +312,7 @@ async def test_restart_outside_window_no_marker_adopts_active(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_applies_missed_window_start(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -329,6 +335,7 @@ async def test_restart_applies_missed_window_start(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_missed_window_start_with_lights_already_on(
     hass: HomeAssistant,
 ) -> None:
@@ -346,6 +353,7 @@ async def test_restart_missed_window_start_with_lights_already_on(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_readopts_window_already_applied(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -368,6 +376,7 @@ async def test_restart_readopts_window_already_applied(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_schedule_state_missing_falls_through(
     hass: HomeAssistant,
 ) -> None:

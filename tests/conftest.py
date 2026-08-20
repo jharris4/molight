@@ -71,8 +71,12 @@ def light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
     variant = _LIGHT_BEHAVIOR_VARIANT.get()
     if variant == "regular" or entry.data.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT:
         return entry
-    if CONF_SCHEDULE_ENTITY in entry.data or CONF_SCHEDULE_MODE in entry.data:
-        pytest.skip("Regular Virtual Light schedule modes do not apply")
+    marker_error = (
+        "Tests for a regular Virtual Light schedule mode must use the "
+        "regular_virtual_light_only marker"
+    )
+    assert CONF_SCHEDULE_ENTITY not in entry.data, marker_error
+    assert CONF_SCHEDULE_MODE not in entry.data, marker_error
 
     settings = {
         key: value
@@ -250,10 +254,23 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     return
 
 
-@pytest.fixture(
-    params=["regular", "scheduled_outside", "scheduled_inside"],
-    ids=["regular", "scheduled-outside", "scheduled-inside"],
-)
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Collect only behavior variants that apply to each shared light test."""
+    fixture = "virtual_light_behavior_variant"
+    if fixture not in metafunc.fixturenames:
+        return
+    if metafunc.definition.get_closest_marker("regular_virtual_light_only"):
+        variants = [pytest.param("regular", id="regular")]
+    else:
+        variants = [
+            pytest.param("regular", id="regular"),
+            pytest.param("scheduled_outside", id="scheduled-outside"),
+            pytest.param("scheduled_inside", id="scheduled-inside"),
+        ]
+    metafunc.parametrize(fixture, variants, indirect=True)
+
+
+@pytest.fixture
 def virtual_light_behavior_variant(request, hass: HomeAssistant):
     """Run common Virtual Light behavior against all applicable entry types."""
     variant = request.param

@@ -53,23 +53,47 @@ def _state(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("illum", "sched", "expect_on"),
+    ("illum", "expect_on"),
     [
-        pytest.param(None, None, True, id="no-illum/no-sched"),
-        pytest.param(None, "on", True, id="no-illum/gate-in-window"),
-        pytest.param(None, "off", False, id="no-illum/gate-out-of-window"),
-        pytest.param("dark", None, True, id="dark/no-sched"),
-        pytest.param("dark", "on", True, id="dark/gate-in-window"),
-        pytest.param("dark", "off", False, id="dark/gate-out-of-window"),
-        pytest.param("bright", None, False, id="bright/no-sched"),
-        pytest.param("bright", "on", False, id="bright/gate-in-window"),
-        pytest.param("bright", "off", False, id="bright/gate-out-of-window"),
+        pytest.param(None, True, id="no-illum"),
+        pytest.param("dark", True, id="dark"),
+        pytest.param("bright", False, id="bright"),
     ],
 )
-async def test_occupancy_trigger_gating(
-    hass: HomeAssistant, illum: str | None, sched: str | None, expect_on: bool
+async def test_occupancy_trigger_illuminance_gating(
+    hass: HomeAssistant, illum: str | None, expect_on: bool
 ) -> None:
-    """Occupancy turns lights on iff it is dark (or ungated) and in-window."""
+    """Occupancy turns lights on only when dark, if illuminance is configured."""
+    await _assert_occupancy_trigger_gating(hass, illum, None, expect_on)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("illum", "sched", "expect_on"),
+    [
+        pytest.param(None, "on", True, id="no-illum/in-window"),
+        pytest.param(None, "off", False, id="no-illum/out-of-window"),
+        pytest.param("dark", "on", True, id="dark/in-window"),
+        pytest.param("dark", "off", False, id="dark/out-of-window"),
+        pytest.param("bright", "on", False, id="bright/in-window"),
+        pytest.param("bright", "off", False, id="bright/out-of-window"),
+    ],
+)
+async def test_occupancy_trigger_schedule_gating(
+    hass: HomeAssistant, illum: str | None, sched: str, expect_on: bool
+) -> None:
+    """A regular light's gate schedule combines with illuminance gating."""
+    await _assert_occupancy_trigger_gating(hass, illum, sched, expect_on)
+
+
+async def _assert_occupancy_trigger_gating(
+    hass: HomeAssistant,
+    illum: str | None,
+    sched: str | None,
+    expect_on: bool,
+) -> None:
+    """Exercise occupancy-trigger gating with the supplied light inputs."""
     entry = make_light_entry(
         occupancy=OCC,
         illuminance=ILLUM if illum else None,
@@ -98,27 +122,51 @@ async def test_occupancy_trigger_gating(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("occ", "lot", "sched", "expect_state"),
+    ("occ", "lot", "expect_state"),
     [
-        pytest.param("on", None, None, STATE_OCCUPIED, id="occupied"),
-        pytest.param("on", None, "on", STATE_OCCUPIED, id="occupied/gate-in-window"),
-        pytest.param("on", None, "off", STATE_IDLE, id="occupied/gate-out-of-window"),
-        pytest.param("off", "stale", None, STATE_IDLE, id="clear-stale-lot"),
+        pytest.param("on", None, STATE_OCCUPIED, id="occupied"),
+        pytest.param("off", "stale", STATE_IDLE, id="clear-stale-lot"),
         # The next two pin current behavior: with no occupancy history at all
         # (no latest_occupied_time / no recorded on-period) the dark transition
         # still lights the room for the full light_timeout.
-        pytest.param("off", None, None, STATE_COUNTDOWN, id="clear-no-lot"),
-        pytest.param(None, None, None, STATE_COUNTDOWN, id="no-occ-no-history"),
+        pytest.param("off", None, STATE_COUNTDOWN, id="clear-no-lot"),
+        pytest.param(None, None, STATE_COUNTDOWN, id="no-occ-no-history"),
     ],
 )
 async def test_illuminance_dark_activation(
     hass: HomeAssistant,
     occ: str | None,
     lot: str | None,
+    expect_state: str,
+) -> None:
+    """Going dark activates lights based on occupancy state and history."""
+    await _assert_illuminance_dark_activation(hass, occ, lot, None, expect_state)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("sched", "expect_state"),
+    [
+        pytest.param("on", STATE_OCCUPIED, id="in-window"),
+        pytest.param("off", STATE_IDLE, id="out-of-window"),
+    ],
+)
+async def test_illuminance_dark_activation_obeys_gate_schedule(
+    hass: HomeAssistant, sched: str, expect_state: str
+) -> None:
+    """A regular light's gate schedule controls dark-triggered activation."""
+    await _assert_illuminance_dark_activation(hass, "on", None, sched, expect_state)
+
+
+async def _assert_illuminance_dark_activation(
+    hass: HomeAssistant,
+    occ: str | None,
+    lot: str | None,
     sched: str | None,
     expect_state: str,
 ) -> None:
-    """Going dark activates lights based on occupancy state/history and gating."""
+    """Exercise dark-triggered activation with the supplied light inputs."""
     entry = make_light_entry(
         occupancy=OCC if occ else None,
         illuminance=ILLUM,
@@ -174,6 +222,7 @@ async def test_illuminance_dark_is_noop_while_running(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_scheduled_ignores_occupancy_and_illuminance(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -222,6 +271,7 @@ async def test_scheduled_ignores_occupancy_and_illuminance(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_occupancy_can_relight_after_manual_off_mid_window(
     hass: HomeAssistant,
 ) -> None:
@@ -256,6 +306,7 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
 async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> None:
     """Window end turns the lights off from every running state."""
@@ -287,6 +338,7 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
     """Window end while IDLE stays IDLE."""
     entry = make_light_entry(
@@ -304,6 +356,7 @@ async def test_gate_window_end_noop_while_idle(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_switching_gate_recalculates_from_occupancy_history(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -329,6 +382,7 @@ async def test_switching_gate_recalculates_from_occupancy_history(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_switching_gate_adopts_active_occupancy_at_window_end(
     hass: HomeAssistant,
 ) -> None:
@@ -362,6 +416,7 @@ async def test_switching_gate_adopts_active_occupancy_at_window_end(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
 async def test_state_preserving_gate_keeps_on_period_at_window_end(
     hass: HomeAssistant, freezer, origin: str
@@ -414,6 +469,7 @@ async def test_state_preserving_gate_keeps_on_period_at_window_end(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -462,6 +518,7 @@ async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -489,6 +546,7 @@ async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -526,6 +584,7 @@ async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> None:
     """Window start with occupancy active but bright stays off; dark then lights."""
     entry = make_light_entry(
@@ -553,6 +612,7 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_start_relights_at_auto_on_brightness(
     hass: HomeAssistant,
 ) -> None:
@@ -579,6 +639,7 @@ async def test_gate_window_start_relights_at_auto_on_brightness(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_start_keeps_running_state(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -611,6 +672,7 @@ async def test_gate_window_start_keeps_running_state(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_forced_off_beats_occupancy_with_all_three_configured(
     hass: HomeAssistant,
 ) -> None:
@@ -659,17 +721,30 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("blocker", ["bright", "gate-out-of-window"])
-async def test_manual_turn_on_never_gated(
-    hass: HomeAssistant, freezer, blocker: str
+async def test_manual_turn_on_not_gated_by_bright_illuminance(
+    hass: HomeAssistant, freezer
 ) -> None:
-    """The user can always turn the light on; the normal timeout applies."""
-    if blocker == "bright":
-        entry = make_light_entry(illuminance=ILLUM)
-        hass.states.async_set(ILLUM, "on")
-    else:
-        entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
-        hass.states.async_set(SCHED, "off")
+    """The user can turn the light on while its illuminance sensor is bright."""
+    entry = make_light_entry(illuminance=ILLUM)
+    hass.states.async_set(ILLUM, "on")
+    await _assert_manual_turn_on_runs_timeout(hass, freezer, entry)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_manual_turn_on_not_gated_outside_schedule(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The user can turn a regular light on outside its gate schedule."""
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    hass.states.async_set(SCHED, "off")
+    await _assert_manual_turn_on_runs_timeout(hass, freezer, entry)
+
+
+async def _assert_manual_turn_on_runs_timeout(
+    hass: HomeAssistant, freezer, entry
+) -> None:
+    """Assert a manually activated light runs its normal timeout."""
     await setup_entries(hass, entry)
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})

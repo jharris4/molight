@@ -1,6 +1,9 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "regular_virtual_light_only: behavior requires a regular Virtual Light's own schedule mode",
+]
 
 [tool.ruff]
 target-version = "py313"

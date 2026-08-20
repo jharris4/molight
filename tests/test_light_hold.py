@@ -405,6 +405,7 @@ async def test_hold_blocks_bright_force_off_release_applies_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_hold_blocks_follow_window_end_release_applies_it(
     hass: HomeAssistant,
 ) -> None:
@@ -431,6 +432,7 @@ async def test_hold_blocks_follow_window_end_release_applies_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_release_inside_follow_window_stays_scheduled(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -452,6 +454,7 @@ async def test_release_inside_follow_window_stays_scheduled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_hold_blocks_gate_window_end_release_applies_it(
     hass: HomeAssistant,
 ) -> None:
@@ -499,6 +502,7 @@ async def test_hold_suppresses_false_detection_quick_off(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_startup_hold_keeps_missed_window_end_marker(
     hass: HomeAssistant,
 ) -> None:

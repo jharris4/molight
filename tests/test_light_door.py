@@ -150,19 +150,43 @@ async def test_open_mode_reopen_retriggers_timer(hass: HomeAssistant, freezer) -
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("illum", "sched", "expect_on"),
+    ("illum", "expect_on"),
     [
-        pytest.param(None, None, True, id="no-illum/no-sched"),
-        pytest.param("dark", None, True, id="dark"),
-        pytest.param("bright", None, False, id="bright-suppresses"),
-        pytest.param("dark", "on", True, id="dark/in-window"),
-        pytest.param("dark", "off", False, id="dark/out-of-window"),
+        pytest.param(None, True, id="no-illum"),
+        pytest.param("dark", True, id="dark"),
+        pytest.param("bright", False, id="bright-suppresses"),
     ],
 )
-async def test_door_open_is_gated_like_occupancy(
-    hass: HomeAssistant, illum: str | None, sched: str | None, expect_on: bool
+async def test_door_open_is_illuminance_gated_like_occupancy(
+    hass: HomeAssistant, illum: str | None, expect_on: bool
 ) -> None:
-    """Opening only lights the room when dark (if gated) and inside a window."""
+    """Opening only lights the room when dark, when illuminance is configured."""
+    await _assert_door_open_gating(hass, illum, None, expect_on)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("sched", "expect_on"),
+    [
+        pytest.param("on", True, id="in-window"),
+        pytest.param("off", False, id="out-of-window"),
+    ],
+)
+async def test_door_open_is_schedule_gated_like_occupancy(
+    hass: HomeAssistant, sched: str, expect_on: bool
+) -> None:
+    """A regular light's gate schedule also controls automatic door activation."""
+    await _assert_door_open_gating(hass, "dark", sched, expect_on)
+
+
+async def _assert_door_open_gating(
+    hass: HomeAssistant,
+    illum: str | None,
+    sched: str | None,
+    expect_on: bool,
+) -> None:
+    """Exercise door-trigger gating with the supplied light inputs."""
     entry = make_light_entry(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN,
@@ -374,6 +398,7 @@ async def test_open_close_dark_return_re_holds_open_door(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(
     ("door_mode", "expect_on"),
     [
@@ -457,6 +482,7 @@ async def test_open_close_unavailable_door_keeps_holding(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_window_ignores_door(hass: HomeAssistant) -> None:
     """While SCHEDULED, door open/close events are ignored entirely."""
     entry = make_light_entry(

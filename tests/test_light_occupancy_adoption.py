@@ -171,6 +171,7 @@ async def test_dark_without_occupancy_keeps_timer(hass: HomeAssistant, freezer) 
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_start_adopts_active_occupancy(
     hass: HomeAssistant, freezer
 ) -> None:

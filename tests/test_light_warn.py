@@ -305,6 +305,7 @@ async def test_bright_forces_off_during_warn(hass: HomeAssistant, freezer) -> No
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_window_end_during_warn_forces_off(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -442,6 +443,7 @@ async def test_maintain_on_during_warn_resumes_and_occupies(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_window_start_during_effect_restores_lights(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -485,6 +487,7 @@ async def test_follow_window_start_during_effect_restores_lights(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     hass: HomeAssistant, freezer
 ) -> None:

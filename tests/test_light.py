@@ -335,6 +335,7 @@ async def test_auto_on_brightness_not_applied_on_manual_on(hass: HomeAssistant) 
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_auto_on_brightness_applied_on_schedule_window(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -992,6 +993,7 @@ async def test_illuminance_gate_mode_never_forces_off(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     """Follow-mode light turns on at window start, ignores light_timeout, off at end."""
     await hass.config.async_set_time_zone("UTC")
@@ -1031,6 +1033,7 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_mode_restart_catch_up(hass: HomeAssistant, freezer) -> None:
     """A window start missed while HA was down is applied at startup."""
     await hass.config.async_set_time_zone("UTC")
@@ -1045,6 +1048,7 @@ async def test_follow_mode_restart_catch_up(hass: HomeAssistant, freezer) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> None:
     """A window already applied before restart is not re-asserted at startup."""
     await hass.config.async_set_time_zone("UTC")
@@ -1071,6 +1075,7 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_mode_manual_re_on_rejoins_window(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -1107,6 +1112,7 @@ async def test_follow_mode_manual_re_on_rejoins_window(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_gate_mode_blocks_occupancy_outside_window(
     hass: HomeAssistant, freezer, occupancy_entry: MockConfigEntry
 ) -> None:
