@@ -552,6 +552,56 @@ async def test_source_schedule_options_prefill_source_and_inversion(
 
 
 @pytest.mark.asyncio
+async def test_source_schedule_options_reject_schedule_source(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Options reject a forced source that is another MoLight schedule."""
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Source Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    assert (
+        "binary_sensor.test_schedule"
+        not in _selector_config(result, CONF_SCHEDULE_SOURCE)["exclude_entities"]
+    )
+
+    # The form's exclusion list is frozen, so a newly created schedule reaches
+    # the backend guard when submitted from this already-open options flow.
+    await setup_entries(hass, schedule_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Source Schedule",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.test_schedule",
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+    assert result["step_id"] == "schedule_source"
+    assert result["errors"] == {
+        CONF_SCHEDULE_SOURCE: "schedule_source_molight_schedule"
+    }
+    assert (
+        "binary_sensor.test_schedule"
+        in _selector_config(result, CONF_SCHEDULE_SOURCE)["exclude_entities"]
+    )
+    assert molight_config(entry)[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
+
+
+@pytest.mark.asyncio
 async def test_schedule_options_can_change_source_definition_to_time(
     hass: HomeAssistant,
 ) -> None:
