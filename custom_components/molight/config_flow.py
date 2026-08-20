@@ -397,8 +397,8 @@ def _schedule_edge_fields() -> dict:
 
 # Pickers for a virtual light's optional entity references. The occupancy,
 # maintain, illuminance and schedule sensors are MoLight virtual sensors
-# (integration=DOMAIN); the schedule sensor has no device_class (HA offers
-# none that fits), so its picker can only narrow to MoLight binary sensors.
+# (integration=DOMAIN). Schedule sensors have no suitable device_class, so
+# their picker is built dynamically below from MoLight schedule config entries.
 # The door sensor is a plain real contact sensor, so its picker is not
 # restricted to MoLight — only to door-ish binary_sensor device classes.
 # Keep-on entities can be anything with an on/off state (input_boolean,
@@ -421,9 +421,6 @@ _LIGHT_REF_SELECTORS = {
         domain="binary_sensor",
         device_class="light",
         multiple=False,
-    ),
-    CONF_SCHEDULE_ENTITY: selector.EntitySelectorConfig(
-        integration=DOMAIN, domain="binary_sensor", multiple=False
     ),
     CONF_DOOR_ENTITY: selector.EntitySelectorConfig(
         domain="binary_sensor",
@@ -504,21 +501,71 @@ def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
     )
 
 
+def _molight_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | None:
+    """Return the MoLight config-entry type backing an entity, if any."""
+    if not entity_id:
+        return None
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    if (
+        reg_entry is None
+        or reg_entry.domain != "binary_sensor"
+        or reg_entry.config_entry_id is None
+    ):
+        return None
+    entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+    if entry is None or entry.domain != DOMAIN:
+        return None
+    return _molight_cfg(entry).get(CONF_ENTITY_TYPE)
+
+
+def _schedule_entity_selector(
+    hass: HomeAssistant, *, legacy_entity: str | None = None
+) -> selector.EntitySelector:
+    """Build a picker containing schedules plus one configured legacy sensor."""
+    registry = er.async_get(hass)
+    schedule_ids = set(_molight_schedule_entity_ids(hass))
+    excluded_ids = sorted(
+        entity.entity_id
+        for entity in registry.entities.values()
+        if entity.domain == "binary_sensor"
+        and entity.platform == DOMAIN
+        and entity.entity_id not in schedule_ids
+    )
+    if legacy_entity in excluded_ids:
+        # Before schedule pickers were type-filtered they offered every MoLight
+        # binary sensor. Keep such a selection visible while it remains stored,
+        # but do not offer it for a new configuration.
+        excluded_ids.remove(legacy_entity)
+    return selector.EntitySelector(
+        selector.EntitySelectorConfig(
+            integration=DOMAIN,
+            domain="binary_sensor",
+            exclude_entities=excluded_ids,
+            multiple=False,
+        )
+    )
+
+
+def _schedule_entity_is_allowed(
+    hass: HomeAssistant,
+    entity_id: str | None,
+    *,
+    legacy_entity: str | None = None,
+) -> bool:
+    """Return whether a schedule reference is valid or grandfathered."""
+    if not entity_id:
+        return True
+    entity_type = _molight_entity_type(hass, entity_id)
+    return entity_type == ENTITY_TYPE_SCHEDULE or (
+        entity_id == legacy_entity and entity_type is not None
+    )
+
+
 def _schedule_source_is_molight_schedule(
     hass: HomeAssistant, entity_id: str | None
 ) -> bool:
     """Return whether an entity is backed by a MoLight schedule entry."""
-    if not entity_id:
-        return False
-    reg_entry = er.async_get(hass).async_get(entity_id)
-    if reg_entry is None or reg_entry.config_entry_id is None:
-        return False
-    entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
-    return bool(
-        entry is not None
-        and entry.domain == DOMAIN
-        and _molight_cfg(entry).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULE
-    )
+    return _molight_entity_type(hass, entity_id) == ENTITY_TYPE_SCHEDULE
 
 
 def _combined_occupancy_creates_cycle(
@@ -916,7 +963,11 @@ def _illuminance_option_fields() -> dict:
 
 
 def _light_option_fields(
-    *, with_entity_id: bool = False, with_schedule: bool = True
+    hass: HomeAssistant,
+    *,
+    with_entity_id: bool = False,
+    with_schedule: bool = True,
+    legacy_schedule: str | None = None,
 ) -> dict:
     """Sectioned settings of a virtual light.
 
@@ -947,8 +998,8 @@ def _light_option_fields(
     if with_schedule:
         sensor_fields.update(
             {
-                vol.Optional(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
-                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                vol.Optional(CONF_SCHEDULE_ENTITY): _schedule_entity_selector(
+                    hass, legacy_entity=legacy_schedule
                 ),
                 vol.Required(
                     CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
@@ -1376,7 +1427,7 @@ class _ScheduledLightSettingsSteps:
         return self.async_show_form(
             step_id=_SCHEDULED_LIGHT_STEP_IDS[side],
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_light_option_fields(with_schedule=False)),
+                vol.Schema(_light_option_fields(self.hass, with_schedule=False)),
                 user_input or _nest_sections(previous or {}, _LIGHT_SECTIONS),
             ),
             errors=errors,
@@ -1932,6 +1983,10 @@ class MoLightConfigFlow(
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            if not _schedule_entity_is_allowed(
+                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+            ):
+                errors["base"] = "schedule_entity_not_schedule"
             if not errors:
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
                     self._light_pending = {"kind": "discovery", "flat": flat}
@@ -1941,7 +1996,7 @@ class MoLightConfigFlow(
         return self.async_show_form(
             step_id="discover_light_defaults",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_light_option_fields()), user_input or {}
+                vol.Schema(_light_option_fields(self.hass)), user_input or {}
             ),
             errors=errors,
         )
@@ -2263,21 +2318,25 @@ class MoLightConfigFlow(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Pick a schedule sensor and its mode, then choose target lights."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._assign = {
-                "sensor": user_input[CONF_ASSIGN_SENSOR],
-                "key": CONF_SCHEDULE_ENTITY,
-                "mode_key": CONF_SCHEDULE_MODE,
-                "mode": user_input[CONF_SCHEDULE_MODE],
-                "check_timeout": False,
-            }
-            return await self.async_step_assign_lights()
+            if not _schedule_entity_is_allowed(
+                self.hass, user_input.get(CONF_ASSIGN_SENSOR)
+            ):
+                errors[CONF_ASSIGN_SENSOR] = "schedule_entity_not_schedule"
+            else:
+                self._assign = {
+                    "sensor": user_input[CONF_ASSIGN_SENSOR],
+                    "key": CONF_SCHEDULE_ENTITY,
+                    "mode_key": CONF_SCHEDULE_MODE,
+                    "mode": user_input[CONF_SCHEDULE_MODE],
+                    "check_timeout": False,
+                }
+                return await self.async_step_assign_lights()
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
-                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
-                ),
+                vol.Required(CONF_ASSIGN_SENSOR): _schedule_entity_selector(self.hass),
                 vol.Required(
                     CONF_SCHEDULE_MODE, default=DEFAULT_SCHEDULE_MODE
                 ): selector.SelectSelector(
@@ -2287,7 +2346,9 @@ class MoLightConfigFlow(
                 ),
             }
         )
-        return self.async_show_form(step_id="assign_schedule", data_schema=schema)
+        return self.async_show_form(
+            step_id="assign_schedule", data_schema=schema, errors=errors
+        )
 
     def _entity_label(self, entity_id: str) -> str:
         """Friendly name of an entity, falling back to its entity_id."""
@@ -2722,6 +2783,10 @@ class MoLightConfigFlow(
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            if not _schedule_entity_is_allowed(
+                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+            ):
+                errors["base"] = "schedule_entity_not_schedule"
             if not errors:
                 _, entity_errors, _, _ = self._resolve_entity_id(
                     flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
@@ -2752,7 +2817,7 @@ class MoLightConfigFlow(
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                **_light_option_fields(with_entity_id=True),
+                **_light_option_fields(self.hass, with_entity_id=True),
             }
         )
         return self.async_show_form(
@@ -2824,6 +2889,10 @@ class MoLightConfigFlow(
             flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
+            if not _schedule_entity_is_allowed(
+                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+            ):
+                errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
             if not errors:
                 _, entity_errors, _, _ = self._resolve_entity_id(
                     flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
@@ -2846,8 +2915,8 @@ class MoLightConfigFlow(
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                vol.Required(CONF_SCHEDULE_ENTITY): selector.EntitySelector(
-                    _LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]
+                vol.Required(CONF_SCHEDULE_ENTITY): _schedule_entity_selector(
+                    self.hass
                 ),
                 vol.Required(
                     CONF_SCHEDULE_END_ACTION, default=DEFAULT_SCHEDULE_END_ACTION
@@ -3290,6 +3359,12 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            if not _schedule_entity_is_allowed(
+                self.hass,
+                flat.get(CONF_SCHEDULE_ENTITY),
+                legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
+            ):
+                errors["base"] = "schedule_entity_not_schedule"
             if not errors:
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
                     self._light_pending = {"flat": flat}
@@ -3312,7 +3387,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="light", multiple=True)
                 ),
-                **_light_option_fields(),
+                **_light_option_fields(
+                    self.hass, legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY)
+                ),
             }
         )
         return self.async_show_form(
@@ -3365,6 +3442,12 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if user_input is not None:
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
+            if not _schedule_entity_is_allowed(
+                self.hass,
+                user_input.get(CONF_SCHEDULE_ENTITY),
+                legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
+            ):
+                errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
             if not errors:
                 self._scheduled_light_shared = dict(user_input)
                 return await self.async_step_scheduled_light_outside()
@@ -3380,7 +3463,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ),
                 vol.Required(
                     CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)
-                ): selector.EntitySelector(_LIGHT_REF_SELECTORS[CONF_SCHEDULE_ENTITY]),
+                ): _schedule_entity_selector(
+                    self.hass, legacy_entity=cfg.get(CONF_SCHEDULE_ENTITY)
+                ),
                 vol.Required(
                     CONF_SCHEDULE_END_ACTION,
                     default=cfg.get(
