@@ -848,6 +848,70 @@ async def test_light_options_grandfather_existing_non_schedule_sensor(
 
 
 @pytest.mark.asyncio
+async def test_light_options_reject_different_non_schedule_sensor(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
+) -> None:
+    """Grandfathering applies only to the exact stored legacy entity."""
+    regular = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Legacy Light",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.test_occupancy",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        },
+    )
+    scheduled = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: "Legacy Scheduled Light",
+            CONF_LIGHTS: ["light.hallway_2"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.test_occupancy",
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+        },
+    )
+    await setup_entries(hass, occupancy_entry, regular, scheduled)
+    regular_result = await hass.config_entries.options.async_init(regular.entry_id)
+    scheduled_result = await hass.config_entries.options.async_init(scheduled.entry_id)
+
+    # The replacement appears after both forms were rendered, so flow-level
+    # validation—not only the selector's original exclusion list—must reject it.
+    await setup_entries(hass, illuminance_entry)
+    result = await hass.config_entries.options.async_configure(
+        regular_result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Legacy Light",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {
+                CONF_SCHEDULE_ENTITY: "binary_sensor.test_illuminance",
+                CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+            },
+        },
+    )
+    assert result["step_id"] == "light"
+    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+
+    result = await hass.config_entries.options.async_configure(
+        scheduled_result["flow_id"],
+        {
+            CONF_NAME: "Legacy Scheduled Light",
+            CONF_LIGHTS: ["light.hallway_2"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.test_illuminance",
+        },
+    )
+    assert result["step_id"] == "scheduled_light"
+    assert result["errors"] == {CONF_SCHEDULE_ENTITY: "schedule_entity_not_schedule"}
+
+
+@pytest.mark.asyncio
 async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
     """The three main forms store two independent Virtual Light settings maps."""
     await _setup_night_schedule(hass)
@@ -1038,13 +1102,14 @@ async def test_scheduled_light_options_edit_both_settings(
 async def test_scheduled_light_options_requires_replacing_deleted_schedule(
     hass: HomeAssistant,
 ) -> None:
-    """A removed shared schedule cannot be saved as an empty selection."""
+    """A removed shared schedule is required and cannot be saved again."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Hallway",
             CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.deleted_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
             CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
         },
@@ -1058,6 +1123,17 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
         if str(marker) == CONF_SCHEDULE_ENTITY
     )
     assert isinstance(schedule_marker, vol.Required)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.deleted_schedule",
+        },
+    )
+    assert result["step_id"] == "scheduled_light"
+    assert result["errors"] == {CONF_SCHEDULE_ENTITY: "schedule_entity_not_schedule"}
 
 
 @pytest.mark.asyncio
@@ -2953,6 +3029,34 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
 
 
 @pytest.mark.asyncio
+async def test_discover_light_defaults_rejects_non_schedule_sensor_from_stale_form(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Discovery defaults revalidate a schedule created after form rendering."""
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_SENSORS: {CONF_SCHEDULE_ENTITY: "binary_sensor.test_occupancy"},
+        },
+    )
+    assert result["step_id"] == "discover_light_defaults"
+    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+    schedule_selector = _section_selector_config(
+        result, SECTION_SENSORS, CONF_SCHEDULE_ENTITY
+    )
+    assert "binary_sensor.test_occupancy" in schedule_selector["exclude_entities"]
+
+
+@pytest.mark.asyncio
 async def test_discover_light_creates_with_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
@@ -4049,6 +4153,30 @@ async def test_assign_schedule_sets_mode(
     cfg = molight_config(light)
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.test_schedule"
     assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+
+
+@pytest.mark.asyncio
+async def test_assign_schedule_rejects_non_schedule_sensor_from_stale_form(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Bulk assignment revalidates a sensor created after form rendering."""
+    result = await _reach_assign_kind(hass, "assign_schedule")
+    assert result["step_id"] == "assign_schedule"
+
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        },
+    )
+    assert result["step_id"] == "assign_schedule"
+    assert result["errors"] == {CONF_ASSIGN_SENSOR: "schedule_entity_not_schedule"}
+    assert (
+        "binary_sensor.test_occupancy"
+        in _selector_config(result, CONF_ASSIGN_SENSOR)["exclude_entities"]
+    )
 
 
 # ---------------------------------------------------------------------------
