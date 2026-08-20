@@ -214,6 +214,91 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
+async def test_inverted_overlapping_windows_begin_after_merged_interval(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An inner window end is not the start of an inverted effective window."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 21:00:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Inverted Overlap",
+            CONF_TIME_WINDOWS: [
+                {"start": "18:00", "end": "23:00"},
+                {"start": "20:00", "end": "02:00"},
+            ],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get("binary_sensor.inverted_overlap")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
+
+    # The first raw window ends, but the overlapping overnight window remains.
+    t = datetime(2026, 7, 2, 23, 0, 2, tzinfo=UTC)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.inverted_overlap")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+    assert state.attributes["next_transition"] == "2026-07-03T02:00:00+00:00"
+
+    # Only the end of the merged raw interval starts the inverted on-period.
+    t = datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.inverted_overlap")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-03T02:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_inverted_unresolvable_sun_window_uses_stable_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A continuously-on inverted polar schedule has a stable Follow marker."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Inverted Polar",
+            CONF_TIME_WINDOWS: [
+                {"start": {"sun": "sunset"}, "end": {"sun": "sunrise"}}
+            ],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    with patch(
+        "custom_components.molight.binary_sensor.get_astral_event_date",
+        return_value=None,
+    ):
+        await _setup(hass, entry)
+        state = hass.states.get("binary_sensor.inverted_polar")
+        assert state.state == "on"
+        assert state.attributes["current_window_start"] == "inverted"
+        assert state.attributes["next_transition"] is None
+
+        # The daily polar re-check must not manufacture a new effective window.
+        t = datetime(2026, 7, 3, 0, 0, 2, tzinfo=UTC)
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.inverted_polar")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "inverted"
+    assert state.attributes["next_transition"] is None
+
+
+@pytest.mark.asyncio
 async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
     """With no windows the sensor is off and the daily re-check keeps working."""
     await hass.config.async_set_time_zone("UTC")
@@ -281,7 +366,20 @@ async def test_inverted_time_window_uses_effective_on_period(
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await hass.async_block_till_done()
-    assert hass.states.get("binary_sensor.night_schedule").state == "off"
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+    assert state.attributes["next_transition"] == "2026-07-03T07:00:00+00:00"
+
+    # The configured window ends, beginning the next effective inverted window.
+    t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-03T07:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-03T21:00:00+00:00"
 
 
 @pytest.mark.asyncio
