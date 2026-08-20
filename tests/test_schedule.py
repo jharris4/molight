@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from homeassistant.core import State
 from homeassistant.helpers.sun import get_astral_event_date
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache,
 )
 
 from custom_components.molight.const import (
@@ -349,6 +351,92 @@ async def test_inverted_source_schedule(hass: HomeAssistant) -> None:
     hass.states.async_set("binary_sensor.away", "unknown")
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.home").state == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_restores_marker_through_restart_outage(
+    hass: HomeAssistant,
+) -> None:
+    """An effective window marker survives restart while its source is down."""
+    source = "binary_sensor.house_mode"
+    entity_id = "binary_sensor.house_mode_schedule"
+    marker = "2026-07-02T21:00:00+00:00"
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                entity_id,
+                "unavailable",
+                {
+                    "current_window_start": marker,
+                    "source_entity": source,
+                    "inverted": False,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(source, "unavailable")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: source,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "unavailable"
+
+    hass.states.async_set(source, "on")
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_does_not_restore_marker_from_previous_source(
+    hass: HomeAssistant,
+) -> None:
+    """Changing the source starts a new effective window instead of reusing one."""
+    old_source = "binary_sensor.old_mode"
+    source = "binary_sensor.new_mode"
+    entity_id = "binary_sensor.house_mode_schedule"
+    old_marker = "2026-07-02T21:00:00+00:00"
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                entity_id,
+                "on",
+                {
+                    "current_window_start": old_marker,
+                    "source_entity": old_source,
+                    "inverted": False,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(source, "on")
+    source_started = hass.states.get(source).last_changed.isoformat()
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: source,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == source_started
+    assert state.attributes["current_window_start"] != old_marker
 
 
 @pytest.mark.asyncio
