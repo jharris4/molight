@@ -45,6 +45,7 @@ from custom_components.molight.const import (
     SCHEDULE_END_ACTION_TURN_OFF,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
+    STATE_EFFECT,
     STATE_OCCUPIED,
     STATE_WARN,
 )
@@ -413,6 +414,151 @@ async def test_schedule_end_switch_uses_outside_warning_settings(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_WARN
     assert state.attributes["brightness"] == 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("warning_state", "warning_elapsed"),
+    [(STATE_EFFECT, 0), (STATE_WARN, 11)],
+)
+async def test_schedule_end_switch_replaces_inside_warning_with_outside_timer(
+    hass: HomeAssistant, freezer, warning_state: str, warning_elapsed: int
+) -> None:
+    """Switch-state restores an inside warning before starting outside timing."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30},
+        inside=_WARNING_OUTSIDE,
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}
+    )
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    if warning_elapsed:
+        freezer.tick(timedelta(seconds=warning_elapsed))
+        async_fire_time_changed(hass)
+        await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["molight_state"] == warning_state
+    assert state.attributes["pre_warn_brightness"] == 200
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    # The discarded inside warning cannot expire the light; the complete
+    # outside timeout now owns its deadline.
+    freezer.tick(timedelta(seconds=29))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_obeys_outside_bright_control(
+    hass: HomeAssistant,
+) -> None:
+    """Switch-state turns off for the incoming profile's bright control sensor."""
+    illuminance = "binary_sensor.outside_illuminance"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(illuminance, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+        },
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An incoming hold suppresses the recalculated off until it is released."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hold = "input_boolean.outside_keep_on"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(
+        occupancy,
+        "off",
+        {
+            "latest_occupied_time": (
+                datetime.now(UTC) - timedelta(seconds=120)
+            ).isoformat()
+        },
+    )
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_HOLD_ENTITIES: [hold],
+        },
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    # Releasing a normal auto-off hold starts the incoming profile's complete
+    # timeout, just as it does when a hold begins outside a schedule boundary.
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["auto_off_held"] is False
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    freezer.tick(timedelta(seconds=29))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio
