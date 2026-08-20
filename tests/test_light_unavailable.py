@@ -26,6 +26,7 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -45,6 +46,7 @@ SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
 REAL2 = "light.real_2"
 VIRTUAL = "light.matrix_light"
+HOLD = "input_boolean.hold"
 MARKER = "2026-07-02T21:00:00+00:00"
 
 
@@ -306,6 +308,58 @@ async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_schedule_outage_is_not_end_boundary_on_hold_release(
+    hass: HomeAssistant,
+) -> None:
+    """Releasing an auto-off hold during an outage keeps the applied window."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(HOLD, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            hold_entities=[HOLD],
+        ),
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    hass.states.async_set(SCHED, "unavailable")
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_hard_gate_outage_does_not_force_off_on_hold_release(
+    hass: HomeAssistant,
+) -> None:
+    """An unavailable hard gate blocks new starts without forcing an on light off."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(HOLD, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+            hold_entities=[HOLD],
+        ),
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    hass.states.async_set(SCHED, "unavailable")
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio

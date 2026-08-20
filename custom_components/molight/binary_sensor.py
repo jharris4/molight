@@ -8,7 +8,7 @@ Provides four sensor types, all created via the config flow:
                                    trigger/maintain logic; latest_occupied_time
                                    is the max across all constituents
   VirtualIlluminanceSensor       — compares a real illuminance sensor to a threshold
-  VirtualScheduleSensor          — evaluates configurable time windows
+  VirtualScheduleSensor          — evaluates time windows or mirrors a binary sensor
 """
 
 from __future__ import annotations
@@ -45,6 +45,9 @@ from .const import (
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SCHEDULE_DEFINITION,
+    CONF_SCHEDULE_INVERT,
+    CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
@@ -60,6 +63,8 @@ from .const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SCHEDULE_DEFINITION_TIME,
     SUN_EVENTS,
 )
 from .helpers import molight_config, suggested_entity_id
@@ -101,6 +106,15 @@ def _restored_latest_occupied_time(last_state: State | None) -> datetime | None:
         return datetime.fromisoformat(raw)
     except (ValueError, TypeError):
         return None
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    """Parse a stored ISO datetime attribute."""
+    if not isinstance(value, str):
+        return None
+    with contextlib.suppress(ValueError):
+        return datetime.fromisoformat(value)
+    return None
 
 
 async def async_setup_entry(
@@ -526,8 +540,8 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualScheduleSensor(BinarySensorEntity):
-    """Binary sensor that is ON when the current time falls in any configured window.
+class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
+    """Binary sensor driven by a time window or another binary sensor.
 
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
     plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
@@ -550,9 +564,13 @@ class VirtualScheduleSensor(BinarySensorEntity):
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
+        self._definition = cfg.get(CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME)
+        self._source: str | None = cfg.get(CONF_SCHEDULE_SOURCE)
+        self._invert = bool(cfg.get(CONF_SCHEDULE_INVERT, False))
         self._windows: list[dict] = cfg.get(CONF_TIME_WINDOWS, [])
         self._attr_is_on = False
-        self._current_window_start: datetime | None = None
+        self._attr_available = self._definition != SCHEDULE_DEFINITION_BINARY_SENSOR
+        self._current_window_start: datetime | str | None = None
         self._next_transition: datetime | None = None
         self._unsub_transition = None
 
@@ -560,7 +578,28 @@ class VirtualScheduleSensor(BinarySensorEntity):
         """Evaluate the schedule and arm the transition timer."""
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_transition_timer)
-        self._refresh()
+        if self._definition == SCHEDULE_DEFINITION_BINARY_SENSOR:
+            last = await self.async_get_last_state()
+            restored_start = (
+                _parse_datetime(last.attributes.get("current_window_start"))
+                if last is not None
+                and last.attributes.get("source_entity") == self._source
+                else None
+            )
+            self._current_window_start = restored_start
+            self._attr_is_on = restored_start is not None
+            if self._source:
+                self.async_on_remove(
+                    async_track_state_change_event(
+                        self.hass, [self._source], self._handle_source_change
+                    )
+                )
+            self._refresh_source(
+                self.hass.states.get(self._source) if self._source else None,
+                restored_start=restored_start,
+            )
+        else:
+            self._refresh()
 
     @callback
     def _cancel_transition_timer(self) -> None:
@@ -573,9 +612,17 @@ class VirtualScheduleSensor(BinarySensorEntity):
         """Evaluate the current window state and schedule the next transition."""
         now = dt_util.utcnow()
         active_start, next_transition = self._evaluate(now)
-        self._attr_is_on = active_start is not None
-        self._current_window_start = active_start
+        raw_is_on = active_start is not None
+        self._attr_is_on = raw_is_on != self._invert
+        self._current_window_start = (
+            active_start
+            if self._attr_is_on and not self._invert
+            else self._inverted_window_start(now)
+            if self._attr_is_on
+            else None
+        )
         self._next_transition = next_transition
+        self._attr_available = True
 
         self._cancel_transition_timer()
         if next_transition is None:
@@ -585,6 +632,34 @@ class VirtualScheduleSensor(BinarySensorEntity):
         self._unsub_transition = async_track_point_in_time(
             self.hass, self._refresh, next_transition + timedelta(seconds=1)
         )
+        self.async_write_ha_state()
+
+    @callback
+    def _handle_source_change(self, event: Event[EventStateChangedData]) -> None:
+        """Mirror valid source states; an outage is not a false boundary."""
+        self._refresh_source(event.data.get("new_state"))
+
+    @callback
+    def _refresh_source(
+        self, source: State | None, *, restored_start: datetime | None = None
+    ) -> None:
+        """Apply a source state, preserving the last value while unavailable."""
+        self._next_transition = None
+        if source is None or source.state not in ("on", "off"):
+            self._attr_available = False
+            self.async_write_ha_state()
+            return
+
+        effective_on = (source.state == "on") != self._invert
+        if effective_on:
+            if not self._attr_is_on:
+                self._current_window_start = restored_start or source.last_changed
+            elif restored_start is not None:
+                self._current_window_start = restored_start
+        else:
+            self._current_window_start = None
+        self._attr_is_on = effective_on
+        self._attr_available = True
         self.async_write_ha_state()
 
     def _evaluate(self, now: datetime) -> tuple[datetime | None, datetime | None]:
@@ -607,6 +682,30 @@ class VirtualScheduleSensor(BinarySensorEntity):
 
         active_start = max(iv[0] for iv in active) if active else None
         return active_start, (future[0] if future else None)
+
+    def _inverted_window_start(self, now: datetime) -> datetime | str:
+        """Return when the current gap between configured windows began."""
+        today = dt_util.as_local(now).date()
+        intervals = []
+        for offset in (-2, -1, 0, 1):
+            day = today + timedelta(days=offset)
+            intervals.extend(
+                interval
+                for window in self._windows
+                if (interval := self._resolve_window(window, day)) is not None
+            )
+
+        merged: list[list[datetime]] = []
+        for start, end in sorted(intervals):
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        ended = [end for _start, end in merged if end <= now]
+        # With no resolvable boundaries (for example, a sun-only window during
+        # polar day/night), inversion is continuously on. Use a stable marker
+        # so Follow mode can apply it once without re-triggering every restart.
+        return max(ended, default="inverted")
 
     def _resolve_window(
         self, window: dict, day: date
@@ -660,10 +759,12 @@ class VirtualScheduleSensor(BinarySensorEntity):
     def extra_state_attributes(self) -> dict:
         """Return the schedule window attributes."""
 
-        def _fmt(t: datetime | None) -> str | None:
-            return t.isoformat() if t else None
+        def _fmt(t: datetime | str | None) -> str | None:
+            return t.isoformat() if isinstance(t, datetime) else t
 
         return {
             "current_window_start": _fmt(self._current_window_start),
             "next_transition": _fmt(self._next_transition),
+            "source_entity": self._source,
+            "inverted": self._invert,
         }

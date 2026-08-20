@@ -71,9 +71,12 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
+    CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
@@ -93,6 +96,8 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SCHEDULE_DEFINITION_TIME,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -126,6 +131,22 @@ async def _start_create(hass: HomeAssistant) -> dict:
     assert result["type"] == FlowResultType.MENU
     return await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "create"}
+    )
+
+
+async def _choose_time_schedule(hass: HomeAssistant, result: dict) -> dict:
+    """Advance a Virtual Schedule Sensor flow to its time-window form."""
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME},
+    )
+
+
+async def _choose_time_schedule_options(hass: HomeAssistant, result: dict) -> dict:
+    """Advance schedule options to its time-window form."""
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME},
     )
 
 
@@ -279,6 +300,8 @@ async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
     assert result["step_id"] == "schedule"
+    result = await _choose_time_schedule(hass, result)
+    assert result["step_id"] == "schedule_time"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -327,6 +350,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
+    result = await _choose_time_schedule(hass, result)
 
     # Start edge only — no end.
     result = await hass.config_entries.flow.async_configure(
@@ -358,6 +382,97 @@ async def test_config_flow_schedule_rejects_incomplete_window(
             "end": {"sun": "sunrise", "combine": "latest"},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_source_schedule_excludes_schedule_sources(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """A source schedule is reusable but cannot chain another schedule."""
+    hass.states.async_set("binary_sensor.house_mode", "off")
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    assert result["step_id"] == "schedule_source"
+    assert (
+        "binary_sensor.test_schedule"
+        not in _selector_config(result, CONF_SCHEDULE_SOURCE)["exclude_entities"]
+    )
+
+    # A schedule created after the form opened is absent from its frozen
+    # selector exclusion, so submission must be rejected by backend validation.
+    await setup_entries(hass, schedule_entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Nested Schedule",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.test_schedule",
+            CONF_SCHEDULE_INVERT: False,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["errors"] == {
+        CONF_SCHEDULE_SOURCE: "schedule_source_molight_schedule"
+    }
+    assert (
+        "binary_sensor.test_schedule"
+        in _selector_config(result, CONF_SCHEDULE_SOURCE)["exclude_entities"]
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: True,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+        CONF_NAME: "House Mode Schedule",
+        CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        CONF_SCHEDULE_INVERT: True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_schedule_options_can_change_definition(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Changing from time to source drops the obsolete window definition."""
+    await setup_entries(hass, schedule_entry)
+    hass.states.async_set("binary_sensor.house_mode", "on")
+
+    result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    assert result["data_schema"]({})[CONF_SCHEDULE_DEFINITION] == (
+        SCHEDULE_DEFINITION_TIME
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "House Mode",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    cfg = molight_config(schedule_entry)
+    assert cfg[CONF_SCHEDULE_DEFINITION] == SCHEDULE_DEFINITION_BINARY_SENSOR
+    assert cfg[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
+    assert CONF_TIME_WINDOWS not in cfg
 
 
 @pytest.mark.asyncio
@@ -2179,6 +2294,7 @@ async def test_schedule_options_round_trip(
 
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
     assert result["type"] == FlowResultType.FORM
+    result = await _choose_time_schedule_options(hass, result)
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -2219,6 +2335,7 @@ async def test_schedule_options_prefill_dict_edges(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] == FlowResultType.FORM
+    result = await _choose_time_schedule_options(hass, result)
 
     suggested = _suggested_values(result["data_schema"])
     assert suggested["start"] == {
@@ -4032,6 +4149,7 @@ async def test_schedule_options_reject_incomplete_window(
     await setup_entries(hass, schedule_entry)
 
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    result = await _choose_time_schedule_options(hass, result)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {CONF_NAME: "Test Schedule", "start": {"time": "20:00:00"}, "end": {}},
@@ -4215,6 +4333,7 @@ async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
     )
+    result = await _choose_time_schedule(hass, result)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_NAME: "Empty Schedule", "start": {}, "end": {}, SECTION_ADVANCED: {}},
@@ -4246,6 +4365,7 @@ async def test_schedule_options_require_window(
     await setup_entries(hass, schedule_entry)
 
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    result = await _choose_time_schedule_options(hass, result)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_NAME: "Test Schedule", "start": {}, "end": {}}
     )
@@ -4301,6 +4421,8 @@ async def test_explicit_entity_id_conflict_all_create_steps(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: entity_type}
     )
+    if entity_type == ENTITY_TYPE_SCHEDULE:
+        result = await _choose_time_schedule(hass, result)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {**user_input, SECTION_ADVANCED: {CONF_ENTITY_ID: "taken"}},

@@ -11,7 +11,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Occupancy Sensor](#virtual-occupancy-binary-sensor) | Wraps one motion/presence sensor; estimates when the person *actually left* |
 | [Virtual Combined Occupancy Sensor](#virtual-combined-occupancy-binary-sensor) | Merges several occupancy sensors with trigger/maintain roles |
 | [Virtual Illuminance Sensor](#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
-| [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | On inside time windows defined by fixed times and/or sun events |
+| [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | Reusable schedule signal from a time/sun window or another binary sensor, optionally inverted |
 | [Virtual Light](#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
 | [Virtual Scheduled Light](#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it |
 | [Virtual Remote](#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, …) to light actions — no automations |
@@ -168,7 +168,12 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity 
 
 ### Virtual Schedule Binary Sensor
 
-`on` = current time is within an active window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry — create additional schedule entries for additional windows.
+A Virtual Schedule Sensor provides a reusable on/off schedule signal. Choose its definition when creating or configuring it:
+
+- **Time window** — `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry — create additional schedule entries for additional windows.
+- **Binary sensor** — mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. Other Virtual Schedule Sensors are excluded as sources to prevent chains and cycles.
+
+**Invert output** is available for both definitions. A time-window schedule is then `on` outside its configured window; a source-backed schedule is `on` while its source is `off`. An unknown, unavailable, or missing source makes the Virtual Schedule Sensor unavailable and is never inverted to `on`.
 
 The form has a **Window start** and a **Window end** section; each edge is a fixed time, a sun event, or both:
 
@@ -181,7 +186,9 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 
 e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone.
 
-Attributes: `current_window_start` (identifies the active window; used by follow-mode lights for restart catch-up), `next_transition`.
+Attributes: `current_window_start` (identifies the effective `on` period; used by follow-mode lights for restart catch-up), `next_transition`, `source_entity`, `inverted`.
+
+Source-backed schedules preserve their effective state and window marker across a temporary source outage. Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state. As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
 
 ### Virtual Light
 

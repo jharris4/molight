@@ -71,9 +71,12 @@ from .const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
+    CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
@@ -118,6 +121,9 @@ from .const import (
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
     REMOTE_PRESET_VALUE_KEYS,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SCHEDULE_DEFINITION_TIME,
+    SCHEDULE_DEFINITIONS,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -484,6 +490,35 @@ def _molight_occupancy_entity_ids(hass: HomeAssistant) -> list[str]:
             if entity.domain == "binary_sensor"
         )
     return sorted(entity_ids)
+
+
+def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
+    """Entity ids created by MoLight schedule entries."""
+    registry = er.async_get(hass)
+    return sorted(
+        entity.entity_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULE
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.domain == "binary_sensor"
+    )
+
+
+def _schedule_source_is_molight_schedule(
+    hass: HomeAssistant, entity_id: str | None
+) -> bool:
+    """Return whether an entity is backed by a MoLight schedule entry."""
+    if not entity_id:
+        return False
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    if reg_entry is None or reg_entry.config_entry_id is None:
+        return False
+    entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+    return bool(
+        entry is not None
+        and entry.domain == DOMAIN
+        and _molight_cfg(entry).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULE
+    )
 
 
 def _combined_occupancy_creates_cycle(
@@ -1422,6 +1457,7 @@ class MoLightConfigFlow(
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._scheduled_light_shared_input: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
+        self._schedule_definition = SCHEDULE_DEFINITION_TIME
         # Stashed sensor/role/mode between the two bulk-assign steps.
         self._assign: dict[str, Any] = {}
         # Direction and selected entry ids awaiting a bulk-conversion review.
@@ -2511,7 +2547,41 @@ class MoLightConfigFlow(
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a Virtual Schedule Binary Sensor.
+        """Choose how a Virtual Schedule Binary Sensor is defined."""
+        if self._prefill and CONF_SCHEDULE_DEFINITION in self._prefill:
+            self._schedule_definition = self._prefill[CONF_SCHEDULE_DEFINITION]
+            return await (
+                self.async_step_schedule_source()
+                if self._schedule_definition == SCHEDULE_DEFINITION_BINARY_SENSOR
+                else self.async_step_schedule_time()
+            )
+        if user_input is not None:
+            self._schedule_definition = user_input[CONF_SCHEDULE_DEFINITION]
+            return await (
+                self.async_step_schedule_source()
+                if self._schedule_definition == SCHEDULE_DEFINITION_BINARY_SENSOR
+                else self.async_step_schedule_time()
+            )
+        return self.async_show_form(
+            step_id="schedule",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SCHEDULE_DEFINITION, default=SCHEDULE_DEFINITION_TIME
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=SCHEDULE_DEFINITIONS,
+                            translation_key=CONF_SCHEDULE_DEFINITION,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_schedule_time(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure a time-window Virtual Schedule Binary Sensor.
 
         Each window edge combines an optional fixed time with an optional sun
         event (e.g. start at the later of sunset and 21:00). The HA frontend
@@ -2534,7 +2604,9 @@ class MoLightConfigFlow(
             else:
                 data = {
                     CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                    CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME,
                     CONF_NAME: user_input[CONF_NAME],
+                    CONF_SCHEDULE_INVERT: user_input.get(CONF_SCHEDULE_INVERT, False),
                     CONF_TIME_WINDOWS: [window],
                 }
                 entity_id = (user_input.get(SECTION_ADVANCED) or {}).get(CONF_ENTITY_ID)
@@ -2544,7 +2616,10 @@ class MoLightConfigFlow(
                     entity_type=ENTITY_TYPE_SCHEDULE,
                     name=user_input[CONF_NAME],
                     data=data,
-                    prefill=user_input,
+                    prefill={
+                        **user_input,
+                        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME,
+                    },
                     entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
                 )
                 if result is not None:
@@ -2554,11 +2629,71 @@ class MoLightConfigFlow(
             {
                 vol.Required(CONF_NAME): str,
                 **_schedule_edge_fields(),
+                vol.Optional(
+                    CONF_SCHEDULE_INVERT, default=False
+                ): selector.BooleanSelector(),
                 **_entity_id_section(),
             }
         )
         return self.async_show_form(
-            step_id="schedule",
+            step_id="schedule_time",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or self._prefill or {}
+            ),
+            errors=errors,
+        )
+
+    async def async_step_schedule_source(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure a source-backed Virtual Schedule Binary Sensor."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            source = user_input.get(CONF_SCHEDULE_SOURCE)
+            if _schedule_source_is_molight_schedule(self.hass, source):
+                errors[CONF_SCHEDULE_SOURCE] = "schedule_source_molight_schedule"
+            if not errors:
+                data = {
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                    CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_SCHEDULE_SOURCE: source,
+                    CONF_SCHEDULE_INVERT: user_input.get(CONF_SCHEDULE_INVERT, False),
+                }
+                entity_id = (user_input.get(SECTION_ADVANCED) or {}).get(CONF_ENTITY_ID)
+                if entity_id:
+                    data[CONF_ENTITY_ID] = entity_id
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_SCHEDULE,
+                    name=user_input[CONF_NAME],
+                    data=data,
+                    prefill={
+                        **user_input,
+                        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+                    },
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
+                )
+                if result is not None:
+                    return result
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                vol.Required(CONF_SCHEDULE_SOURCE): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor",
+                        exclude_entities=_molight_schedule_entity_ids(self.hass),
+                        multiple=False,
+                    )
+                ),
+                vol.Optional(
+                    CONF_SCHEDULE_INVERT, default=False
+                ): selector.BooleanSelector(),
+                **_entity_id_section(),
+            }
+        )
+        return self.async_show_form(
+            step_id="schedule_source",
             data_schema=self.add_suggested_values_to_schema(
                 schema, user_input or self._prefill or {}
             ),
@@ -2827,6 +2962,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         }
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
+        self._schedule_definition = self._cfg.get(
+            CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME
+        )
 
     def _finish(self, data: dict[str, Any]) -> config_entries.FlowResult:
         """Store the edited options, syncing the entry title to the new name.
@@ -3018,7 +3156,34 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a Virtual Schedule Sensor's settings."""
+        """Choose the definition used by a Virtual Schedule Sensor."""
+        if user_input is not None:
+            self._schedule_definition = user_input[CONF_SCHEDULE_DEFINITION]
+            return await (
+                self.async_step_schedule_source()
+                if self._schedule_definition == SCHEDULE_DEFINITION_BINARY_SENSOR
+                else self.async_step_schedule_time()
+            )
+        return self.async_show_form(
+            step_id="schedule",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_SCHEDULE_DEFINITION, default=self._schedule_definition
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=SCHEDULE_DEFINITIONS,
+                            translation_key=CONF_SCHEDULE_DEFINITION,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_schedule_time(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit a time-window Virtual Schedule Sensor."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -3033,6 +3198,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 return self._finish(
                     {
                         CONF_NAME: user_input[CONF_NAME],
+                        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME,
+                        CONF_SCHEDULE_INVERT: user_input.get(
+                            CONF_SCHEDULE_INVERT, False
+                        ),
                         CONF_TIME_WINDOWS: [window],
                     }
                 )
@@ -3043,13 +3212,63 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
                 **_schedule_edge_fields(),
+                vol.Optional(
+                    CONF_SCHEDULE_INVERT,
+                    default=cfg.get(CONF_SCHEDULE_INVERT, False),
+                ): selector.BooleanSelector(),
             }
         )
         return self.async_show_form(
-            step_id="schedule",
+            step_id="schedule_time",
             data_schema=self.add_suggested_values_to_schema(
                 schema, user_input or _window_suggested(first)
             ),
+            errors=errors,
+        )
+
+    async def async_step_schedule_source(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit a source-backed Virtual Schedule Sensor."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            source = user_input.get(CONF_SCHEDULE_SOURCE)
+            if _schedule_source_is_molight_schedule(self.hass, source):
+                errors[CONF_SCHEDULE_SOURCE] = "schedule_source_molight_schedule"
+            if not errors:
+                return self._finish(
+                    {
+                        CONF_NAME: user_input[CONF_NAME],
+                        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+                        CONF_SCHEDULE_SOURCE: source,
+                        CONF_SCHEDULE_INVERT: user_input.get(
+                            CONF_SCHEDULE_INVERT, False
+                        ),
+                    }
+                )
+
+        cfg = self._cfg
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
+                vol.Required(
+                    CONF_SCHEDULE_SOURCE, default=cfg.get(CONF_SCHEDULE_SOURCE)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor",
+                        exclude_entities=_molight_schedule_entity_ids(self.hass),
+                        multiple=False,
+                    )
+                ),
+                vol.Optional(
+                    CONF_SCHEDULE_INVERT,
+                    default=cfg.get(CONF_SCHEDULE_INVERT, False),
+                ): selector.BooleanSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="schedule_source",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or cfg),
             errors=errors,
         )
 

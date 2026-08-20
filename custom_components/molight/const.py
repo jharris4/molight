@@ -108,6 +108,18 @@ CONF_ILLUMINANCE_HYSTERESIS = "illuminance_hysteresis"
 DEFAULT_ILLUMINANCE_HYSTERESIS = 0.0
 
 # --- Virtual Schedule Binary Sensor ---
+# A schedule is either calculated from time windows or mirrors a source binary
+# sensor. Existing entries predate the discriminator and are therefore treated
+# as time-window schedules when this key is absent.
+CONF_SCHEDULE_DEFINITION = "schedule_definition"
+SCHEDULE_DEFINITION_TIME = "time"
+SCHEDULE_DEFINITION_BINARY_SENSOR = "binary_sensor"
+SCHEDULE_DEFINITIONS = [
+    SCHEDULE_DEFINITION_TIME,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
+]
+CONF_SCHEDULE_SOURCE = "schedule_source"
+CONF_SCHEDULE_INVERT = "schedule_invert"
 # List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain
 # "HH:MM" string (legacy) or a dict:
 #   {"time": "HH:MM", "sun": "sunset"|"sunrise", "offset": <minutes>,

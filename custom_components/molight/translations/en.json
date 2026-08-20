@@ -401,9 +401,45 @@
       },
       "schedule": {
         "title": "Virtual Schedule Sensor",
-        "description": "On while the current time is inside the window. Each edge is a fixed time, a sun event with an optional offset, or both combined — e.g. start at the later of sunset − 15 min and 21:00. Overnight windows work.",
+        "description": "Choose whether this schedule is calculated from a time window or mirrors another binary sensor.",
         "data": {
-          "name": "Name"
+          "schedule_definition": "Schedule definition"
+        }
+      },
+      "schedule_source": {
+        "title": "Binary sensor schedule",
+        "description": "Creates a reusable Virtual Schedule Sensor from another binary sensor.",
+        "data": {
+          "name": "Name",
+          "schedule_source": "Source binary sensor",
+          "schedule_invert": "Invert output"
+        },
+        "data_description": {
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. Virtual Schedule Sensors are excluded to prevent chains and cycles.",
+          "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "Rarely needed.",
+            "data": {
+              "entity_id": "Entity ID"
+            },
+            "data_description": {
+              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+            }
+          }
+        }
+      },
+      "schedule_time": {
+        "title": "Time window schedule",
+        "description": "On while the current time is inside the window. Each edge is a fixed time, a sun event with an optional offset, or both combined. Overnight windows work.",
+        "data": {
+          "name": "Name",
+          "schedule_invert": "Invert output"
+        },
+        "data_description": {
+          "schedule_invert": "When enabled, this schedule is on outside the configured window."
         },
         "sections": {
           "start": {
@@ -850,6 +886,7 @@
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
+      "schedule_source_molight_schedule": "Select a binary sensor that is not another Virtual Schedule Sensor.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
@@ -900,6 +937,12 @@
         "light": "Virtual Light",
         "scheduled_light": "Virtual Scheduled Light",
         "remote": "Virtual Remote"
+      }
+    },
+    "schedule_definition": {
+      "options": {
+        "time": "Time window — fixed times and/or sun events",
+        "binary_sensor": "Binary sensor — mirror an existing sensor"
       }
     },
     "affix_target": {
@@ -1191,9 +1234,33 @@
       },
       "schedule": {
         "title": "Virtual Schedule Sensor",
+        "description": "Choose whether this schedule is calculated from a time window or mirrors another binary sensor.",
+        "data": {
+          "schedule_definition": "Schedule definition"
+        }
+      },
+      "schedule_source": {
+        "title": "Binary sensor schedule",
+        "description": "Mirrors another binary sensor as a reusable Virtual Schedule Sensor.",
+        "data": {
+          "name": "Name",
+          "schedule_source": "Source binary sensor",
+          "schedule_invert": "Invert output"
+        },
+        "data_description": {
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. Virtual Schedule Sensors are excluded to prevent chains and cycles.",
+          "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
+        }
+      },
+      "schedule_time": {
+        "title": "Time window schedule",
         "description": "Each edge is a fixed time, a sun event with an optional offset, or both combined. Overnight windows work.",
         "data": {
-          "name": "Name"
+          "name": "Name",
+          "schedule_invert": "Invert output"
+        },
+        "data_description": {
+          "schedule_invert": "When enabled, this schedule is on outside the configured window."
         },
         "sections": {
           "start": {
@@ -1417,6 +1484,7 @@
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
+      "schedule_source_molight_schedule": "Select a binary sensor that is not another Virtual Schedule Sensor.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",

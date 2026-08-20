@@ -1118,7 +1118,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._on_maintain_change(new_state.state == "on")
         if entity_id == self._illuminance_entity:
             self._on_illuminance_change(new_state.state == "on")
-        if entity_id == self._schedule_entity:
+        if entity_id == self._schedule_entity and new_state.state in ("on", "off"):
             self._on_schedule_change(new_state)
         if entity_id == self._door_entity:
             self._door_open = new_state.state == "on"
@@ -1403,10 +1403,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         return not (state is not None and state.state == "on")
 
     def _hard_gate_schedule_inactive(self) -> bool:
-        """Return True when the original hard gate currently requires off."""
-        return (
-            self._schedule_mode == SCHEDULE_MODE_GATE and self._gate_schedule_inactive()
-        )
+        """Return True when a valid hard-gate state explicitly requires off."""
+        if self._schedule_mode != SCHEDULE_MODE_GATE or not self._schedule_entity:
+            return False
+        state = self.hass.states.get(self._schedule_entity)
+        return state is not None and state.state == "off"
 
     def _follow_schedule_state(self) -> State | None:
         """Return the schedule state when in follow mode and ON, else None."""
@@ -1470,6 +1471,24 @@ class VirtualLight(LightEntity, RestoreEntity):
         if sched is not None:
             # Active follow window owns the lights — no timer.
             self._apply_window_start(sched.attributes.get("current_window_start"))
+            return
+        schedule_state = (
+            self.hass.states.get(self._schedule_entity)
+            if self._schedule_entity
+            else None
+        )
+        if (
+            self._schedule_mode == SCHEDULE_MODE_FOLLOW
+            and self._schedule_window_applied is not None
+            and (
+                schedule_state is None
+                or schedule_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            )
+        ):
+            # An unreadable schedule is not proof that its active window ended.
+            # Keep the applied window until a valid state recovers.
+            self._machine_state = STATE_SCHEDULED
+            self.async_write_ha_state()
             return
         if (
             self._schedule_entity

@@ -16,9 +16,13 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
+    CONF_SCHEDULE_DEFINITION,
+    CONF_SCHEDULE_INVERT,
+    CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
     DOMAIN,
     ENTITY_TYPE_SCHEDULE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
 )
 
 if TYPE_CHECKING:
@@ -247,6 +251,104 @@ async def test_invalid_window_edges_never_activate(
     assert state.state == "off"
     assert state.attributes["current_window_start"] is None
     assert state.attributes["next_transition"] is None
+
+
+@pytest.mark.asyncio
+async def test_inverted_time_window_uses_effective_on_period(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Inversion turns the complement into the schedule's effective window."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Night Schedule",
+            CONF_TIME_WINDOWS: [{"start": "21:00", "end": "07:00"}],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T07:00:00+00:00"
+
+    t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.night_schedule").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_mirrors_valid_states_and_holds_across_outage(
+    hass: HomeAssistant,
+) -> None:
+    """A source outage is unavailable, not an effective off transition."""
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        },
+    )
+    await _setup(hass, entry)
+    assert hass.states.get("binary_sensor.house_mode_2").state == "off"
+
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.house_mode_2")
+    assert state.state == "on"
+    marker = state.attributes["current_window_start"]
+    assert marker is not None
+    assert state.attributes["next_transition"] is None
+
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.house_mode_2").state == "unavailable"
+
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.house_mode_2")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.house_mode_2")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+
+
+@pytest.mark.asyncio
+async def test_inverted_source_schedule(hass: HomeAssistant) -> None:
+    """Source inversion applies only to valid on/off values."""
+    hass.states.async_set("binary_sensor.away", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Home",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.away",
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await _setup(hass, entry)
+    assert hass.states.get("binary_sensor.home").state == "on"
+
+    hass.states.async_set("binary_sensor.away", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.home").state == "off"
+
+    hass.states.async_set("binary_sensor.away", "unknown")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.home").state == "unavailable"
 
 
 @pytest.mark.asyncio
