@@ -149,7 +149,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   follow    # on at window start, off at window end
 ```
 
-`follow` = porch-light behavior; the window owns the light but manual changes mid-window still stand. Use `gate` instead if you want occupancy to control the light *only inside* the window.
+`follow` = porch-light behavior; the window owns the light but manual changes mid-window still stand. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end, **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** preserves its existing state and timer.
 
 ---
 
@@ -218,7 +218,8 @@ Auto-on color temperature: 2200                  # warm night light
 
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
-- With the selected schedule-end behavior, switching settings never restyles or turns off a light that is already on — brightness and color only apply on the *next* automatic turn-on. A countdown already running keeps its original duration. Choose **Turn off using the inside settings** instead when the end of the night window should be an automatic off boundary.
+- With this example's **Keep state** choice and profiles, ending the schedule does not restyle or force off a light that is already on — brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. An incoming profile with bright illuminance in `control` mode can still force off under the normal rules.
+- Choose **Switch state** to replace an on light's state and deadline using the outside profile's current sensors/history and 300-second timeout, or **Turn off using the inside settings** when the end of the night window itself should be an automatic off boundary.
 - Every setting can differ per side, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one side and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
 
