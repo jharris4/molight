@@ -27,6 +27,8 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -360,6 +362,41 @@ async def test_hard_gate_outage_does_not_force_off_on_hold_release(
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+async def test_gate_outage_preserves_on_light_but_blocks_new_activation(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """Every gate mode fails closed without treating an outage as a boundary."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=mode),
+    )
+
+    # An already-on light is left in its running state when the gate vanishes.
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    # Once off, the unreadable gate blocks a fresh occupancy activation.
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio

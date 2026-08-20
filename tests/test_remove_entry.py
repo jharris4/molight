@@ -41,7 +41,9 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
@@ -51,6 +53,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
@@ -194,6 +197,36 @@ async def test_remove_entry_is_clean(hass: HomeAssistant, caplog, make_entry) ->
     await settle(hass)
 
     await _remove_and_assert_clean(hass, entry, caplog)
+
+
+@pytest.mark.asyncio
+async def test_remove_source_entry_clears_source_backed_schedule_reference(
+    hass: HomeAssistant,
+) -> None:
+    """Removing a MoLight source leaves its schedule safely unconfigured."""
+    source = _occupancy_entry()
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Source Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.rm_occupancy",
+        },
+    )
+    for entry in (source, schedule):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    assert molight_config(schedule)[CONF_SCHEDULE_SOURCE] == (
+        "binary_sensor.rm_occupancy"
+    )
+
+    await hass.config_entries.async_remove(source.entry_id)
+    await settle(hass)
+
+    assert CONF_SCHEDULE_SOURCE not in molight_config(schedule)
+    assert hass.states.get("binary_sensor.source_schedule").state == "unavailable"
 
 
 @pytest.mark.asyncio

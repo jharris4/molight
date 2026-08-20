@@ -398,7 +398,10 @@ async def test_source_schedule_mirrors_valid_states_and_holds_across_outage(
         },
     )
     await _setup(hass, entry)
-    assert hass.states.get("binary_sensor.house_mode_2").state == "off"
+    state = hass.states.get("binary_sensor.house_mode_2")
+    assert state.state == "off"
+    assert state.attributes["source_entity"] == "binary_sensor.house_mode"
+    assert state.attributes["inverted"] is False
 
     hass.states.async_set("binary_sensor.house_mode", "on")
     await hass.async_block_till_done()
@@ -440,7 +443,10 @@ async def test_inverted_source_schedule(hass: HomeAssistant) -> None:
         },
     )
     await _setup(hass, entry)
-    assert hass.states.get("binary_sensor.home").state == "on"
+    state = hass.states.get("binary_sensor.home")
+    assert state.state == "on"
+    assert state.attributes["source_entity"] == "binary_sensor.away"
+    assert state.attributes["inverted"] is True
 
     hass.states.async_set("binary_sensor.away", "on")
     await hass.async_block_till_done()

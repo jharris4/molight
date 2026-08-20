@@ -8,6 +8,7 @@ import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import HomeAssistant, ServiceCall, State
 from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
     async_fire_time_changed,
     mock_restore_cache,
 )
@@ -31,17 +32,23 @@ from custom_components.molight.const import (
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_SOURCE,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
+    ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -1481,6 +1488,55 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
     # Recovery to a valid opposite state switches normally.
     hass.states.async_set(SCHEDULE, "off")
     await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_OUTSIDE
+    )
+
+
+@pytest.mark.asyncio
+async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
+    hass: HomeAssistant,
+) -> None:
+    """A real source propagates through its schedule wrapper to profile selection."""
+    source = "binary_sensor.house_mode"
+    schedule_entity = "binary_sensor.profile_schedule"
+    hass.states.async_set(source, "off")
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Profile Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: source,
+        },
+    )
+    light = make_scheduled_light_entry(schedule=schedule_entity)
+    await setup_entries(hass, schedule, light)
+
+    assert hass.states.get(schedule_entity).state == "off"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_OUTSIDE
+    )
+
+    hass.states.async_set(source, "on")
+    await settle(hass)
+    assert hass.states.get(schedule_entity).state == "on"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_INSIDE
+    )
+
+    # Losing the real source makes the wrapper unavailable but does not invent
+    # a profile boundary in the consumer.
+    hass.states.async_set(source, "unavailable")
+    await settle(hass)
+    assert hass.states.get(schedule_entity).state == "unavailable"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
+        ACTIVE_SETTINGS_INSIDE
+    )
+
+    hass.states.async_set(source, "off")
+    await settle(hass)
+    assert hass.states.get(schedule_entity).state == "off"
     assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == (
         ACTIVE_SETTINGS_OUTSIDE
     )

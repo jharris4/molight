@@ -445,6 +445,52 @@ async def test_config_flow_source_schedule_excludes_schedule_sources(
 
 
 @pytest.mark.asyncio
+async def test_source_schedule_collision_change_preserves_second_step(
+    hass: HomeAssistant,
+) -> None:
+    """Going back from a derived-id collision restores the source form."""
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    hass.states.async_set("binary_sensor.source_schedule", "off")
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    source_input = {
+        CONF_NAME: "Source Schedule",
+        CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        CONF_SCHEDULE_INVERT: True,
+        SECTION_ADVANCED: {},
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], source_input
+    )
+    assert result["step_id"] == "confirm_entity_id"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_change"}
+    )
+    assert result["step_id"] == "schedule_source"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "Source Schedule"
+    assert suggested[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
+    assert suggested[CONF_SCHEDULE_INVERT] is True
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **source_input,
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "distinct_schedule"},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "distinct_schedule"
+
+
+@pytest.mark.asyncio
 async def test_schedule_options_can_change_definition(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
@@ -473,6 +519,36 @@ async def test_schedule_options_can_change_definition(
     assert cfg[CONF_SCHEDULE_DEFINITION] == SCHEDULE_DEFINITION_BINARY_SENSOR
     assert cfg[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
     assert CONF_TIME_WINDOWS not in cfg
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_options_prefill_source_and_inversion(
+    hass: HomeAssistant,
+) -> None:
+    """Editing a source schedule restores its source-specific values."""
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    assert result["step_id"] == "schedule_source"
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "House Mode"
+    assert suggested[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
+    assert suggested[CONF_SCHEDULE_INVERT] is True
 
 
 @pytest.mark.asyncio
