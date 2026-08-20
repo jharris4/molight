@@ -101,6 +101,10 @@ input_boolean:
   occupancy_house:
     name: "House Occupancy"
 
+  # Schedule sensors
+  schedule:
+    name: "Schedule"
+
 # Input number — backing state for illuminance sensor
 input_number:
   illuminance_living_room:
@@ -618,7 +622,7 @@ template:
           target:
             entity_id: input_boolean.light_bulk_30
 
-  # Motion / Presence binary sensors (binary_sensor.test_*)
+  # Motion / Presence / Schedule binary sensors (binary_sensor.test_*)
   - binary_sensor:
       - name: "Test Living Room Motion"
         unique_id: test_motion_living_room
@@ -649,6 +653,10 @@ template:
         unique_id: test_house_occupancy
         device_class: occupancy
         state: "{{ is_state('input_boolean.occupancy_house', 'on') }}"
+
+      - name: "Test Schedule"
+        unique_id: test_schedule
+        state: "{{ is_state('input_boolean.schedule', 'on') }}"
 
   # Illuminance sensor (sensor.test_*)
   - sensor:
