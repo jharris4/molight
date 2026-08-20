@@ -2483,6 +2483,52 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
 
 
 @pytest.mark.asyncio
+async def test_discover_light_creates_with_turn_on_selection(
+    hass: HomeAssistant,
+) -> None:
+    """Discovered lights complete the target-dependent selection subflow."""
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+    hass.states.async_set(
+        "select.desk_preset",
+        "Reading",
+        {"options": ["Reading", "Relax"]},
+    )
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_BEHAVIOR: {
+                CONF_TURN_ON_SELECT_ENTITY: "select.desk_preset",
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light_selection"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Relax"}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        entry
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(entry).get(CONF_LIGHTS) == ["light.desk"]
+    ]
+    assert len(created) == 1
+    assert created[0].data[CONF_TURN_ON_SELECT_ENTITY] == "select.desk_preset"
+    assert created[0].data[CONF_TURN_ON_SELECT_OPTION] == "Relax"
+
+
+@pytest.mark.asyncio
 async def test_discover_defaults_step_applies_overrides(hass: HomeAssistant) -> None:
     """Edited defaults on the discovery step apply to every created entity."""
     hass.states.async_set(

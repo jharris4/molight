@@ -1747,6 +1747,125 @@ async def test_restart_with_held_pending_off_reports_maintained_hold(
 
 
 @pytest.mark.asyncio
+async def test_restart_clears_pending_off_when_physical_light_is_already_off(
+    hass: HomeAssistant,
+) -> None:
+    """A completed pending off cannot cut a later manual on after a hold cycle."""
+    switch = "switch.scheduled_light_auto_off"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_OUTSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    ATTR_SCHEDULE_END_OFF_PENDING: True,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+async def test_restart_held_pending_off_restores_old_warning_before_release(
+    hass: HomeAssistant,
+) -> None:
+    """A held pending off undoes its old warning presentation before waiting."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(hold, "on")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_OUTSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    ATTR_SCHEDULE_END_OFF_PENDING: True,
+                    "brightness": 255,
+                    "pre_warn_brightness": 200,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["pre_warn_brightness"] is None
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_restart_missed_switch_with_light_off_seeds_outside_occupancy(
+    hass: HomeAssistant,
+) -> None:
+    """An off light follows normal outside occupancy after a missed switch."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(occupancy, "on")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "off",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
 async def test_reload_with_different_schedule_does_not_catch_up_boundary(
     hass: HomeAssistant,
 ) -> None:

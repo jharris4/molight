@@ -119,7 +119,7 @@ async def test_real_light_recovery_keeps_running_countdown(
 
 @pytest.mark.asyncio
 async def test_real_light_recovery_mirrors_brightness(hass: HomeAssistant) -> None:
-    """The recovery adoption still mirrors the member's brightness/color."""
+    """The recovery adoption still mirrors the member's brightness."""
     await setup_entries(hass, make_light_entry())
 
     hass.states.async_set(REAL, "on", {"brightness": 200})
@@ -133,6 +133,36 @@ async def test_real_light_recovery_mirrors_brightness(hass: HomeAssistant) -> No
     state = _state(hass)
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 120
+
+
+@pytest.mark.asyncio
+async def test_real_light_recovery_mirrors_color(hass: HomeAssistant) -> None:
+    """A recovered member's color is mirrored without restarting its timer."""
+    original = {
+        "supported_color_modes": ["hs"],
+        "color_mode": "hs",
+        "hs_color": [30, 40],
+        "brightness": 200,
+    }
+    recovered = {
+        **original,
+        "hs_color": [120, 60],
+        "brightness": 120,
+    }
+    await setup_entries(hass, make_light_entry())
+
+    hass.states.async_set(REAL, "on", original)
+    await settle(hass)
+    assert tuple(_state(hass).attributes["hs_color"]) == (30.0, 40.0)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "on", recovered)
+    await settle(hass)
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+    assert tuple(state.attributes["hs_color"]) == (120.0, 60.0)
 
 
 @pytest.mark.asyncio
