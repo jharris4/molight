@@ -476,6 +476,59 @@ async def test_schedule_options_can_change_definition(
 
 
 @pytest.mark.asyncio
+async def test_schedule_options_can_change_source_definition_to_time(
+    hass: HomeAssistant,
+) -> None:
+    """Changing from source to time drops the source and keeps inversion."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["data_schema"]({})[CONF_SCHEDULE_DEFINITION] == (
+        SCHEDULE_DEFINITION_BINARY_SENSOR
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME},
+    )
+    assert result["step_id"] == "schedule_time"
+
+    # Omitting inversion exercises the form default inherited from the source
+    # definition rather than explicitly submitting the same value again.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Daytime",
+            "start": {"time": "08:00:00"},
+            "end": {"time": "18:00:00"},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    cfg = molight_config(entry)
+    assert cfg == {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+        CONF_NAME: "Daytime",
+        CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME,
+        CONF_SCHEDULE_INVERT: True,
+        CONF_TIME_WINDOWS: [
+            {
+                "start": {"time": "08:00:00"},
+                "end": {"time": "18:00:00"},
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
 async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     """Full config flow creates a virtual light entry."""
     result = await _start_create(hass)
