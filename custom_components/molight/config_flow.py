@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -154,6 +156,8 @@ if TYPE_CHECKING:
 
 # "none" lets a previously chosen sun anchor be cleared in the options flow —
 # a bare SelectSelector can't be un-set once it has a value.
+_LOGGER = logging.getLogger(__name__)
+
 _SUN_OPTIONS = ["none", *SUN_EVENTS]
 _COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
 
@@ -1922,7 +1926,7 @@ class MoLightConfigFlow(
             errors=errors,
         )
 
-    def _finish_discovery(
+    async def _finish_discovery(
         self,
         payload: Callable[[str, str], dict[str, Any]],
         overrides: dict[str, Any],
@@ -1930,8 +1934,10 @@ class MoLightConfigFlow(
         """Bulk-create the stashed selection, layering the chosen settings on top.
 
         A config flow can only return one entry, so each selected entity is
-        created through the import step spawned as a background task, and this
-        flow ends with an abort that reports how many were made.
+        created through the import step, and this flow ends with an abort
+        reporting how many were made. The imports are awaited rather than left
+        to run detached, so the reported count is what actually got created and
+        a failure is surfaced instead of only reaching the log.
         """
         disc = self._discovery
         selected = disc["selected"]
@@ -1940,6 +1946,7 @@ class MoLightConfigFlow(
         # Drop cleared optional fields so they stay absent from the entry
         # rather than being stored as None.
         overrides = {k: v for k, v in overrides.items() if v is not None}
+        flows = []
         for entity_id in selected:
             base = candidates.get(entity_id, entity_id)
             composed = f"{prefix}{base}{suffix}"
@@ -1955,16 +1962,26 @@ class MoLightConfigFlow(
             # entity, name and entity_id it never touches stay as the payload
             # set them.
             data.update(overrides)
-            self.hass.async_create_task(
+            flows.append(
                 self.hass.config_entries.flow.async_init(
                     DOMAIN,
                     context={"source": config_entries.SOURCE_IMPORT},
                     data=data,
                 )
             )
+
+        results = await asyncio.gather(*flows, return_exceptions=True)
+        created = 0
+        for entity_id, result in zip(selected, results, strict=True):
+            if isinstance(result, BaseException):
+                _LOGGER.error(
+                    "Failed to create a MoLight entry for %s: %s", entity_id, result
+                )
+            else:
+                created += 1
         return self.async_abort(
             reason="discovery_done",
-            description_placeholders={"count": str(len(selected))},
+            description_placeholders={"count": str(created)},
         )
 
     async def async_step_discover_occupancy(
@@ -1996,7 +2013,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered occupancy sensor."""
         if user_input is not None:
-            return self._finish_discovery(
+            return await self._finish_discovery(
                 _occupancy_payload, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
             )
         return self.async_show_form(
@@ -2032,7 +2049,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered illuminance sensor."""
         if user_input is not None:
-            return self._finish_discovery(_illuminance_payload, user_input)
+            return await self._finish_discovery(_illuminance_payload, user_input)
         return self.async_show_form(
             step_id="discover_illuminance_defaults",
             data_schema=vol.Schema(_illuminance_option_fields()),
@@ -2099,7 +2116,7 @@ class MoLightConfigFlow(
                     self._light_pending = {"kind": "discovery", "flat": flat}
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
-                return self._finish_discovery(_light_payload, flat)
+                return await self._finish_discovery(_light_payload, flat)
         return self.async_show_form(
             step_id="discover_light_defaults",
             data_schema=self.add_suggested_values_to_schema(
@@ -2987,7 +3004,7 @@ class MoLightConfigFlow(
                     if key in flat
                 }
                 if pending["kind"] == "discovery":
-                    return self._finish_discovery(_light_payload, flat)
+                    return await self._finish_discovery(_light_payload, flat)
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
                     name=flat[CONF_NAME],

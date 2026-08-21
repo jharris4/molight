@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 import voluptuous as vol
@@ -22,6 +23,7 @@ from custom_components.molight.config_flow import (
     SECTION_BEHAVIOR,
     SECTION_SENSORS,
     SECTION_WARNING,
+    MoLightConfigFlow,
     _validate_turn_on_selection,
 )
 from custom_components.molight.const import (
@@ -5552,3 +5554,51 @@ async def test_light_flow_allows_zero_effect_brightness_on_disabled_stage(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_discovery_count_reflects_entries_that_actually_got_created(
+    hass: HomeAssistant,
+) -> None:
+    """The summary reports what was created, not what was attempted — the
+    imports are awaited, so a failure is counted out and logged."""
+    hass.states.async_set(
+        "binary_sensor.hall_motion", "off", {"device_class": "motion"}
+    )
+    hass.states.async_set("binary_sensor.porch_pir", "off", {"device_class": "motion"})
+
+    real_import = MoLightConfigFlow.async_step_import
+
+    async def _fail_the_porch(self, import_data):
+        if import_data[CONF_OCCUPANCY_SENSOR] == "binary_sensor.porch_pir":
+            msg = "boom"
+            raise ValueError(msg)
+        return await real_import(self, import_data)
+
+    result = await _reach_discovery_select(hass, "discover_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_SELECTED_ENTITIES: [
+                "binary_sensor.hall_motion",
+                "binary_sensor.porch_pir",
+            ]
+        },
+    )
+    with patch.object(MoLightConfigFlow, "async_step_import", _fail_the_porch):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {SECTION_ADVANCED: {}}
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "discovery_done"
+    # Two were attempted; only one survived.
+    assert result["description_placeholders"] == {"count": "1"}
+    await hass.async_block_till_done()
+
+    wrapped = {
+        molight_config(e).get(CONF_OCCUPANCY_SENSOR)
+        for e in hass.config_entries.async_entries(DOMAIN)
+    }
+    assert "binary_sensor.hall_motion" in wrapped
+    assert "binary_sensor.porch_pir" not in wrapped
