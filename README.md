@@ -439,15 +439,32 @@ npm test
 
 ### Releasing
 
-Development is done on the `develop` branch, so merge it into `main` before
-releasing and tag the release there. `main` is the default branch — it's what
-anyone visiting the repository sees.
+Development is done on the `develop` branch. Start a release by fast-forwarding
+`main` to the tested `develop` commit, then prepare, commit and tag the release
+on `main`:
+
+```bash
+git switch main
+git merge --ff-only develop
+git push
+```
 
 Once `main` is up to date, the rest is scripted. `npm run release <version>`
 writes nothing on its own — it lists the changes a release would make (stamping
 the changelog, bumping the manifest version, updating the compare links) and
 prints the command that applies them. Applying then prints the git commands to
-tag and push.
+commit, tag and push. After pushing the tag, fast-forward `develop` to include
+that release commit too, so development resumes with the stamped changelog and
+new manifest version:
+
+```bash
+git switch develop
+git merge --ff-only main
+git push
+```
+
+Do not start new work on `develop` between the first merge and this final sync;
+keeping the release window short ensures both updates remain fast-forwards.
 
 ### Working in the dev container
 
