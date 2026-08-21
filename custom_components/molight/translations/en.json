@@ -776,6 +776,10 @@
         "data": {
           "turn_on_select_source_entity": "Option source entity",
           "turn_on_select_option": "Fixed/fallback option"
+        },
+        "data_description": {
+          "turn_on_select_source_entity": "Optional. At each off-to-on transition, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities advertise options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
         }
       },
       "light_selection": {
@@ -1182,6 +1186,10 @@
         "data": {
           "turn_on_select_source_entity": "Option source entity",
           "turn_on_select_option": "Fixed/fallback option"
+        },
+        "data_description": {
+          "turn_on_select_source_entity": "Optional. At each off-to-on transition, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities advertise options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
         }
       },
       "occupancy": {
