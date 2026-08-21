@@ -575,7 +575,12 @@ async def test_illuminance_hysteresis_holds_state_in_band(
 
     sensor = lambda: hass.states.get("binary_sensor.hyst_illuminance")  # noqa: E731
 
-    # Dark; a reading above the threshold but inside the band stays dark.
+    # Establish dark with a first reading clearly below the threshold.
+    hass.states.async_set("sensor.lux_1", "5")
+    await hass.async_block_till_done()
+    assert sensor().state == "off"
+
+    # A reading above the threshold but inside the band stays dark.
     hass.states.async_set("sensor.lux_1", "11")
     await hass.async_block_till_done()
     assert sensor().state == "off"
@@ -594,6 +599,35 @@ async def test_illuminance_hysteresis_holds_state_in_band(
     hass.states.async_set("sensor.lux_1", "7.9")
     await hass.async_block_till_done()
     assert sensor().state == "off"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_first_reading_in_band_uses_bare_threshold(
+    hass: HomeAssistant,
+) -> None:
+    """A first-ever reading has no held state, so the band must not apply."""
+    for name, source, reading, expected in (
+        ("Band Bright", "sensor.lux_a", "11", "on"),
+        ("Band Dark", "sensor.lux_b", "9", "off"),
+    ):
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+                CONF_NAME: name,
+                CONF_ILLUMINANCE_SENSOR: source,
+                CONF_ILLUMINANCE_THRESHOLD: 10.0,
+                CONF_ILLUMINANCE_HYSTERESIS: 2.0,
+            },
+        )
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        hass.states.async_set(source, reading)
+        await hass.async_block_till_done()
+        entity_id = f"binary_sensor.{name.lower().replace(' ', '_')}"
+        assert hass.states.get(entity_id).state == expected
 
 
 @pytest.mark.asyncio

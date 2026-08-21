@@ -557,7 +557,12 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
             value = float(state_value)
         except (ValueError, TypeError):
             return  # unparsable reading — hold last known value
-        self._attr_available = True
+        if not self._attr_available:
+            # First-ever reading: there is no held state to apply the
+            # hysteresis band to, so judge the bare threshold.
+            self._attr_available = True
+            self._attr_is_on = value >= self._threshold
+            return
         if self._attr_is_on:
             if value < self._threshold - self._hysteresis:
                 self._attr_is_on = False
