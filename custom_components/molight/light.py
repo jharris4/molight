@@ -97,7 +97,8 @@ Color support
   The virtual light derives its color capabilities from the real lights: it
   advertises HS when any member can show a color (hs/rgb/rgbw/rgbww/xy — HA
   converts hs to each member's native mode) and COLOR_TEMP when any member
-  supports it, falling back to brightness-only when none do. Capabilities are
+  supports it, falling back to brightness — or to plain on/off when no member
+  dims at all. Capabilities are
   re-derived on every member event, so members that are unavailable at startup
   contribute theirs once they appear. Color commands are forwarded to ALL
   members in one service call; HA filters/converts the color per real light,
@@ -326,7 +327,12 @@ from .const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from .helpers import lights_support_transition, molight_config, suggested_entity_id
+from .helpers import (
+    lights_support_brightness,
+    lights_support_transition,
+    molight_config,
+    suggested_entity_id,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -1256,9 +1262,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         member modes: HS when any member can show a color (HA converts hs to
         each member's native rgb/rgbw/rgbww/xy on the way out) and COLOR_TEMP
         when any member supports it, so two modes cover every member while
-        keeping this entity's own color state simple. Falls back to
-        brightness-only — the pre-color behavior — when no member reports a
-        color capability, including while members are still unavailable.
+        keeping this entity's own color state simple. With no color capability
+        reported it falls back to brightness, or to plain on/off once every
+        member has been judged and none of them dims.
         """
         member_modes: set[str] = set()
         min_kelvins: list[int] = []
@@ -1279,7 +1285,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         if ColorMode.COLOR_TEMP in member_modes:
             supported.add(ColorMode.COLOR_TEMP)
         if not supported:
-            supported = {ColorMode.BRIGHTNESS}
+            # A group of plugs can only do on/off, and advertising a slider
+            # none of them can move would be a lie. Fail open as ever.
+            supported = (
+                {ColorMode.ONOFF}
+                if lights_support_brightness(self.hass, self._lights) is False
+                else {ColorMode.BRIGHTNESS}
+            )
 
         changed = supported != self._attr_supported_color_modes
         # Most permissive envelope; each member clamps to its own range. Track
@@ -1313,10 +1325,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._attr_color_mode not in supported:
             # Keep the reported mode legal for the new capability set; the
             # value-bearing attributes only survive where they still apply.
-            if supported == {ColorMode.BRIGHTNESS}:
+            if supported in ({ColorMode.BRIGHTNESS}, {ColorMode.ONOFF}):
                 self._attr_hs_color = None
                 self._attr_color_temp_kelvin = None
-                self._attr_color_mode = ColorMode.BRIGHTNESS
+                self._attr_color_mode = next(iter(supported))
             elif self._attr_color_temp_kelvin and ColorMode.COLOR_TEMP in supported:
                 self._attr_color_mode = ColorMode.COLOR_TEMP
             elif ColorMode.HS in supported:

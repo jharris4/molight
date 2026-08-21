@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.components.light import (
     ATTR_SUPPORTED_COLOR_MODES,
+    COLOR_MODES_BRIGHTNESS,
     COLOR_MODES_COLOR,
     ColorMode,
     LightEntityFeature,
@@ -131,5 +132,21 @@ def lights_support_color(hass: HomeAssistant, entity_ids: Sequence[str]) -> bool
     def _capable(state: State) -> bool | None:
         modes = _color_modes(state)
         return None if modes is None else not COLOR_MODES_COLOR.isdisjoint(modes)
+
+    return _judge_lights(hass, entity_ids, _capable)
+
+
+def lights_support_brightness(
+    hass: HomeAssistant, entity_ids: Sequence[str]
+) -> bool | None:
+    """Whether any of these real lights is dimmable.
+
+    Every color-bearing mode implies brightness, so this only decides the
+    floor: brightness-only versus on/off-only.
+    """
+
+    def _capable(state: State) -> bool | None:
+        modes = _color_modes(state)
+        return None if modes is None else not COLOR_MODES_BRIGHTNESS.isdisjoint(modes)
 
     return _judge_lights(hass, entity_ids, _capable)

@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from homeassistant.components.light import ColorMode
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import HomeAssistant, State, callback
 from pytest_homeassistant_custom_component.common import (
@@ -21,6 +22,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     STATE_ACTIVE,
+    STATE_EFFECT,
     STATE_OCCUPIED,
     STATE_WARN,
 )
@@ -627,3 +629,103 @@ async def test_inconsistent_member_color_ignored_when_brightness_only(
     attrs = _state(hass).attributes
     assert attrs["color_mode"] == "brightness"
     assert attrs.get("hs_color") is None
+
+
+# ---------------------------------------------------------------------------
+# On/off-only members
+#
+# Brightness is derived like every other capability rather than assumed, so a
+# light wrapping only plugs or non-dimmable bulbs advertises on/off and no
+# longer offers a slider none of its members can move.
+# ---------------------------------------------------------------------------
+
+ONOFF_CAPS = {"supported_color_modes": ["onoff"]}
+BRIGHTNESS_CAPS = {"supported_color_modes": ["brightness"]}
+
+
+@pytest.mark.asyncio
+async def test_onoff_only_members_advertise_onoff(hass: HomeAssistant) -> None:
+    """Every member positively reports on/off, so the virtual light does too."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    await setup_entries(hass, make_light_entry())
+
+    state = _state(hass)
+    assert state.attributes["supported_color_modes"] == [ColorMode.ONOFF]
+    assert state.attributes["color_mode"] is None  # reported only while on
+    assert "brightness" not in state.attributes
+
+
+@pytest.mark.asyncio
+async def test_onoff_only_members_still_turn_on_and_off(hass: HomeAssistant) -> None:
+    """Dropping the brightness claim must not affect actually driving them."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    await setup_entries(hass, make_light_entry())
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["color_mode"] == ColorMode.ONOFF
+
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_one_dimmable_member_keeps_brightness(hass: HomeAssistant) -> None:
+    """One dimmable member is enough, exactly like the color rule."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    hass.states.async_set(REAL_2, "off", BRIGHTNESS_CAPS)
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL_2]))
+
+    assert _state(hass).attributes["supported_color_modes"] == [ColorMode.BRIGHTNESS]
+
+
+@pytest.mark.asyncio
+async def test_unjudgeable_member_keeps_brightness(hass: HomeAssistant) -> None:
+    """Fail open: a member that hasn't reported its modes must not downgrade
+    the virtual light to on/off."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL_2]))
+
+    assert _state(hass).attributes["supported_color_modes"] == [ColorMode.BRIGHTNESS]
+
+
+@pytest.mark.asyncio
+async def test_onoff_light_upgrades_when_a_dimmable_member_appears(
+    hass: HomeAssistant,
+) -> None:
+    """Capabilities are re-derived on every member event, so a bulb that shows
+    up late lifts the light back to brightness."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL_2]))
+    hass.states.async_set(REAL_2, "off", ONOFF_CAPS)
+    await settle(hass)
+    assert _state(hass).attributes["supported_color_modes"] == [ColorMode.ONOFF]
+
+    hass.states.async_set(REAL_2, "off", BRIGHTNESS_CAPS)
+    await settle(hass)
+    assert _state(hass).attributes["supported_color_modes"] == [ColorMode.BRIGHTNESS]
+
+
+@pytest.mark.asyncio
+async def test_onoff_light_effect_blink_off_still_works(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The effect stage's blink fully off goes through turn_off, so it is the
+    one warning cue that works on members with no brightness at all."""
+    hass.states.async_set(REAL, "off", ONOFF_CAPS)
+    await setup_entries(
+        hass,
+        make_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=0),
+    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+    assert hass.states.get(REAL).state == "off"  # blinked off
+    assert _state(hass).state == "on"  # logically still on

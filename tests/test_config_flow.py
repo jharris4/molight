@@ -5309,3 +5309,99 @@ async def test_light_flow_allows_color_when_a_light_advertises_no_modes(
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+# ---------------------------------------------------------------------------
+# A brightness none of the chosen lights could apply
+# ---------------------------------------------------------------------------
+
+PLAIN = "light.plain"  # on/off only — not dimmable
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_brightness_no_light_can_apply(
+    hass: HomeAssistant,
+) -> None:
+    """An auto-on brightness on on/off-only lights is rejected."""
+    _modes(hass, PLAIN, ["onoff"])
+    result = await _submit_light_create_colors(
+        hass, [PLAIN], {CONF_AUTO_ON_BRIGHTNESS: 60}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "brightness_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_brightness_on_a_dimmable_light(
+    hass: HomeAssistant,
+) -> None:
+    """A dimmable member accepts it, as before."""
+    _modes(hass, WHITE, ["brightness"])
+    result = await _submit_light_create_colors(
+        hass, [WHITE], {CONF_AUTO_ON_BRIGHTNESS: 60}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_blink_fully_off_on_onoff_lights(
+    hass: HomeAssistant,
+) -> None:
+    """An effect brightness of 0 is a blink fully off, sent as turn_off — the
+    one warning cue that works without dimming, so it must not be rejected."""
+    _modes(hass, PLAIN, ["onoff"])
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Plain Light",
+            CONF_LIGHTS: [PLAIN],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 5, CONF_EFFECT_BRIGHTNESS: 0},
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_dimmed_effect_on_onoff_lights(
+    hass: HomeAssistant,
+) -> None:
+    """A non-zero effect brightness is a dim, so it is rejected."""
+    _modes(hass, PLAIN, ["onoff"])
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Plain Light",
+            CONF_LIGHTS: [PLAIN],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 5, CONF_EFFECT_BRIGHTNESS: 40},
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "brightness_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_brightness_when_lights_cannot_be_judged(
+    hass: HomeAssistant,
+) -> None:
+    """Fail open, as with every other capability check."""
+    result = await _submit_light_create_colors(
+        hass, ["light.not_created_yet"], {CONF_AUTO_ON_BRIGHTNESS: 60}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY

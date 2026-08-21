@@ -135,6 +135,7 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
+    lights_support_brightness,
     lights_support_color,
     lights_support_color_temp,
     lights_support_transition,
@@ -897,6 +898,27 @@ def _validate_transition_support(
     return {}
 
 
+def _validate_brightness_support(
+    hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
+) -> dict[str, str]:
+    """Reject a configured brightness none of the chosen lights could apply.
+
+    An effect brightness of 0 is exempt: a blink fully off is sent as turn_off,
+    which every light can do — it is the one warning cue that still works
+    without dimming.
+    """
+    keys = (
+        CONF_AUTO_ON_BRIGHTNESS,
+        CONF_EFFECT_BRIGHTNESS,
+        CONF_WARN_BRIGHTNESS,
+    )
+    if not any(user_input.get(key) for key in keys):
+        return {}
+    if lights_support_brightness(hass, lights) is False:
+        return {"base": "brightness_unsupported"}
+    return {}
+
+
 def _validate_color_support(
     hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
@@ -934,6 +956,7 @@ def _validate_light_settings(
     errors.update(_validate_colors(settings))
     errors.update(_validate_transition_support(hass, settings, lights))
     errors.update(_validate_color_support(hass, settings, lights))
+    errors.update(_validate_brightness_support(hass, settings, lights))
     return errors
 
 
@@ -2056,6 +2079,11 @@ class MoLightConfigFlow(
                     self.hass, flat, self._discovery.get("selected", [])
                 )
             )
+            errors.update(
+                _validate_brightness_support(
+                    self.hass, flat, self._discovery.get("selected", [])
+                )
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -2862,6 +2890,9 @@ class MoLightConfigFlow(
             errors.update(
                 _validate_color_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
+            errors.update(
+                _validate_brightness_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -3443,6 +3474,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             )
             errors.update(
                 _validate_color_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
+            errors.update(
+                _validate_brightness_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
             if not _schedule_entity_is_allowed(
                 self.hass,
