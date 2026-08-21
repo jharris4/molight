@@ -5405,3 +5405,150 @@ async def test_light_flow_allows_brightness_when_lights_cannot_be_judged(
     )
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+# ---------------------------------------------------------------------------
+# Bulk assignment and Virtual Scheduled Lights
+#
+# A scheduled light keeps a separate sensor set per profile, so there is no
+# single reference to write. It used to be offered and then silently dropped,
+# leaving the summary reporting a successful no-op.
+# ---------------------------------------------------------------------------
+
+
+def _scheduled_light_entry(name: str, obj_id: str) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: name,
+            CONF_LIGHTS: [f"light.{obj_id}_real"],
+            CONF_ENTITY_ID: obj_id,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_assign_lights_picker_excludes_scheduled_lights(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A scheduled light is never offered as a bulk-assign target."""
+    await _setup_night_schedule(hass)
+    regular = _light_entry("Hall", "hall")
+    scheduled = _scheduled_light_entry("Hallway Night", "hallway_night")
+    await setup_entries(hass, occupancy_entry, regular, scheduled)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    assert result["step_id"] == "assign_lights"
+    excluded = _selector_config(result, CONF_ASSIGN_LIGHTS)["exclude_entities"]
+    assert "light.hallway_night" in excluded
+    assert "light.hall" not in excluded
+
+
+@pytest.mark.asyncio
+async def test_assign_lights_rejects_scheduled_light_from_stale_form(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """One created after the form rendered slips past the picker's exclusion
+    snapshot, so the handler re-checks — it used to abort with a
+    successful-looking "assigned: 0, removed: 0"."""
+    await _setup_night_schedule(hass)
+    regular = _light_entry("Hall", "hall")
+    await setup_entries(hass, occupancy_entry, regular)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    assert result["step_id"] == "assign_lights"
+
+    # Created only now, so the rendered schema could not exclude it.
+    scheduled = _scheduled_light_entry("Hallway Night", "hallway_night")
+    await setup_entries(hass, scheduled)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_ASSIGN_LIGHTS: ["light.hall", "light.hallway_night"]},
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "assign_lights"
+    assert result["errors"] == {CONF_ASSIGN_LIGHTS: "assign_lights_scheduled"}
+    # Nothing was applied — not even the valid pick alongside it.
+    assert CONF_OCCUPANCY_ENTITY not in molight_config(regular)
+    # The submitted selection is preserved so it needn't be rebuilt.
+    assert _suggested_values(result["data_schema"])[CONF_ASSIGN_LIGHTS] == [
+        "light.hall",
+        "light.hallway_night",
+    ]
+
+    # Dropping the scheduled light lets the rest through.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    await hass.async_block_till_done()
+    assert (
+        molight_config(regular)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    )
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_effect_brightness_on_disabled_stage(
+    hass: HomeAssistant,
+) -> None:
+    """A positive effect brightness with the stage disabled is rejected rather
+    than stored and silently ignored, like every other stage value."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_BRIGHTNESS: 40},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "effect_brightness_requires_timeout"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_zero_effect_brightness_on_disabled_stage(
+    hass: HomeAssistant,
+) -> None:
+    """0 is the default and the blink-fully-off cue, so it is never a mistake."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 0, CONF_EFFECT_BRIGHTNESS: 0},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY

@@ -869,6 +869,12 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
         user_input.get(CONF_EFFECT_TIMEOUT) or 0
     ):
         return {"base": "effect_color_requires_timeout"}
+    # 0 is the default and the blink-fully-off cue, so only a positive value
+    # on a disabled stage is a mistake.
+    if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not float(
+        user_input.get(CONF_EFFECT_TIMEOUT) or 0
+    ):
+        return {"base": "effect_brightness_requires_timeout"}
     if (
         user_input.get(CONF_WARN_BRIGHTNESS) or user_input.get(CONF_WARN_RGB_COLOR)
     ) and not float(user_input.get(CONF_WARN_TIMEOUT) or 0):
@@ -2466,78 +2472,93 @@ class MoLightConfigFlow(
         key), and pre-selected lights that were deselected have it removed.
         Occupancy targets whose turn-off timeout is shorter than the sensor's
         timeout are skipped and reported rather than silently misconfigured.
+
+        Only regular Virtual Lights can be assigned this way — a Virtual
+        Scheduled Light keeps a separate sensor set per profile, so there is no
+        single reference to write. They are kept out of the picker and rejected
+        on submit (a stale form can still offer one), rather than being
+        accepted and silently dropped.
         """
         assign = self._assign
         key = assign["key"]
         sensor = assign["sensor"]
         lights = _molight_light_entries(self.hass)
+        scheduled = set(
+            _molight_light_entries(self.hass, (ENTITY_TYPE_SCHEDULED_LIGHT,))
+        )
         already = {
             eid
             for eid, entry in lights.items()
             if _molight_cfg(entry).get(key) == sensor
         }
 
+        errors: dict[str, str] = {}
         if user_input is not None:
             selected = set(user_input.get(CONF_ASSIGN_LIGHTS, []))
-            occ_timeout = (
-                _effective_occupancy_timeout(self.hass, sensor)
-                if assign["check_timeout"]
-                else None
-            )
-            assigned: list[str] = []
-            skipped: list[str] = []
-            for eid in selected:
-                entry = lights.get(eid)
-                if entry is None:
-                    continue  # a stale pick no longer backed by a light entry
-                cfg = _molight_cfg(entry)
-                if (
-                    occ_timeout is not None
-                    and int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
-                    < occ_timeout
-                ):
-                    skipped.append(eid)
-                    continue
-                opts = {
-                    k: v
-                    for k, v in cfg.items()
-                    if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID)
-                }
-                changed = opts.get(key) != sensor
-                opts[key] = sensor
-                if assign["mode_key"] is not None:
-                    changed = changed or opts.get(assign["mode_key"]) != assign["mode"]
-                    opts[assign["mode_key"]] = assign["mode"]
-                if changed:
+            if selected & scheduled:
+                errors[CONF_ASSIGN_LIGHTS] = "assign_lights_scheduled"
+            else:
+                occ_timeout = (
+                    _effective_occupancy_timeout(self.hass, sensor)
+                    if assign["check_timeout"]
+                    else None
+                )
+                assigned: list[str] = []
+                skipped: list[str] = []
+                for eid in selected:
+                    entry = lights.get(eid)
+                    if entry is None:
+                        continue  # a stale pick no longer backed by a light entry
+                    cfg = _molight_cfg(entry)
+                    if (
+                        occ_timeout is not None
+                        and int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+                        < occ_timeout
+                    ):
+                        skipped.append(eid)
+                        continue
+                    opts = {
+                        k: v
+                        for k, v in cfg.items()
+                        if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID)
+                    }
+                    changed = opts.get(key) != sensor
+                    opts[key] = sensor
+                    if assign["mode_key"] is not None:
+                        changed = (
+                            changed or opts.get(assign["mode_key"]) != assign["mode"]
+                        )
+                        opts[assign["mode_key"]] = assign["mode"]
+                    if changed:
+                        self.hass.config_entries.async_update_entry(entry, options=opts)
+                        assigned.append(eid)
+
+                removed: list[str] = []
+                for eid in already - selected:
+                    entry = lights[eid]
+                    opts = {
+                        k: v
+                        for k, v in _molight_cfg(entry).items()
+                        if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID, key)
+                    }
                     self.hass.config_entries.async_update_entry(entry, options=opts)
-                    assigned.append(eid)
+                    removed.append(eid)
 
-            removed: list[str] = []
-            for eid in already - selected:
-                entry = lights[eid]
-                opts = {
-                    k: v
-                    for k, v in _molight_cfg(entry).items()
-                    if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID, key)
+                placeholders = {
+                    "assigned": str(len(assigned)),
+                    "removed": str(len(removed)),
                 }
-                self.hass.config_entries.async_update_entry(entry, options=opts)
-                removed.append(eid)
-
-            placeholders = {
-                "assigned": str(len(assigned)),
-                "removed": str(len(removed)),
-            }
-            if skipped:
-                placeholders["skipped"] = ", ".join(
-                    sorted(self._entity_label(eid) for eid in skipped)
-                )
+                if skipped:
+                    placeholders["skipped"] = ", ".join(
+                        sorted(self._entity_label(eid) for eid in skipped)
+                    )
+                    return self.async_abort(
+                        reason="assign_done_skipped",
+                        description_placeholders=placeholders,
+                    )
                 return self.async_abort(
-                    reason="assign_done_skipped",
-                    description_placeholders=placeholders,
+                    reason="assign_done", description_placeholders=placeholders
                 )
-            return self.async_abort(
-                reason="assign_done", description_placeholders=placeholders
-            )
 
         if not lights:
             return self.async_abort(reason="no_lights")
@@ -2548,12 +2569,19 @@ class MoLightConfigFlow(
                     CONF_ASSIGN_LIGHTS, default=sorted(already)
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        integration=DOMAIN, domain="light", multiple=True
+                        integration=DOMAIN,
+                        domain="light",
+                        exclude_entities=sorted(scheduled),
+                        multiple=True,
                     )
                 )
             }
         )
-        return self.async_show_form(step_id="assign_lights", data_schema=schema)
+        return self.async_show_form(
+            step_id="assign_lights",
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            errors=errors,
+        )
 
     # ------------------------------------------------------------------
     # Occupancy (simple — one sensor, one timeout)
