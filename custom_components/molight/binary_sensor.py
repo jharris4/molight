@@ -718,9 +718,18 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
                     intervals.append(interval)
 
         active = [iv for iv in intervals if iv[0] <= now < iv[1]]
-        future = sorted(t for iv in intervals for t in iv if t > now)
+        # Same-tzinfo aware datetimes sort by wall clock (PEP 495), which
+        # misorders edges around a DST gap — order by real instant instead.
+        future = sorted(
+            (t for iv in intervals for t in iv if t > now),
+            key=lambda t: t.timestamp(),
+        )
 
-        active_start = max(iv[0] for iv in active) if active else None
+        active_start = (
+            max((iv[0] for iv in active), key=lambda t: t.timestamp())
+            if active
+            else None
+        )
         return active_start, (future[0] if future else None)
 
     def _inverted_window_start(self, now: datetime) -> datetime | str:
@@ -736,16 +745,20 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
             )
 
         merged: list[list[datetime]] = []
-        for start, end in sorted(intervals):
-            if merged and start <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], end)
+        # Order and compare by real instant — same-tzinfo datetimes sort by
+        # wall clock (PEP 495), which misorders edges around a DST gap.
+        for start, end in sorted(
+            intervals, key=lambda iv: (iv[0].timestamp(), iv[1].timestamp())
+        ):
+            if merged and start.timestamp() <= merged[-1][1].timestamp():
+                merged[-1][1] = max(merged[-1][1], end, key=lambda t: t.timestamp())
             else:
                 merged.append([start, end])
         ended = [end for _start, end in merged if end <= now]
         # With no resolvable boundaries (for example, a sun-only window during
         # polar day/night), inversion is continuously on. Use a stable marker
         # so Follow mode can apply it once without re-triggering every restart.
-        return max(ended, default="inverted")
+        return max(ended, key=lambda t: t.timestamp(), default="inverted")
 
     def _resolve_window(
         self, window: dict, day: date

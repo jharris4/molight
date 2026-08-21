@@ -598,3 +598,40 @@ async def test_sun_edge_ignores_unparsable_offset(hass: HomeAssistant, freezer) 
     assert state.state in ("on", "off")
     # The window still resolved: a boundary is scheduled.
     assert state.attributes["next_transition"] is not None
+
+
+@pytest.mark.asyncio
+async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Edges are ordered by real instant, not wall clock, across a DST gap.
+
+    On 2026-03-08 in America/New_York, 02:30 does not exist; resolved with
+    fold=0 it lands on EST (07:30 UTC) — a *later* real instant than
+    03:05 EDT (07:05 UTC) despite the earlier wall time. The 03:05 window's
+    start must not be shadowed by the gap edge.
+    """
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-03-08 06:50:00+00:00")  # 01:50 EST, before both edges
+    await _setup(
+        hass,
+        _schedule_entry(
+            [
+                {"start": "03:05", "end": "06:00"},
+                {"start": "02:30", "end": "02:45"},
+            ]
+        ),
+    )
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    # 02:30 resolves into the gap (07:30 UTC as EST) — a later real instant
+    # than 03:05 EDT (07:05 UTC). The timer must be armed for 03:05.
+    assert state.attributes["next_transition"] == "2026-03-08T03:05:00-04:00"
+
+    freezer.move_to("2026-03-08 07:06:00+00:00")  # 03:06 EDT, past the edge
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-03-08T03:05:00-04:00"
