@@ -16,8 +16,8 @@ from datetime import timedelta
 
 import pytest
 from homeassistant.components.light import LightEntityFeature
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -390,3 +390,27 @@ async def test_transition_stays_advertised_until_the_last_member_is_judged(
     )
     await settle(hass)
     assert _features(hass) & LightEntityFeature.TRANSITION
+
+
+@pytest.mark.asyncio
+async def test_transition_advertised_during_the_startup_window(
+    hass: HomeAssistant,
+) -> None:
+    """Before the deferred first capability pass, the feature must fail open.
+
+    At boot _seed_state (and with it _update_capabilities) waits for
+    EVENT_HOMEASSISTANT_STARTED, but the entity exists and takes service
+    calls before that — a startup scene's fade must not be stripped.
+    """
+    hass.set_state(CoreState.starting)
+    hass.states.async_set(REAL, "off", {"supported_features": 0})
+    await setup_entries(hass, make_light_entry())
+
+    assert _features(hass) & LightEntityFeature.TRANSITION
+
+    # Startup completes: the capability pass judges the sole member and
+    # withdraws the advertisement.
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await settle(hass)
+    assert not _features(hass) & LightEntityFeature.TRANSITION

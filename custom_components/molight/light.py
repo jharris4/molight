@@ -393,6 +393,9 @@ class VirtualLight(LightEntity, RestoreEntity):
     _attr_color_mode = ColorMode.BRIGHTNESS
     # Reassigned per-instance by _update_capabilities, never mutated in place.
     _attr_supported_color_modes: ClassVar[set[ColorMode]] = {ColorMode.BRIGHTNESS}
+    # Fail open until the first capability derivation (which at boot waits for
+    # EVENT_HOMEASSISTANT_STARTED) — a startup caller must not lose their fade.
+    _attr_supported_features = LightEntityFeature.TRANSITION
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
