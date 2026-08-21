@@ -5135,7 +5135,32 @@ async def test_discover_light_defaults_reject_fade_no_light_can_apply(
         {**EMPTY_LIGHT_SECTIONS, SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2}},
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "transition_unsupported"}
+    assert result["errors"] == {"base": "transition_unsupported_pick"}
+    assert result["description_placeholders"] == {"entity_id": PLUG}
+
+
+@pytest.mark.asyncio
+async def test_discover_light_defaults_reject_fade_one_pick_cannot_apply(
+    hass: HomeAssistant,
+) -> None:
+    """Every pick becomes its own single-light entry, so one capable pick must
+    not carry an incapable one through the shared capability checks."""
+    _no_fade(hass)
+    _can_fade(hass)
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: [DIMMER, PLUG]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**EMPTY_LIGHT_SECTIONS, SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2}},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "transition_unsupported_pick"}
+    assert result["description_placeholders"] == {"entity_id": PLUG}
 
 
 # ---------------------------------------------------------------------------

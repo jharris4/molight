@@ -2087,26 +2087,29 @@ class MoLightConfigFlow(
         enforces apply here, since one setting set is shared by every pick.
         """
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         if user_input is not None:
             flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
-            errors.update(
-                _validate_transition_support(
-                    self.hass, flat, self._discovery.get("selected", [])
+            # Each pick becomes its own single-light entry, so the capability
+            # checks must hold per pick — pooled, one capable pick would let a
+            # setting through that another pick's entry could never apply.
+            for entity_id in self._discovery.get("selected", []):
+                pick_errors = _validate_transition_support(self.hass, flat, [entity_id])
+                pick_errors.update(
+                    _validate_color_support(self.hass, flat, [entity_id])
                 )
-            )
-            errors.update(
-                _validate_color_support(
-                    self.hass, flat, self._discovery.get("selected", [])
+                pick_errors.update(
+                    _validate_brightness_support(self.hass, flat, [entity_id])
                 )
-            )
-            errors.update(
-                _validate_brightness_support(
-                    self.hass, flat, self._discovery.get("selected", [])
-                )
-            )
+                if pick_errors:
+                    errors.update(
+                        {field: f"{key}_pick" for field, key in pick_errors.items()}
+                    )
+                    placeholders["entity_id"] = entity_id
+                    break
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -2123,6 +2126,7 @@ class MoLightConfigFlow(
                 vol.Schema(_light_option_fields(self.hass)), user_input or {}
             ),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_import(
