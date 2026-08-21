@@ -40,7 +40,8 @@ Effect/warn warning
   Each stage can optionally fade into its brightness over effect_transition /
   warn_transition seconds (each validated <= its stage's timeout). Separately,
   auto_on_transition / auto_off_transition fade automatic turn-ons and
-  turn-offs; manual/physical turn-ons and a manual off never get a transition.
+  turn-offs; manual/physical turn-ons and a manual off never get a *configured*
+  transition (a caller-supplied one is forwarded — see "Transition support").
   Throughout EFFECT and WARN the virtual light stays logically on. Any
   re-trigger — occupancy/maintain becoming active, a manual or physical
   turn-on, an external dim — cancels the sequence and behaves exactly as if
@@ -103,6 +104,13 @@ Color support
   so mixed setups (color + brightness-only members) just work — each light
   shows what it can. The reported color mirrors the first on member that has
   one, exactly like brightness.
+
+Transition support
+  A transition supplied by the caller (a scene, a script, light.turn_on with a
+  fade) is forwarded to the members. HA strips it before async_turn_on unless
+  we advertise LightEntityFeature.TRANSITION, so _update_capabilities derives
+  it from the members and fails open: withheld only once every member is
+  visible and none can fade.
 
 Maintain occupancy (when a maintain occupancy entity is configured)
   The maintain entity holds an already-on light on while it is on; it never
@@ -220,10 +228,12 @@ from homeassistant.components.light import (
     ENTITY_ID_FORMAT,
     ColorMode,
     LightEntity,
+    LightEntityFeature,
 )
 from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import (
     ATTR_OPTION,
+    ATTR_SUPPORTED_FEATURES,
     EVENT_HOMEASSISTANT_STARTED,
     SERVICE_SELECT_OPTION,
     STATE_UNAVAILABLE,
@@ -1009,7 +1019,12 @@ class VirtualLight(LightEntity, RestoreEntity):
     # ------------------------------------------------------------------
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on all real lights and transition the state machine."""
+        """Turn on all real lights and transition the state machine.
+
+        A caller-supplied transition is forwarded; auto_on_transition is not
+        (this is the manual path). A turn-on that also restores the pre-warning
+        brightness/color restores it over that same fade.
+        """
         now = datetime.now(UTC)
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
@@ -1036,14 +1051,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         await self._set_lights(
             True,
             brightness=brightness,
+            transition=kwargs.get(ATTR_TRANSITION),
             color=color,
             apply_turn_on_selection=True,
         )
         self._transition_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off all real lights and go idle."""
-        await self._set_lights(False)
+        """Turn off all real lights and go idle.
+
+        No configured fade, but a caller-supplied transition is forwarded.
+        """
+        await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
         self._go_idle()
 
     # ------------------------------------------------------------------
@@ -1247,6 +1266,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         color capability, including while members are still unavailable.
         """
         member_modes: set[str] = set()
+        member_features: list[int] = []
         min_kelvins: list[int] = []
         max_kelvins: list[int] = []
         for entity_id in self._lights:
@@ -1254,6 +1274,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             if state is None:
                 continue
             member_modes.update(state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ())
+            # A real light always publishes supported_features, even as 0 and
+            # even while unavailable, so an absent one means "can't judge yet".
+            if (features := state.attributes.get(ATTR_SUPPORTED_FEATURES)) is not None:
+                member_features.append(features)
             if kelvin := state.attributes.get(ATTR_MIN_COLOR_TEMP_KELVIN):
                 min_kelvins.append(kelvin)
             if kelvin := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
@@ -1283,6 +1307,20 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._attr_min_color_temp_kelvin = envelope[0]
             self._attr_max_color_temp_kelvin = envelope[1]
             changed = True
+
+        # Fail open like the floor above: an unseen member must not cost the
+        # caller their fade. Withheld only once every member is judged.
+        every_member_judged = len(member_features) == len(self._lights)
+        can_fade = any(f & LightEntityFeature.TRANSITION for f in member_features)
+        supported_features = (
+            LightEntityFeature(0)
+            if every_member_judged and not can_fade
+            else LightEntityFeature.TRANSITION
+        )
+        if supported_features != self._attr_supported_features:
+            self._attr_supported_features = supported_features
+            changed = True
+
         self._attr_supported_color_modes = supported
         if self._attr_color_mode not in supported:
             # Keep the reported mode legal for the new capability set; the

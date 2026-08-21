@@ -317,7 +317,7 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 
 #### Brightness, color, and fades
 
-The virtual light supports brightness. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
+The virtual light always supports brightness. Unlike the colour and fade support below, that is not derived from the real lights, so a virtual light wrapping only non-dimmable bulbs or smart plugs still offers a brightness slider that does nothing. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
 Color works the same way, and its capabilities come from the real lights: the virtual light offers a color wheel when any member can show a color and a color-temperature slider when any member supports one, and stays brightness-only otherwise. Mixed setups need no configuration — a color command goes to *all* members in one call and Home Assistant filters/converts it per light, so the bulbs that can go red go red and the rest just dim. The virtual light mirrors the first lit member's color, and an external recolor restarts a running timer exactly like an external dim (`last_color_change_physical` / `_virtual`).
 
@@ -328,6 +328,8 @@ For conditional behavior, choose an **option source entity**: an `input_select` 
 MoLight selects the resolved option first, waits for that service call to finish, and then turns on the member lights. This happens for both manual and automatic Virtual Light commands. A physical member-light turn-on is left alone because applying a selection afterward could overwrite an intentional external choice. The last successfully applied value and where it came from are exposed as `last_turn_on_selection_option` and `last_turn_on_selection_source`.
 
 An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; manual and physical turn-ons are left alone, so you can dim the room by hand without it snapping back. An **auto-on color temperature** *or* **auto-on color** does the same for color — think warm white for the night-time hallway. Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions — flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
+
+Those configured fades are separate from a `transition` you pass on the service call yourself. A virtual light forwards that to its real lights, so `light.turn_on`/`light.turn_off` with a fade, or a scene applied with one, works as it would against the real lights — Home Assistant drops the fade per member for any bulb that can't do one. Transition support is advertised whenever any member can fade, and stays advertised while a member hasn't reported in yet, so a bulb that is slow to appear at startup can't silently cost you a fade.
 
 #### Restarts and unavailability
 
