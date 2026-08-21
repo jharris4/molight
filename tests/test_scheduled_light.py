@@ -24,6 +24,7 @@ from custom_components.molight.const import (
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
@@ -2160,3 +2161,64 @@ async def test_scheduled_light_gets_shared_auto_off_switch(
     await setup_entries(hass, make_scheduled_light_entry())
 
     assert hass.states.get("switch.scheduled_light_auto_off") is not None
+
+
+@pytest.mark.asyncio
+async def test_boundary_keeps_door_hold_through_unavailable_blip(
+    hass: HomeAssistant,
+) -> None:
+    """A door blipping unavailable at the boundary must not drop its hold."""
+    door = "binary_sensor.shared_door"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(door, "off")
+    side = {
+        CONF_LIGHT_TIMEOUT: 60,
+        CONF_DOOR_ENTITY: door,
+        CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+    }
+    entry = make_scheduled_light_entry(outside=dict(side), inside=dict(side))
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(door, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(door, "unavailable")
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_boundary_off_defers_to_unavailable_keep_on_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A keep-on hold blipping unavailable at the window end still defers the off."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+    )
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    hass.states.async_set(hold, "unavailable")
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    # The recovered hold clearing applies the deferred off.
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"

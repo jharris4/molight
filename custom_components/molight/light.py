@@ -780,6 +780,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._schedule_end_off_pending = False
             self._schedule_end_switch_pending = False
         self._inside_schedule = inside
+        prev_door_entity = self._door_entity
+        prev_hold_states = self._hold_states
         self._apply_light_settings(
             self._inside_schedule_settings
             if inside
@@ -788,13 +790,28 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         # Seed stateful inputs from their current values. Inactive settings
         # entities remain subscribed but are ignored by _handle_state_change.
+        # An entity carried over from the other side keeps its cached value
+        # while it reads unavailable/unknown — a blip at the boundary must not
+        # read as "closed" or "hold released", the same rule
+        # _handle_state_change applies mid-run.
         door = self.hass.states.get(self._door_entity) if self._door_entity else None
-        self._door_open = door is not None and door.state == "on"
-        self._hold_states = {
-            entity_id: (state := self.hass.states.get(entity_id)) is not None
-            and state.state == "on"
-            for entity_id in self._hold_entities
-        }
+        if not (
+            door is not None
+            and door.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            and self._door_entity == prev_door_entity
+        ):
+            self._door_open = door is not None and door.state == "on"
+        self._hold_states = {}
+        for entity_id in self._hold_entities:
+            state = self.hass.states.get(entity_id)
+            if (
+                state is not None
+                and state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+                and entity_id in prev_hold_states
+            ):
+                self._hold_states[entity_id] = prev_hold_states[entity_id]
+            else:
+                self._hold_states[entity_id] = state is not None and state.state == "on"
         old_held = self._held
         self._held = self._compute_held()
 
