@@ -9,10 +9,11 @@ The examples build on each other:
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Home-only lighting](#example-5--home-only-lighting-source-backed-inverted-schedule) — an inverted schedule derived from an away-mode binary sensor
-6. [Storage room light](#example-6--storage-room-light-door-sensor) — a door/contact sensor
-7. [Hallway night light](#example-7--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
-8. [Pico remote](#example-8--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
-9. [Bilresa remote](#example-9--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
+6. [Stairs night light](#example-6--stairs-night-light-gate-and-keep-state) — a schedule that gates motion without cutting a timer short
+7. [Storage room light](#example-7--storage-room-light-door-sensor) — a door/contact sensor
+8. [Hallway night light](#example-8--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
+9. [Pico remote](#example-9--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
+10. [Bilresa remote](#example-10--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -151,7 +152,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   follow    # on at window start, off at window end
 ```
 
-`follow` = porch-light behavior; the window owns the light but manual changes mid-window still stand. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end, **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** preserves its existing state and timer.
+`follow` = porch-light behavior; the window owns the light but manual changes mid-window still stand. It gates nothing outside the window — add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
 
 ---
 
@@ -184,7 +185,42 @@ While someone is home, occupancy can turn the entryway light on normally. When a
 
 ---
 
-### Example 6 — Storage room light (door sensor)
+### Example 6 — Stairs night light (Gate and keep state)
+
+Motion should light the stairs only at night, and the light must not go out on someone just because the clock reached 06:00. A schedule window plus a virtual light (the stairs' occupancy sensor is set up like Example 2's):
+
+**1. Virtual Schedule Sensor**
+
+```text
+Name:          Night Window                     # → binary_sensor.night_window
+
+Window start:
+  Time:        22:00
+Window end:
+  Time:        06:00
+```
+
+**2. Virtual Light**
+
+```text
+Name:              Stairs                       # → light.stairs
+Lights to control: light.stairs_real
+Turn-off timeout:  300                          # 5 min after the stairs empty
+Occupancy sensor:  binary_sensor.stairs_occupancy
+Schedule sensor:   binary_sensor.night_window
+Schedule mode:     Gate and keep state
+```
+
+Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the window ends. Someone walking in at 05:58 keeps the light until their timer runs out at about 06:03, exactly as it would mid-window — the window ending changes nothing for a light already on. Compare the other two:
+
+- **Gate and turn off** (Example 5) would switch the light off at 06:00 — mid-stairs.
+- **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and history — much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in `control` mode) goes off.
+
+Two things every Gate mode does at 22:00 that are easy to miss: if someone is already on the stairs when the window starts (the occupancy sensor is on and it's dark), the light turns on right then; and if the light is already on, that person holds it. The window start never turns a light off.
+
+---
+
+### Example 7 — Storage room light (door sensor)
 
 Open the storage room door → light on; close it → light off. A single entry driven by a real door/contact sensor:
 
@@ -206,7 +242,7 @@ Open the door and the light stays on the whole time it's open — no timeout whi
 
 ---
 
-### Example 7 — Hallway night light (Virtual Scheduled Light)
+### Example 8 — Hallway night light (Virtual Scheduled Light)
 
 Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviours; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light — delete that entry first (its occupancy sensor stays and is reused below), or two virtual lights would fight over `light.hallway_real`. It's three forms in a row:
 
@@ -256,7 +292,7 @@ At 23:00 the schedule turns on and the light silently switches to the inside set
 
 ---
 
-### Example 8 — Pico remote for the closet light (Virtual Remote)
+### Example 9 — Pico remote for the closet light (Virtual Remote)
 
 A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant's own Caséta integration doesn't expose Pico buttons as `event` entities — install [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) first, and each button appears as one on the Pico's device page:
 
@@ -279,7 +315,7 @@ Each raise/lower click steps the brightness by 10%; the favorite button jumps to
 
 ---
 
-### Example 9 — Bilresa two-button remote (single vs. double click)
+### Example 10 — Bilresa two-button remote (single vs. double click)
 
 An IKEA Bilresa (Matter over Thread) has just two buttons, so single and double clicks carry different actions:
 
