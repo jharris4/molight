@@ -2036,6 +2036,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         be >= the sensor's occupancy_timeout (the flows enforce it).
         """
         base = self._light_timeout
+        if lots := self._occupancy_lots():
+            now = datetime.now(UTC)
+            remaining = (max(lots) - now).total_seconds()
+            return max(0, int(base + remaining))
+        return base
+
+    def _occupancy_lots(self) -> list[datetime]:
+        """latest_occupied_time across the occupancy and maintain entities."""
         lots: list[datetime] = []
         for entity_id in (self._occupancy_entity, self._maintain_entity):
             if not entity_id:
@@ -2047,11 +2055,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if lot_str:
                 with contextlib.suppress(ValueError, TypeError):
                     lots.append(datetime.fromisoformat(lot_str))
-        if lots:
-            now = datetime.now(UTC)
-            remaining = (max(lots) - now).total_seconds()
-            return max(0, int(base + remaining))
-        return base
+        return lots
 
     def _most_recent_on_time(self) -> datetime | None:
         """Return the latest recorded turn-on timestamp across all sources.
@@ -2077,18 +2081,19 @@ class VirtualLight(LightEntity, RestoreEntity):
         When an occupancy entity is configured, delegates to the occupancy-based
         countdown which is already anchored to latest_occupied_time.
 
-        When there is no occupancy entity, subtracts elapsed time since the light
-        was last on from light_timeout, so the re-activation uses only the
-        remaining portion of the original on-period.
+        Otherwise, subtracts elapsed time since the light was last on from
+        light_timeout, so the re-activation uses only the remaining portion of
+        the original on-period. With no on-period history at all there is
+        nothing to resume: a long-empty (or never-lit) room is not re-lit.
         """
-        if self._occupancy_entity:
+        if self._occupancy_entity and self._occupancy_lots():
             return self._compute_occupancy_countdown()
 
         last_on = self._most_recent_on_time()
         if last_on is not None:
             elapsed = (datetime.now(UTC) - last_on).total_seconds()
             return max(0, int(self._light_timeout - elapsed))
-        return self._light_timeout
+        return 0
 
     def _transition_on(self) -> None:
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""

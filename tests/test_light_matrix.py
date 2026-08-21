@@ -126,11 +126,11 @@ async def _assert_occupancy_trigger_gating(
     [
         pytest.param("on", None, STATE_OCCUPIED, id="occupied"),
         pytest.param("off", "stale", STATE_IDLE, id="clear-stale-lot"),
-        # The next two pin current behavior: with no occupancy history at all
-        # (no latest_occupied_time / no recorded on-period) the dark transition
-        # still lights the room for the full light_timeout.
-        pytest.param("off", None, STATE_COUNTDOWN, id="clear-no-lot"),
-        pytest.param(None, None, STATE_COUNTDOWN, id="no-occ-no-history"),
+        # With no on-period history at all there is nothing to resume: the
+        # dark edge must not light a long-empty (or never-lit) room, exactly
+        # as a stale latest_occupied_time doesn't.
+        pytest.param("off", None, STATE_IDLE, id="clear-no-lot"),
+        pytest.param(None, None, STATE_IDLE, id="no-occ-no-history"),
     ],
 )
 async def test_illuminance_dark_activation(
