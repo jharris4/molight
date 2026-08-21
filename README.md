@@ -421,6 +421,13 @@ npm run dev:up      # start the devcontainer (fast after first build)
 npm test
 ```
 
+### Releasing
+
+`npm run release 1.6.0` writes nothing — it lists the changes a release would
+make (stamping the changelog, bumping the manifest version, updating the compare
+links) and prints the command that applies them. Applying then prints the git
+commands to tag and push.
+
 ### Working in the dev container
 
 Every command below runs *inside* the dev container via `devcontainer exec`:

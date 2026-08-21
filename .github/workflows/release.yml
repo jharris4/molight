@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  guard:
+    name: Version guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the tag, the manifest and the changelog agree
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          manifest=$(python3 -c \
+            "import json; print(json.load(open('custom_components/molight/manifest.json'))['version'])")
+          if [ "$version" != "$manifest" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME implies version '$version', but manifest.json says '$manifest'"
+            exit 1
+          fi
+          if ! grep -qF "## [$version]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$version]' section"
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME matches manifest.json and has a CHANGELOG section."
+      - name: Put the release notes in the job summary
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "Release notes for $version — paste into the GitHub release body,"
+            echo "which is what HACS shows users in its update dialog."
+            echo '```markdown'
+            awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Prepare a release: stamp the changelog, bump the manifest, print next steps.
+
+Usage: scripts/release 1.6.0            # preview only
+       scripts/release 1.6.0 --write    # apply
+
+Previewing is the default so a stray invocation can never rewrite files. The
+preview prints the exact command to apply it, so there is nothing to remember.
+
+Edits files only — it never commits, tags, or pushes. Review the diff, then run
+the git commands it prints.
+"""
+
+import json
+import re
+import subprocess
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CHANGELOG = ROOT / "CHANGELOG.md"
+MANIFEST = ROOT / "custom_components/molight/manifest.json"
+COMPARE = "https://github.com/jharris4/molight/compare"
+
+
+def _today() -> str:
+    """Return today's local date as YYYY-MM-DD."""
+    return datetime.now(tz=UTC).astimezone().date().isoformat()
+
+
+def fail(msg: str) -> None:
+    """Abort with a one-line error message."""
+    sys.exit(f"error: {msg}")
+
+
+def main() -> None:
+    """Stamp the changelog and manifest for a release."""
+    args = [a for a in sys.argv[1:] if a != "--write"]
+    write = "--write" in sys.argv[1:]
+    if len(args) != 1:
+        fail("usage: scripts/release <version> [--write]   e.g. scripts/release 1.6.0")
+    version = args[0].lstrip("v")
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        fail(f"'{version}' is not a x.y.z version")
+
+    text = CHANGELOG.read_text()
+    if f"## [{version}]" in text:
+        fail(f"CHANGELOG.md already has a [{version}] section")
+    if "## [Unreleased]" not in text:
+        fail("CHANGELOG.md has no '## [Unreleased]' section to release")
+
+    # The previous release is the first version heading below Unreleased.
+    releases = re.findall(r"^## \[(\d+\.\d+\.\d+)\]", text, re.MULTILINE)
+    if not releases:
+        fail("CHANGELOG.md has no previous release heading to compare against")
+    previous = releases[0]
+
+    body = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
+    if not body.strip():
+        fail("the [Unreleased] section is empty — nothing to release")
+
+    # Stamp Unreleased as this version and open a fresh empty one above it.
+    text = text.replace(
+        "## [Unreleased]",
+        f"## [Unreleased]\n\n## [{version}] - {_today()}",
+        1,
+    )
+
+    # Repoint the Unreleased compare link and insert this version's own.
+    old_link = re.search(r"^\[Unreleased\]: .*$", text, re.MULTILINE)
+    if not old_link:
+        fail("CHANGELOG.md has no '[Unreleased]:' link at the bottom")
+    text = text.replace(
+        old_link.group(),
+        f"[Unreleased]: {COMPARE}/v{version}...HEAD\n"
+        f"[{version}]: {COMPARE}/v{previous}...v{version}",
+        1,
+    )
+
+    manifest_text = MANIFEST.read_text()
+    current = json.loads(manifest_text)["version"]
+    new_manifest = re.sub(
+        r'("version":\s*)"[^"]*"', rf'\1"{version}"', manifest_text, count=1
+    )
+
+    print(f"  CHANGELOG.md   [Unreleased] -> [{version}], compare link vs v{previous}")
+    print(f"  manifest.json  {current} -> {version}")
+    if not write:
+        print(
+            f"\nPreview only — nothing written. To apply, run:\n"
+            f"  python3 scripts/release {version} --write"
+        )
+        return
+
+    CHANGELOG.write_text(text)
+    MANIFEST.write_text(new_manifest)
+
+    print(
+        f"\nReview the diff, then:\n"
+        f"  git commit -am 'release {version}'\n"
+        f"  git push\n"
+        f"  git tag v{version} && git push origin v{version}\n\n"
+        f"The tag runs .github/workflows/release.yml, which checks the tag, the\n"
+        f"manifest and the changelog agree, and prints the release notes in its\n"
+        f"job summary. Paste those into the GitHub release body — that is what\n"
+        f"HACS shows users in its update dialog."
+    )
+    subprocess.run(
+        ["git", "diff", "--stat"], cwd=ROOT, check=False, stderr=subprocess.DEVNULL
+    )
+
+
+if __name__ == "__main__":
+    main()
