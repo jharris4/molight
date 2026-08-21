@@ -467,6 +467,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known on/off of each keep-on entity — kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
         self._hold_states: dict[str, bool] = {}
+        # Last known bright/dark, None until first seen — a recovery matching
+        # it must not replay the bright/dark edge actions.
+        self._illuminance_last_bright: bool | None = None
         # Effective hold: companion switch off OR any keep-on entity on.
         self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
@@ -787,6 +790,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._inside_schedule = inside
         prev_door_entity = self._door_entity
         prev_hold_states = self._hold_states
+        prev_illuminance_entity = self._illuminance_entity
         self._apply_light_settings(
             self._inside_schedule_settings
             if inside
@@ -817,6 +821,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._hold_states[entity_id] = prev_hold_states[entity_id]
             else:
                 self._hold_states[entity_id] = state is not None and state.state == "on"
+        if not (
+            self._illuminance_entity == prev_illuminance_entity
+            and (s := self.hass.states.get(self._illuminance_entity or "")) is not None
+            and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        ):
+            self._illuminance_last_bright = self._live_illuminance_bright()
         old_held = self._held
         self._held = self._compute_held()
 
@@ -914,6 +924,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._door_entity:
             door = self.hass.states.get(self._door_entity)
             self._door_open = door is not None and door.state == "on"
+
+        self._illuminance_last_bright = self._live_illuminance_bright()
 
         # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
@@ -1163,6 +1175,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
         if same_state:
             return  # attribute-only change (battery, ...)
+        # A recovery from unavailable/unknown (or a first sighting) that
+        # matches the last known value is a replay, not an observed edge.
+        # Level-based roles are replay-safe, but the door and illuminance
+        # roles act on edges, so they skip such replays: a standing-open
+        # door's sensor blip must not fire a fresh "opening".
+        recovered = old_state is None or old_state.state in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        )
         # One entity may serve several roles (e.g. as both the occupancy and
         # the maintain entity), so the role checks are independent, not
         # exclusive. A scheduled light's schedule switches settings first, so
@@ -1178,12 +1199,21 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id == self._maintain_entity:
             self._on_maintain_change(new_state.state == "on")
         if entity_id == self._illuminance_entity:
-            self._on_illuminance_change(new_state.state == "on")
+            bright = new_state.state == "on"
+            level_changed = (
+                self._illuminance_last_bright is None
+                or bright != self._illuminance_last_bright
+            )
+            self._illuminance_last_bright = bright
+            if not recovered or level_changed:
+                self._on_illuminance_change(bright)
         if entity_id == self._schedule_entity and new_state.state in ("on", "off"):
             self._on_schedule_change(new_state)
         if entity_id == self._door_entity:
+            door_was_open = self._door_open
             self._door_open = new_state.state == "on"
-            self._on_door_change(self._door_open)
+            if not recovered or self._door_open != door_was_open:
+                self._on_door_change(self._door_open)
         if entity_id in self._hold_entities:
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
@@ -1877,6 +1907,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             return False
         state = self.hass.states.get(self._maintain_entity)
         return state is not None and state.state == "on"
+
+    def _live_illuminance_bright(self) -> bool | None:
+        """Live bright/dark of the illuminance entity, None when unknown."""
+        if not self._illuminance_entity:
+            return None
+        state = self.hass.states.get(self._illuminance_entity)
+        if state is None or state.state not in ("on", "off"):
+            return None
+        return state.state == "on"
 
     def _door_holds(self) -> bool:
         """Return True when an open_close-mode door is open (holds the light).

@@ -694,3 +694,36 @@ async def test_open_close_close_mid_warning_lets_it_finish(
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A standing-open door's sensor blip must not replay the opening edge."""
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(DOOR, "on")  # opened
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    # The light times out with the door left ajar.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    # The battery sensor blips and recovers, still reporting open.
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    # A real close and re-open is still a fresh opening.
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"

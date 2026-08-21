@@ -540,3 +540,31 @@ async def test_schedule_recovery_readopts_externally_relit_light(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
+    hass: HomeAssistant,
+) -> None:
+    """A bright sensor blipping unavailable must not replay the bright edge.
+
+    A manual turn-on while steadily bright stands (control mode only forces
+    off on the bright edge); the sensor recovering to the same value is not
+    that edge.
+    """
+    illum = "binary_sensor.illum"
+    hass.states.async_set(illum, "on")  # bright
+    entry = make_light_entry(illuminance=illum)
+    await setup_entries(hass, entry)
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    hass.states.async_set(illum, "unavailable")
+    await settle(hass)
+    hass.states.async_set(illum, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
