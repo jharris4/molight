@@ -439,10 +439,15 @@ npm test
 
 ### Releasing
 
-`npm run release 1.6.0` writes nothing — it lists the changes a release would
-make (stamping the changelog, bumping the manifest version, updating the compare
-links) and prints the command that applies them. Applying then prints the git
-commands to tag and push.
+Development is done on the `develop` branch, so merge it into `main` before
+releasing and tag the release there. `main` is the default branch — it's what
+anyone visiting the repository sees.
+
+Once `main` is up to date, the rest is scripted. `npm run release <version>`
+writes nothing on its own — it lists the changes a release would make (stamping
+the changelog, bumping the manifest version, updating the compare links) and
+prints the command that applies them. Applying then prints the git commands to
+tag and push.
 
 ### Working in the dev container
 
