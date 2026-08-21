@@ -813,6 +813,10 @@
             "data": {
               "on_buttons_single": "Single-click buttons",
               "on_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "on_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "on_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "turn_off": {
@@ -821,6 +825,10 @@
             "data": {
               "off_buttons_single": "Single-click buttons",
               "off_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "off_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "off_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "toggle": {
@@ -829,6 +837,10 @@
             "data": {
               "toggle_buttons_single": "Single-click buttons",
               "toggle_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "toggle_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "toggle_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "brightness_up": {
@@ -837,6 +849,10 @@
             "data": {
               "brightness_up_buttons_single": "Single-click buttons",
               "brightness_up_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "brightness_up_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "brightness_up_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "brightness_down": {
@@ -845,6 +861,10 @@
             "data": {
               "brightness_down_buttons_single": "Single-click buttons",
               "brightness_down_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "brightness_down_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "brightness_down_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "preset_1": {
@@ -856,6 +876,13 @@
               "preset_1_brightness": "Brightness",
               "preset_1_color_temp": "Color temperature",
               "preset_1_rgb_color": "Color"
+            },
+            "data_description": {
+              "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
+              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
+              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
+              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
             }
           },
           "preset_2": {
@@ -867,6 +894,13 @@
               "preset_2_brightness": "Brightness",
               "preset_2_color_temp": "Color temperature",
               "preset_2_rgb_color": "Color"
+            },
+            "data_description": {
+              "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
+              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
+              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
+              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
             }
           }
         }
@@ -1430,6 +1464,10 @@
             "data": {
               "on_buttons_single": "Single-click buttons",
               "on_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "on_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "on_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "turn_off": {
@@ -1438,6 +1476,10 @@
             "data": {
               "off_buttons_single": "Single-click buttons",
               "off_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "off_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "off_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "toggle": {
@@ -1446,6 +1488,10 @@
             "data": {
               "toggle_buttons_single": "Single-click buttons",
               "toggle_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "toggle_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "toggle_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "brightness_up": {
@@ -1454,6 +1500,10 @@
             "data": {
               "brightness_up_buttons_single": "Single-click buttons",
               "brightness_up_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "brightness_up_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "brightness_up_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "brightness_down": {
@@ -1462,6 +1512,10 @@
             "data": {
               "brightness_down_buttons_single": "Single-click buttons",
               "brightness_down_buttons_double": "Double-click buttons"
+            },
+            "data_description": {
+              "brightness_down_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "brightness_down_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
           "preset_1": {
@@ -1473,6 +1527,13 @@
               "preset_1_brightness": "Brightness",
               "preset_1_color_temp": "Color temperature",
               "preset_1_rgb_color": "Color"
+            },
+            "data_description": {
+              "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
+              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
+              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
+              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
             }
           },
           "preset_2": {
@@ -1484,6 +1545,13 @@
               "preset_2_brightness": "Brightness",
               "preset_2_color_temp": "Color temperature",
               "preset_2_rgb_color": "Color"
+            },
+            "data_description": {
+              "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
+              "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
+              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
+              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
+              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
             }
           }
         }
