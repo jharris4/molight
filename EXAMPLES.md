@@ -106,6 +106,7 @@ Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       control   # dark gates turn-ons AND bright forces off
 Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual left alone
 Turn-on selection entity: select.living_wled_preset
+# The next two fields are asked on a second page after submitting this form:
 Option source entity:      input_select.living_theme  # changed by calendar/automations
 Fixed/fallback option:     Warm White Solid           # picked from WLED's offered options
 Effect warning duration: 3        # 3s "about to turn off" cue...
