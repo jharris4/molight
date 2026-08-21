@@ -6,6 +6,7 @@ markers = [
 ]
 
 [tool.ruff]
+# The floor's interpreter (HA 2026.1 needs 3.13), so 3.14-only syntax is caught.
 target-version = "py313"
 line-length = 88
 
