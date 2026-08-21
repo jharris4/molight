@@ -242,7 +242,7 @@ The form groups everything but the timeout into collapsible sections — *Sensor
 | `last_on_door` | Timestamp of the last turn-on caused by the door opening |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
-| `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied [turn-on selection](#generic-turn-on-selection) and where the value came from |
+| `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied turn-on selection and where the value came from (see [Brightness, color, and fades](#brightness-color-and-fades)) |
 | `warning_active` | Whether an effect/warn warning sequence is currently running; a restart mid-warning uses it to undo the interrupted warning and restore the pre-warning brightness and color |
 | `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
