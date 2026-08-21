@@ -1553,6 +1553,9 @@ class _ScheduledLightSettingsSteps:
         flat = dict(self._scheduled_light_settings[side])
         errors: dict[str, str] = {}
         if user_input is not None:
+            # This form owns both selection fields; an absent optional source
+            # means the user cleared it, so it must not survive the update.
+            flat.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
             flat.update(user_input)
             errors = _validate_turn_on_selection(self.hass, flat)
             if not errors:

@@ -1421,7 +1421,11 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert result["errors"] == {"base": "turn_on_selection_invalid_option"}
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Dusk"}
+        result["flow_id"],
+        {
+            CONF_TURN_ON_SELECT_OPTION: "Dusk",
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+        },
     )
     assert result["step_id"] == "scheduled_light_inside"
     suggested = _suggested_values(result["data_schema"])
@@ -1438,12 +1442,45 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     outside = cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert outside[CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
     assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
-    # The untouched source survives the round trip through the selection page.
+    # The resubmitted source survives the round trip through the selection page.
     assert outside[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
     inside = cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
     assert CONF_TURN_ON_SELECT_ENTITY not in inside
     assert CONF_TURN_ON_SELECT_OPTION not in inside
     assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in inside
+
+    # A second pass that keeps the target but omits the source clears it —
+    # the selection form owns the field, so absence is a clear, not a keep.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_selection"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Dusk"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    outside = molight_config(entry)[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
+    assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in outside
 
 
 @pytest.mark.asyncio
