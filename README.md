@@ -434,6 +434,8 @@ npm run dev:down      # stop and remove the container (dev:up recreates it)
 npm run dev:rebuild   # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
 ```
 
+If you open the repository locally rather than in the container, Pylance can't see the container's Python environment and flags every Home Assistant import as unresolved — see [LOCAL_DEV_NOTES.md](LOCAL_DEV_NOTES.md) for the editor-only fix.
+
 ### Running Home Assistant
 
 There are two ways to get a live HA instance, depending on what you're testing:
