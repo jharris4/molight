@@ -253,7 +253,12 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             # clear measure the on-duration from the recovery moment and
             # misclassify a long occupancy as a false detection.
             if not self._attr_is_on:
-                self._last_on_time = datetime.now(UTC)
+                # Before startup finishes, an on-event is a late-loading
+                # source replaying a pre-restart detection: its true start is
+                # unknown, so leave the cycle unclassified (as in _seed_state).
+                self._last_on_time = (
+                    datetime.now(UTC) if self.hass.state is CoreState.running else None
+                )
             self._attr_is_on = True
         else:
             if not self._attr_is_on:

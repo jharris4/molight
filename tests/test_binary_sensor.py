@@ -905,6 +905,51 @@ async def test_occupancy_does_not_seed_last_on_time_at_startup(
 
 
 @pytest.mark.asyncio
+async def test_occupancy_does_not_stamp_on_time_for_late_loading_source(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A source first appearing 'on' during startup gets no on-time anchor.
+
+    A source entity that loads after the MoLight entry (a retained MQTT
+    state, a slow coordinator) delivers its pre-restart 'on' as an event;
+    stamping the startup moment would misclassify the first clear.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Late Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    hass.set_state(CoreState.starting)
+
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # The source appears for the first time, already on, mid-startup.
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.late_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] is None
+
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.late_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+    assert state.attributes["latest_occupied_time"] is not None
+
+
+@pytest.mark.asyncio
 async def test_occupancy_seeds_off_when_source_unavailable_at_startup(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
