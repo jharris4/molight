@@ -7,5 +7,4 @@ services:
       - ./custom_components/molight:/config/custom_components/molight:ro
     ports:
       - "8123:8123"
-    privileged: true
     restart: unless-stopped
