@@ -602,6 +602,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                         )
                 # A boundary off deferred under a previous configuration no
                 # longer applies once the end action is anything but "turn off".
+                # It deliberately survives a schedule swap, unlike the
+                # same-schedule-guarded restores above: the off was already
+                # observed, not inferred, so the new schedule can't un-happen
+                # it.
                 self._schedule_end_off_pending = (
                     self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
                     and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
