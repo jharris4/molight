@@ -26,6 +26,8 @@ config/tts/
 config/.HA_VERSION
 config/.ha_run.lock
 config/deps/
+# Stock blueprints HA rewrites into any fresh config dir (ensure_config)
+config/blueprints/
 
 # Ruff
 .ruff_cache/
