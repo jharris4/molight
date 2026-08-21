@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
   # The latest leg tracks upstream, which moves without a change here.
   schedule:
