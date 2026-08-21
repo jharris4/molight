@@ -149,7 +149,7 @@ Combines multiple MoLight occupancy sensors into one. Constituents are usually s
 
 `latest_occupied_time` is the max across all constituents, so each sub-sensor's individual timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor.
 
-After a restart, a *maintain* sensor that has already been `on` for more than 5 seconds is assumed to reflect occupancy triggered before HA went down, and seeds the sensor `on` (the one exception to "maintain sensors never start occupancy").
+After a restart, if the sensor's restored state was `on` and a *maintain* sensor still shows presence, occupancy is seeded `on` (the one exception to "maintain sensors never start occupancy" — the restored state is direct evidence it was already triggered before HA went down).
 
 If the last constituent still `on` drops out of the state machine (its entry unloaded, the entity removed), occupancy clears immediately rather than holding forever — the combined-sensor counterpart of the simple sensor's *clear after unavailable* timeout. As there, the person is assumed present up to the dropout: `latest_occupied_time` advances to that moment so dependent lights run their normal gentle countdown, and the clear is never classified as a false detection. Constituents are MoLight's own sensors, which never blip `unavailable` in normal operation, so no grace period is needed.
 

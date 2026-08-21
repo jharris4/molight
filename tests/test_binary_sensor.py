@@ -697,12 +697,12 @@ async def test_combined_seeds_on_from_trigger_at_startup(hass: HomeAssistant) ->
 
 
 @pytest.mark.asyncio
-async def test_combined_seeds_on_from_long_held_maintain(
-    hass: HomeAssistant, freezer
+async def test_combined_seeds_on_from_restored_state_and_maintain(
+    hass: HomeAssistant,
 ) -> None:
-    """A maintain sensor on for >5s at startup counts as pre-restart occupancy."""
+    """A restored 'on' plus a maintain sensor still showing presence seeds on."""
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
     hass.states.async_set("binary_sensor.m2", "on")
-    freezer.tick(timedelta(seconds=10))
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -712,17 +712,33 @@ async def test_combined_seeds_on_from_long_held_maintain(
 
 
 @pytest.mark.asyncio
-async def test_combined_ignores_maintain_flap_at_startup(
-    hass: HomeAssistant, freezer
+async def test_combined_maintain_alone_never_seeds_occupancy(
+    hass: HomeAssistant,
 ) -> None:
-    """A maintain sensor that just flapped on (<5s) must not seed occupancy."""
+    """Without restored evidence, a maintain sensor cannot start occupancy."""
     hass.states.async_set("binary_sensor.m2", "on")
-    freezer.tick(timedelta(seconds=2))
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_midrun_reload_does_not_seed_from_maintain(
+    hass: HomeAssistant,
+) -> None:
+    """An options reload must not let a maintain sensor start occupancy."""
+    hass.states.async_set("binary_sensor.m2", "on")
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
 
 

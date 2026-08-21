@@ -74,10 +74,6 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, EventStateChangedData, State
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-# Minimum on-time for a maintain sensor to seed occupancy after a restart;
-# filters out sensors that merely flapped on during startup itself.
-STARTUP_MAINTAIN_SEED_SECONDS = 5
-
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -390,30 +386,20 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self.hass, all_sensors, self._handle_occupancy_change
             )
         )
-        self._seed_state()
+        self._seed_state(restored_on=last is not None and last.state == "on")
 
-    def _seed_state(self) -> None:
+    def _seed_state(self, *, restored_on: bool) -> None:
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
-        else:
+        elif restored_on and self._any_on(self._maintain_sensors):
             # Intentional startup exception to "maintain sensors never start
-            # occupancy": after a restart we can't know whether occupancy was
-            # already triggered before HA went down. A maintain sensor that has
-            # been on for more than 5 seconds is assumed to reflect ongoing
-            # occupancy from before the restart, so it seeds the sensor on
-            # (and thus can turn lights on). The minimum on-time filters out
-            # sensors that merely flapped on during startup itself.
-            now = datetime.now(UTC)
-            for entity_id in self._maintain_sensors:
-                state = self.hass.states.get(entity_id)
-                if (
-                    state
-                    and state.state == "on"
-                    and (now - state.last_changed).total_seconds()
-                    > STARTUP_MAINTAIN_SEED_SECONDS
-                ):
-                    self._attr_is_on = True
-                    break
+            # occupancy": the restored state is direct evidence occupancy was
+            # already triggered before the restart, so a maintain sensor
+            # still showing presence carries it across. (An on-duration
+            # heuristic can't do this job: constituents rewrite their state
+            # at boot, resetting last_changed — and it would wrongly start
+            # occupancy on a mid-run options reload.)
+            self._attr_is_on = True
         if self._attr_is_on:
             self._cycle_start_lot = self._latest_occupied_time
         self.async_write_ha_state()
