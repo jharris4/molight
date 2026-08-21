@@ -495,6 +495,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         )
 
         self._attr_is_on = False
+        self._attr_available = False
 
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to the illuminance source."""
@@ -502,6 +503,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
             self._attr_is_on = last.state == "on"
+            self._attr_available = True
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, [self._source_entity], self._handle_illuminance_change
@@ -528,6 +530,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
             value = float(state_value)
         except (ValueError, TypeError):
             return  # unparsable reading — hold last known value
+        self._attr_available = True
         if self._attr_is_on:
             if value < self._threshold - self._hysteresis:
                 self._attr_is_on = False

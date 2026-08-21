@@ -162,7 +162,7 @@ Attributes: `latest_occupied_time` (max across all constituents), `last_clear_fa
 | **Threshold (lx)** | Default `10`. The lux level at which the sensor reports `on` |
 | **Hysteresis (lx)** | `0` disables (the default). Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold |
 
-An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
+An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts. Until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness; consumers treat that as "not bright".
 
 Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity carries `device_class: light`, so HA's UI shows it as "Light detected" / "No light".
 

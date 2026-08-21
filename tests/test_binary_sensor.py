@@ -839,6 +839,40 @@ async def test_illuminance_restores_state(
 
 
 @pytest.mark.asyncio
+async def test_illuminance_unavailable_before_first_reading(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """Without a reading the sensor must not claim 'dark' — off opens the gates."""
+    illuminance_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(illuminance_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.test_illuminance").state == "unavailable"
+
+    hass.states.async_set("sensor.lux_1", "unavailable")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "unavailable"
+
+    hass.states.async_set("sensor.lux_1", "5")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_seeds_from_existing_source(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """A source already reporting at setup makes the sensor available at once."""
+    hass.states.async_set("sensor.lux_1", "500")
+
+    illuminance_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(illuminance_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.test_illuminance").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_illuminance_holds_value_when_source_unavailable(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry
 ) -> None:
