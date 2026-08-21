@@ -242,6 +242,7 @@ The form groups everything but the timeout into collapsible sections — *Sensor
 | `last_on_door` | Timestamp of the last turn-on caused by the door opening |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
+| `warning_active` | Whether an effect/warn warning sequence is currently running; a restart mid-warning uses it to restore the sequence |
 | `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
 
