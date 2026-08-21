@@ -9,7 +9,7 @@ The examples build on each other:
 3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Home-only lighting](#example-5--home-only-lighting-source-backed-inverted-schedule) — an inverted schedule derived from an away-mode binary sensor
-6. [Pantry light](#example-6--pantry-light-door-sensor) — a door/contact sensor
+6. [Storage room light](#example-6--storage-room-light-door-sensor) — a door/contact sensor
 7. [Hallway night light](#example-7--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
 8. [Pico remote](#example-8--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
 9. [Bilresa remote](#example-9--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
@@ -183,24 +183,24 @@ While someone is home, occupancy can turn the entryway light on normally. When a
 
 ---
 
-### Example 6 — Pantry light (door sensor)
+### Example 6 — Storage room light (door sensor)
 
-Open the pantry door → light on; close it → light off. A single entry driven by a real door/contact sensor:
+Open the storage room door → light on; close it → light off. A single entry driven by a real door/contact sensor:
 
 **Virtual Light**
 
 ```text
-Name:              Pantry                       # → light.pantry
-Lights to control: light.pantry_real
+Name:              Storage Room                 # → light.storage_room
+Lights to control: light.storage_room_real
 Turn-off timeout:  120                          # countdown once the door closes
-Door sensor:       binary_sensor.pantry_door    # a real contact sensor (on = open)
+Door sensor:       binary_sensor.storage_door   # a real contact sensor (on = open)
 Door mode:         open_close                   # on while open, off when closed
 ```
 
 Open the door and the light stays on the whole time it's open — no timeout while you're rummaging. Close it and a countdown (the **Turn-off timeout**) begins.
 
 - Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off — closing is ignored. Handy for a walk-through door where you don't want the light killed the instant it shuts.
-- Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy — no wasted light opening a pantry in daylight. In `open_close` mode, if the room turns dark while the door is still standing open, the light comes on then.
+- Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy — no wasted light opening a storage room in daylight. In `open_close` mode, if the room turns dark while the door is still standing open, the light comes on then.
 - In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor (or a keep-on entity is holding auto-off) and it still sees someone, the lights stay on instead of dropping on a person who just shut the door behind them.
 
 ---
