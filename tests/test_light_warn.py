@@ -576,3 +576,61 @@ async def test_external_dim_during_warning_honors_new_brightness(
     await settle(hass)
     assert _mstate(hass) == STATE_EFFECT
     assert _state(hass).attributes["pre_warn_brightness"] == 120
+
+
+@pytest.mark.asyncio
+async def test_external_dim_mid_effect_restores_pre_warning_color(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A brightness-only re-trigger mid-warning undoes the stage recolor."""
+    entry = make_light_entry(
+        effect_timeout=10,
+        effect_brightness=50,
+        effect_rgb_color=[255, 0, 0],
+        warn_timeout=15,
+    )
+    await setup_entries(hass, entry)
+
+    await _turn_on_virtual(hass, brightness=200)
+    hass.states.async_set(
+        REAL,
+        "on",
+        {
+            "brightness": 200,
+            "supported_color_modes": ["hs"],
+            "color_mode": "hs",
+            "hs_color": (30.0, 40.0),
+        },
+    )
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_EFFECT
+
+    calls = _record_service_calls(hass)
+    # Someone dims the real light mid-effect, bringing no color of its own.
+    hass.states.async_set(
+        REAL,
+        "on",
+        {
+            "brightness": 120,
+            "supported_color_modes": ["hs"],
+            "color_mode": "hs",
+            "hs_color": (30.0, 40.0),
+        },
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+    restores = [
+        d
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and tuple(d["service_data"].get("hs_color") or ()) == (30.0, 40.0)
+    ]
+    assert restores, "pre-warning color was not restored"
