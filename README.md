@@ -316,7 +316,7 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
 - Every automatic turn-off is suspended — the timer, the false-detection quick off, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
 - Turn-ons are unaffected (occupancy, going dark, and window starts still light the room), and a manual off always works.
 - When the last hold releases, the light re-evaluates its rules: a follow or hard-gate window that ended while held turns it off now, as does being bright in `control` mode; active occupancy keeps it on (when it's dark / in-window, like any adoption — a **Gate and keep state** window is not required once the light is on); an active follow window keeps it `SCHEDULED`; otherwise a **fresh full timer** starts.
-- A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The switch state survives restarts, and a held light adopted at startup won't start a timer.
+- A keep-on entity dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released" — or engaged). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding. The switch state survives restarts, and a held light adopted at startup won't start a timer.
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own. The current hold status is exposed as the `auto_off_held` attribute.
 
