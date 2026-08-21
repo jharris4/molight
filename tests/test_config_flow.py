@@ -3865,6 +3865,29 @@ async def test_config_flow_illuminance(hass: HomeAssistant) -> None:
     assert result["data"][CONF_ILLUMINANCE_HYSTERESIS] == 0.0
 
 
+@pytest.mark.asyncio
+async def test_config_flow_illuminance_rejects_hysteresis_at_threshold(
+    hass: HomeAssistant,
+) -> None:
+    """A hysteresis >= threshold would make dark unreachable and is rejected."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 10.0,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
+
+
 # ---------------------------------------------------------------------------
 # Options flows not covered above
 # ---------------------------------------------------------------------------
@@ -3897,6 +3920,27 @@ async def test_illuminance_options_round_trip(
     assert cfg[CONF_ILLUMINANCE_SENSOR] == "sensor.lux_2"
     assert cfg[CONF_ILLUMINANCE_THRESHOLD] == 42.0
     assert cfg[CONF_ILLUMINANCE_HYSTERESIS] == 2.5
+
+
+@pytest.mark.asyncio
+async def test_illuminance_options_reject_hysteresis_at_threshold(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+) -> None:
+    """The options flow enforces the same hysteresis < threshold rule."""
+    await setup_entries(hass, illuminance_entry)
+
+    result = await hass.config_entries.options.async_init(illuminance_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.lux_2",
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 12.0,
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
 
 
 @pytest.mark.asyncio

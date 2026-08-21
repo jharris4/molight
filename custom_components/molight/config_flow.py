@@ -1033,6 +1033,23 @@ def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
     }
 
 
+def _validate_illuminance_band(user_input: dict[str, Any]) -> dict[str, str]:
+    """Reject a hysteresis that makes the dark state unreachable.
+
+    Becoming dark requires a reading below threshold - hysteresis; no lux
+    sensor reports below 0, so hysteresis >= threshold latches bright forever.
+    """
+    threshold = float(
+        user_input.get(CONF_ILLUMINANCE_THRESHOLD, DEFAULT_ILLUMINANCE_THRESHOLD)
+    )
+    hysteresis = float(
+        user_input.get(CONF_ILLUMINANCE_HYSTERESIS, DEFAULT_ILLUMINANCE_HYSTERESIS)
+    )
+    if hysteresis and hysteresis >= threshold:
+        return {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
+    return {}
+
+
 def _illuminance_option_fields() -> dict:
     return {
         vol.Required(
@@ -2724,15 +2741,17 @@ class MoLightConfigFlow(
 
         if user_input is not None:
             flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
-            result, errors = await self._resolve_and_create(
-                entity_type=ENTITY_TYPE_ILLUMINANCE,
-                name=flat[CONF_NAME],
-                data={CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, **flat},
-                prefill=user_input,
-                entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
-            )
-            if result is not None:
-                return result
+            errors = _validate_illuminance_band(flat)
+            if not errors:
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_ILLUMINANCE,
+                    name=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, **flat},
+                    prefill=user_input,
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
+                )
+                if result is not None:
+                    return result
 
         schema = vol.Schema(
             {
@@ -3357,8 +3376,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Edit a Virtual Illuminance Sensor's settings."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self._finish(user_input)
+            errors = _validate_illuminance_band(user_input)
+            if not errors:
+                return self._finish(user_input)
 
         cfg = self._cfg
         schema = vol.Schema(
@@ -3377,7 +3399,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         )
         return self.async_show_form(
             step_id="illuminance",
-            data_schema=self.add_suggested_values_to_schema(schema, cfg),
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or cfg),
+            errors=errors,
         )
 
     # ------------------------------------------------------------------
