@@ -233,7 +233,6 @@ from homeassistant.components.light import (
 from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import (
     ATTR_OPTION,
-    ATTR_SUPPORTED_FEATURES,
     EVENT_HOMEASSISTANT_STARTED,
     SERVICE_SELECT_OPTION,
     STATE_UNAVAILABLE,
@@ -326,7 +325,7 @@ from .const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from .helpers import molight_config, suggested_entity_id
+from .helpers import lights_support_transition, molight_config, suggested_entity_id
 
 if TYPE_CHECKING:
     from collections.abc import Coroutine
@@ -1266,7 +1265,6 @@ class VirtualLight(LightEntity, RestoreEntity):
         color capability, including while members are still unavailable.
         """
         member_modes: set[str] = set()
-        member_features: list[int] = []
         min_kelvins: list[int] = []
         max_kelvins: list[int] = []
         for entity_id in self._lights:
@@ -1274,10 +1272,6 @@ class VirtualLight(LightEntity, RestoreEntity):
             if state is None:
                 continue
             member_modes.update(state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ())
-            # A real light always publishes supported_features, even as 0 and
-            # even while unavailable, so an absent one means "can't judge yet".
-            if (features := state.attributes.get(ATTR_SUPPORTED_FEATURES)) is not None:
-                member_features.append(features)
             if kelvin := state.attributes.get(ATTR_MIN_COLOR_TEMP_KELVIN):
                 min_kelvins.append(kelvin)
             if kelvin := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
@@ -1310,11 +1304,9 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         # Fail open like the floor above: an unseen member must not cost the
         # caller their fade. Withheld only once every member is judged.
-        every_member_judged = len(member_features) == len(self._lights)
-        can_fade = any(f & LightEntityFeature.TRANSITION for f in member_features)
         supported_features = (
             LightEntityFeature(0)
-            if every_member_judged and not can_fade
+            if lights_support_transition(self.hass, self._lights) is False
             else LightEntityFeature.TRANSITION
         )
         if supported_features != self._attr_supported_features:

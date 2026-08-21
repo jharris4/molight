@@ -134,11 +134,11 @@ from .const import (
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
-from .helpers import molight_config as _molight_cfg
+from .helpers import lights_support_transition, molight_config as _molight_cfg
 from .remote import CLICK_DOUBLE, CLICK_SINGLE, entity_double_click_supported
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
     from homeassistant.core import HomeAssistant
 
@@ -870,13 +870,36 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_transition_support(
+    hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
+) -> dict[str, str]:
+    """Reject a configured fade that none of the chosen lights could apply.
+
+    Like the double-click check in _validate_remote, only a positive "none of
+    them can" blocks; an unjudgeable light is allowed through. Base error: the
+    fade fields sit inside collapsed sections.
+    """
+    fades = (
+        CONF_AUTO_ON_TRANSITION,
+        CONF_AUTO_OFF_TRANSITION,
+        CONF_EFFECT_TRANSITION,
+        CONF_WARN_TRANSITION,
+    )
+    if not any(user_input.get(key) for key in fades):
+        return {}
+    if lights_support_transition(hass, lights) is False:
+        return {"base": "transition_unsupported"}
+    return {}
+
+
 def _validate_light_settings(
-    hass: HomeAssistant, settings: dict[str, Any]
+    hass: HomeAssistant, settings: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
     """Validate one flat Virtual Light settings mapping."""
     errors = _validate_light_timeout(hass, settings)
     errors.update(_validate_stage_transitions(settings))
     errors.update(_validate_colors(settings))
+    errors.update(_validate_transition_support(hass, settings, lights))
     return errors
 
 
@@ -1376,6 +1399,8 @@ class _ScheduledLightSettingsSteps:
     """
 
     hass: HomeAssistant
+    # Set by both subclasses' shared first form, before either side form runs.
+    _scheduled_light_shared: dict[str, Any] | None
 
     def _init_scheduled_light_steps(self) -> None:
         """Reset the per-side settings stash and the pending selection side."""
@@ -1412,7 +1437,11 @@ class _ScheduledLightSettingsSteps:
         previous = self._scheduled_light_previous(side)
         if user_input is not None:
             flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
-            errors = _validate_light_settings(self.hass, flat)
+            errors = _validate_light_settings(
+                self.hass,
+                flat,
+                (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
+            )
             if not errors:
                 _carry_turn_on_selection(flat, previous)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
@@ -1983,6 +2012,11 @@ class MoLightConfigFlow(
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(
+                _validate_transition_support(
+                    self.hass, flat, self._discovery.get("selected", [])
+                )
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -2783,6 +2817,9 @@ class MoLightConfigFlow(
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(
+                _validate_transition_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -3359,6 +3396,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(
+                _validate_transition_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
             if not _schedule_entity_is_allowed(
                 self.hass,
                 flat.get(CONF_SCHEDULE_ENTITY),

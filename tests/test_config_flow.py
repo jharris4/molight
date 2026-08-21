@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components.light import LightEntityFeature
 from homeassistant.data_entry_flow import FlowResultType, section
 from homeassistant.helpers import (
     area_registry as ar,
@@ -4944,3 +4945,192 @@ async def test_assign_noop_leaves_entry_untouched(
     assert (
         molight_config(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
     )
+
+
+# ---------------------------------------------------------------------------
+# A fade none of the chosen lights could apply
+#
+# Mirrors the double-click check: only a positive "none of them can" blocks.
+# A light with no state yet can't be judged, so the fade is allowed through.
+# ---------------------------------------------------------------------------
+
+PLUG = "light.plug"  # positively cannot fade
+DIMMER = "light.dimmer"  # positively can fade
+
+
+def _no_fade(hass: HomeAssistant, entity_id: str = PLUG) -> None:
+    hass.states.async_set(entity_id, "off", {"supported_features": 0})
+
+
+def _can_fade(hass: HomeAssistant, entity_id: str = DIMMER) -> None:
+    hass.states.async_set(
+        entity_id, "off", {"supported_features": LightEntityFeature.TRANSITION}
+    )
+
+
+async def _submit_light_create(hass: HomeAssistant, lights: list[str]) -> dict:
+    """Submit the create form with a 2s auto-on fade on the given lights."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Fade Light",
+            CONF_LIGHTS: lights,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2},
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_fade_no_light_can_apply(hass: HomeAssistant) -> None:
+    """A fade on lights that all positively report no transition support is
+    rejected rather than silently ignored."""
+    _no_fade(hass)
+    result = await _submit_light_create(hass, [PLUG])
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "transition_unsupported"}
+
+    # Clearing the fade lets the same lights through.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Fade Light",
+            CONF_LIGHTS: [PLUG],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_fade_when_a_light_can_apply_it(
+    hass: HomeAssistant,
+) -> None:
+    """One capable light is enough — mixed groups are the documented case."""
+    _no_fade(hass)
+    _can_fade(hass)
+    result = await _submit_light_create(hass, [PLUG, DIMMER])
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_AUTO_ON_TRANSITION] == 2
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_fade_when_lights_cannot_be_judged(
+    hass: HomeAssistant,
+) -> None:
+    """A light that isn't in the state machine yet can't be judged, so the fade
+    is allowed and simply does nothing until it proves itself."""
+    result = await _submit_light_create(hass, ["light.not_created_yet"])
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_fade_when_any_light_is_unjudgeable(
+    hass: HomeAssistant,
+) -> None:
+    """An unjudgeable member keeps the whole set unjudgeable, so the fade is
+    allowed — the known member being incapable is not proof about the rest."""
+    _no_fade(hass)
+    result = await _submit_light_create(hass, [PLUG, "light.not_created_yet"])
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_options_reject_fade_no_light_can_apply(
+    hass: HomeAssistant,
+) -> None:
+    """The same guard applies when editing an existing light."""
+    _no_fade(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Fade Light",
+            CONF_LIGHTS: [PLUG],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Fade Light",
+            CONF_LIGHTS: [PLUG],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_OFF_TRANSITION: 3},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "transition_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_side_form_rejects_fade_no_light_can_apply(
+    hass: HomeAssistant,
+) -> None:
+    """A scheduled light's side forms carry no light picker — the guard reads
+    the members from the shared first form."""
+    await _setup_night_schedule(hass)
+    _no_fade(hass)
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: [PLUG],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "scheduled_light_outside"
+    assert result["errors"] == {"base": "transition_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_discover_light_defaults_reject_fade_no_light_can_apply(
+    hass: HomeAssistant,
+) -> None:
+    """Discovery applies one settings set to every pick, so the guard reads the
+    selected lights rather than a single member list."""
+    _no_fade(hass)
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: [PLUG]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**EMPTY_LIGHT_SECTIONS, SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2}},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "transition_unsupported"}
