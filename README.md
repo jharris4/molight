@@ -453,9 +453,25 @@ Once `main` is up to date, the rest is scripted. `npm run release <version>`
 writes nothing on its own — it lists the changes a release would make (stamping
 the changelog, bumping the manifest version, updating the compare links) and
 prints the command that applies them. Applying then prints the git commands to
-commit, tag and push. After pushing the tag, fast-forward `develop` to include
-that release commit too, so development resumes with the stamped changelog and
-new manifest version:
+commit, tag and push.
+
+Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
+validates that the tag, manifest and changelog versions agree, then puts the
+release notes extracted from the changelog in its job summary. It does **not**
+create the GitHub Release. After the workflow succeeds:
+
+1. Open its job summary and copy the generated release notes.
+2. In the repository's **Releases** page, choose **Draft a new release** and
+   select the tag you just pushed.
+3. Give the release a descriptive title, paste the generated notes into its
+   body, and publish it as a normal release (not a draft or prerelease). The
+   published body is what HACS shows users in its update dialog.
+
+Creating only the tag is not a complete release: the corresponding published
+GitHub Release is required for users and HACS to see the version and its notes.
+
+Finally, fast-forward `develop` to include the release commit too, so
+development resumes with the stamped changelog and new manifest version:
 
 ```bash
 git switch develop
