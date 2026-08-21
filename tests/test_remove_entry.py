@@ -32,6 +32,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
+    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
@@ -53,6 +54,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
+    ENTITY_TYPE_SCHEDULED_LIGHT,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_GATE,
 )
@@ -467,3 +469,33 @@ async def test_remove_entry_without_references_leaves_others_alone(
     await hass.config_entries.async_remove(never_loaded.entry_id)
     await settle(hass)
     assert not light.options
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
+    hass: HomeAssistant,
+) -> None:
+    """A scheduled light missing a settings side must not be rewritten just to
+    materialise that side as an empty dict — that would differ from its stored
+    config and force a reload of an entry referencing nothing removed."""
+    occupancy = _occupancy_entry()
+    partial = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_NAME: "Partial Scheduled",
+            CONF_LIGHTS: ["light.real_1"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.some_schedule",
+            # Only one side stored; the other is absent entirely.
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+        },
+    )
+    for entry in (occupancy, partial):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(occupancy.entry_id)
+    await settle(hass)
+
+    assert not partial.options

@@ -127,7 +127,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
                     values = settings.get(key)
                     if values and any(e in removed for e in values):
                         settings[key] = [e for e in values if e not in removed]
-                cleaned[side] = settings
+                # Materialising an absent side would differ from cfg and
+                # force a needless reload.
+                if side in cleaned or settings:
+                    cleaned[side] = settings
         if cleaned == cfg:
             continue
         # Stored options fully replace data; authoritative entity_type and the
