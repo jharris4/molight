@@ -22,6 +22,7 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
+    DATA_PLATFORMS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
@@ -29,14 +30,15 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
+    PLATFORMS_BY_ENTITY_TYPE,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-# Each entry type registers exactly these entity domains — and none of the
-# other platforms', despite every platform being forwarded for every entry.
+# Each entry type registers exactly these entity domains, which must also be
+# the platforms PLATFORMS_BY_ENTITY_TYPE forwards for it.
 TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
     ENTITY_TYPE_OCCUPANCY: (
         {
@@ -86,6 +88,14 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
 }
 
 
+@pytest.mark.parametrize("entity_type", list(TYPE_ENTRIES), ids=list(TYPE_ENTRIES))
+def test_forwarded_platforms_match_registered_domains(entity_type: str) -> None:
+    """Only the platforms an entry actually uses are forwarded to it."""
+    assert sorted(PLATFORMS_BY_ENTITY_TYPE[entity_type]) == sorted(
+        TYPE_ENTRIES[entity_type][1]
+    )
+
+
 def _make_entry(entity_type: str) -> MockConfigEntry:
     data, _expected = TYPE_ENTRIES[entity_type]
     return MockConfigEntry(domain=DOMAIN, data={CONF_ENTITY_TYPE: entity_type, **data})
@@ -96,9 +106,8 @@ def _make_entry(entity_type: str) -> MockConfigEntry:
 async def test_entry_registers_exactly_its_own_entities(
     hass: HomeAssistant, entity_type: str
 ) -> None:
-    """Every platform is forwarded to every entry; the per-platform guards
-    must keep foreign entity types out (no stray Auto-off switch on a sensor
-    entry, no Last Action sensor on a light entry, ...)."""
+    """An entry registers its own entities and no others (no stray Auto-off
+    switch on a sensor entry, no Last Action sensor on a light entry, ...)."""
     entry = _make_entry(entity_type)
     await setup_entries(hass, entry)
 
@@ -134,7 +143,10 @@ async def test_light_entry_seeds_and_clears_hass_data(hass: HomeAssistant) -> No
     """hass.data is seeded (auto-off enabled) at setup and dropped at unload."""
     entry = make_light_entry(name="Data Light")
     await setup_entries(hass, entry)
-    assert hass.data[DOMAIN][entry.entry_id] == {DATA_AUTO_OFF_ENABLED: True}
+    assert hass.data[DOMAIN][entry.entry_id] == {
+        DATA_AUTO_OFF_ENABLED: True,
+        DATA_PLATFORMS: ["light", "switch"],
+    }
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await settle(hass)

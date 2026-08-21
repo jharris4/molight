@@ -2,6 +2,7 @@
 
 DOMAIN = "molight"
 
+# Union of every platform below; the fallback for an unrecognised entity type.
 PLATFORMS = ["binary_sensor", "light", "sensor", "switch"]
 
 # Entity type discriminator stored in config entry data
@@ -22,6 +23,18 @@ ENTITY_TYPES = [
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ENTITY_TYPE_REMOTE,
 ]
+
+# Forwarding only the platforms an entry actually uses avoids setting up (and
+# immediately returning from) the other three on every sensor entry.
+PLATFORMS_BY_ENTITY_TYPE = {
+    ENTITY_TYPE_OCCUPANCY: ["binary_sensor"],
+    ENTITY_TYPE_COMBINED_OCCUPANCY: ["binary_sensor"],
+    ENTITY_TYPE_ILLUMINANCE: ["binary_sensor"],
+    ENTITY_TYPE_SCHEDULE: ["binary_sensor"],
+    ENTITY_TYPE_LIGHT: ["light", "switch"],
+    ENTITY_TYPE_SCHEDULED_LIGHT: ["light", "switch"],
+    ENTITY_TYPE_REMOTE: ["sensor"],
+}
 
 # --- Shared config keys ---
 CONF_ENTITY_TYPE = "entity_type"
@@ -247,6 +260,9 @@ CONF_HOLD_ENTITIES = "hold_entities"
 # switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies the
 # light via this dispatcher signal (formatted with the entry_id).
 DATA_AUTO_OFF_ENABLED = "auto_off_enabled"
+# The platforms actually forwarded, so unload matches setup even if the
+# entry type changed in between (a light/scheduled-light conversion).
+DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
 # How a referenced illuminance entity affects the light:

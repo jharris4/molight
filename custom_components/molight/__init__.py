@@ -23,10 +23,12 @@ from .const import (
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
+    DATA_PLATFORMS,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     PLATFORMS,
+    PLATFORMS_BY_ENTITY_TYPE,
 )
 from .helpers import molight_config
 from .remote import async_setup_remote
@@ -63,15 +65,19 @@ _REFERENCE_LIST_KEYS = (
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a MoLight virtual entity from a config entry."""
+    platforms = PLATFORMS_BY_ENTITY_TYPE.get(entry.data[CONF_ENTITY_TYPE], PLATFORMS)
     # Seeded before the platforms load so the light can always read the
     # auto-off flag; the companion switch overwrites it when it restores.
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_AUTO_OFF_ENABLED: True}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        DATA_AUTO_OFF_ENABLED: True,
+        DATA_PLATFORMS: platforms,
+    }
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE:
         # A Virtual Remote's runtime is the event-entity listener set up
         # here (torn down with the entry); its Last Action sensor rides the
         # normal platform forwarding below.
         entry.async_on_unload(async_setup_remote(hass, entry))
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
 
     # Reload the entry whenever options are updated so entities pick up new values.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
@@ -84,7 +90,11 @@ async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a MoLight config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    platforms = (
+        hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get(DATA_PLATFORMS)
+        or PLATFORMS
+    )
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unload_ok
