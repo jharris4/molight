@@ -416,6 +416,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     @callback
     def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
         if not _real_state_change(event):
+            self._reevaluate_on_dropout(event)
             return
         new_state = event.data["new_state"]
 
@@ -447,6 +448,28 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             if self._last_clear_false:
                 self._false_count += 1
 
+        self.async_write_ha_state()
+
+    def _reevaluate_on_dropout(self, event: Event[EventStateChangedData]) -> None:
+        """Clear occupancy when the last constituent still on drops out.
+
+        A constituent leaving the state machine (its entry unloaded, the
+        entity removed) must not hold the combined sensor on forever. Like
+        the simple sensor's clear-on-unavailable, never classified as a
+        false detection — the room may still be occupied.
+        """
+        new_state = event.data.get("new_state")
+        if new_state is not None and new_state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            return  # attribute-only update; the combined state can't change
+        if not self._attr_is_on:
+            return
+        if self._any_on(self._trigger_sensors) or self._any_on(self._maintain_sensors):
+            return
+        self._attr_is_on = False
+        self._last_clear_false = False
         self.async_write_ha_state()
 
     def _any_on(self, sensors: list[str]) -> bool:

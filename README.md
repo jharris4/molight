@@ -151,6 +151,8 @@ Combines multiple MoLight occupancy sensors into one. Constituents are usually s
 
 After a restart, a *maintain* sensor that has already been `on` for more than 5 seconds is assumed to reflect occupancy triggered before HA went down, and seeds the sensor `on` (the one exception to "maintain sensors never start occupancy").
 
+If the last constituent still `on` drops out of the state machine (its entry unloaded, the entity removed), occupancy clears immediately rather than holding forever — the combined-sensor counterpart of the simple sensor's *clear after unavailable* timeout, and likewise never classified as a false detection. Constituents are MoLight's own sensors, which never blip `unavailable` in normal operation, so no grace period is needed.
+
 Attributes: `latest_occupied_time` (max across all constituents), `last_clear_false_detection`, `false_detection_count`.
 
 ### Virtual Illuminance Binary Sensor

@@ -693,6 +693,70 @@ async def test_combined_ignores_maintain_flap_at_startup(
 
 
 @pytest.mark.asyncio
+async def test_combined_clears_when_last_constituent_drops_out(
+    hass: HomeAssistant,
+) -> None:
+    """A constituent going unavailable must not hold the combined sensor on."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m1", "unavailable")
+    await settle(hass)
+    combined = hass.states.get("binary_sensor.seed_combined")
+    assert combined.state == "off"
+    assert combined.attributes["last_clear_false_detection"] is False
+    assert combined.attributes["false_detection_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_combined_clears_when_last_constituent_is_removed(
+    hass: HomeAssistant,
+) -> None:
+    """A constituent removed from the state machine releases the combined sensor."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_remove("binary_sensor.m1")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_holds_through_dropout_while_maintain_on(
+    hass: HomeAssistant,
+) -> None:
+    """A dropped trigger doesn't clear occupancy a maintain sensor still sees."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.m1", "unavailable")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    # The surviving maintain sensor clearing still ends occupancy normally.
+    hass.states.async_set("binary_sensor.m2", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
 async def test_combined_keeps_newest_lot_over_older_clear(
     hass: HomeAssistant,
 ) -> None:
@@ -727,10 +791,10 @@ async def test_combined_keeps_newest_lot_over_older_clear(
 
 
 @pytest.mark.asyncio
-async def test_combined_holds_through_unavailable_constituent(
+async def test_combined_retriggers_on_constituent_recovery(
     hass: HomeAssistant,
 ) -> None:
-    """A constituent dropping out must not end combined occupancy."""
+    """A constituent recovering straight to on is a real trigger event."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -742,12 +806,11 @@ async def test_combined_holds_through_unavailable_constituent(
 
     hass.states.async_set("binary_sensor.m1", "unavailable")
     await hass.async_block_till_done()
-    assert hass.states.get("binary_sensor.seed_combined").state == "on"
-
-    # Recovery straight to off is a real clear.
-    hass.states.async_set("binary_sensor.m1", "off")
-    await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
 
 
 @pytest.mark.asyncio
