@@ -461,7 +461,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         A constituent leaving the state machine (its entry unloaded, the
         entity removed) must not hold the combined sensor on forever. Like
         the simple sensor's clear-on-unavailable, never classified as a
-        false detection — the room may still be occupied.
+        false detection — the room may still be occupied — and the person is
+        assumed present right up to the dropout, so latest_occupied_time
+        advances to that moment: dependent lights run their normal gentle
+        countdown, and a nesting combined sensor sees an advanced lot rather
+        than misreading the clear as a false cycle.
         """
         new_state = event.data.get("new_state")
         if new_state is not None and new_state.state not in (
@@ -473,6 +477,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             return
         if self._any_on(self._trigger_sensors) or self._any_on(self._maintain_sensors):
             return
+        now = datetime.now(UTC)
+        if self._latest_occupied_time is None or now > self._latest_occupied_time:
+            self._latest_occupied_time = now
         self._attr_is_on = False
         self._last_clear_false = False
         self.async_write_ha_state()

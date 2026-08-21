@@ -746,6 +746,48 @@ async def test_combined_clears_when_last_constituent_drops_out(
     assert combined.state == "off"
     assert combined.attributes["last_clear_false_detection"] is False
     assert combined.attributes["false_detection_count"] == 0
+    # The person is assumed present up to the dropout: the lot advances so
+    # dependent lights run their normal countdown instead of snapping off.
+    lot = datetime.fromisoformat(combined.attributes["latest_occupied_time"])
+    assert (datetime.now(UTC) - lot).total_seconds() < 5
+
+
+@pytest.mark.asyncio
+async def test_combined_dropout_advances_lot_for_nesting_parent(
+    hass: HomeAssistant,
+) -> None:
+    """A dropout-clear's advanced lot keeps a nesting parent from calling it false."""
+    inner = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Inner Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.m1"],
+        },
+    )
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.inner_combined"],
+        },
+    )
+    for entry in (inner, outer):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.outer_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m1", "unavailable")
+    await settle(hass)
+    outer_state = hass.states.get("binary_sensor.outer_combined")
+    assert outer_state.state == "off"
+    assert outer_state.attributes["last_clear_false_detection"] is False
+    assert outer_state.attributes["false_detection_count"] == 0
 
 
 @pytest.mark.asyncio
