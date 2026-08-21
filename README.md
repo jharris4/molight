@@ -202,7 +202,7 @@ The form groups everything but the timeout into collapsible sections — *Sensor
 
 | Config | Description |
 |---|---|
-| **Lights to control** | Real `light` entities to control |
+| **Lights to control** | The `light` entities to control — usually real lights, but another MoLight virtual light works too; deleting a member cleans up the reference like any other |
 | **Turn-off timeout (s)** | Default `300`. Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | Default `5`. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, a door opening, illuminance going dark, or a schedule window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
