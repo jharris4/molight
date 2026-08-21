@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from tests.conftest import make_light_entry, settle, setup_entries
 
@@ -265,3 +267,43 @@ async def test_selection_failure_does_not_prevent_turn_on(
 
     assert hass.states.get("light.selection_light").state == "on"
     assert "Unable to apply turn-on selection" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_selection_reapplied_when_turning_on_during_a_blink_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An effect stage blinking fully off leaves the virtual light logically on
+    while the real lights are dark, so a turn-on there is still an off-to-on
+    command for them and must re-apply the selection."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(effect_timeout=10, effect_brightness=0, warn_timeout=30),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await settle(hass)
+    assert selected == ["Cozy"]
+
+    # Run the timer out into the effect stage, which turns the real lights off.
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    assert hass.states.get("light.ambient").state == "off"
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await settle(hass)
+
+    assert selected == ["Cozy", "Cozy"]

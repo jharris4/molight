@@ -2313,7 +2313,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         color: dict | None = None,
         apply_turn_on_selection: bool = False,
     ) -> None:
-        was_off = not self._attr_is_on
+        # A blink-fully-off leaves the light logically on while the members
+        # are dark, so this is still off-to-on for them.
+        was_off = not self._attr_is_on or self._all_lights_off()
         context = Context()
         self._self_context_ids.append(context.id)
         if on and was_off and apply_turn_on_selection:
