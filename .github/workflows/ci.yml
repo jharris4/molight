@@ -4,17 +4,63 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The latest leg tracks upstream, which moves without a change here.
+  schedule:
+    - cron: "0 0 * * *"
 
 jobs:
-  test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           cache: pip
       - run: pip install -r requirements_test.txt
       - run: ruff check custom_components tests scripts
       - run: ruff format --check custom_components tests scripts
+
+  test:
+    name: pytest (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    # The latest leg reports an upstream break without turning the build red.
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Home Assistant 2026.3 moved to Python 3.14, so each leg runs the
+          # interpreter a user on that Home Assistant version actually has.
+          - label: HA floor
+            python: "3.13"
+            spec: pytest-homeassistant-custom-component==0.13.305
+            experimental: false
+          - label: pinned
+            python: "3.14"
+            spec: -r requirements_test.txt
+            experimental: false
+          - label: HA latest
+            python: "3.14"
+            spec: pytest-homeassistant-custom-component
+            experimental: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install ${{ matrix.spec }}
+      - name: Report the Home Assistant version under test
+        run: python -c "from importlib.metadata import version; print(version('homeassistant'))"
+      - name: Check the floor leg still matches hacs.json
+        if: matrix.label == 'HA floor'
+        run: |
+          declared=$(python -c "import json; print(json.load(open('hacs.json'))['homeassistant'])")
+          installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
+          if [ "$declared" != "$installed" ]; then
+            echo "::error::hacs.json declares $declared but this leg installs $installed — update the pin above or hacs.json"
+            exit 1
+          fi
       - run: pytest
