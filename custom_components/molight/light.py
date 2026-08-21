@@ -458,6 +458,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Persisted in its own right: the snapshots above are legitimately
         # null for members reporting no brightness or color.
         self._warning_active: bool = False
+        self._effect_sent_color: bool = False
 
         # Last known open/closed of the door — kept ourselves so a briefly
         # unavailable sensor (battery contact sensors blip) holds its last
@@ -2194,6 +2195,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warning_active = True
         self._pre_warn_brightness = self._attr_brightness
         self._pre_warn_color = self._current_color()
+        # Recorded rather than re-derived in _enter_warn: a profile switch
+        # mid-effect can swap _effect_color out from under the running stage.
+        self._effect_sent_color = (
+            self._effect_timeout > 0 and self._effect_color is not None
+        )
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
             self.hass.async_create_task(
@@ -2215,7 +2221,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # recolor, mirroring how its brightness falls back to the
             # pre-warning brightness.
             effect_recolored = (
-                self._machine_state == STATE_EFFECT and self._effect_color is not None
+                self._machine_state == STATE_EFFECT and self._effect_sent_color
             )
             self._machine_state = STATE_WARN
             brightness = (

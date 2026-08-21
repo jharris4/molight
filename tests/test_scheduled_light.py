@@ -2222,3 +2222,53 @@ async def test_boundary_off_defers_to_unavailable_keep_on_hold(
     hass.states.async_set(hold, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_warn_undoes_effect_recolor_across_keep_boundary(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A keep boundary mid-effect must not stop the warn undoing the recolor."""
+    hass.states.async_set(REAL, "off", {"supported_color_modes": ["hs"]})
+    hass.states.async_set(SCHEDULE, "off")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_BRIGHTNESS: 50,
+            CONF_EFFECT_RGB_COLOR: [255, 0, 0],
+            CONF_WARN_TIMEOUT: 30,
+        },
+        inside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_BRIGHTNESS: 50,
+            CONF_WARN_TIMEOUT: 30,
+        },
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": VIRTUAL, "hs_color": [120, 50]},
+        blocking=True,
+    )
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["molight_state"] == STATE_EFFECT
+    assert state.attributes["hs_color"] == (0.0, 100.0)
+
+    hass.states.async_set(SCHEDULE, "on")  # keep boundary mid-effect
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes["molight_state"] == STATE_WARN
+    assert state.attributes["hs_color"] == (120.0, 50.0)
