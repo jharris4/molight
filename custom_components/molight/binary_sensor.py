@@ -23,7 +23,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_point_in_time,
@@ -228,9 +228,13 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         state = self.hass.states.get(self._source_sensor)
         if state:
             self._attr_is_on = state.state == "on"
-            if self._attr_is_on and self._last_on_time is None:
-                # Restart mid-cycle without a restored on-time: the source's
-                # last_changed is our best estimate.
+            if (
+                self._attr_is_on
+                and self._last_on_time is None
+                and self.hass.state is CoreState.running
+            ):
+                # Only a mid-run reload makes last_changed a real estimate; at
+                # startup it is just the restart moment.
                 self._last_on_time = state.last_changed
         self.async_write_ha_state()
 

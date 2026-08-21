@@ -134,6 +134,8 @@ Wraps a single real binary sensor (motion, presence, occupancy…). `on` mirrors
 >
 > This value **has no effect on the source sensor** — it doesn't change the real sensor's hold time, it only tells MoLight what that hold time is. The two are not linked, so if you ever change the source sensor's own timeout, update this to match by hand.
 
+Classification needs a real on-time. `last_on_time` survives restarts, but if motion began while HA was down there is nothing to restore — the source's `last_changed` is then just the restart moment, so the cycle in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
+
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
 ### Virtual Combined Occupancy Binary Sensor

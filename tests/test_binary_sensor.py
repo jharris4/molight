@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import CoreState, HomeAssistant, State
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -754,7 +754,7 @@ async def test_combined_holds_through_unavailable_constituent(
 async def test_occupancy_seeds_last_on_time_from_source(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """Restart mid-cycle without a restored on-time uses the source's last_changed."""
+    """A mid-run reload without a restored on-time uses the source's last_changed."""
     hass.states.async_set("binary_sensor.motion_1", "on")
     freezer.tick(timedelta(seconds=10))
 
@@ -766,6 +766,45 @@ async def test_occupancy_seeds_last_on_time_from_source(
     assert state.state == "on"
     source_changed = hass.states.get("binary_sensor.motion_1").last_changed
     assert state.attributes["last_on_time"] == source_changed.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_occupancy_does_not_seed_last_on_time_at_startup(
+    hass: HomeAssistant, freezer
+) -> None:
+    """At startup last_changed is the restart moment, so the cycle isn't classified."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Boot Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    hass.set_state(CoreState.starting)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] is None
+
+    # Motion that began before the restart clears moments later: not a false
+    # detection, so the countdown gets a real latest_occupied_time.
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+    assert state.attributes["latest_occupied_time"] is not None
 
 
 @pytest.mark.asyncio
