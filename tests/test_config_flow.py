@@ -5134,3 +5134,178 @@ async def test_discover_light_defaults_reject_fade_no_light_can_apply(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "transition_unsupported"}
+
+
+# ---------------------------------------------------------------------------
+# A color none of the chosen lights could show
+#
+# Color temperature and RGB are separate capabilities, so they are judged
+# separately — a tunable-white bulb has one and not the other.
+# ---------------------------------------------------------------------------
+
+WHITE = "light.white"  # dimmable only — no color, no color temp
+TUNABLE = "light.tunable"  # color temp, but cannot show a color
+RGB = "light.rgb"  # full color
+
+
+def _modes(hass: HomeAssistant, entity_id: str, modes: list[str]) -> None:
+    hass.states.async_set(entity_id, "off", {"supported_color_modes": modes})
+
+
+async def _submit_light_create_colors(
+    hass: HomeAssistant, lights: list[str], behavior: dict
+) -> dict:
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Color Light",
+            CONF_LIGHTS: lights,
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: behavior,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_color_temp_no_light_can_show(
+    hass: HomeAssistant,
+) -> None:
+    """An auto-on color temperature on brightness-only lights is rejected."""
+    _modes(hass, WHITE, ["brightness"])
+    result = await _submit_light_create_colors(
+        hass, [WHITE], {CONF_AUTO_ON_COLOR_TEMP: 2700}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "color_temp_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_color_no_light_can_show(hass: HomeAssistant) -> None:
+    """An auto-on color on lights that can only do color temperature is
+    rejected — the two capabilities are judged separately."""
+    _modes(hass, TUNABLE, ["color_temp"])
+    result = await _submit_light_create_colors(
+        hass, [TUNABLE], {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "color_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_color_temp_on_a_tunable_light(
+    hass: HomeAssistant,
+) -> None:
+    """The same light that can't show a color still accepts a color temp."""
+    _modes(hass, TUNABLE, ["color_temp"])
+    result = await _submit_light_create_colors(
+        hass, [TUNABLE], {CONF_AUTO_ON_COLOR_TEMP: 2700}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_color_when_one_member_can_show_it(
+    hass: HomeAssistant,
+) -> None:
+    """Mixed groups are the documented case: one capable member is enough."""
+    _modes(hass, WHITE, ["brightness"])
+    _modes(hass, RGB, ["hs"])
+    result = await _submit_light_create_colors(
+        hass, [WHITE, RGB], {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_color_when_lights_cannot_be_judged(
+    hass: HomeAssistant,
+) -> None:
+    """A light reporting only "unknown" color modes hasn't decided yet, so it
+    can't be used as proof that a color would be ignored."""
+    _modes(hass, WHITE, ["unknown"])
+    result = await _submit_light_create_colors(
+        hass, [WHITE], {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_warning_stage_color(hass: HomeAssistant) -> None:
+    """The warning-stage colors are covered too, not just the auto-on one."""
+    _modes(hass, WHITE, ["brightness"])
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Color Light",
+            CONF_LIGHTS: [WHITE],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "color_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_reject_color_no_light_can_show(
+    hass: HomeAssistant,
+) -> None:
+    """The same guard applies when editing an existing light."""
+    _modes(hass, WHITE, ["brightness"])
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Color Light",
+            CONF_LIGHTS: [WHITE],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Color Light",
+            CONF_LIGHTS: [WHITE],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_RGB_COLOR: [0, 0, 255]},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "color_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_allows_color_when_a_light_advertises_no_modes(
+    hass: HomeAssistant,
+) -> None:
+    """A light present in the state machine but advertising no color modes at
+    all is unjudgeable too, not incapable."""
+    hass.states.async_set(WHITE, "off")
+    result = await _submit_light_create_colors(
+        hass, [WHITE], {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY

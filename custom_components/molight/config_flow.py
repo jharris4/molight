@@ -134,7 +134,12 @@ from .const import (
     SCHEDULE_MODES,
     SUN_EVENTS,
 )
-from .helpers import lights_support_transition, molight_config as _molight_cfg
+from .helpers import (
+    lights_support_color,
+    lights_support_color_temp,
+    lights_support_transition,
+    molight_config as _molight_cfg,
+)
 from .remote import CLICK_DOUBLE, CLICK_SINGLE, entity_double_click_supported
 
 if TYPE_CHECKING:
@@ -892,6 +897,34 @@ def _validate_transition_support(
     return {}
 
 
+def _validate_color_support(
+    hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
+) -> dict[str, str]:
+    """Reject a configured color none of the chosen lights could show.
+
+    Color temperature and RGB are separate capabilities — a tunable-white bulb
+    has one and not the other — so they are judged separately. Same rule as the
+    fade check: only a positive "none of them can" blocks, and a mixed group
+    passes on the strength of one capable member, which is the documented case.
+    """
+    if (
+        user_input.get(CONF_AUTO_ON_COLOR_TEMP)
+        and lights_support_color_temp(hass, lights) is False
+    ):
+        return {"base": "color_temp_unsupported"}
+    rgb_keys = (
+        CONF_AUTO_ON_RGB_COLOR,
+        CONF_EFFECT_RGB_COLOR,
+        CONF_WARN_RGB_COLOR,
+    )
+    if (
+        any(user_input.get(key) for key in rgb_keys)
+        and lights_support_color(hass, lights) is False
+    ):
+        return {"base": "color_unsupported"}
+    return {}
+
+
 def _validate_light_settings(
     hass: HomeAssistant, settings: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
@@ -900,6 +933,7 @@ def _validate_light_settings(
     errors.update(_validate_stage_transitions(settings))
     errors.update(_validate_colors(settings))
     errors.update(_validate_transition_support(hass, settings, lights))
+    errors.update(_validate_color_support(hass, settings, lights))
     return errors
 
 
@@ -2017,6 +2051,11 @@ class MoLightConfigFlow(
                     self.hass, flat, self._discovery.get("selected", [])
                 )
             )
+            errors.update(
+                _validate_color_support(
+                    self.hass, flat, self._discovery.get("selected", [])
+                )
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -2820,6 +2859,9 @@ class MoLightConfigFlow(
             errors.update(
                 _validate_transition_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
+            errors.update(
+                _validate_color_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
             if not _schedule_entity_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_ENTITY)
             ):
@@ -3398,6 +3440,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             errors.update(_validate_colors(flat))
             errors.update(
                 _validate_transition_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
+            )
+            errors.update(
+                _validate_color_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
             if not _schedule_entity_is_allowed(
                 self.hass,

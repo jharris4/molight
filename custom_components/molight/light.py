@@ -223,6 +223,7 @@ from homeassistant.components.light import (
     ATTR_RGB_COLOR,
     ATTR_SUPPORTED_COLOR_MODES,
     ATTR_TRANSITION,
+    COLOR_MODES_COLOR,
     DEFAULT_MAX_KELVIN,
     DEFAULT_MIN_KELVIN,
     ENTITY_ID_FORMAT,
@@ -337,14 +338,9 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # Member color modes an hs command can drive (HA converts hs to each member's
-# native mode); any of them lets the virtual light advertise HS itself.
-_HS_CAPABLE_MODES = {
-    ColorMode.HS,
-    ColorMode.RGB,
-    ColorMode.RGBW,
-    ColorMode.RGBWW,
-    ColorMode.XY,
-}
+# native mode); any of them lets the virtual light advertise HS itself. Shared
+# with the config flow so an upstream addition can't split the two.
+_HS_CAPABLE_MODES = COLOR_MODES_COLOR
 
 
 def _opt_transition(value: float | None) -> float | None:
