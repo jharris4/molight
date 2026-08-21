@@ -198,7 +198,7 @@ async def test_schedule_end_off_still_checks_outside_sensors_for_off_light(
 async def test_schedule_end_off_still_checks_outside_door_for_off_light(
     hass: HomeAssistant,
 ) -> None:
-    """turn_off on an already-off light also honours an open outside door."""
+    """turn_off on an already-off light also honours a held-open outside door."""
     door = "binary_sensor.outside_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -208,6 +208,7 @@ async def test_schedule_end_off_still_checks_outside_door_for_off_light(
         outside={
             CONF_LIGHT_TIMEOUT: 60,
             CONF_DOOR_ENTITY: door,
+            CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
         inside={CONF_LIGHT_TIMEOUT: 60},
@@ -220,7 +221,8 @@ async def test_schedule_end_off_still_checks_outside_door_for_off_light(
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["brightness"] == 64
-    assert state.attributes["molight_state"] == STATE_ACTIVE
+    # The open door holds it, exactly as it would outside a schedule.
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
 @pytest.mark.asyncio
@@ -959,7 +961,7 @@ async def test_manual_off_discards_deferred_schedule_end_off_across_restart(
 async def test_schedule_change_rechecks_already_open_door(
     hass: HomeAssistant,
 ) -> None:
-    """An open-mode door selected by the new settings triggers the light."""
+    """A held-open door selected by the new settings triggers the light."""
     door = "binary_sensor.inside_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -969,6 +971,7 @@ async def test_schedule_change_rechecks_already_open_door(
         inside={
             CONF_LIGHT_TIMEOUT: 60,
             CONF_DOOR_ENTITY: door,
+            CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
     )
@@ -980,6 +983,36 @@ async def test_schedule_change_rechecks_already_open_door(
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["brightness"] == 64
+
+
+@pytest.mark.asyncio
+async def test_schedule_change_ignores_a_standing_open_momentary_door(
+    hass: HomeAssistant,
+) -> None:
+    """In plain open mode the door is a momentary trigger, so a profile switch
+    is not an opening — matching startup, illuminance going dark and a
+    gate-mode window starting, which all ignore a door that is merely open."""
+    door = "binary_sensor.inside_door"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(door, "on")
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_ENTITY: door},
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    # Actually opening it still works.
+    hass.states.async_set(door, "off")
+    await settle(hass)
+    hass.states.async_set(door, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
 
 
 @pytest.mark.asyncio

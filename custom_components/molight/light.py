@@ -832,7 +832,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
             if self._occupancy_active():
                 self._on_occupancy_change(occupied=True)
-            elif self._door_open:
+            elif self._door_holds():
+                # Not _door_open: in plain open mode the door is momentary,
+                # and a profile switch is not an opening.
                 self._on_door_change(True)
             else:
                 self.async_write_ha_state()
