@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = ROOT / "CHANGELOG.md"
 MANIFEST = ROOT / "custom_components/molight/manifest.json"
 COMPARE = "https://github.com/jharris4/molight/compare"
+RELEASE_BRANCH = "main"
+DEVELOP_BRANCH = "develop"
+REMOTE = "origin"
 
 
 def _today() -> str:
@@ -34,6 +37,84 @@ def fail(msg: str) -> None:
     sys.exit(f"error: {msg}")
 
 
+def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run Git in the repository and return its captured result."""
+    result = subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        fail(f"git {' '.join(args)} failed: {detail}")
+    return result
+
+
+def _version_tuple(version: str) -> tuple[int, int, int]:
+    """Return a validated x.y.z version as an integer tuple."""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        fail(f"'{version}' is not a x.y.z version")
+    parts = tuple(int(part) for part in version.split("."))
+    return parts[0], parts[1], parts[2]
+
+
+def _preflight(version: str) -> None:
+    """Refuse to prepare a release from an unsafe repository state."""
+    branch = _git("branch", "--show-current").stdout.strip()
+    if branch != RELEASE_BRANCH:
+        fail(f"releases must be prepared on '{RELEASE_BRANCH}', not '{branch}'")
+
+    if _git("status", "--porcelain").stdout.strip():
+        fail("the worktree is not clean; commit or stash all changes first")
+
+    tag_ref = f"refs/tags/v{version}"
+    if _git("show-ref", "--verify", "--quiet", tag_ref, check=False).returncode == 0:
+        fail(f"tag v{version} already exists locally")
+
+    develop_ref = f"refs/heads/{DEVELOP_BRANCH}"
+    if _git("show-ref", "--verify", "--quiet", develop_ref, check=False).returncode:
+        fail(f"local branch '{DEVELOP_BRANCH}' does not exist")
+    if _git(
+        "merge-base",
+        "--is-ancestor",
+        DEVELOP_BRANCH,
+        RELEASE_BRANCH,
+        check=False,
+    ).returncode:
+        fail(f"'{RELEASE_BRANCH}' does not contain the tip of '{DEVELOP_BRANCH}'")
+
+    requested_refs = [
+        f"refs/heads/{RELEASE_BRANCH}",
+        f"refs/heads/{DEVELOP_BRANCH}",
+        tag_ref,
+    ]
+    remote_result = _git("ls-remote", REMOTE, *requested_refs, check=False)
+    if remote_result.returncode:
+        detail = remote_result.stderr.strip() or "unknown error"
+        fail(f"could not query remote '{REMOTE}': {detail}")
+    remote_refs = {
+        ref: commit
+        for line in remote_result.stdout.splitlines()
+        for commit, ref in [line.split(maxsplit=1)]
+    }
+    if tag_ref in remote_refs:
+        fail(f"tag v{version} already exists on '{REMOTE}'")
+
+    for name in (RELEASE_BRANCH, DEVELOP_BRANCH):
+        ref = f"refs/heads/{name}"
+        remote_commit = remote_refs.get(ref)
+        if remote_commit is None:
+            fail(f"remote branch '{REMOTE}/{name}' does not exist")
+        local_commit = _git("rev-parse", "--verify", ref).stdout.strip()
+        if local_commit != remote_commit:
+            fail(
+                f"local '{name}' is not synchronized with '{REMOTE}/{name}'; "
+                "push or update it first"
+            )
+
+
 def main() -> None:
     """Stamp the changelog and manifest for a release."""
     args = [a for a in sys.argv[1:] if a != "--write"]
@@ -41,12 +122,9 @@ def main() -> None:
     if len(args) != 1:
         fail("usage: scripts/release <version> [--write]   e.g. scripts/release 1.6.0")
     version = args[0].lstrip("v")
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        fail(f"'{version}' is not a x.y.z version")
+    requested_version = _version_tuple(version)
 
     text = CHANGELOG.read_text()
-    if f"## [{version}]" in text:
-        fail(f"CHANGELOG.md already has a [{version}] section")
     if "## [Unreleased]" not in text:
         fail("CHANGELOG.md has no '## [Unreleased]' section to release")
 
@@ -56,9 +134,24 @@ def main() -> None:
         fail("CHANGELOG.md has no previous release heading to compare against")
     previous = releases[0]
 
+    manifest_text = MANIFEST.read_text()
+    current = json.loads(manifest_text)["version"]
+    current_version = _version_tuple(current)
+    if current != previous:
+        fail(
+            f"manifest version {current} does not match the latest changelog "
+            f"release {previous}"
+        )
+    if requested_version <= current_version:
+        fail(f"version {version} must be greater than the current version {current}")
+    if f"## [{version}]" in text:
+        fail(f"CHANGELOG.md already has a [{version}] section")
+
     body = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
     if not body.strip():
         fail("the [Unreleased] section is empty — nothing to release")
+
+    _preflight(version)
 
     # Stamp Unreleased as this version and open a fresh empty one above it.
     text = text.replace(
@@ -78,8 +171,6 @@ def main() -> None:
         1,
     )
 
-    manifest_text = MANIFEST.read_text()
-    current = json.loads(manifest_text)["version"]
     new_manifest = re.sub(
         r'("version":\s*)"[^"]*"', rf'\1"{version}"', manifest_text, count=1
     )

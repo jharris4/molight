@@ -453,7 +453,10 @@ Once `main` is up to date, the rest is scripted. `npm run release <version>`
 writes nothing on its own — it lists the changes a release would make (stamping
 the changelog, bumping the manifest version, updating the compare links) and
 prints the command that applies them. Applying then prints the git commands to
-commit, tag and push.
+commit, tag and push. Before either previewing or applying, the script also
+checks that the worktree is clean, `main` contains `develop`, both branches
+match their live `origin` refs, the version moves forward, and the tag does not
+already exist locally or on GitHub.
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
 validates that the tag, manifest and changelog versions agree, then puts the
