@@ -7,9 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > Entries for 1.5.0 and earlier were reconstructed from the commit history after
 > the fact and are deliberately coarse — they summarise each release rather than
-> enumerate it. Entries from 1.6.0 onwards are written as the work lands.
+> enumerate it. Later entries are written as the work lands.
 
 ## [Unreleased]
+
+A release focused on scheduling. The new **Virtual Scheduled Light** holds two
+complete settings profiles and switches between them as a schedule opens and
+closes, and ordinary Virtual Lights gain two more ways to treat the end of a
+schedule window. Plus a round of restart, occupancy and sensor edge-case fixes.
+
+MoLight is also now in the HACS default repository list, so installing it no
+longer needs a custom repository.
+
+### Upgrade notes
+
+- **Lights that already gate on a schedule are unchanged** — only the label
+  moved, to *Gate and turn off*, now that two more gate modes sit beside it.
+- **The new form validation never stops an existing entry from loading.** The
+  capability and hysteresis checks under *Changed* run in the forms, not at
+  startup, so an entry configured under an earlier version keeps running as it
+  is — but its next edit won't save until the rejected setting is corrected.
 
 ### Added
 

@@ -6,7 +6,7 @@ The examples build on each other:
 
 1. [Just a turn-off timer](#example-1--just-a-turn-off-timer-the-simplest-case) — no sensors at all
 2. [Simple occupancy](#example-2--simple-occupancy-case) — one motion sensor
-3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink
+3. [Living room](#example-3--living-room-the-whole-toolbox) — occupancy + maintain + illuminance + a warning blink + a turn-on selection
 4. [Porch light](#example-4--porch-light-schedule-follow-mode) — a schedule window
 5. [Home-only lighting](#example-5--home-only-lighting-source-backed-inverted-schedule) — an inverted schedule derived from an away-mode binary sensor
 6. [Stairs night light](#example-6--stairs-night-light-gate-and-keep-state) — a schedule that gates motion without cutting a timer short
@@ -118,7 +118,7 @@ Warning color:           255, 0, 0   # red — bulbs that can show color turn re
 
 Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel — in red on any color-capable bulb, an unmissable cue (brightness-only bulbs just hold their level). Get up in that window and it's as if nothing happened — original brightness and color restored, no trace.
 
-At each MoLight off-to-on transition, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Omit the source for a permanently fixed selection.
+At each MoLight off-to-on transition, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
 Use `Illuminance mode: gate` instead if your lux sensor can *see* the lights it controls (otherwise they'd oscillate).
 
