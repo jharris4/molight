@@ -452,6 +452,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # attributes so they survive a restart landing mid-warning.
         self._pre_warn_brightness: int | None = None
         self._pre_warn_color: dict | None = None
+        # Persisted in its own right: the snapshots above are legitimately
+        # null for members reporting no brightness or color.
+        self._warning_active: bool = False
 
         # Last known open/closed of the door — kept ourselves so a briefly
         # unavailable sensor (battery contact sensors blip) holds its last
@@ -653,6 +656,16 @@ class VirtualLight(LightEntity, RestoreEntity):
                     for k in (ATTR_COLOR_TEMP_KELVIN, ATTR_HS_COLOR)
                     if k in raw_pre_warn_color
                 } or None
+            # Pre-warning_active states can only be judged the old way.
+            raw_active = last.attributes.get("warning_active")
+            self._warning_active = (
+                bool(raw_active)
+                if raw_active is not None
+                else (
+                    self._pre_warn_brightness is not None
+                    or self._pre_warn_color is not None
+                )
+            )
 
         watch = list(self._lights)
         if self._settings_schedule_entity:
@@ -895,7 +908,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if not self._attr_is_on:
                 self._schedule_end_off_pending = False
             elif self._held:
-                if self._pre_warn_brightness is not None or self._pre_warn_color:
+                if self._warning_active:
                     self._resume_lights()
                 # Report the same state the normal seed would: a hold that
                 # would otherwise adopt the light keeps it OCCUPIED until the
@@ -916,13 +929,13 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._schedule_end_switch_pending:
             self._schedule_end_switch_pending = False
             if self._attr_is_on:
-                if self._pre_warn_brightness is not None or self._pre_warn_color:
+                if self._warning_active:
                     self._machine_state = STATE_ACTIVE
                     self._resume_lights()
                 self._switch_running_state()
                 return
 
-        if self._pre_warn_brightness is not None or self._pre_warn_color is not None:
+        if self._warning_active:
             if self._attr_is_on:
                 # The restart landed mid effect/warn with the lights still on:
                 # undo the warning stage like any other re-trigger, then seed
@@ -932,6 +945,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 # The lights ended up off (e.g. mid blink-off) — treat the
                 # auto-off as having completed; the room is not re-lit.
+                self._warning_active = False
                 self._pre_warn_brightness = None
                 self._pre_warn_color = None
 
@@ -1223,6 +1237,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # An external dim or recolor during the warning sequence is a
             # re-trigger like any other: honour the new brightness/color and
             # restart the full timer.
+            self._warning_active = False
             self._pre_warn_brightness = None
             self._pre_warn_color = None
             self._machine_state = STATE_ACTIVE
@@ -2041,6 +2056,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
         # A manual/physical turn-on ends any warning sequence; the caller has
         # already set the real lights, so just drop the restore snapshot.
+        self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
@@ -2091,6 +2107,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # A deferred schedule-end off only applies to the on-period it
         # interrupted; any off consumes it.
         self._schedule_end_off_pending = False
+        self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         self.async_write_ha_state()
@@ -2152,6 +2169,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         earlier stage is disabled, so both timeouts at 0 behaves exactly like
         the old immediate off.
         """
+        self._warning_active = True
         self._pre_warn_brightness = self._attr_brightness
         self._pre_warn_color = self._current_color()
         if self._effect_timeout > 0:
@@ -2203,6 +2221,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         brightness = self._pre_warn_brightness
         color = self._pre_warn_color
+        self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         self.hass.async_create_task(
@@ -2428,6 +2447,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # Non-null only while the effect/warn stage is showing; persisted
             # so a restart mid-warning can restore the pre-warning brightness
             # and color.
+            "warning_active": self._warning_active,
             "pre_warn_brightness": self._pre_warn_brightness,
             "pre_warn_color": self._pre_warn_color,
             "schedule_window_start": self._schedule_window_applied,

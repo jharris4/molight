@@ -469,3 +469,24 @@ async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 255
+
+
+@pytest.mark.asyncio
+async def test_restart_mid_warning_without_warning_active_uses_the_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """A state written before warning_active existed is judged the old way, by
+    whether a snapshot was taken — so an upgrade landing mid-warning still
+    restores the pre-warning brightness instead of adopting the warn stage's."""
+    mock_restore_cache(
+        hass,
+        [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 180})],
+    )
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 180
+    assert state.attributes["warning_active"] is False
