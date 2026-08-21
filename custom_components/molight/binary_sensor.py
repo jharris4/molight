@@ -208,8 +208,12 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
+            # Only a cycle that was still running owns its anchor: a
+            # last_on_time restored alongside an "off" state belongs to a
+            # finished pre-restart cycle and would skew the next
+            # classification.
             raw = last.attributes.get("last_on_time")
-            if raw:
+            if raw and last.state == "on":
                 with contextlib.suppress(ValueError, TypeError):
                     self._last_on_time = datetime.fromisoformat(raw)
         self.async_on_remove(

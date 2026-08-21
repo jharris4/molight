@@ -906,6 +906,32 @@ async def test_combined_retriggers_on_constituent_recovery(
 
 
 @pytest.mark.asyncio
+async def test_occupancy_discards_last_on_time_restored_with_off(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """An anchor restored alongside 'off' belongs to a finished cycle.
+
+    Keeping it would let a fresh post-restart cycle measure its on-duration
+    from the previous cycle's start, skewing classification.
+    """
+    stale = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
+    mock_restore_cache(
+        hass,
+        [State("binary_sensor.test_occupancy", "off", {"last_on_time": stale})],
+    )
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    hass.set_state(CoreState.starting)
+
+    occupancy_entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(occupancy_entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.test_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] is None
+
+
+@pytest.mark.asyncio
 async def test_occupancy_seeds_last_on_time_from_source(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
