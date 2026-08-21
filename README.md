@@ -63,7 +63,7 @@ Order matters only in that a virtual entity must exist before another can refere
 
 ### Choosing the entity ID
 
-Every create form except the Virtual Remote's ends with an optional **Entity ID** field (a remote entry's only entity is its diagnostic sensor, whose ID derives from the name) — handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior:
+Every create form except the Virtual Remote's ends with an optional **Entity ID** field (a remote entry's only entity is its diagnostic sensor, whose ID derives from the name) — handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior. On the sensor forms this field — along with less-common options like the false-detection grace — sits in a collapsed **Advanced** section:
 
 - **Leave it blank** to derive the ID from the name. If that ID is already taken, the flow warns you and offers to proceed (HA appends `_2`) or go back, prefilled, and set one yourself.
 - **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting ID re-shows the form with an error. A virtual light's pinned ID also shapes its companion switch: `light.kitchen` → `switch.kitchen_auto_off`.
