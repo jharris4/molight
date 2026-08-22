@@ -1,0 +1,19 @@
+services:
+  homeassistant:
+    image: ${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.8.0}
+    restart: unless-stopped
+    volumes:
+      - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/config
+      - ../../custom_components/molight:/config/custom_components/molight:ro
+      - ./testbed/molight_testbed:/config/custom_components/molight_testbed:ro
+
+  runner:
+    image: python:3.14-slim
+    working_dir: /e2e
+    environment:
+      MOLIGHT_E2E_HA_URL: http://homeassistant:8123
+    volumes:
+      - ./runner:/e2e:ro
+      - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/ha-config:ro
+    depends_on:
+      - homeassistant

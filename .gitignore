@@ -29,6 +29,9 @@ config/deps/
 # Stock blueprints HA rewrites into any fresh config dir (ensure_config)
 config/blueprints/
 
+# Live acceptance-test failure artifacts are normally retained under /tmp.
+tests/e2e/artifacts/
+
 # Ruff
 .ruff_cache/
 

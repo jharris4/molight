@@ -46,6 +46,21 @@ ignore = [
     "ARG001",  # fixtures often take unused arguments
     "FBT",     # boolean literals in test calls are fine
 ]
+"tests/e2e/runner/**" = [
+    "EM",      # assertion failures include the live response inline
+    "PERF401", # log scan clarity matters more than a micro-optimization
+    "S105",    # fixed credentials exist only in the disposable HA config
+    "S310",    # the runner deliberately calls its configured HA URL
+    "T201",    # phase progress is the runner's command-line interface
+    "TC003",   # Callable is clearer beside the other runner imports
+    "TRY003",  # detailed assertion messages are acceptance-test output
+    "TRY300",  # polling loops read more clearly with an early return
+]
+"tests/e2e/testbed/**" = [
+    "EM",      # service validation errors include the bad fixture value
+    "TC",      # HA callback types stay beside their runtime platform imports
+    "TRY003",  # detailed service errors make fixture failures actionable
+]
 "scripts/**" = [
     "T201", # print is fine in scripts
     "S",    # scripts run trusted local input

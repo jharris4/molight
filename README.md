@@ -519,6 +519,39 @@ npm run dev:hass     # run HA from source inside the dev container — code is l
 
 Use `hass:up` to confirm behavior against a real, released HA build; use `dev:hass` for active development, where HA runs against your working tree and can be restarted and debugged in place. Remember to `hass:down` before starting the dev container (or vice versa) so port 8123 is free.
 
+### Running the live acceptance tests
+
+The end-to-end suite starts an isolated official Home Assistant container and
+a short-lived API runner on a private Docker network. It does not use the
+stateful manual-development `config/` directory or publish port 8123, so it can
+run alongside the dev container. A test-only `molight_testbed` integration
+provides persistent simulated lights, sensors, a door, a schedule and selects;
+it is mounted only into the disposable acceptance environment and is never
+part of a MoLight release.
+
+```bash
+npm run test:e2e
+```
+
+The suite performs automated onboarding, creates and edits MoLight entries
+through Home Assistant's backend config-flow API, switches both scheduled
+profiles, exercises selection source and fallback behavior, converts a light
+in both directions without changing its entity ID, restarts Home Assistant
+core, restarts the full container with the same temporary `/config`, and
+checks the resulting logs.
+
+The default image is pinned to the Home Assistant release used by the current
+test dependencies. Override it to exercise another release:
+
+```bash
+MOLIGHT_E2E_HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable npm run test:e2e
+```
+
+A successful run removes its temporary configuration. On failure the runner
+prints a retained directory under the system temporary directory containing
+the isolated HA configuration and Compose logs. That directory contains the
+disposable test account, so remove it after debugging.
+
 ## Design notes
 
 - Each virtual entity is its own config entry, so they can be created, edited, and removed independently. A Virtual Remote is mostly wiring between button event entities and target lights — its only entity is the diagnostic Last Action sensor.

@@ -1,0 +1,17 @@
+homeassistant:
+  name: MoLight E2E
+  latitude: 43.6532
+  longitude: -79.3832
+  elevation: 76
+  unit_system: metric
+  time_zone: UTC
+
+default_config:
+
+logger:
+  default: warning
+  logs:
+    custom_components.molight: debug
+    custom_components.molight_testbed: debug
+
+molight_testbed:
