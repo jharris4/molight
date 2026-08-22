@@ -20,6 +20,9 @@ STORAGE_VERSION: Final = 1
 LIGHT_MAIN: Final = "light_main"
 LIGHT_ON_OFF: Final = "light_on_off"
 LIGHT_TIMER: Final = "light_timer"
+LIGHT_MULTI_ON_OFF: Final = "light_multi_on_off"
+LIGHT_MULTI_DIMMER: Final = "light_multi_dimmer"
+LIGHT_MULTI_RGB: Final = "light_multi_rgb"
 MOTION: Final = "motion"
 OCCUPANCY: Final = "occupancy"
 DOOR: Final = "door"
@@ -40,6 +43,17 @@ DEFAULT_STATES: Final = {
         "state": "off",
         "available": True,
         "attributes": {"brightness": 0},
+    },
+    LIGHT_MULTI_ON_OFF: {"state": "off", "available": True, "attributes": {}},
+    LIGHT_MULTI_DIMMER: {
+        "state": "off",
+        "available": True,
+        "attributes": {"brightness": 0},
+    },
+    LIGHT_MULTI_RGB: {
+        "state": "off",
+        "available": True,
+        "attributes": {"brightness": 0, "rgb_color": [255, 255, 255]},
     },
     MOTION: {"state": "off", "available": True, "attributes": {}},
     OCCUPANCY: {"state": "off", "available": True, "attributes": {}},

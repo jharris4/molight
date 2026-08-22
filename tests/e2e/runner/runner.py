@@ -21,6 +21,9 @@ WAIT_TIMEOUT = 90
 
 RAW_LIGHT = "light.e2e_main"
 RAW_TIMER_LIGHT = "light.e2e_timer_target"
+RAW_MULTI_ON_OFF = "light.e2e_multi_on_off"
+RAW_MULTI_DIMMER = "light.e2e_multi_dimmer"
+RAW_MULTI_RGB = "light.e2e_multi_rgb"
 RAW_MOTION = "binary_sensor.e2e_motion"
 RAW_DOOR = "binary_sensor.e2e_door"
 RAW_ILLUMINANCE = "sensor.e2e_illuminance"
@@ -33,6 +36,7 @@ VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
+VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -428,6 +432,25 @@ def create_timeout_light(client: HomeAssistantClient) -> str:
     return result["result"]["entry_id"]
 
 
+def create_multi_light(client: HomeAssistantClient) -> str:
+    """Create an isolated mixed-capability virtual light."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Multi",
+            "lights": [RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_multi"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Multi-light creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
 def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
     """Complete the live options flow and prove the entry reloads in place."""
     result = client.start_flow(options_entry_id=entry_id)
@@ -766,6 +789,151 @@ def run_timeout_warning_scenario(
     else:
         raise AssertionError("Temporary timer-light config entry was not removed")
     print("PASS: live countdown, warning stages, final off, and retrigger cancellation")
+
+
+def command_data(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the payload most recently received by one testbed light."""
+    command = state["attributes"].get("testbed_last_command") or {}
+    return command.get("data") or {}
+
+
+def has_color_command(data: dict[str, Any]) -> bool:
+    """Return whether a native or canonical color field reached a member."""
+    return any(
+        key in data
+        for key in (
+            "hs_color",
+            "rgb_color",
+            "rgbw_color",
+            "rgbww_color",
+            "xy_color",
+            "color_temp_kelvin",
+        )
+    )
+
+
+def assert_multi_light_routing(client: HomeAssistantClient) -> None:
+    """Prove HA filters brightness and color for mixed-capability members."""
+    client.call_service(
+        "light",
+        "turn_on",
+        {
+            "entity_id": VIRTUAL_MULTI_LIGHT,
+            "brightness": 128,
+            "hs_color": [120, 50],
+        },
+    )
+    client.wait_state(
+        RAW_MULTI_ON_OFF,
+        lambda state: (
+            state["state"] == "on"
+            and command_data(state).get("brightness") is None
+            and not has_color_command(command_data(state))
+        ),
+        "on without unsupported brightness or color",
+    )
+    client.wait_state(
+        RAW_MULTI_DIMMER,
+        lambda state: (
+            state["state"] == "on"
+            and command_data(state).get("brightness") == 128
+            and not has_color_command(command_data(state))
+        ),
+        "on with brightness but no unsupported color",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and command_data(state).get("brightness") == 128
+            and has_color_command(command_data(state))
+        ),
+        "on with brightness and converted color",
+    )
+
+
+def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
+    """Verify full capabilities, then persist one unavailable RGB member."""
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
+            and int(state["attributes"].get("supported_features", 0)) > 0
+        ),
+        "advertising the mixed group's color and transition capabilities",
+    )
+    assert_multi_light_routing(client)
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        client.wait_state(entity_id, lambda state: state["state"] == "off", "off")
+
+    client.set_available(RAW_MULTI_RGB, False)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "unavailable",
+        "unavailable",
+    )
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
+            and int(state["attributes"].get("supported_features", 0)) > 0
+        ),
+        "off while retaining last-known capabilities before restart",
+    )
+
+
+def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
+    """Check cold-start capabilities, recover routing, and remove the fixture."""
+    entries = client.molight_entries()
+    matches = [entry for entry in entries if entry.get("title") == "E2E Multi"]
+    if len(matches) != 1 or matches[0].get("state") != "loaded":
+        raise AssertionError(f"Expected one loaded E2E Multi entry: {matches}")
+    entry_id = matches[0]["entry_id"]
+
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "unavailable",
+        "persisted unavailable",
+    )
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and set(state["attributes"].get("supported_color_modes", []))
+            == {"brightness"}
+            and int(state["attributes"].get("supported_features", 0)) > 0
+        ),
+        "restored off with brightness and fail-open transition capabilities",
+        timeout=WAIT_TIMEOUT,
+    )
+
+    client.set_available(RAW_MULTI_RGB, True)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "recovered")
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
+            and int(state["attributes"].get("supported_features", 0)) > 0
+        ),
+        "advertising recovered color and transition capabilities",
+    )
+    assert_multi_light_routing(client)
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        client.wait_state(entity_id, lambda state: state["state"] == "off", "off")
+
+    client.remove_entry(entry_id)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if all(entry["entry_id"] != entry_id for entry in client.molight_entries()):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("Temporary multi-light config entry was not removed")
+    print("PASS: mixed light capabilities, routing, restart, and recovery")
 
 
 def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
@@ -1157,6 +1325,10 @@ def run_primary() -> None:
     wait_profile(client, PROFILE_INSIDE)
     trigger_and_assert(client, 204, "Night")
 
+    multi_entry_id = create_multi_light(client)
+    assert_entry_loaded(client, multi_entry_id)
+    prepare_multi_light_restart(client)
+
     client.call_service("homeassistant", "restart", {})
     time.sleep(1)
     client.wait_ready()
@@ -1170,6 +1342,17 @@ def run_primary() -> None:
         timeout=WAIT_TIMEOUT,
     )
     assert_entry_loaded(client, light_entry_id)
+    assert_entry_loaded(client, multi_entry_id)
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and set(state["attributes"].get("supported_color_modes", []))
+            == {"brightness"}
+        ),
+        "restored with its RGB member unavailable after a core restart",
+        timeout=WAIT_TIMEOUT,
+    )
     print("PASS: live creation, behavior, options, conversion, and core restart")
 
 
@@ -1178,6 +1361,11 @@ def run_container_restart_verification() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    entries = client.molight_entries()
+    if len(entries) != 5:
+        raise AssertionError(f"Expected five restored MoLight entries: {entries}")
+    wait_entries_loaded(client, {entry["entry_id"] for entry in entries})
+    verify_and_remove_multi_light(client)
     client.wait_state(
         RAW_SCHEDULE, lambda state: state["state"] == "on", "persisted on"
     )

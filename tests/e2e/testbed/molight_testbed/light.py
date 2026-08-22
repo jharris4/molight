@@ -16,7 +16,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import controller_for_entry
-from .const import LIGHT_MAIN, LIGHT_ON_OFF, LIGHT_TIMER
+from .const import (
+    LIGHT_MAIN,
+    LIGHT_MULTI_DIMMER,
+    LIGHT_MULTI_ON_OFF,
+    LIGHT_MULTI_RGB,
+    LIGHT_ON_OFF,
+    LIGHT_TIMER,
+)
 from .entity import TestbedEntity
 
 
@@ -148,6 +155,28 @@ async def async_setup_entry(
                 "light.e2e_timer_target",
                 "E2E Timer Target",
                 color_modes={ColorMode.BRIGHTNESS},
+            ),
+            TestbedLight(
+                controller,
+                LIGHT_MULTI_ON_OFF,
+                "light.e2e_multi_on_off",
+                "E2E Multi On/Off",
+                color_modes={ColorMode.ONOFF},
+            ),
+            TestbedLight(
+                controller,
+                LIGHT_MULTI_DIMMER,
+                "light.e2e_multi_dimmer",
+                "E2E Multi Dimmer",
+                color_modes={ColorMode.BRIGHTNESS},
+            ),
+            TestbedLight(
+                controller,
+                LIGHT_MULTI_RGB,
+                "light.e2e_multi_rgb",
+                "E2E Multi RGB",
+                color_modes={ColorMode.RGB},
+                features=LightEntityFeature.TRANSITION,
             ),
         ]
     )
