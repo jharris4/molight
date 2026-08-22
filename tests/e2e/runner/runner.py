@@ -38,6 +38,8 @@ VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
+VIRTUAL_AUTO_OFF_LIGHT = "light.e2e_auto_off"
+AUTO_OFF_SWITCH = "switch.e2e_auto_off_auto_off"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
@@ -53,6 +55,7 @@ UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
 UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 REMOVAL_SNAPSHOT = Path("/ha-config/e2e-removal-snapshot.json")
 REMOTE_SNAPSHOT = Path("/ha-config/e2e-remote-snapshot.json")
+AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -462,6 +465,27 @@ def create_timeout_light(client: HomeAssistantClient) -> str:
     )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Timer light creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def create_auto_off_light(client: HomeAssistantClient) -> str:
+    """Create a short-timeout light dedicated to switch persistence."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Auto-off",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 3,
+            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {},
+            "advanced": {"entity_id": "e2e_auto_off"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Auto-off light creation failed: {result}")
     return result["result"]["entry_id"]
 
 
@@ -2047,6 +2071,96 @@ def run_unavailable_sensors_schedule_first() -> None:
     print("PASS: schedule-first recovery preserved profile and keep-on behavior")
 
 
+def run_auto_off_prepare() -> None:
+    """Disable auto-off and prove it holds a cleared occupancy timeout."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    entry_id = create_auto_off_light(client)
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(VIRTUAL_AUTO_OFF_LIGHT, lambda _state: True, "loaded")
+    client.wait_state(AUTO_OFF_SWITCH, lambda state: state["state"] == "on", "on")
+
+    client.call_service("switch", "turn_off", {"entity_id": AUTO_OFF_SWITCH})
+    client.wait_state(AUTO_OFF_SWITCH, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        VIRTUAL_AUTO_OFF_LIGHT,
+        lambda state: state["attributes"].get("auto_off_held") is True,
+        "holding automatic turn-offs",
+    )
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the disabled three-second auto-off timeout",
+        duration=5,
+    )
+
+    AUTO_OFF_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print("PASS: disabled auto-off held the light past occupancy timeout")
+
+
+def run_auto_off_restart() -> None:
+    """Verify disabled state restoration, then re-enable and observe turn-off."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(AUTO_OFF_SNAPSHOT.read_text())
+
+    wait_entry_loaded(client, snapshot["entry_id"])
+    client.wait_state(AUTO_OFF_SWITCH, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        VIRTUAL_AUTO_OFF_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("auto_off_held") is True
+        ),
+        "on with automatic turn-off still held after restart",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on while the restored switch remains disabled",
+        duration=4,
+    )
+
+    client.call_service("switch", "turn_on", {"entity_id": AUTO_OFF_SWITCH})
+    client.wait_state(AUTO_OFF_SWITCH, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        VIRTUAL_AUTO_OFF_LIGHT,
+        lambda state: state["attributes"].get("auto_off_held") is False,
+        "running auto-off after re-enable",
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the fresh countdown",
+        timeout=10,
+    )
+    wait_machine_state(client, "idle", VIRTUAL_AUTO_OFF_LIGHT)
+
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, VIRTUAL_AUTO_OFF_LIGHT)
+    wait_entity_absent(client, AUTO_OFF_SWITCH)
+    print("PASS: auto-off switch persisted disabled and resumed countdown when enabled")
+
+
 def check_logs() -> None:
     """Fail for MoLight errors or tracebacks in all current/rotated HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
@@ -2083,6 +2197,8 @@ def main() -> None:
         "unavailable-light-recover": run_unavailable_light_recovery,
         "unavailable-sensors-motion-first": run_unavailable_sensors_motion_first,
         "unavailable-sensors-schedule-first": (run_unavailable_sensors_schedule_first),
+        "auto-off-prepare": run_auto_off_prepare,
+        "auto-off-restart": run_auto_off_restart,
         "upgrade-prepare": run_upgrade_prepare,
         "upgrade-verify": run_upgrade_verification,
         "logs": check_logs,

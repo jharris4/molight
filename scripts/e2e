@@ -53,6 +53,11 @@ echo "Restarting to recover the unavailable sensors in reverse order..."
 compose restart homeassistant
 compose run --rm runner python runner.py unavailable-sensors-schedule-first
 
+echo "Disabling auto-off and preparing its restart-persistence check..."
+compose run --rm runner python runner.py auto-off-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py auto-off-restart
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 
