@@ -1,0 +1,68 @@
+name: E2E
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  current:
+    name: Live E2E (HA current)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run the live acceptance suite
+        run: npm run test:e2e
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+
+  compatibility:
+    name: Live E2E (${{ matrix.label }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: HA floor
+            image: ghcr.io/home-assistant/home-assistant:2026.1.0
+            experimental: false
+          - label: HA current
+            image: ghcr.io/home-assistant/home-assistant:2026.8.0
+            experimental: false
+          # Floating stable is an upstream canary: report incompatibilities
+          # without blocking the known-good floor/current compatibility legs.
+          - label: HA stable canary
+            image: ghcr.io/home-assistant/home-assistant:stable
+            experimental: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run the live acceptance suite
+        run: npm run test:e2e
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ${{ matrix.image }}
+
+  upgrade:
+    name: Previous-release upgrade E2E
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Run the previous-release upgrade suite
+        run: npm run test:e2e:upgrade
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0

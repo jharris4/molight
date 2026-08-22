@@ -193,9 +193,9 @@ def main() -> None:
         f"  git push\n"
         f"  git tag v{version} && git push origin v{version}\n\n"
         f"The tag runs .github/workflows/release.yml, which checks the tag, the\n"
-        f"manifest and the changelog agree, and prints the release notes in its\n"
-        f"job summary. Paste those into the GitHub release body — that is what\n"
-        f"HACS shows users in its update dialog."
+        f"manifest and changelog, runs the previous-release upgrade E2E suite,\n"
+        f"and prints the release notes in its job summary. Paste those into the\n"
+        f"GitHub release body — that is what HACS shows users in its update dialog."
     )
     subprocess.run(
         ["git", "diff", "--stat"], cwd=ROOT, check=False, stderr=subprocess.DEVNULL

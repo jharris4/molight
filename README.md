@@ -459,9 +459,10 @@ match their live `origin` refs, the version moves forward, and the tag does not
 already exist locally or on GitHub.
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
-validates that the tag, manifest and changelog versions agree, then puts the
-release notes extracted from the changelog in its job summary. It does **not**
-create the GitHub Release. After the workflow succeeds:
+validates that the tag, manifest and changelog versions agree, runs the live
+upgrade suite from the preceding release tag, then puts the release notes
+extracted from the changelog in its job summary. It does **not** create the
+GitHub Release. After the workflow succeeds:
 
 1. Open its job summary and copy the generated release notes.
 2. In the repository's **Releases** page, choose **Draft a new release** and
@@ -577,6 +578,12 @@ A successful run removes its temporary configuration. On failure the runner
 prints a retained directory under the system temporary directory containing
 the isolated HA configuration and Compose logs. That directory contains the
 disposable test account, so remove it after debugging.
+
+CI runs the live suite against the pinned current Home Assistant image on
+pushes and pull requests. Nightly and manually dispatched E2E workflows run a
+minimum-supported/current matrix plus an advisory floating `stable` canary,
+along with the previous-release upgrade suite. Release tags also run the
+upgrade suite from the preceding tag before the release guard passes.
 
 ## Design notes
 

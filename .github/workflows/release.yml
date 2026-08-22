@@ -6,10 +6,12 @@ on:
 
 jobs:
   guard:
-    name: Version guard
+    name: Release guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Check the tag, the manifest and the changelog agree
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -34,3 +36,10 @@ jobs:
             awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Run the previous-release upgrade E2E suite
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^")
+          echo "Testing upgrade from $previous to $GITHUB_REF_NAME"
+          MOLIGHT_E2E_PREVIOUS_TAG="$previous" npm run test:e2e:upgrade
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
