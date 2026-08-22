@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cd "$(dirname "$0")/.."
+
+PROJECT_ROOT="$PWD"
+COMPOSE_FILE="tests/e2e/compose.yaml"
+PREVIOUS_TAG="${MOLIGHT_E2E_PREVIOUS_TAG:-$(git describe --tags --abbrev=0)}"
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-upgrade.XXXXXX")"
+export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
+export COMPOSE_PROJECT_NAME="molight-e2e-upgrade-$$"
+mkdir -p "$MOLIGHT_E2E_CONFIG_DIR" "$RUN_ROOT/previous"
+cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
+
+compose() {
+    docker compose --file "$COMPOSE_FILE" "$@"
+}
+
+cleanup() {
+    status=$?
+    set +e
+    compose logs --no-color > "$RUN_ROOT/docker-compose.log" 2>&1
+    compose down --volumes --remove-orphans >/dev/null 2>&1
+    if [ "$status" -eq 0 ]; then
+        rm -rf "$RUN_ROOT"
+    else
+        echo ""
+        echo "E2E upgrade failure artifacts retained at: $RUN_ROOT"
+        echo "The config contains the isolated test account; delete it after debugging."
+    fi
+    exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+git cat-file -e "$PREVIOUS_TAG:custom_components/molight/manifest.json"
+git archive "$PREVIOUS_TAG" custom_components/molight | tar -x -C "$RUN_ROOT/previous"
+
+export MOLIGHT_E2E_INTEGRATION_DIR="$RUN_ROOT/previous/custom_components/molight"
+echo "Starting isolated Home Assistant with MoLight $PREVIOUS_TAG..."
+compose up --detach homeassistant
+
+echo "Creating and exercising previous-release entries..."
+compose run --rm runner python runner.py upgrade-prepare
+
+echo "Restarting Home Assistant with the working-tree MoLight integration..."
+export MOLIGHT_E2E_INTEGRATION_DIR="$PROJECT_ROOT/custom_components/molight"
+compose up --detach --force-recreate homeassistant
+
+echo "Verifying upgraded entries and behavior..."
+compose run --rm runner python runner.py upgrade-verify
+
+echo "Checking Home Assistant logs from both releases..."
+compose run --rm runner python runner.py logs
+
+echo "MoLight previous-release upgrade suite passed."

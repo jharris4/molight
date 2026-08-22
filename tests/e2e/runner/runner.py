@@ -21,7 +21,10 @@ WAIT_TIMEOUT = 90
 
 RAW_LIGHT = "light.e2e_main"
 RAW_MOTION = "binary_sensor.e2e_motion"
+RAW_DOOR = "binary_sensor.e2e_door"
+RAW_ILLUMINANCE = "sensor.e2e_illuminance"
 RAW_SCHEDULE = "binary_sensor.e2e_schedule_source"
+EVENT_BUTTON = "event.e2e_button"
 TARGET_SELECT = "select.e2e_target_mode"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
@@ -29,6 +32,14 @@ VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
+
+UPGRADE_OCCUPANCY = "binary_sensor.upgrade_occupancy"
+UPGRADE_COMBINED = "binary_sensor.upgrade_combined"
+UPGRADE_ILLUMINANCE = "binary_sensor.upgrade_illuminance"
+UPGRADE_SCHEDULE = "binary_sensor.upgrade_schedule"
+UPGRADE_LIGHT = "light.upgrade_gated"
+UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
+UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
 
@@ -194,6 +205,23 @@ class HomeAssistantClient:
             "molight_testbed",
             "set_available",
             {"entity_id": entity_id, "available": available},
+        )
+
+    def fire_event(
+        self,
+        entity_id: str,
+        event_type: str,
+        attributes: dict[str, Any] | None = None,
+    ) -> None:
+        """Emit an event from a simulated event entity."""
+        self.call_service(
+            "molight_testbed",
+            "fire_event",
+            {
+                "entity_id": entity_id,
+                "event_type": event_type,
+                "attributes": attributes or {},
+            },
         )
 
     def start_flow(self, *, options_entry_id: str | None = None) -> dict[str, Any]:
@@ -376,7 +404,10 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
 
 
 def convert_light(
-    client: HomeAssistantClient, direction: str, expected_step: str
+    client: HomeAssistantClient,
+    direction: str,
+    expected_step: str,
+    entity_id: str = VIRTUAL_LIGHT,
 ) -> None:
     """Convert the live entry in place using MoLight's backend flow."""
     result = client.start_flow()
@@ -384,7 +415,7 @@ def convert_light(
     expect_step(result, "convert_lights")
     result = client.continue_flow(result, {"next_step_id": direction})
     expect_step(result, direction)
-    result = client.continue_flow(result, {"convert_lights": [VIRTUAL_LIGHT]})
+    result = client.continue_flow(result, {"convert_lights": [entity_id]})
     expect_step(result, expected_step)
     result = client.continue_flow(result, {"confirm_conversion": True})
     if result.get("type") != "abort" or result.get("reason") != "conversion_done":
@@ -435,6 +466,301 @@ def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
     matches = [entry for entry in entries if entry["entry_id"] == entry_id]
     if len(matches) != 1 or matches[0].get("state") != "loaded":
         raise AssertionError(f"MoLight entry is not loaded: {matches}")
+
+
+def wait_entries_loaded(
+    client: HomeAssistantClient, expected_ids: set[str], timeout: float = WAIT_TIMEOUT
+) -> list[dict[str, Any]]:
+    """Wait for startup to finish loading an exact set of MoLight entries."""
+    deadline = time.monotonic() + timeout
+    entries: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        entries = client.molight_entries()
+        if {entry["entry_id"] for entry in entries} == expected_ids and all(
+            entry.get("state") == "loaded" for entry in entries
+        ):
+            return entries
+        time.sleep(0.2)
+    raise AssertionError(f"MoLight entries did not finish loading: {entries}")
+
+
+def finish_creation(result: dict[str, Any], description: str) -> str:
+    """Return a newly-created entry id or fail with the whole flow result."""
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"{description} creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def create_upgrade_occupancy(client: HomeAssistantClient) -> str:
+    """Create a representative v1.5.0 occupancy entry."""
+    result = start_create(client, "occupancy")
+    expect_step(result, "occupancy")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "Upgrade Occupancy",
+            "occupancy_sensor": RAW_MOTION,
+            "occupancy_timeout": 2,
+            "advanced": {
+                "false_detection_grace": 0,
+                "clear_on_unavailable_timeout": 1,
+                "entity_id": "upgrade_occupancy",
+            },
+        },
+    )
+    return finish_creation(result, "Upgrade occupancy")
+
+
+def create_upgrade_combined(client: HomeAssistantClient) -> str:
+    """Create a v1.5.0 combined occupancy entry referencing another entry."""
+    result = start_create(client, "combined_occupancy")
+    expect_step(result, "combined_occupancy")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "Upgrade Combined",
+            "trigger_sensors": [UPGRADE_OCCUPANCY],
+            "advanced": {"entity_id": "upgrade_combined"},
+        },
+    )
+    return finish_creation(result, "Upgrade combined occupancy")
+
+
+def create_upgrade_illuminance(client: HomeAssistantClient) -> str:
+    """Create a v1.5.0 illuminance threshold entry."""
+    result = start_create(client, "illuminance")
+    expect_step(result, "illuminance")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "Upgrade Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 1,
+            "advanced": {"entity_id": "upgrade_illuminance"},
+        },
+    )
+    return finish_creation(result, "Upgrade illuminance")
+
+
+def create_upgrade_schedule(client: HomeAssistantClient) -> str:
+    """Create the time-window schedule format supported by v1.5.0."""
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "Upgrade Schedule",
+            "start": {"time": "00:00:00"},
+            "end": {"time": "23:59:59"},
+            "advanced": {"entity_id": "upgrade_schedule"},
+        },
+    )
+    return finish_creation(result, "Upgrade schedule")
+
+
+def upgrade_light_payload(name: str, brightness: int) -> dict[str, Any]:
+    """Build the sectioned light form shared by v1.5.0 create and edit."""
+    return {
+        "name": name,
+        "lights": [RAW_LIGHT],
+        "light_timeout": 10,
+        "sensors": {
+            "occupancy_entity": UPGRADE_COMBINED,
+            "illuminance_entity": UPGRADE_ILLUMINANCE,
+            "illuminance_mode": "gate",
+            "schedule_entity": UPGRADE_SCHEDULE,
+            "schedule_mode": "gate",
+            "door_entity": RAW_DOOR,
+            "door_mode": "open_close",
+        },
+        "behavior": {
+            "false_detection_off_delay": 0,
+            "auto_on_brightness": brightness,
+        },
+        "warning": {},
+    }
+
+
+def create_and_edit_upgrade_light(client: HomeAssistantClient) -> str:
+    """Create a gated v1.5.0 light and store representative options."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    payload = upgrade_light_payload("Upgrade Gated", 40)
+    payload["advanced"] = {"entity_id": "upgrade_gated"}
+    entry_id = finish_creation(
+        client.continue_flow(result, payload), "Upgrade gated light"
+    )
+
+    result = client.start_flow(options_entry_id=entry_id)
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        upgrade_light_payload("Upgrade Gated Edited", 60),
+        options=True,
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Upgrade light options failed: {result}")
+    return entry_id
+
+
+def create_upgrade_remote(client: HomeAssistantClient) -> str:
+    """Create a v1.5.0 remote bound to the simulated event button."""
+    result = start_create(client, "remote")
+    expect_step(result, "remote")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "Upgrade Remote",
+            "target_lights": [UPGRADE_LIGHT],
+            "dim_step": 15,
+            "turn_on": {"on_buttons_single": [EVENT_BUTTON]},
+            "turn_off": {},
+            "toggle": {},
+            "brightness_up": {},
+            "brightness_down": {},
+            "preset_1": {},
+            "preset_2": {},
+        },
+    )
+    return finish_creation(result, "Upgrade remote")
+
+
+def reset_upgrade_light(client: HomeAssistantClient) -> None:
+    """Return upgrade fixtures to a stable off/dark/unoccupied baseline."""
+    client.set_state(RAW_MOTION, "off")
+    client.set_state(RAW_DOOR, "off")
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(UPGRADE_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.wait_state(UPGRADE_COMBINED, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        UPGRADE_ILLUMINANCE, lambda state: state["state"] == "off", "dark"
+    )
+    client.call_service("light", "turn_off", {"entity_id": UPGRADE_LIGHT})
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+
+
+def assert_upgrade_turn_on(client: HomeAssistantClient) -> None:
+    """Assert that the upgraded light uses the saved 60 percent brightness."""
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
+        ),
+        "on at the saved 60 percent brightness",
+    )
+
+
+def run_upgrade_prepare() -> None:
+    """Create and exercise entries while the previous release is installed."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(EVENT_BUTTON, lambda _state: True, "available")
+
+    entry_ids = {
+        "occupancy": create_upgrade_occupancy(client),
+        "combined": create_upgrade_combined(client),
+        "illuminance": create_upgrade_illuminance(client),
+        "schedule": create_upgrade_schedule(client),
+        "light": create_and_edit_upgrade_light(client),
+        "remote": create_upgrade_remote(client),
+    }
+    for entry_id in entry_ids.values():
+        assert_entry_loaded(client, entry_id)
+
+    client.wait_state(UPGRADE_SCHEDULE, lambda state: state["state"] == "on", "on")
+    reset_upgrade_light(client)
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(UPGRADE_COMBINED, lambda state: state["state"] == "on", "on")
+    assert_upgrade_turn_on(client)
+    reset_upgrade_light(client)
+
+    UPGRADE_SNAPSHOT.write_text(
+        json.dumps({"entry_ids": entry_ids}, indent=2, sort_keys=True) + "\n"
+    )
+    print("PASS: previous release created, edited, and exercised upgrade fixtures")
+
+
+def run_upgrade_verification() -> None:
+    """Verify old entries and behavior after installing the candidate release."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot = json.loads(UPGRADE_SNAPSHOT.read_text())
+    entry_ids: dict[str, str] = snapshot["entry_ids"]
+
+    client.wait_state(RAW_LIGHT, lambda _state: True, "testbed available")
+    wait_entries_loaded(client, set(entry_ids.values()))
+
+    for entity_id in (
+        UPGRADE_OCCUPANCY,
+        UPGRADE_COMBINED,
+        UPGRADE_ILLUMINANCE,
+        UPGRADE_SCHEDULE,
+        UPGRADE_LIGHT,
+        UPGRADE_REMOTE_SENSOR,
+    ):
+        client.wait_state(
+            entity_id, lambda _state: True, "present with its original id"
+        )
+
+    client.wait_state(UPGRADE_SCHEDULE, lambda state: state["state"] == "on", "on")
+    reset_upgrade_light(client)
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(UPGRADE_COMBINED, lambda state: state["state"] == "on", "on")
+    assert_upgrade_turn_on(client)
+    reset_upgrade_light(client)
+
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        UPGRADE_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(UPGRADE_COMBINED, lambda state: state["state"] == "on", "on")
+    time.sleep(1)
+    if client.state(RAW_LIGHT)["state"] != "off":
+        raise AssertionError(
+            "Saved illuminance gate did not suppress automatic turn-on"
+        )
+    reset_upgrade_light(client)
+
+    client.set_state(RAW_DOOR, "on")
+    assert_upgrade_turn_on(client)
+    reset_upgrade_light(client)
+
+    client.fire_event(EVENT_BUTTON, "short_release")
+    assert_upgrade_turn_on(client)
+    client.wait_state(
+        UPGRADE_REMOTE_SENSOR,
+        lambda state: state["state"] == "turn_on",
+        "recording the restored turn-on binding",
+    )
+
+    convert_light(
+        client,
+        "convert_to_scheduled",
+        "confirm_convert_to_scheduled",
+        UPGRADE_LIGHT,
+    )
+    assert_entry_loaded(client, entry_ids["light"])
+    client.wait_state(
+        UPGRADE_LIGHT,
+        lambda state: "active_settings" in state["attributes"],
+        "scheduled after conversion without changing its id",
+    )
+    convert_light(
+        client,
+        "convert_to_regular",
+        "confirm_convert_to_regular",
+        UPGRADE_LIGHT,
+    )
+    assert_entry_loaded(client, entry_ids["light"])
+    client.wait_state(
+        UPGRADE_LIGHT, lambda _state: True, "regular after conversion round trip"
+    )
+    print("PASS: previous-release entries, ids, options, behavior, and conversion")
 
 
 def run_primary() -> None:
@@ -578,6 +904,8 @@ def main() -> None:
     commands = {
         "primary": run_primary,
         "restart": run_container_restart_verification,
+        "upgrade-prepare": run_upgrade_prepare,
+        "upgrade-verify": run_upgrade_verification,
         "logs": check_logs,
     }
     if len(sys.argv) != 2 or sys.argv[1] not in commands:

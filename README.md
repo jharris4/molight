@@ -531,6 +531,7 @@ part of a MoLight release.
 
 ```bash
 npm run test:e2e
+npm run test:e2e:upgrade
 ```
 
 The suite performs automated onboarding, creates and edits MoLight entries
@@ -539,6 +540,14 @@ profiles, exercises selection source and fallback behavior, converts a light
 in both directions without changing its entity ID, restarts Home Assistant
 core, restarts the full container with the same temporary `/config`, and
 checks the resulting logs.
+
+The upgrade suite checks out the latest Git tag's integration into a temporary
+directory, creates and edits a representative set of entries with that release,
+then restarts the same Home Assistant configuration with the working-tree
+integration. It verifies that all config-entry IDs and entity IDs survive, the
+stored sensor gating, door, remote, and light behavior still works, and the
+upgraded light can make a scheduled/regular conversion round trip. Set
+`MOLIGHT_E2E_PREVIOUS_TAG` to select another compatible source tag.
 
 The default image is pinned to the Home Assistant release used by the current
 test dependencies. Override it to exercise another release:

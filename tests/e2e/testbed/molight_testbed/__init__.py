@@ -9,16 +9,18 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTR_AVAILABLE,
+    ATTR_EVENT_TYPE,
     DATA_CONTROLLER,
     DEFAULT_STATES,
     DOMAIN,
     PLATFORMS,
+    SERVICE_FIRE_EVENT,
     SERVICE_SET_AVAILABLE,
     SERVICE_SET_STATE,
     STORAGE_KEY,
@@ -40,6 +42,13 @@ SET_AVAILABLE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required(ATTR_AVAILABLE): cv.boolean,
+    }
+)
+FIRE_EVENT_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_EVENT_TYPE): str,
+        vol.Optional("attributes", default={}): dict,
     }
 )
 
@@ -95,6 +104,15 @@ class TestbedController:
         await self.async_save()
         entity.async_write_ha_state()
 
+    def fire_event(
+        self, entity_id: str, event_type: str, attributes: dict[str, Any]
+    ) -> None:
+        """Fire a fresh event from a simulated event entity."""
+        entity = self.entities.get(entity_id)
+        if entity is None or not hasattr(entity, "fire_test_event"):
+            raise ValueError(f"Unknown testbed event entity: {entity_id}")
+        entity.fire_test_event(event_type, attributes)
+
 
 async def async_setup(hass: HomeAssistant, _config: dict[str, Any]) -> bool:
     """Import the singleton config entry declared by configuration.yaml."""
@@ -130,6 +148,14 @@ async def async_setup_entry(
             call.data[ATTR_ENTITY_ID], call.data[ATTR_AVAILABLE]
         )
 
+    @callback
+    def _fire_event(call: ServiceCall) -> None:
+        controller.fire_event(
+            call.data[ATTR_ENTITY_ID],
+            call.data[ATTR_EVENT_TYPE],
+            call.data["attributes"],
+        )
+
     hass.services.async_register(
         DOMAIN, SERVICE_SET_STATE, _set_state, schema=SET_STATE_SCHEMA
     )
@@ -138,6 +164,9 @@ async def async_setup_entry(
         SERVICE_SET_AVAILABLE,
         _set_available,
         schema=SET_AVAILABLE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -151,6 +180,7 @@ async def async_unload_entry(
         return False
     hass.services.async_remove(DOMAIN, SERVICE_SET_STATE)
     hass.services.async_remove(DOMAIN, SERVICE_SET_AVAILABLE)
+    hass.services.async_remove(DOMAIN, SERVICE_FIRE_EVENT)
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
 

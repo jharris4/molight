@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/config
-      - ../../custom_components/molight:/config/custom_components/molight:ro
+      - ${MOLIGHT_E2E_INTEGRATION_DIR:-../../custom_components/molight}:/config/custom_components/molight:ro
       - ./testbed/molight_testbed:/config/custom_components/molight_testbed:ro
 
   runner:
@@ -14,6 +14,6 @@ services:
       MOLIGHT_E2E_HA_URL: http://homeassistant:8123
     volumes:
       - ./runner:/e2e:ro
-      - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/ha-config:ro
+      - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/ha-config
     depends_on:
       - homeassistant
