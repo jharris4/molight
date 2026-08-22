@@ -25,6 +25,7 @@ RAW_MULTI_ON_OFF = "light.e2e_multi_on_off"
 RAW_MULTI_DIMMER = "light.e2e_multi_dimmer"
 RAW_MULTI_RGB = "light.e2e_multi_rgb"
 RAW_MOTION = "binary_sensor.e2e_motion"
+RAW_REMOVAL_MOTION = "binary_sensor.e2e_removal_motion"
 RAW_DOOR = "binary_sensor.e2e_door"
 RAW_ILLUMINANCE = "sensor.e2e_illuminance"
 RAW_SCHEDULE = "binary_sensor.e2e_schedule_source"
@@ -37,6 +38,8 @@ VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
+REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
+REMOVAL_LIGHT = "light.e2e_removal_light"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -47,6 +50,8 @@ UPGRADE_SCHEDULE = "binary_sensor.upgrade_schedule"
 UPGRADE_LIGHT = "light.upgrade_gated"
 UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
 UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
+REMOVAL_SNAPSHOT = Path("/ha-config/e2e-removal-snapshot.json")
+CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
 
@@ -448,6 +453,49 @@ def create_multi_light(client: HomeAssistantClient) -> str:
     )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Multi-light creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def create_removal_occupancy(client: HomeAssistantClient) -> str:
+    """Create the temporary virtual sensor that will be removed live."""
+    result = start_create(client, "occupancy")
+    expect_step(result, "occupancy")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Removed Occupancy",
+            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_timeout": 1,
+            "advanced": {
+                "false_detection_grace": 0,
+                "clear_on_unavailable_timeout": 1,
+                "entity_id": "e2e_removed_occupancy",
+            },
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Removal occupancy creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def create_removal_light(client: HomeAssistantClient) -> str:
+    """Create a surviving light that references the removable sensor."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Removal Light",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": REMOVAL_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 50},
+            "warning": {},
+            "advanced": {"entity_id": "e2e_removal_light"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Removal light creation failed: {result}")
     return result["result"]["entry_id"]
 
 
@@ -936,6 +984,116 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
     print("PASS: mixed light capabilities, routing, restart, and recovery")
 
 
+def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, str]:
+    """Remove a referenced sensor and prove its surviving light reloads cleanly."""
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    sensor_entry_id = create_removal_occupancy(client)
+    light_entry_id = create_removal_light(client)
+    wait_entry_loaded(client, sensor_entry_id)
+    wait_entry_loaded(client, light_entry_id)
+
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    client.wait_state(REMOVAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 128
+        ),
+        "on through the sensor reference",
+    )
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.wait_state(REMOVAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": REMOVAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    client.remove_entry(sensor_entry_id)
+    wait_entity_absent(client, REMOVAL_OCCUPANCY)
+    wait_entry_loaded(client, light_entry_id)
+    client.wait_state(REMOVAL_LIGHT, lambda state: state["state"] == "off", "reloaded")
+    if any(entry["entry_id"] == sensor_entry_id for entry in client.molight_entries()):
+        raise AssertionError("Removed sensor config entry remained in the live API")
+
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the removed sensor's source turns on",
+    )
+
+    snapshot = {
+        "sensor_entry_id": sensor_entry_id,
+        "light_entry_id": light_entry_id,
+    }
+    REMOVAL_SNAPSHOT.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+    print("PASS: sensor removal cleaned its surviving light's live reference")
+    return snapshot
+
+
+def verify_removal_reference_cleanup(
+    client: HomeAssistantClient, snapshot: dict[str, str], restart_kind: str
+) -> None:
+    """Prove a removed sensor and its reference stay gone after a restart."""
+    entries = client.molight_entries()
+    if any(entry["entry_id"] == snapshot["sensor_entry_id"] for entry in entries):
+        raise AssertionError(
+            f"Removed sensor resurrected after {restart_kind}: {entries}"
+        )
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    wait_entity_absent(client, REMOVAL_OCCUPANCY)
+    client.wait_state(
+        REMOVAL_LIGHT,
+        lambda state: state["state"] == "off",
+        f"off after {restart_kind}",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        RAW_REMOVAL_MOTION,
+        lambda state: state["state"] == "on",
+        f"persisted on after {restart_kind}",
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        f"off without a resurrected reference after {restart_kind}",
+    )
+    assert_removal_storage_clean(snapshot)
+
+
+def finish_removal_reference_cleanup(client: HomeAssistantClient) -> None:
+    """Verify cold-start cleanup, then remove the surviving temporary light."""
+    snapshot: dict[str, str] = json.loads(REMOVAL_SNAPSHOT.read_text())
+    verify_removal_reference_cleanup(client, snapshot, "a full container restart")
+
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the removed source is toggled post-restart",
+    )
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+
+    client.remove_entry(snapshot["light_entry_id"])
+    wait_entity_absent(client, REMOVAL_LIGHT)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if all(
+            entry["entry_id"] != snapshot["light_entry_id"]
+            for entry in client.molight_entries()
+        ):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("Temporary removal-test light entry was not removed")
+    print("PASS: removed sensor and reference stayed absent across storage restart")
+
+
 def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
     """Assert a particular MoLight config entry is still loaded."""
     entries = client.molight_entries()
@@ -958,6 +1116,66 @@ def wait_entries_loaded(
             return entries
         time.sleep(0.2)
     raise AssertionError(f"MoLight entries did not finish loading: {entries}")
+
+
+def wait_entry_loaded(
+    client: HomeAssistantClient, entry_id: str, timeout: float = WAIT_TIMEOUT
+) -> dict[str, Any]:
+    """Wait for one config entry to finish a reload without constraining peers."""
+    deadline = time.monotonic() + timeout
+    matches: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        matches = [
+            entry for entry in client.molight_entries() if entry["entry_id"] == entry_id
+        ]
+        if len(matches) == 1 and matches[0].get("state") == "loaded":
+            return matches[0]
+        time.sleep(0.2)
+    raise AssertionError(f"MoLight entry did not finish loading: {matches}")
+
+
+def wait_entity_absent(
+    client: HomeAssistantClient, entity_id: str, timeout: float = 20
+) -> None:
+    """Wait until Home Assistant returns 404 for a removed entity."""
+    deadline = time.monotonic() + timeout
+    last: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        try:
+            last = client.state(entity_id)
+        except ApiError as err:
+            if "returned 404" in str(err):
+                return
+            raise
+        time.sleep(0.2)
+    raise AssertionError(f"Removed entity remained in Home Assistant: {last}")
+
+
+def stored_config_entries() -> list[dict[str, Any]]:
+    """Read Home Assistant's persisted config-entry records."""
+    payload = json.loads(CONFIG_ENTRIES_STORAGE.read_text())
+    return payload["data"]["entries"]
+
+
+def assert_removal_storage_clean(snapshot: dict[str, str]) -> None:
+    """Assert the removed entry and dependent reference are absent on disk."""
+    entries = stored_config_entries()
+    if any(entry["entry_id"] == snapshot["sensor_entry_id"] for entry in entries):
+        raise AssertionError("Removed sensor config entry remained in storage")
+    matches = [
+        entry for entry in entries if entry["entry_id"] == snapshot["light_entry_id"]
+    ]
+    if len(matches) != 1:
+        raise AssertionError(
+            f"Surviving removal-test light missing from storage: {matches}"
+        )
+    # HA retains the entry's immutable original data; non-empty options fully
+    # replace it at runtime and are where reference cleanup is persisted.
+    effective = matches[0]["options"] or matches[0]["data"]
+    if REMOVAL_OCCUPANCY in json.dumps(effective, sort_keys=True):
+        raise AssertionError(
+            f"Removed sensor reference remained in effective storage: {effective}"
+        )
 
 
 def assert_state_stays(
@@ -1325,6 +1543,7 @@ def run_primary() -> None:
     wait_profile(client, PROFILE_INSIDE)
     trigger_and_assert(client, 204, "Night")
 
+    removal_snapshot = prepare_removal_reference_cleanup(client)
     multi_entry_id = create_multi_light(client)
     assert_entry_loaded(client, multi_entry_id)
     prepare_multi_light_restart(client)
@@ -1353,6 +1572,9 @@ def run_primary() -> None:
         "restored with its RGB member unavailable after a core restart",
         timeout=WAIT_TIMEOUT,
     )
+    verify_removal_reference_cleanup(
+        client, removal_snapshot, "a Home Assistant core restart"
+    )
     print("PASS: live creation, behavior, options, conversion, and core restart")
 
 
@@ -1362,10 +1584,11 @@ def run_container_restart_verification() -> None:
     client.wait_ready()
     client.authenticate()
     entries = client.molight_entries()
-    if len(entries) != 5:
-        raise AssertionError(f"Expected five restored MoLight entries: {entries}")
+    if len(entries) != 6:
+        raise AssertionError(f"Expected six restored MoLight entries: {entries}")
     wait_entries_loaded(client, {entry["entry_id"] for entry in entries})
     verify_and_remove_multi_light(client)
+    finish_removal_reference_cleanup(client)
     client.wait_state(
         RAW_SCHEDULE, lambda state: state["state"] == "on", "persisted on"
     )

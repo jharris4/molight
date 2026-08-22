@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import controller_for_entry
-from .const import DOOR, MOTION, OCCUPANCY, SCHEDULE
+from .const import DOOR, MOTION, MOTION_REMOVAL, OCCUPANCY, SCHEDULE
 from .entity import TestbedEntity
 
 
@@ -57,6 +57,13 @@ async def async_setup_entry(
                 MOTION,
                 "binary_sensor.e2e_motion",
                 "E2E Motion",
+                device_class=BinarySensorDeviceClass.MOTION,
+            ),
+            TestbedBinarySensor(
+                controller,
+                MOTION_REMOVAL,
+                "binary_sensor.e2e_removal_motion",
+                "E2E Removal Motion",
                 device_class=BinarySensorDeviceClass.MOTION,
             ),
             TestbedBinarySensor(
