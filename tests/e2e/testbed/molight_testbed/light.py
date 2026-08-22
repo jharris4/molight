@@ -29,10 +29,20 @@ class TestbedLight(TestbedEntity, LightEntity):
         color_modes: set[ColorMode],
         features: LightEntityFeature | None = None,
     ) -> None:
-        """Initialize a light with fixed capabilities."""
+        """Initialize a light whose capabilities arrive with availability."""
         super().__init__(*args)
-        self._attr_supported_color_modes = color_modes
-        self._attr_supported_features = features or LightEntityFeature(0)
+        self._testbed_color_modes = color_modes
+        self._testbed_features = features or LightEntityFeature(0)
+        self._set_reported_capabilities(self.available)
+
+    def _set_reported_capabilities(self, reported: bool) -> None:
+        """Expose only a valid minimal capability set until the light reports."""
+        self._attr_supported_color_modes = (
+            self._testbed_color_modes if reported else {ColorMode.ONOFF}
+        )
+        self._attr_supported_features = (
+            self._testbed_features if reported else LightEntityFeature(0)
+        )
 
     @property
     def is_on(self) -> bool:
@@ -46,12 +56,14 @@ class TestbedLight(TestbedEntity, LightEntity):
             return ColorMode.RGB
         if ColorMode.BRIGHTNESS in self._attr_supported_color_modes:
             return ColorMode.BRIGHTNESS
-        return ColorMode.ONOFF
+        if ColorMode.ONOFF in self._attr_supported_color_modes:
+            return ColorMode.ONOFF
+        return ColorMode.UNKNOWN
 
     @property
     def brightness(self) -> int | None:
         """Return the persisted brightness when supported."""
-        if self.color_mode is ColorMode.ONOFF:
+        if self.color_mode not in (ColorMode.RGB, ColorMode.BRIGHTNESS):
             return None
         return int(self.record["attributes"].get(ATTR_BRIGHTNESS, 0))
 
@@ -99,6 +111,11 @@ class TestbedLight(TestbedEntity, LightEntity):
             "service": "testbed_set_state",
             "data": {"state": normalized, **attributes},
         }
+
+    def set_test_available(self, available: bool) -> None:
+        """Publish this light's real capabilities when it becomes available."""
+        super().set_test_available(available)
+        self._set_reported_capabilities(available)
 
 
 async def async_setup_entry(

@@ -56,3 +56,7 @@ class TestbedEntity(Entity):
         """Store a generic state supplied by the test control service."""
         self.record["state"] = state
         self.record["attributes"].update(attributes)
+
+    def set_test_available(self, available: bool) -> None:
+        """Store availability before the controller publishes a new state."""
+        self.record["available"] = available

@@ -40,6 +40,19 @@ echo "Restarting the full Home Assistant container..."
 compose restart homeassistant
 compose run --rm runner python runner.py restart
 
+echo "Preparing a restart with the physical light unavailable..."
+compose run --rm runner python runner.py unavailable-light-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py unavailable-light-recover
+
+echo "Restarting with occupancy and schedule sources unavailable..."
+compose restart homeassistant
+compose run --rm runner python runner.py unavailable-sensors-motion-first
+
+echo "Restarting to recover the unavailable sensors in reverse order..."
+compose restart homeassistant
+compose run --rm runner python runner.py unavailable-sensors-schedule-first
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 

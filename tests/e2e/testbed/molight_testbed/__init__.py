@@ -100,7 +100,7 @@ class TestbedController:
         entity = self.entities.get(entity_id)
         if entity is None:
             raise ValueError(f"Unknown testbed entity: {entity_id}")
-        self.states[entity.testbed_key]["available"] = available
+        entity.set_test_available(available)
         await self.async_save()
         entity.async_write_ha_state()
 

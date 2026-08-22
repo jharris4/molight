@@ -539,7 +539,11 @@ through Home Assistant's backend config-flow API, switches both scheduled
 profiles, exercises selection source and fallback behavior, converts a light
 in both directions without changing its entity ID, restarts Home Assistant
 core, restarts the full container with the same temporary `/config`, and
-checks the resulting logs.
+checks the resulting logs. Additional cold-start phases hold the physical
+light, occupancy source, and schedule source unavailable across restarts,
+recover the sensors in both orders without false transitions, and verify a
+late-reporting light updates the virtual light's capabilities without turning
+it on.
 
 The upgrade suite checks out the latest Git tag's integration into a temporary
 directory, creates and edits a representative set of entries with that release,

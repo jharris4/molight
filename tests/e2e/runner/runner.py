@@ -317,7 +317,7 @@ def light_settings(brightness: int) -> dict[str, Any]:
     """Build one scheduled profile with occupancy and dynamic selection."""
     return {
         **EMPTY_LIGHT_SECTIONS,
-        "light_timeout": 5,
+        "light_timeout": 30,
         "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
         "behavior": {
             "auto_on_brightness": brightness,
@@ -482,6 +482,25 @@ def wait_entries_loaded(
             return entries
         time.sleep(0.2)
     raise AssertionError(f"MoLight entries did not finish loading: {entries}")
+
+
+def assert_state_stays(
+    client: HomeAssistantClient,
+    entity_id: str,
+    predicate: Callable[[dict[str, Any]], bool],
+    description: str,
+    duration: float = 1.5,
+) -> None:
+    """Assert an entity continuously avoids an unwanted delayed transition."""
+    deadline = time.monotonic() + duration
+    last: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        last = client.state(entity_id)
+        if not predicate(last):
+            raise AssertionError(
+                f"Expected {entity_id} to stay {description}; observed {last}"
+            )
+        time.sleep(0.2)
 
 
 def finish_creation(result: dict[str, Any], description: str) -> str:
@@ -873,6 +892,193 @@ def run_container_restart_verification() -> None:
     print("PASS: state and entries survived a full container restart")
 
 
+def run_unavailable_light_prepare() -> None:
+    """Persist an unavailable physical light for the next cold startup."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(VIRTUAL_LIGHT, lambda _state: True, "loaded")
+
+    reset_trigger(client)
+    client.set_available(RAW_LIGHT, False)
+    client.wait_state(
+        RAW_LIGHT, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: state["state"] == "off",
+        "off when its physical member disappears",
+    )
+    print("PASS: unavailable physical-light startup fixture prepared")
+
+
+def run_unavailable_light_recovery() -> None:
+    """Recover a late-reporting light, then prepare unavailable sensors."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(
+        RAW_LIGHT, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    virtual = client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after unavailable-member startup",
+        timeout=WAIT_TIMEOUT,
+    )
+    modes = virtual["attributes"].get("supported_color_modes", [])
+    if "hs" in modes:
+        raise AssertionError(
+            f"Virtual light advertised color before its member reported: {virtual}"
+        )
+
+    client.set_available(RAW_LIGHT, True)
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "recovered off")
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: (
+            "hs" in state["attributes"].get("supported_color_modes", [])
+            and int(state["attributes"].get("supported_features", 0)) > 0
+        ),
+        "advertising recovered color and transition capabilities",
+    )
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after capability recovery",
+    )
+
+    client.set_state(RAW_MOTION, "off")
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_profile(client, PROFILE_INSIDE)
+    client.set_available(RAW_MOTION, False)
+    client.set_available(RAW_SCHEDULE, False)
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.wait_state(
+        VIRTUAL_SCHEDULE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable",
+    )
+    print("PASS: late light capabilities recovered without false activation")
+
+
+def run_unavailable_sensors_motion_first() -> None:
+    """Recover occupancy before schedule, then prepare the reverse order."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.wait_state(
+        VIRTUAL_SCHEDULE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable",
+    )
+    wait_profile(client, PROFILE_INSIDE)
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off during unavailable-sensor startup",
+    )
+
+    client.set_available(RAW_MOTION, True)
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "off", "recovered off"
+    )
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after occupancy recovers off",
+    )
+
+    client.set_available(RAW_SCHEDULE, True)
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_profile(client, PROFILE_INSIDE)
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the same schedule window recovers",
+    )
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "on")
+    client.set_available(RAW_MOTION, False)
+    client.set_available(RAW_SCHEDULE, False)
+    client.set_state(RAW_MOTION, "off")
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.wait_state(
+        VIRTUAL_SCHEDULE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable",
+    )
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "still on")
+    print("PASS: motion-first recovery caused no replay or false schedule boundary")
+
+
+def run_unavailable_sensors_schedule_first() -> None:
+    """Recover a missed schedule end before occupancy without turning off."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.wait_state(
+        VIRTUAL_SCHEDULE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable",
+    )
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+        ),
+        "restored on with its last known profile",
+        timeout=WAIT_TIMEOUT,
+    )
+
+    client.set_available(RAW_SCHEDULE, True)
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+    wait_profile(client, PROFILE_OUTSIDE)
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "on across the keep-policy schedule boundary",
+    )
+
+    client.set_available(RAW_MOTION, True)
+    client.wait_state(
+        RAW_MOTION, lambda state: state["state"] == "off", "recovered off"
+    )
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "on after occupancy recovers off",
+    )
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    print("PASS: schedule-first recovery preserved profile and keep-on behavior")
+
+
 def check_logs() -> None:
     """Fail for MoLight errors or tracebacks in all current/rotated HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
@@ -904,6 +1110,10 @@ def main() -> None:
     commands = {
         "primary": run_primary,
         "restart": run_container_restart_verification,
+        "unavailable-light-prepare": run_unavailable_light_prepare,
+        "unavailable-light-recover": run_unavailable_light_recovery,
+        "unavailable-sensors-motion-first": run_unavailable_sensors_motion_first,
+        "unavailable-sensors-schedule-first": (run_unavailable_sensors_schedule_first),
         "upgrade-prepare": run_upgrade_prepare,
         "upgrade-verify": run_upgrade_verification,
         "logs": check_logs,
