@@ -553,7 +553,10 @@ and that its advertised capabilities remain accurate when the RGB member is
 unavailable across a restart and later recovers. A removal scenario deletes a
 referenced virtual sensor through Home Assistant's config-entry API, confirms
 the surviving light drops that reference, and verifies neither the sensor nor
-its stored reference returns after core and container restarts.
+its stored reference returns after core and container restarts. A current-flow
+Virtual Remote scenario exercises single/double event bindings, edits them to
+brightness/toggle actions, checks Last Action diagnostics across restarts, and
+confirms removing its target leaves the surviving remote inert.
 
 The upgrade suite checks out the latest Git tag's integration into a temporary
 directory, creates and edits a representative set of entries with that release,

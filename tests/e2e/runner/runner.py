@@ -40,6 +40,7 @@ VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
+REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -51,9 +52,19 @@ UPGRADE_LIGHT = "light.upgrade_gated"
 UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
 UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 REMOVAL_SNAPSHOT = Path("/ha-config/e2e-removal-snapshot.json")
+REMOTE_SNAPSHOT = Path("/ha-config/e2e-remote-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
+EMPTY_REMOTE_SECTIONS = {
+    "turn_on": {},
+    "turn_off": {},
+    "toggle": {},
+    "brightness_up": {},
+    "brightness_down": {},
+    "preset_1": {},
+    "preset_2": {},
+}
 
 
 class ApiError(RuntimeError):
@@ -454,6 +465,46 @@ def create_multi_light(client: HomeAssistantClient) -> str:
     if result.get("type") != "create_entry":
         raise AssertionError(f"Multi-light creation failed: {result}")
     return result["result"]["entry_id"]
+
+
+def create_remote(client: HomeAssistantClient) -> str:
+    """Create a current-release remote with single and double bindings."""
+    result = start_create(client, "remote")
+    expect_step(result, "remote")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Remote",
+            "target_lights": [VIRTUAL_MULTI_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            "turn_on": {"on_buttons_single": [EVENT_BUTTON]},
+            "turn_off": {"off_buttons_double": [EVENT_BUTTON]},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Remote creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def edit_remote(client: HomeAssistantClient, entry_id: str) -> None:
+    """Replace the current remote's bindings through its options flow."""
+    result = client.start_flow(options_entry_id=entry_id)
+    expect_step(result, "remote")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Remote Edited",
+            "target_lights": [VIRTUAL_MULTI_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            "toggle": {"toggle_buttons_double": [EVENT_BUTTON]},
+            "brightness_up": {"brightness_up_buttons_single": [EVENT_BUTTON]},
+        },
+        options=True,
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Remote options failed: {result}")
 
 
 def create_removal_occupancy(client: HomeAssistantClient) -> str:
@@ -951,9 +1002,9 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
             state["state"] == "off"
             and set(state["attributes"].get("supported_color_modes", []))
             == {"brightness"}
-            and int(state["attributes"].get("supported_features", 0)) > 0
+            and int(state["attributes"].get("supported_features", 0)) == 0
         ),
-        "restored off with brightness and fail-open transition capabilities",
+        "settled off with the available members' brightness-only capabilities",
         timeout=WAIT_TIMEOUT,
     )
 
@@ -982,6 +1033,157 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
     else:
         raise AssertionError("Temporary multi-light config entry was not removed")
     print("PASS: mixed light capabilities, routing, restart, and recovery")
+
+
+def wait_remote_action(
+    client: HomeAssistantClient, action: str, click: str, event_type: str
+) -> dict[str, Any]:
+    """Wait for the remote's diagnostic sensor to record one binding."""
+    return client.wait_state(
+        REMOTE_LAST_ACTION,
+        lambda state: (
+            state["state"] == action
+            and state["attributes"].get("button") == EVENT_BUTTON
+            and state["attributes"].get("click") == click
+            and state["attributes"].get("event_type") == event_type
+        ),
+        f"recording {action} from a {click} click",
+    )
+
+
+def turn_off_multi_members(client: HomeAssistantClient) -> None:
+    """Return the temporary remote target and its available members to off."""
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+    client.wait_state(VIRTUAL_MULTI_LIGHT, lambda state: state["state"] == "off", "off")
+    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        state = client.state(entity_id)
+        if state["state"] != "unavailable":
+            client.wait_state(entity_id, lambda item: item["state"] == "off", "off")
+
+
+def exercise_created_remote(client: HomeAssistantClient) -> None:
+    """Exercise the remote's initial on-single and off-double bindings."""
+    turn_off_multi_members(client)
+    client.fire_event(EVENT_BUTTON, "short_release")
+    wait_remote_action(client, "turn_on", "single", "short_release")
+    client.wait_state(VIRTUAL_MULTI_LIGHT, lambda state: state["state"] == "on", "on")
+
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    wait_remote_action(client, "turn_off", "double", "multi_press_2")
+    turn_off_multi_members(client)
+
+
+def exercise_edited_remote(client: HomeAssistantClient) -> None:
+    """Exercise edited brightness-single and toggle-double bindings."""
+    turn_off_multi_members(client)
+    client.fire_event(EVENT_BUTTON, "short_release")
+    wait_remote_action(client, "brightness_up", "single", "short_release")
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and 1 <= int(state["attributes"].get("brightness", 0)) <= 52
+        ),
+        "on at one 20-percent brightness step",
+    )
+    client.wait_state(
+        RAW_MULTI_DIMMER,
+        lambda state: (
+            state["state"] == "on"
+            and 1 <= int(state["attributes"].get("brightness", 0)) <= 52
+        ),
+        "receiving the remote brightness step",
+    )
+
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    wait_remote_action(client, "toggle", "double", "multi_press_2")
+    turn_off_multi_members(client)
+
+
+def prepare_current_remote(client: HomeAssistantClient) -> str:
+    """Create, exercise, edit, and persist the current-release remote."""
+    entry_id = create_remote(client)
+    wait_entry_loaded(client, entry_id)
+    client.wait_state(REMOTE_LAST_ACTION, lambda _state: True, "available")
+    exercise_created_remote(client)
+
+    edit_remote(client, entry_id)
+    wait_entry_loaded(client, entry_id)
+    client.wait_state(
+        REMOTE_LAST_ACTION,
+        lambda state: (
+            state["state"] == "unknown"
+            and state["attributes"].get("friendly_name")
+            == "E2E Remote Edited Last Action"
+        ),
+        "reloaded with its edited name and a fresh diagnostic state",
+    )
+    exercise_edited_remote(client)
+    REMOTE_SNAPSHOT.write_text(
+        json.dumps({"entry_id": entry_id}, indent=2, sort_keys=True) + "\n"
+    )
+    print("PASS: current remote creation, editing, events, and diagnostics")
+    return entry_id
+
+
+def verify_current_remote_after_restart(
+    client: HomeAssistantClient, entry_id: str, restart_kind: str
+) -> None:
+    """Verify edited bindings rebuild without replaying a stale action."""
+    wait_entry_loaded(client, entry_id)
+    client.wait_state(
+        REMOTE_LAST_ACTION,
+        lambda state: state["state"] == "unknown",
+        f"starting without a stale action after {restart_kind}",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: state["state"] == "off",
+        f"off without a replayed button event after {restart_kind}",
+    )
+    exercise_edited_remote(client)
+
+
+def finish_current_remote_target_cleanup(client: HomeAssistantClient) -> None:
+    """Prove target removal makes the surviving remote inert, then remove it."""
+    snapshot: dict[str, str] = json.loads(REMOTE_SNAPSHOT.read_text())
+    entry_id = snapshot["entry_id"]
+    wait_entry_loaded(client, entry_id)
+    wait_entity_absent(client, VIRTUAL_MULTI_LIGHT)
+    client.wait_state(
+        REMOTE_LAST_ACTION,
+        lambda state: state["state"] == "unknown",
+        "reloaded without its removed target",
+    )
+
+    client.fire_event(EVENT_BUTTON, "short_release")
+    assert_state_stays(
+        client,
+        REMOTE_LAST_ACTION,
+        lambda state: state["state"] == "unknown",
+        "inert after its target is removed",
+    )
+    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        assert_state_stays(
+            client,
+            entity_id,
+            lambda state: state["state"] == "off",
+            "off after an event from the targetless remote",
+            duration=0.5,
+        )
+
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, REMOTE_LAST_ACTION)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if all(entry["entry_id"] != entry_id for entry in client.molight_entries()):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("Temporary current-release remote entry was not removed")
+    print("PASS: remote bindings survived restarts and target cleanup was clean")
 
 
 def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, str]:
@@ -1546,6 +1748,7 @@ def run_primary() -> None:
     removal_snapshot = prepare_removal_reference_cleanup(client)
     multi_entry_id = create_multi_light(client)
     assert_entry_loaded(client, multi_entry_id)
+    remote_entry_id = prepare_current_remote(client)
     prepare_multi_light_restart(client)
 
     client.call_service("homeassistant", "restart", {})
@@ -1572,6 +1775,9 @@ def run_primary() -> None:
         "restored with its RGB member unavailable after a core restart",
         timeout=WAIT_TIMEOUT,
     )
+    verify_current_remote_after_restart(
+        client, remote_entry_id, "a Home Assistant core restart"
+    )
     verify_removal_reference_cleanup(
         client, removal_snapshot, "a Home Assistant core restart"
     )
@@ -1584,10 +1790,15 @@ def run_container_restart_verification() -> None:
     client.wait_ready()
     client.authenticate()
     entries = client.molight_entries()
-    if len(entries) != 6:
-        raise AssertionError(f"Expected six restored MoLight entries: {entries}")
+    if len(entries) != 7:
+        raise AssertionError(f"Expected seven restored MoLight entries: {entries}")
     wait_entries_loaded(client, {entry["entry_id"] for entry in entries})
+    remote_snapshot: dict[str, str] = json.loads(REMOTE_SNAPSHOT.read_text())
+    verify_current_remote_after_restart(
+        client, remote_snapshot["entry_id"], "a full container restart"
+    )
     verify_and_remove_multi_light(client)
+    finish_current_remote_target_cleanup(client)
     finish_removal_reference_cleanup(client)
     client.wait_state(
         RAW_SCHEDULE, lambda state: state["state"] == "on", "persisted on"
