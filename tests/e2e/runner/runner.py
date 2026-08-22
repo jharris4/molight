@@ -40,6 +40,8 @@ VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
 VIRTUAL_AUTO_OFF_LIGHT = "light.e2e_auto_off"
 AUTO_OFF_SWITCH = "switch.e2e_auto_off_auto_off"
+VIRTUAL_RESTART_WARNING_LIGHT = "light.e2e_restart_warning"
+RESTART_WARNING_SWITCH = "switch.e2e_restart_warning_auto_off"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
@@ -56,6 +58,7 @@ UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 REMOVAL_SNAPSHOT = Path("/ha-config/e2e-removal-snapshot.json")
 REMOTE_SNAPSHOT = Path("/ha-config/e2e-remote-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
+RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -486,6 +489,31 @@ def create_auto_off_light(client: HomeAssistantClient) -> str:
     )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Auto-off light creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def create_restart_warning_light(client: HomeAssistantClient) -> str:
+    """Create a light whose live warning stage spans a container restart."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Restart Warning",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 10,
+            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {
+                "effect_timeout": 0,
+                "warn_timeout": 10,
+                "warn_brightness": 20,
+            },
+            "advanced": {"entity_id": "e2e_restart_warning"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Restart-warning light creation failed: {result}")
     return result["result"]["entry_id"]
 
 
@@ -2161,6 +2189,139 @@ def run_auto_off_restart() -> None:
     print("PASS: auto-off switch persisted disabled and resumed countdown when enabled")
 
 
+def run_restart_warning_prepare() -> None:
+    """Enter a live warning stage and leave it active for a container restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    entry_id = create_restart_warning_light(client)
+    wait_entry_loaded(client, entry_id)
+    client.wait_state(VIRTUAL_RESTART_WARNING_LIGHT, lambda _state: True, "loaded")
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == 153
+        ),
+        "on at the configured automatic brightness",
+    )
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "countdown", VIRTUAL_RESTART_WARNING_LIGHT)
+    warning = client.wait_state(
+        VIRTUAL_RESTART_WARNING_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "warn"
+            and state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_brightness") == 153
+        ),
+        "in warning with its pre-warning snapshot",
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 51
+        ),
+        "showing warning brightness 51",
+    )
+    if warning["state"] != "on":
+        raise AssertionError(f"Warning-stage virtual light was not on: {warning}")
+
+    RESTART_WARNING_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print("PASS: live warning stage prepared for a container restart")
+
+
+def run_restart_warning_verify() -> None:
+    """Verify a restarted warning safely resumes and completes without relighting."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(RESTART_WARNING_SNAPSHOT.read_text())
+
+    wait_entry_loaded(client, snapshot["entry_id"])
+    restored = client.wait_state(
+        VIRTUAL_RESTART_WARNING_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("warning_active") is False
+            and state["attributes"].get("pre_warn_brightness") is None
+        ),
+        "restored active with warning state cleared",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == 153
+        ),
+        "restored to its pre-warning brightness",
+    )
+    if restored["attributes"].get("brightness") != 153:
+        raise AssertionError(f"Virtual brightness was not safely restored: {restored}")
+
+    warning = client.wait_state(
+        VIRTUAL_RESTART_WARNING_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "warn"
+            and state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_brightness") == 153
+        ),
+        "running a fresh warning after the restored timeout",
+        timeout=20,
+    )
+    if warning["state"] != "on":
+        raise AssertionError(f"Restored warning unexpectedly turned off: {warning}")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the restored timeout and warning",
+        timeout=15,
+    )
+    final = wait_machine_state(client, "idle", VIRTUAL_RESTART_WARNING_LIGHT)
+    if (
+        final["state"] != "off"
+        or final["attributes"].get("warning_active") is not False
+        or final["attributes"].get("pre_warn_brightness") is not None
+    ):
+        raise AssertionError(f"Restored warning did not finish cleanly: {final}")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off without relighting after the restored warning",
+        duration=2.5,
+    )
+    assert_state_stays(
+        client,
+        VIRTUAL_RESTART_WARNING_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+        ),
+        "idle after the restored warning",
+        duration=2.5,
+    )
+
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, VIRTUAL_RESTART_WARNING_LIGHT)
+    wait_entity_absent(client, RESTART_WARNING_SWITCH)
+    print("PASS: restarted warning restored safely, completed, and did not relight")
+
+
 def check_logs() -> None:
     """Fail for MoLight errors or tracebacks in all current/rotated HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
@@ -2199,6 +2360,8 @@ def main() -> None:
         "unavailable-sensors-schedule-first": (run_unavailable_sensors_schedule_first),
         "auto-off-prepare": run_auto_off_prepare,
         "auto-off-restart": run_auto_off_restart,
+        "restart-warning-prepare": run_restart_warning_prepare,
+        "restart-warning-verify": run_restart_warning_verify,
         "upgrade-prepare": run_upgrade_prepare,
         "upgrade-verify": run_upgrade_verification,
         "logs": check_logs,

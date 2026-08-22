@@ -58,6 +58,11 @@ compose run --rm runner python runner.py auto-off-prepare
 compose restart homeassistant
 compose run --rm runner python runner.py auto-off-restart
 
+echo "Restarting during a live warning stage..."
+compose run --rm runner python runner.py restart-warning-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py restart-warning-verify
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 
