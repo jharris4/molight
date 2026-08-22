@@ -2154,8 +2154,7 @@ def run_auto_off_restart() -> None:
     client.wait_state(
         VIRTUAL_AUTO_OFF_LIGHT,
         lambda state: (
-            state["state"] == "on"
-            and state["attributes"].get("auto_off_held") is True
+            state["state"] == "on" and state["attributes"].get("auto_off_held") is True
         ),
         "on with automatic turn-off still held after restart",
         timeout=WAIT_TIMEOUT,
@@ -2211,8 +2210,7 @@ def run_restart_warning_prepare() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on"
-            and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
         ),
         "on at the configured automatic brightness",
     )
@@ -2265,8 +2263,7 @@ def run_restart_warning_verify() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on"
-            and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
         ),
         "restored to its pre-warning brightness",
     )
