@@ -28,6 +28,7 @@ EVENT_BUTTON = "event.e2e_button"
 TARGET_SELECT = "select.e2e_target_mode"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
+VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 PROFILE_OUTSIDE = "outside_schedule"
@@ -313,12 +314,37 @@ def create_virtual_occupancy(client: HomeAssistantClient) -> str:
     return result["result"]["entry_id"]
 
 
-def light_settings(brightness: int) -> dict[str, Any]:
-    """Build one scheduled profile with occupancy and dynamic selection."""
+def create_virtual_illuminance(client: HomeAssistantClient) -> str:
+    """Create a MoLight illuminance threshold wrapping the simulated lux sensor."""
+    result = start_create(client, "illuminance")
+    expect_step(result, "illuminance")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 1,
+            "advanced": {"entity_id": "e2e_illuminance"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Illuminance creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
+def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
+    """Build one profile with deliberately distinct illuminance/door modes."""
     return {
         **EMPTY_LIGHT_SECTIONS,
         "light_timeout": 30,
-        "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+        "sensors": {
+            "occupancy_entity": VIRTUAL_OCCUPANCY,
+            "illuminance_entity": VIRTUAL_ILLUMINANCE,
+            "illuminance_mode": "control" if inside else "gate",
+            "door_entity": RAW_DOOR,
+            "door_mode": "open_close" if inside else "open",
+        },
         "behavior": {
             "auto_on_brightness": brightness,
             "turn_on_select_entity": TARGET_SELECT,
@@ -355,9 +381,13 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
         },
     )
     expect_step(result, "scheduled_light_outside")
-    result = submit_selection(client, client.continue_flow(result, light_settings(30)))
+    result = submit_selection(
+        client, client.continue_flow(result, light_settings(30, inside=False))
+    )
     expect_step(result, "scheduled_light_inside")
-    result = submit_selection(client, client.continue_flow(result, light_settings(80)))
+    result = submit_selection(
+        client, client.continue_flow(result, light_settings(80, inside=True))
+    )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Scheduled light creation failed: {result}")
     return result["result"]["entry_id"]
@@ -378,7 +408,9 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
         options=True,
     )
     expect_step(result, "scheduled_light_outside")
-    result = client.continue_flow(result, light_settings(30), options=True)
+    result = client.continue_flow(
+        result, light_settings(30, inside=False), options=True
+    )
     expect_step(result, "scheduled_light_selection")
     result = client.continue_flow(
         result,
@@ -389,7 +421,7 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
         options=True,
     )
     expect_step(result, "scheduled_light_inside")
-    result = client.continue_flow(result, light_settings(80), options=True)
+    result = client.continue_flow(result, light_settings(80, inside=True), options=True)
     expect_step(result, "scheduled_light_selection")
     result = client.continue_flow(
         result,
@@ -432,9 +464,14 @@ def wait_profile(client: HomeAssistantClient, profile: str) -> dict[str, Any]:
 
 
 def reset_trigger(client: HomeAssistantClient) -> None:
-    """Clear occupancy and force both virtual and physical lights off."""
+    """Return occupancy, door, illuminance, and lights to a dark/off baseline."""
     client.set_state(RAW_MOTION, "off")
+    client.set_state(RAW_DOOR, "off")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark"
+    )
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
 
@@ -458,6 +495,130 @@ def trigger_and_assert(
         lambda state: state["state"] == selection,
         f"selected as {selection}",
     )
+
+
+def wait_machine_state(client: HomeAssistantClient, machine_state: str) -> None:
+    """Wait for the virtual light's internal state-machine diagnostic."""
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == machine_state,
+        f"in {machine_state} state",
+    )
+
+
+def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
+    """Exercise profile-specific illuminance and door behavior live."""
+    reset_trigger(client)
+    wait_profile(client, PROFILE_OUTSIDE)
+
+    # Outside profile: gate-mode illuminance suppresses the initial occupancy
+    # activation and going dark admits it, but returning bright does not force
+    # an already-on light off.
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off while bright occupancy is gated",
+    )
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark"
+    )
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 76
+        ),
+        "on at the outside-profile brightness after becoming dark",
+    )
+    wait_machine_state(client, "occupied")
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "on under the outside profile's gate-only illuminance mode",
+    )
+
+    reset_trigger(client)
+    client.set_state(RAW_DOOR, "on")
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "door-lit")
+    wait_machine_state(client, "active")
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "active",
+        "timer-driven while the outside-profile door remains open",
+    )
+    reset_trigger(client)
+
+    # Inside profile: control-mode illuminance forces an occupied light off
+    # when it becomes bright, and open_close holds until closing starts the
+    # countdown. These contrasts prove the profile settings switch together.
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_profile(client, PROFILE_INSIDE)
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off while inside-profile occupancy is bright",
+    )
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark"
+    )
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 204
+        ),
+        "on at the inside-profile brightness after becoming dark",
+    )
+    wait_machine_state(client, "occupied")
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "forced off by inside-profile control illuminance",
+    )
+
+    reset_trigger(client)
+    client.set_state(RAW_DOOR, "on")
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "door-lit")
+    wait_machine_state(client, "occupied")
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "occupied",
+        "held while the inside-profile door remains open",
+    )
+    client.set_state(RAW_DOOR, "off")
+    wait_machine_state(client, "countdown")
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "counting down")
+    reset_trigger(client)
+
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+    wait_profile(client, PROFILE_OUTSIDE)
 
 
 def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
@@ -791,9 +952,11 @@ def run_primary() -> None:
 
     create_virtual_schedule(client)
     create_virtual_occupancy(client)
+    create_virtual_illuminance(client)
     light_entry_id = create_scheduled_light(client)
     assert_entry_loaded(client, light_entry_id)
     wait_profile(client, PROFILE_OUTSIDE)
+    run_illuminance_and_door_scenarios(client)
 
     client.call_service(
         "select",
@@ -887,8 +1050,8 @@ def run_container_restart_verification() -> None:
         "persisted on at brightness 204",
     )
     entries = client.molight_entries()
-    if len(entries) != 3 or any(entry.get("state") != "loaded" for entry in entries):
-        raise AssertionError(f"Expected three loaded MoLight entries: {entries}")
+    if len(entries) != 4 or any(entry.get("state") != "loaded" for entry in entries):
+        raise AssertionError(f"Expected four loaded MoLight entries: {entries}")
     print("PASS: state and entries survived a full container restart")
 
 
