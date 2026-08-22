@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import controller_for_entry
-from .const import LIGHT_MAIN, LIGHT_ON_OFF
+from .const import LIGHT_MAIN, LIGHT_ON_OFF, LIGHT_TIMER
 from .entity import TestbedEntity
 
 
@@ -141,6 +141,13 @@ async def async_setup_entry(
                 "light.e2e_on_off",
                 "E2E On/Off Light",
                 color_modes={ColorMode.ONOFF},
+            ),
+            TestbedLight(
+                controller,
+                LIGHT_TIMER,
+                "light.e2e_timer_target",
+                "E2E Timer Target",
+                color_modes={ColorMode.BRIGHTNESS},
             ),
         ]
     )

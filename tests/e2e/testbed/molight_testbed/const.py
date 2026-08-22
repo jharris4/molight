@@ -19,6 +19,7 @@ STORAGE_VERSION: Final = 1
 
 LIGHT_MAIN: Final = "light_main"
 LIGHT_ON_OFF: Final = "light_on_off"
+LIGHT_TIMER: Final = "light_timer"
 MOTION: Final = "motion"
 OCCUPANCY: Final = "occupancy"
 DOOR: Final = "door"
@@ -35,6 +36,11 @@ DEFAULT_STATES: Final = {
         "attributes": {"brightness": 0, "rgb_color": [255, 255, 255]},
     },
     LIGHT_ON_OFF: {"state": "off", "available": True, "attributes": {}},
+    LIGHT_TIMER: {
+        "state": "off",
+        "available": True,
+        "attributes": {"brightness": 0},
+    },
     MOTION: {"state": "off", "available": True, "attributes": {}},
     OCCUPANCY: {"state": "off", "available": True, "attributes": {}},
     DOOR: {"state": "off", "available": True, "attributes": {}},

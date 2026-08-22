@@ -541,7 +541,9 @@ in both directions without changing its entity ID, restarts Home Assistant
 core, restarts the full container with the same temporary `/config`, and
 checks the resulting logs. It also checks bright suppression, dark-arrival
 activation, and the distinct gate/control illuminance and open/open-close door
-behavior configured on the two scheduled profiles. Additional cold-start
+behavior configured on the two scheduled profiles. A dedicated short-lived
+light runs a real countdown through effect and warning stages to final off,
+then proves an occupancy retrigger cancels the sequence. Additional cold-start
 phases hold the physical light, occupancy source, and schedule source
 unavailable across restarts, recover the sensors in both orders without false
 transitions, and verify a late-reporting light updates the virtual light's

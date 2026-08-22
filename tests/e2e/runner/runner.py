@@ -20,6 +20,7 @@ REQUEST_TIMEOUT = 10
 WAIT_TIMEOUT = 90
 
 RAW_LIGHT = "light.e2e_main"
+RAW_TIMER_LIGHT = "light.e2e_timer_target"
 RAW_MOTION = "binary_sensor.e2e_motion"
 RAW_DOOR = "binary_sensor.e2e_door"
 RAW_ILLUMINANCE = "sensor.e2e_illuminance"
@@ -31,6 +32,7 @@ VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
 VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
+VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -256,6 +258,10 @@ class HomeAssistantClient:
         """Return live MoLight config entries from Home Assistant."""
         return self.request("GET", "/api/config/config_entries/entry?domain=molight")
 
+    def remove_entry(self, entry_id: str) -> Any:
+        """Remove a temporary config entry through Home Assistant's API."""
+        return self.request("DELETE", f"/api/config/config_entries/entry/{entry_id}")
+
 
 def expect_step(result: dict[str, Any], step_id: str) -> None:
     """Assert that a backend config flow reached the expected step."""
@@ -393,6 +399,35 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
     return result["result"]["entry_id"]
 
 
+def create_timeout_light(client: HomeAssistantClient) -> str:
+    """Create one short-lived light for a real timeout/warning sequence."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Timer",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "behavior": {
+                "false_detection_off_delay": 0,
+                "auto_on_brightness": 60,
+            },
+            "warning": {
+                "effect_timeout": 1,
+                "effect_brightness": 10,
+                "warn_timeout": 1,
+                "warn_brightness": 20,
+            },
+            "advanced": {"entity_id": "e2e_timer"},
+        },
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Timer light creation failed: {result}")
+    return result["result"]["entry_id"]
+
+
 def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
     """Complete the live options flow and prove the entry reloads in place."""
     result = client.start_flow(options_entry_id=entry_id)
@@ -497,10 +532,14 @@ def trigger_and_assert(
     )
 
 
-def wait_machine_state(client: HomeAssistantClient, machine_state: str) -> None:
+def wait_machine_state(
+    client: HomeAssistantClient,
+    machine_state: str,
+    entity_id: str = VIRTUAL_LIGHT,
+) -> dict[str, Any]:
     """Wait for the virtual light's internal state-machine diagnostic."""
-    client.wait_state(
-        VIRTUAL_LIGHT,
+    return client.wait_state(
+        entity_id,
         lambda state: state["attributes"].get("molight_state") == machine_state,
         f"in {machine_state} state",
     )
@@ -619,6 +658,114 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_profile(client, PROFILE_OUTSIDE)
+
+
+def wait_timer_stage(
+    client: HomeAssistantClient, stage: str, target_brightness: int
+) -> None:
+    """Observe one warning stage on both the virtual and physical lights."""
+    client.wait_state(
+        VIRTUAL_TIMER_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == stage
+            and state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_brightness") == 153
+        ),
+        f"in the {stage} stage with its pre-warning snapshot",
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == target_brightness
+        ),
+        f"showing the {stage} brightness {target_brightness}",
+    )
+
+
+def run_timeout_warning_scenario(
+    client: HomeAssistantClient, timer_entry_id: str
+) -> None:
+    """Run one real countdown/effect/warn/off sequence and cancel another."""
+    reset_trigger(client)
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
+        ),
+        "on at the configured automatic brightness",
+    )
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "countdown", VIRTUAL_TIMER_LIGHT)
+    wait_timer_stage(client, "effect", 26)
+    wait_timer_stage(client, "warn", 51)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    final = wait_machine_state(client, "idle", VIRTUAL_TIMER_LIGHT)
+    if final["attributes"].get("warning_active") is not False:
+        raise AssertionError(f"Warning flag remained set after final turn-off: {final}")
+
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
+        ),
+        "retrigger test initially on",
+    )
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    wait_timer_stage(client, "effect", 26)
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    restored = wait_machine_state(client, "occupied", VIRTUAL_TIMER_LIGHT)
+    if (
+        restored["attributes"].get("warning_active") is not False
+        or restored["attributes"].get("pre_warn_brightness") is not None
+    ):
+        raise AssertionError(f"Retrigger did not clear warning state: {restored}")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
+        ),
+        "restored to its pre-warning brightness",
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 153
+        ),
+        "on at restored brightness past the cancelled warning deadline",
+        duration=2.5,
+    )
+
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    client.remove_entry(timer_entry_id)
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if all(
+            entry["entry_id"] != timer_entry_id for entry in client.molight_entries()
+        ):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError("Temporary timer-light config entry was not removed")
+    print("PASS: live countdown, warning stages, final off, and retrigger cancellation")
 
 
 def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
@@ -957,6 +1104,9 @@ def run_primary() -> None:
     assert_entry_loaded(client, light_entry_id)
     wait_profile(client, PROFILE_OUTSIDE)
     run_illuminance_and_door_scenarios(client)
+    timer_entry_id = create_timeout_light(client)
+    assert_entry_loaded(client, timer_entry_id)
+    run_timeout_warning_scenario(client, timer_entry_id)
 
     client.call_service(
         "select",
