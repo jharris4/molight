@@ -1,0 +1,53 @@
+set_state:
+  name: Set simulated state
+  description: Set the persisted state and attributes of a testbed entity.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity: {}
+    state:
+      name: State
+      required: true
+      selector:
+        text: {}
+    attributes:
+      name: Attributes
+      selector:
+        object: {}
+
+set_available:
+  name: Set simulated availability
+  description: Make a testbed entity available or unavailable.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity: {}
+    available:
+      name: Available
+      required: true
+      selector:
+        boolean: {}
+
+fire_event:
+  name: Fire simulated event
+  description: Emit an event from a testbed event entity.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: event
+    event_type:
+      name: Event type
+      required: true
+      selector:
+        text: {}
+    attributes:
+      name: Attributes
+      selector:
+        object: {}

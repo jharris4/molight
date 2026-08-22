@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cd "$(dirname "$0")/.."
+
+COMPOSE_FILE="tests/e2e/compose.yaml"
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-browser.XXXXXX")"
+export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
+export MOLIGHT_E2E_BROWSER_ARTIFACT_DIR="$PWD/tests/e2e/artifacts/browser"
+export COMPOSE_PROJECT_NAME="molight-e2e-browser-$$"
+mkdir -p "$MOLIGHT_E2E_CONFIG_DIR"
+cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
+rm -rf "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+mkdir -p "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+
+compose() {
+    docker compose --file "$COMPOSE_FILE" "$@"
+}
+
+cleanup() {
+    status=$?
+    set +e
+    compose logs --no-color > "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR/docker-compose.log" 2>&1
+    compose down --volumes --remove-orphans >/dev/null 2>&1
+    if [ "$status" -eq 0 ]; then
+        rm -rf "$RUN_ROOT" "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+    else
+        cp -R "$MOLIGHT_E2E_CONFIG_DIR" "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR/ha-config"
+        echo ""
+        echo "Browser E2E failure artifacts retained at: $MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+        echo "The config contains the isolated test account; delete it after debugging."
+        echo "Disposable runtime retained at: $RUN_ROOT"
+    fi
+    exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+echo "Starting isolated Home Assistant (${MOLIGHT_E2E_HA_IMAGE:-2026.8.0})..."
+compose up --detach homeassistant
+
+echo "Preparing the browser fixture through Home Assistant's API..."
+compose run --rm runner python runner.py browser-prepare
+
+echo "Running the create/edit/convert browser smoke test..."
+compose run --rm browser npx playwright test \
+    --config tests/e2e/browser/playwright.config.mjs
+
+echo "Checking Home Assistant logs..."
+compose run --rm runner python runner.py logs
+
+echo "MoLight browser E2E smoke test passed."

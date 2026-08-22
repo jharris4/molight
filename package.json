@@ -17,6 +17,7 @@
     "dev:hass": "devcontainer exec --workspace-folder . bash scripts/develop",
     "test": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/pytest",
     "test:e2e": "bash scripts/e2e",
+    "test:e2e:browser": "bash scripts/e2e-browser",
     "test:e2e:upgrade": "bash scripts/e2e-upgrade",
     "lint": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check custom_components tests scripts",
     "lint:fix": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check --fix custom_components tests scripts",
@@ -25,6 +26,7 @@
     "release": "python3 scripts/release"
   },
   "devDependencies": {
-    "@devcontainers/cli": "^0.87.0"
+    "@devcontainers/cli": "^0.87.0",
+    "@playwright/test": "1.62.0"
   }
 }

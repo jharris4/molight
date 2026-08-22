@@ -25,6 +25,32 @@ jobs:
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
 
+  browser:
+    name: Browser smoke (HA current)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the pinned Playwright test package
+        run: npm ci
+      - name: Run the create/edit/convert browser smoke test
+        run: npm run test:e2e:browser
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-browser-e2e-failure
+          path: tests/e2e/artifacts/browser
+          if-no-files-found: ignore
+          retention-days: 7
+
   compatibility:
     name: Live E2E (${{ matrix.label }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

@@ -175,6 +175,23 @@ class HomeAssistantClient:
         )
         self.token = token["access_token"]
 
+    def finish_onboarding(self) -> None:
+        """Complete non-user onboarding steps for browser-driven scenarios."""
+        onboarding = {
+            item["step"]: item["done"]
+            for item in self.request("GET", "/api/onboarding")
+        }
+        if not onboarding.get("core_config", False):
+            self.request("POST", "/api/onboarding/core_config", {})
+        if not onboarding.get("integration", False):
+            self.request(
+                "POST",
+                "/api/onboarding/integration",
+                {"client_id": CLIENT_ID, "redirect_uri": CLIENT_ID},
+            )
+        if not onboarding.get("analytics", False):
+            self.request("POST", "/api/onboarding/analytics", {})
+
     def state(self, entity_id: str) -> dict[str, Any]:
         """Return one entity's current state object."""
         return self.request("GET", f"/api/states/{entity_id}")
@@ -1784,6 +1801,22 @@ def run_primary() -> None:
     print("PASS: live creation, behavior, options, conversion, and core restart")
 
 
+def run_browser_prepare() -> None:
+    """Prepare the minimal persisted fixture needed by the browser smoke test."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.finish_onboarding()
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    create_virtual_schedule(client)
+    client.wait_state(
+        VIRTUAL_SCHEDULE,
+        lambda state: state["state"] in {"on", "off"},
+        "available",
+    )
+    print("PASS: browser fixture and owner account are ready")
+
+
 def run_container_restart_verification() -> None:
     """Verify persisted fixture and MoLight state after a container restart."""
     client = HomeAssistantClient()
@@ -2044,6 +2077,7 @@ def main() -> None:
     """Dispatch the phase selected by the host orchestrator."""
     commands = {
         "primary": run_primary,
+        "browser-prepare": run_browser_prepare,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,

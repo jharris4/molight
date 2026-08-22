@@ -17,3 +17,18 @@ services:
       - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/ha-config
     depends_on:
       - homeassistant
+
+  browser:
+    image: mcr.microsoft.com/playwright:v1.62.0-noble
+    init: true
+    ipc: host
+    working_dir: /workspace
+    environment:
+      CI: "true"
+      MOLIGHT_BROWSER_HA_URL: http://homeassistant:8123
+      MOLIGHT_BROWSER_ARTIFACT_DIR: /artifacts
+    volumes:
+      - ../..:/workspace:ro
+      - ${MOLIGHT_E2E_BROWSER_ARTIFACT_DIR:-./artifacts/browser}:/artifacts
+    depends_on:
+      - homeassistant
