@@ -3702,7 +3702,53 @@ def run_primary() -> None:
     trigger_and_assert(client, pct(30), "Cozy", source="fixed")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
-    checkpoint("turn-on selection follows its source and falls back when unavailable")
+    # A source option the target does not offer also falls back to the fixed one.
+    client.set_state(SOURCE_SELECT, "Party")
+    trigger_and_assert(client, pct(30), "Cozy", source="fixed")
+    reset_trigger(client)
+    # With the target select unavailable no option can be resolved: MoLight
+    # warns (allow-listed) and still turns the lights on.
+    client.set_available(TARGET_SELECT, False)
+    client.wait_state(
+        TARGET_SELECT, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(30)
+        ),
+        "on without a resolvable turn-on selection",
+    )
+    client.set_available(TARGET_SELECT, True)
+    reset_trigger(client)
+    # A physical member turn-on applies no selection at all.
+    client.call_service(
+        "select", "select_option", {"entity_id": TARGET_SELECT, "option": "Night"}
+    )
+    client.wait_state(TARGET_SELECT, lambda state: state["state"] == "Night", "Night")
+    selection_before = client.state(VIRTUAL_LIGHT)["attributes"].get(
+        "last_turn_on_selection_option"
+    )
+    client.set_state(RAW_LIGHT, "on", {"brightness": 100})
+    wait_machine_state(client, "active")
+    assert_state_stays(
+        client,
+        TARGET_SELECT,
+        lambda state: state["state"] == "Night",
+        "untouched: a wall turn-on applies no selection",
+    )
+    if (
+        client.state(VIRTUAL_LIGHT)["attributes"].get("last_turn_on_selection_option")
+        != selection_before
+    ):
+        raise AssertionError("A physical turn-on was recorded as a selection turn-on")
+    reset_trigger(client)
+    checkpoint(
+        "turn-on selection follows its source, falls back when the source is "
+        "unavailable or unmatched, warns without a target, ignores wall turn-ons"
+    )
     client.call_service(
         "select",
         "select_option",
@@ -4367,6 +4413,8 @@ ALLOWED_WARNINGS = (
     "We found a custom integration molight",
     # Deliberately provoked by the reference-cleanup scenario.
     "has no schedule; using outside-schedule settings",
+    # Deliberately provoked by the turn-on selection scenario (target unavailable).
+    "Unable to resolve a turn-on selection option",
 )
 
 
