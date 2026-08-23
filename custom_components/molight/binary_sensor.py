@@ -22,7 +22,12 @@ from homeassistant.components.binary_sensor import (
     ENTITY_ID_FORMAT,
     BinarySensorEntity,
 )
-from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import (
+    ATTR_RESTORED,
+    EVENT_HOMEASSISTANT_STARTED,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -382,6 +387,13 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._cycle_start_lot: datetime | None = None
         self._false_count: int = 0
         self._last_clear_false: bool = False
+        # A restored "on" that no constituent confirmed at seed time: a
+        # maintain sensor showing presence as the rest of startup unfolds
+        # may still carry it across (see _seed_state).
+        self._restored_carry = False
+        self._startup_done = True
+        self._unreported_maintain: set[str] = set()
+        self._unsub_started: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to all constituent sensors."""
@@ -415,9 +427,49 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             # at boot, resetting last_changed — and it would wrongly start
             # occupancy on a mid-run options reload.)
             self._attr_is_on = True
+        elif restored_on:
+            # Constituents are separate config entries that set up
+            # concurrently, so a maintain sensor may still be HA's restored
+            # placeholder here — or, for a virtual sensor whose own source has
+            # not loaded, a provisional "off". Let a maintain sensor that
+            # shows presence before startup finishes, or on its first sighting
+            # after it, carry the restored occupancy instead (see
+            # _handle_occupancy_change). Seeding off meanwhile is harmless:
+            # dependent lights adopt with a full timer and re-evaluate.
+            self._restored_carry = True
+            self._startup_done = self.hass.state is CoreState.running
+            self._unreported_maintain = {
+                e for e in self._maintain_sensors if self._unreported(e)
+            }
+            if not self._startup_done:
+                self._unsub_started = self.hass.bus.async_listen_once(
+                    EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
+                )
         if self._attr_is_on:
             self._cycle_start_lot = self._latest_occupied_time
         self.async_write_ha_state()
+
+    @callback
+    def _on_startup_done(self, _event: Event) -> None:
+        # A fired one-time listener is already gone; drop our reference so
+        # removal doesn't try to unsubscribe it again.
+        self._unsub_started = None
+        self._startup_done = True
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Drop the startup listener if HA has not finished starting yet."""
+        await super().async_will_remove_from_hass()
+        if self._unsub_started is not None:
+            self._unsub_started()
+            self._unsub_started = None
+
+    def _unreported(self, entity_id: str) -> bool:
+        """Return True while an entity has no state or only a restored placeholder."""
+        state = self.hass.states.get(entity_id)
+        return state is None or (
+            state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            and bool(state.attributes.get(ATTR_RESTORED))
+        )
 
     @callback
     def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
@@ -425,6 +477,17 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             self._reevaluate_on_dropout(event)
             return
         new_state = event.data["new_state"]
+        entity_id = event.data["entity_id"]
+        # A maintain sensor showing presence while startup is still under
+        # way, or on its first sighting after that, carries a restored "on"
+        # across (see _seed_state); any later report cannot start occupancy.
+        carry = (
+            self._restored_carry
+            and entity_id in self._maintain_sensors
+            and new_state.state == "on"
+            and (not self._startup_done or entity_id in self._unreported_maintain)
+        )
+        self._unreported_maintain.discard(entity_id)
 
         if new_state.state != "on":
             lot_str = new_state.attributes.get("latest_occupied_time")
@@ -444,11 +507,16 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = True
         elif self._attr_is_on and self._any_on(self._maintain_sensors):
             pass
+        elif carry:
+            self._attr_is_on = True
         else:
             self._attr_is_on = False
 
         if not was_on and self._attr_is_on:
             self._cycle_start_lot = self._latest_occupied_time
+            # Occupancy has (re)started since the restart; the restored
+            # evidence is spent.
+            self._restored_carry = False
         elif was_on and not self._attr_is_on:
             self._last_clear_false = self._latest_occupied_time == self._cycle_start_lot
             if self._last_clear_false:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, HomeAssistant, State
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -747,6 +748,120 @@ async def test_combined_seeds_on_from_restored_state_and_maintain(
     await hass.async_block_till_done()
 
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_combined_restored_on_waits_for_a_late_maintain_constituent(
+    hass: HomeAssistant,
+) -> None:
+    """A maintain constituent still loading at seed time decides on its first report.
+
+    Constituents are separate config entries that set up concurrently, so the
+    restored "on" must not be lost just because the maintain sensor was still
+    HA's restored placeholder when the combined sensor seeded.
+    """
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
+    hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    # Held by the maintain sensor like any carried-over occupancy.
+    hass.states.async_set("binary_sensor.m2", "off")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    # The restored evidence is spent: a later maintain on cannot start.
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_restored_on_carried_by_maintain_during_startup(
+    hass: HomeAssistant,
+) -> None:
+    """A maintain sensor that seeds off (its own source still loading) and turns
+    on before startup finishes carries a restored "on"; after startup it cannot."""
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.set_state(CoreState.starting)
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m2", "off")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_restored_on_not_carried_by_maintain_after_startup(
+    hass: HomeAssistant,
+) -> None:
+    """Once HA has started, a reported maintain sensor turning on cannot start."""
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.set_state(CoreState.starting)
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_late_maintain_reporting_off_does_not_carry(
+    hass: HomeAssistant,
+) -> None:
+    """A late constituent whose first report is off ends the restored occupancy."""
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
+    hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m2", "off")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_late_maintain_without_restored_on_cannot_start(
+    hass: HomeAssistant,
+) -> None:
+    """Without restored evidence a late maintain sensor still cannot start."""
+    hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.m2", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
 
 
 @pytest.mark.asyncio

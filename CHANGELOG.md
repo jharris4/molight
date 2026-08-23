@@ -102,7 +102,10 @@ longer needs a custom repository.
   the dropout moment so dependent lights run a normal countdown.
 - Maintained occupancy is seeded from the restored state rather than inferred
   from an on-duration guess, and a `last_on_time` restored alongside an `off`
-  state is discarded.
+  state is discarded. That carry-over no longer depends on which entry loads
+  first: a maintain sensor that was still loading when the combined sensor
+  seeded — or still waiting for its own source — carries the restored occupancy
+  when it shows presence before startup finishes, or on its first sighting.
 - Lights no longer snap off seconds after a restart while someone is still in
   the room. Occupancy in progress at boot — or first provided by a source
   integration that loads late, even well after Home Assistant reports running —
