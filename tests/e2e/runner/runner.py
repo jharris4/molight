@@ -376,6 +376,10 @@ class HomeAssistantClient:
             data,
         )
 
+    def abort_flow(self, result: dict[str, Any]) -> None:
+        """Abandon an in-progress config flow left on a rejected form."""
+        self.request("DELETE", f"/api/config/config_entries/flow/{result['flow_id']}")
+
     def molight_entries(self) -> list[dict[str, Any]]:
         """Return live MoLight config entries from Home Assistant."""
         return self.request("GET", "/api/config/config_entries/entry?domain=molight")
@@ -481,6 +485,7 @@ def create_virtual_occupancy(
     name: str = "E2E Occupancy",
     source: str = RAW_MOTION,
     entity_id: str = "e2e_occupancy",
+    timeout: int = 1,
 ) -> str:
     """Create a MoLight occupancy sensor wrapping a simulated motion sensor."""
     return create_entry(
@@ -489,7 +494,7 @@ def create_virtual_occupancy(
         {
             "name": name,
             "occupancy_sensor": source,
-            "occupancy_timeout": 1,
+            "occupancy_timeout": timeout,
             "advanced": {
                 "false_detection_grace": 0,
                 "clear_on_unavailable_timeout": 1,
@@ -929,6 +934,130 @@ def wait_machine_state(
         entity_id,
         lambda state: state["attributes"].get("molight_state") == machine_state,
         f"in {machine_state} state",
+    )
+
+
+def expect_rejection(
+    client: HomeAssistantClient, result: dict[str, Any], code: str
+) -> None:
+    """Assert a submitted form came back with one error code, then abandon it."""
+    errors = result.get("errors") or {}
+    if result.get("type") != "form" or code not in errors.values():
+        raise AssertionError(f"Expected the form to reject with {code!r}: {result}")
+    client.abort_flow(result)
+
+
+def submit_create(
+    client: HomeAssistantClient, entity_type: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Submit one single-form creation and return the raw flow result."""
+    result = start_create(client, entity_type)
+    expect_step(result, entity_type)
+    return client.continue_flow(result, payload)
+
+
+def run_config_flow_rejections(client: HomeAssistantClient) -> None:
+    """The forms reject settings the runtime could not honour."""
+    on_off_light = {
+        "name": "E2E Rejected",
+        "lights": [RAW_MULTI_ON_OFF],
+        "light_timeout": 30,
+        **EMPTY_LIGHT_SECTIONS,
+        "advanced": {},
+    }
+    for behavior, code in (
+        ({"auto_on_rgb_color": [255, 0, 0]}, "color_unsupported"),
+        ({"auto_on_brightness": 50}, "brightness_unsupported"),
+        ({"auto_on_transition": 1}, "transition_unsupported"),
+    ):
+        result = submit_create(client, "light", {**on_off_light, "behavior": behavior})
+        expect_rejection(client, result, code)
+
+    result = submit_create(
+        client,
+        "illuminance",
+        {
+            "name": "E2E Rejected Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 10,
+            "advanced": {},
+        },
+    )
+    expect_rejection(client, result, "hysteresis_too_large")
+
+    slow_entry_id = create_virtual_occupancy(
+        client, "E2E Slow Occupancy", RAW_REMOVAL_MOTION, "e2e_slow_occupancy", 30
+    )
+    assert_entry_loaded(client, slow_entry_id)
+    result = submit_create(
+        client,
+        "light",
+        {
+            "name": "E2E Rejected",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": "binary_sensor.e2e_slow_occupancy"},
+            "advanced": {},
+        },
+    )
+    expect_rejection(client, result, "light_timeout_too_short")
+    client.remove_entry(slow_entry_id)
+    wait_entry_removed(client, slow_entry_id, "Temporary slow occupancy")
+
+    result = submit_create(
+        client,
+        "light",
+        {
+            "name": "E2E Rejected",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_scheduled"},
+        },
+    )
+    expect_rejection(client, result, "entity_id_conflict")
+
+    result = submit_create(
+        client,
+        "light",
+        {
+            "name": "E2E Rejected",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"schedule_entity": RAW_DOOR, "schedule_mode": "gate"},
+            "advanced": {},
+        },
+    )
+    expect_rejection(client, result, "schedule_entity_not_schedule")
+
+    remote = {
+        "name": "E2E Rejected Remote",
+        "target_lights": [VIRTUAL_LIGHT],
+        "dim_step": 20,
+        **EMPTY_REMOTE_SECTIONS,
+    }
+    for bindings, code in (
+        ({}, "buttons_required"),
+        (
+            {"preset_1": {"preset_1_buttons_single": [EVENT_BUTTON]}},
+            "preset_values_required",
+        ),
+        (
+            {
+                "turn_on": {"on_buttons_single": [EVENT_BUTTON]},
+                "turn_off": {"off_buttons_single": [EVENT_BUTTON]},
+            },
+            "button_click_conflict",
+        ),
+    ):
+        result = submit_create(client, "remote", {**remote, **bindings})
+        expect_rejection(client, result, code)
+    checkpoint(
+        "forms reject unusable color/brightness/fade, wide hysteresis, short "
+        "timeouts, id clashes, non-schedule pickers, and bad remote bindings"
     )
 
 
@@ -2970,6 +3099,7 @@ def run_primary() -> None:
     wait_profile(client, PROFILE_OUTSIDE)
     checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
     run_inverted_schedule_scenario(client)
+    run_config_flow_rejections(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     run_sensor_blip_scenarios(client)
