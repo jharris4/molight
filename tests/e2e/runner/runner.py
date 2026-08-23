@@ -130,6 +130,22 @@ class HomeAssistantClient:
                 time.sleep(0.5)
         raise TimeoutError(f"Home Assistant did not become ready: {last_error}")
 
+    def boot_marker(self) -> str:
+        """Return a value that changes whenever Home Assistant core boots."""
+        # zone.home is written fresh at startup, so its last_changed is the boot time.
+        return self.state("zone.home")["last_changed"]
+
+    def restart_core(self) -> None:
+        """Restart core and wait until a new boot is serving requests."""
+        marker = self.boot_marker()
+        self.call_service("homeassistant", "restart", {})
+        self.wait_state(
+            "zone.home",
+            lambda state: state["last_changed"] != marker,
+            "rebooted after the core restart",
+            timeout=WAIT_TIMEOUT,
+        )
+
     def authenticate(self) -> None:
         """Create the isolated owner or log back in after a restart."""
         onboarding = self.request("GET", "/api/onboarding")
@@ -1820,9 +1836,7 @@ def run_primary() -> None:
     remote_entry_id = prepare_current_remote(client)
     prepare_multi_light_restart(client)
 
-    client.call_service("homeassistant", "restart", {})
-    time.sleep(1)
-    client.wait_ready()
+    client.restart_core()
     client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: (
