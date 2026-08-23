@@ -71,6 +71,8 @@ UPGRADE_ILLUMINANCE = "binary_sensor.upgrade_illuminance"
 UPGRADE_SCHEDULE = "binary_sensor.upgrade_schedule"
 UPGRADE_LIGHT = "light.upgrade_gated"
 UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
+UPGRADE_LEGACY_LIGHT = "light.upgrade_colored_on_off"
+UPGRADE_LEGACY_ILLUMINANCE = "binary_sensor.upgrade_wide_hysteresis"
 UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 FIXTURES_SNAPSHOT = Path("/ha-config/e2e-fixtures-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
@@ -388,9 +390,12 @@ class HomeAssistantClient:
             data,
         )
 
-    def abort_flow(self, result: dict[str, Any]) -> None:
-        """Abandon an in-progress config flow left on a rejected form."""
-        self.request("DELETE", f"/api/config/config_entries/flow/{result['flow_id']}")
+    def abort_flow(self, result: dict[str, Any], *, options: bool = False) -> None:
+        """Abandon an in-progress config or options flow left on a rejected form."""
+        kind = "options/" if options else ""
+        self.request(
+            "DELETE", f"/api/config/config_entries/{kind}flow/{result['flow_id']}"
+        )
 
     def molight_entries(self) -> list[dict[str, Any]]:
         """Return live MoLight config entries from Home Assistant."""
@@ -950,13 +955,18 @@ def wait_machine_state(
 
 
 def expect_rejection(
-    client: HomeAssistantClient, result: dict[str, Any], code: str
+    client: HomeAssistantClient,
+    result: dict[str, Any],
+    code: str | tuple[str, ...],
+    *,
+    options: bool = False,
 ) -> None:
-    """Assert a submitted form came back with one error code, then abandon it."""
+    """Assert a submitted form came back with an expected error, then abandon it."""
+    codes = (code,) if isinstance(code, str) else code
     errors = result.get("errors") or {}
-    if result.get("type") != "form" or code not in errors.values():
-        raise AssertionError(f"Expected the form to reject with {code!r}: {result}")
-    client.abort_flow(result)
+    if result.get("type") != "form" or not any(c in errors.values() for c in codes):
+        raise AssertionError(f"Expected the form to reject with {codes!r}: {result}")
+    client.abort_flow(result, options=options)
 
 
 def submit_create(
@@ -3317,6 +3327,96 @@ def assert_upgrade_turn_on(client: HomeAssistantClient) -> None:
     )
 
 
+LEGACY_LIGHT_SETTINGS = {
+    "name": "Upgrade Colored On-Off",
+    "lights": [RAW_MULTI_ON_OFF],
+    "light_timeout": 30,
+    **EMPTY_LIGHT_SECTIONS,
+    "behavior": {"auto_on_brightness": 50, "auto_on_rgb_color": [255, 0, 0]},
+}
+LEGACY_ILLUMINANCE_SETTINGS = {
+    "name": "Upgrade Wide Hysteresis",
+    "illuminance_sensor": RAW_ILLUMINANCE,
+    "illuminance_threshold": 10,
+    "illuminance_hysteresis": 10,
+}
+
+
+def create_legacy_entries(client: HomeAssistantClient) -> dict[str, str]:
+    """Create, on the previous release, entries the new forms would reject."""
+    return {
+        "legacy_light": create_entry(
+            client,
+            "light",
+            {
+                **LEGACY_LIGHT_SETTINGS,
+                "advanced": {"entity_id": "upgrade_colored_on_off"},
+            },
+            "Upgrade colored on/off light",
+        ),
+        "legacy_illuminance": create_entry(
+            client,
+            "illuminance",
+            {
+                **LEGACY_ILLUMINANCE_SETTINGS,
+                "advanced": {"entity_id": "upgrade_wide_hysteresis"},
+            },
+            "Upgrade wide-hysteresis illuminance",
+        ),
+    }
+
+
+def verify_legacy_entries(
+    client: HomeAssistantClient, entry_ids: dict[str, str]
+) -> None:
+    """Rejected-by-new-forms entries still load and run; their next edit is gated."""
+    client.call_service("light", "turn_on", {"entity_id": UPGRADE_LEGACY_LIGHT})
+    client.wait_state(
+        RAW_MULTI_ON_OFF,
+        lambda state: state["state"] == "on",
+        "on: the legacy entry with an unusable color still drives its light",
+    )
+    client.call_service("light", "turn_off", {"entity_id": UPGRADE_LEGACY_LIGHT})
+    client.wait_state(RAW_MULTI_ON_OFF, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        UPGRADE_LEGACY_ILLUMINANCE,
+        lambda state: state["state"] in ("on", "off"),
+        "loaded despite its now-rejected hysteresis",
+    )
+
+    result = client.start_flow(options_entry_id=entry_ids["legacy_light"])
+    expect_step(result, "light")
+    result = client.continue_flow(result, LEGACY_LIGHT_SETTINGS, options=True)
+    # An on/off light can apply neither the brightness nor the color it kept.
+    expect_rejection(
+        client, result, ("brightness_unsupported", "color_unsupported"), options=True
+    )
+    result = client.start_flow(options_entry_id=entry_ids["legacy_light"])
+    result = client.continue_flow(
+        result, {**LEGACY_LIGHT_SETTINGS, "behavior": {}}, options=True
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Corrected legacy light options did not save: {result}")
+
+    result = client.start_flow(options_entry_id=entry_ids["legacy_illuminance"])
+    expect_step(result, "illuminance")
+    result = client.continue_flow(result, LEGACY_ILLUMINANCE_SETTINGS, options=True)
+    expect_rejection(client, result, "hysteresis_too_large", options=True)
+    result = client.start_flow(options_entry_id=entry_ids["legacy_illuminance"])
+    result = client.continue_flow(
+        result,
+        {**LEGACY_ILLUMINANCE_SETTINGS, "illuminance_hysteresis": 1},
+        options=True,
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(
+            f"Corrected legacy illuminance options did not save: {result}"
+        )
+    print(
+        "PASS: legacy entries the new forms reject still load; edits gate until fixed"
+    )
+
+
 def run_upgrade_prepare() -> None:
     """Create and exercise entries while the previous release is installed."""
     client = HomeAssistantClient()
@@ -3331,6 +3431,7 @@ def run_upgrade_prepare() -> None:
         "schedule": create_upgrade_schedule(client),
         "light": create_and_edit_upgrade_light(client),
         "remote": create_upgrade_remote(client),
+        **create_legacy_entries(client),
     }
     for entry_id in entry_ids.values():
         assert_entry_loaded(client, entry_id)
@@ -3435,6 +3536,7 @@ def run_upgrade_verification() -> None:
         lambda state: "active_settings" not in state["attributes"],
         "regular after conversion round trip",
     )
+    verify_legacy_entries(client, entry_ids)
     print("PASS: previous-release entries, ids, options, behavior, and conversion")
 
 
