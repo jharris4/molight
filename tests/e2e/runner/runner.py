@@ -1858,11 +1858,12 @@ def run_upgrade_verification() -> None:
     )
     client.set_state(RAW_MOTION, "on")
     client.wait_state(UPGRADE_COMBINED, lambda state: state["state"] == "on", "on")
-    time.sleep(1)
-    if client.state(RAW_LIGHT)["state"] != "off":
-        raise AssertionError(
-            "Saved illuminance gate did not suppress automatic turn-on"
-        )
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off while bright: the saved illuminance gate suppresses automatic turn-on",
+    )
     reset_upgrade_light(client)
 
     client.set_state(RAW_DOOR, "on")
@@ -2158,17 +2159,21 @@ def run_unavailable_light_recovery() -> None:
     client.wait_state(
         RAW_LIGHT, lambda state: state["state"] == "unavailable", "unavailable"
     )
-    virtual = client.wait_state(
+    client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: state["state"] == "off",
         "off after unavailable-member startup",
         timeout=WAIT_TIMEOUT,
     )
-    modes = virtual["attributes"].get("supported_color_modes", [])
-    if "hs" in modes:
-        raise AssertionError(
-            f"Virtual light advertised color before its member reported: {virtual}"
-        )
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and "hs" not in state["attributes"].get("supported_color_modes", [])
+        ),
+        "off without advertising color before its member reports",
+    )
 
     client.set_available(RAW_LIGHT, True)
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "recovered off")
@@ -2264,7 +2269,12 @@ def run_unavailable_sensors_motion_first() -> None:
         lambda state: state["state"] == "unavailable",
         "unavailable",
     )
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "still on")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "on while both sources drop out again (no false turn-off)",
+    )
     print("PASS: motion-first recovery caused no replay or false schedule boundary")
 
 
