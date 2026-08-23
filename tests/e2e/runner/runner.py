@@ -53,6 +53,8 @@ LATE_OCCUPANCY = "binary_sensor.e2e_late_occupancy"
 LATE_LIGHT = "light.e2e_late"
 EFFECT_LIGHT = "light.e2e_effect"
 AUTO_COLOR_LIGHT = "light.e2e_auto_color"
+DUSK_LIGHT = "light.e2e_dusk"
+DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -4834,6 +4836,149 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
     print("PASS: auto-on colour applied to automatic turn-ons only")
 
 
+def set_dusk_lux(client: HomeAssistantClient, bright: bool) -> None:
+    """Drive the dusk scenario's illuminance sensor bright or dark."""
+    client.set_state(RAW_ILLUMINANCE, 50 if bright else 5)
+    client.wait_state(
+        DUSK_ILLUMINANCE,
+        lambda state: state["state"] == ("on" if bright else "off"),
+        "bright" if bright else "dark",
+    )
+
+
+def create_dusk_light(client: HomeAssistantClient, *, occupancy: bool) -> str:
+    """Create the dusk light, with or without an occupancy input."""
+    sensors: dict[str, Any] = {
+        "illuminance_entity": DUSK_ILLUMINANCE,
+        "illuminance_mode": "control",
+    }
+    if occupancy:
+        sensors["occupancy_entity"] = VIRTUAL_TIMER_OCCUPANCY
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Dusk",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": sensors,
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_dusk"},
+        },
+        "Dusk light",
+    )
+
+
+def expect_dark_edge_relight(client: HomeAssistantClient) -> None:
+    """Bright forces the on light off; dark re-lights it for the remainder only."""
+    assert_state_stays(
+        client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=2
+    )
+    set_dusk_lux(client, True)
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "forced off by brightness"
+    )
+    wait_machine_state(client, "idle", DUSK_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off",
+        duration=1.5,
+    )
+    set_dusk_lux(client, False)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "re-lit by going dark while the countdown still had time left",
+    )
+    client.wait_state(
+        DUSK_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_on_illuminance") is not None
+            and state["attributes"].get("molight_state") == "countdown"
+        ),
+        "counting down the remainder, stamped as an illuminance turn-on",
+    )
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "on for the remainder of the original countdown",
+        duration=3,
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off at the original deadline",
+        timeout=10,
+    )
+    wait_machine_state(client, "idle", DUSK_LIGHT)
+    # With that countdown spent, another dark edge leaves the room dark.
+    set_dusk_lux(client, True)
+    set_dusk_lux(client, False)
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off: no remaining countdown to resume",
+        duration=2.5,
+    )
+
+
+def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
+    """Going dark re-lights a room only for a countdown it still has left."""
+    sensor_entry_id = create_entry(
+        client,
+        "illuminance",
+        {
+            "name": "E2E Dusk Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 0,
+            "advanced": {"entity_id": "e2e_dusk_illuminance"},
+        },
+        "Dusk illuminance",
+    )
+    assert_entry_loaded(client, sensor_entry_id)
+
+    # Without an occupancy input the remainder is anchored to the light's own
+    # last turn-on: a never-lit room stays dark, a recently lit one resumes.
+    light_entry_id = create_dusk_light(client, occupancy=False)
+    assert_entry_loaded(client, light_entry_id)
+    client.wait_state(DUSK_LIGHT, lambda state: state["state"] == "off", "off")
+    set_dusk_lux(client, True)
+    set_dusk_lux(client, False)
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off: going dark does not light a room with no on-history",
+        duration=2.5,
+    )
+    if client.state(DUSK_LIGHT)["attributes"].get("last_on_illuminance") is not None:
+        raise AssertionError("A never-lit room was stamped with an illuminance turn-on")
+    client.call_service("light", "turn_on", {"entity_id": DUSK_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on by hand")
+    wait_machine_state(client, "active", DUSK_LIGHT)
+    expect_dark_edge_relight(client)
+    remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
+
+    # With an occupancy input the remainder is anchored to latest_occupied_time.
+    light_entry_id = create_dusk_light(client, occupancy=True)
+    assert_entry_loaded(client, light_entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", DUSK_LIGHT)
+    expect_dark_edge_relight(client)
+    client.set_state(RAW_ILLUMINANCE, 5)
+    remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
+    remove_entry_and_entity(client, sensor_entry_id, DUSK_ILLUMINANCE)
+    print("PASS: going dark re-lights only a room with countdown left, stamped as such")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -4868,6 +5013,7 @@ def run_scenarios() -> None:
     run_fast_physical_scenarios(client)
     run_effect_color_scenarios(client)
     run_auto_on_color_scenario(client)
+    run_dark_arrival_scenarios(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
