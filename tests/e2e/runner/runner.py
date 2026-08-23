@@ -92,6 +92,19 @@ EMPTY_REMOTE_SECTIONS = {
 class ApiError(RuntimeError):
     """Describe a failed Home Assistant API request."""
 
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def poll_tolerates(err: Exception, *, missing_ok: bool) -> bool:
+    """Whether a polling loop should ride out this request error."""
+    if not isinstance(err, ApiError):
+        return True  # connection refused or timed out while HA restarts
+    if err.status is not None and err.status >= 500:
+        return True
+    return missing_ok and err.status == 404
+
 
 class HomeAssistantClient:
     """Small standard-library client for HA REST and config-flow APIs."""
@@ -128,7 +141,9 @@ class HomeAssistantClient:
                 payload = response.read()
         except error.HTTPError as err:
             detail = err.read().decode(errors="replace")
-            raise ApiError(f"{method} {path} returned {err.code}: {detail}") from err
+            raise ApiError(
+                f"{method} {path} returned {err.code}: {detail}", err.code
+            ) from err
         if not payload:
             return None
         return json.loads(payload)
@@ -244,16 +259,20 @@ class HomeAssistantClient:
         """Poll an entity until a semantic assertion becomes true."""
         deadline = time.monotonic() + timeout
         last: dict[str, Any] | None = None
+        last_error: Exception | None = None
         while time.monotonic() < deadline:
             try:
                 last = self.state(entity_id)
                 if predicate(last):
                     return last
-            except (ApiError, error.URLError, TimeoutError):
-                pass
+            except (ApiError, error.URLError, TimeoutError) as err:
+                if not poll_tolerates(err, missing_ok=True):
+                    raise
+                last_error = err
             time.sleep(0.2)
         raise AssertionError(
             f"Timed out waiting for {entity_id} to be {description}; last={last}"
+            + (f"; last error: {last_error}" if last_error else "")
         )
 
     def call_service(self, domain: str, service: str, data: dict[str, Any]) -> Any:
@@ -1477,7 +1496,7 @@ def wait_entity_absent(
         try:
             last = client.state(entity_id)
         except ApiError as err:
-            if "returned 404" in str(err):
+            if err.status == 404:
                 return
             raise
         time.sleep(0.2)
@@ -1612,7 +1631,13 @@ def assert_state_stays(
     deadline = time.monotonic() + duration
     last: dict[str, Any] | None = None
     while time.monotonic() < deadline:
-        last = client.state(entity_id)
+        try:
+            last = client.state(entity_id)
+        except (ApiError, error.URLError, TimeoutError) as err:
+            if not poll_tolerates(err, missing_ok=False):
+                raise
+            time.sleep(0.2)
+            continue
         if not predicate(last):
             raise AssertionError(
                 f"Expected {entity_id} to stay {description}; observed {last}"
