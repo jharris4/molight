@@ -17,6 +17,7 @@ from .const import (
     ATTR_AVAILABLE,
     ATTR_BEHAVIOR,
     ATTR_EVENT_TYPE,
+    ATTR_SECONDS,
     DATA_CONTROLLER,
     DEFAULT_STATES,
     DOMAIN,
@@ -24,6 +25,7 @@ from .const import (
     SERVICE_FIRE_EVENT,
     SERVICE_SET_AVAILABLE,
     SERVICE_SET_BEHAVIOR,
+    SERVICE_SET_STARTUP_DELAY,
     SERVICE_SET_STATE,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -50,6 +52,12 @@ SET_BEHAVIOR_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required(ATTR_BEHAVIOR): dict,
+    }
+)
+SET_STARTUP_DELAY_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_SECONDS): vol.Coerce(float),
     }
 )
 FIRE_EVENT_SCHEMA = vol.Schema(
@@ -123,6 +131,21 @@ class TestbedController:
         await self.async_save()
         entity.async_write_ha_state()
 
+    async def async_set_startup_delay(self, entity_id: str, seconds: float) -> None:
+        """Hold one entity back for this long at the next boot, then add it."""
+        entity = self.entities.get(entity_id)
+        if entity is None:
+            raise ValueError(f"Unknown testbed entity: {entity_id}")
+        entity.record["startup_delay"] = seconds
+        await self.async_save()
+
+    def take_startup_delay(self, testbed_key: str) -> float:
+        """Consume a pending startup delay for a record (one-shot)."""
+        delay = float(self.states[testbed_key].pop("startup_delay", 0) or 0)
+        if delay:
+            self.hass.async_create_task(self.async_save())
+        return delay
+
     def fire_event(
         self, entity_id: str, event_type: str, attributes: dict[str, Any]
     ) -> None:
@@ -172,6 +195,11 @@ async def async_setup_entry(
             call.data[ATTR_ENTITY_ID], call.data[ATTR_BEHAVIOR]
         )
 
+    async def _set_startup_delay(call: ServiceCall) -> None:
+        await controller.async_set_startup_delay(
+            call.data[ATTR_ENTITY_ID], call.data[ATTR_SECONDS]
+        )
+
     @callback
     def _fire_event(call: ServiceCall) -> None:
         controller.fire_event(
@@ -193,6 +221,12 @@ async def async_setup_entry(
         DOMAIN, SERVICE_SET_BEHAVIOR, _set_behavior, schema=SET_BEHAVIOR_SCHEMA
     )
     hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_STARTUP_DELAY,
+        _set_startup_delay,
+        schema=SET_STARTUP_DELAY_SCHEMA,
+    )
+    hass.services.async_register(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -208,6 +242,7 @@ async def async_unload_entry(
     hass.services.async_remove(DOMAIN, SERVICE_SET_STATE)
     hass.services.async_remove(DOMAIN, SERVICE_SET_AVAILABLE)
     hass.services.async_remove(DOMAIN, SERVICE_SET_BEHAVIOR)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_STARTUP_DELAY)
     hass.services.async_remove(DOMAIN, SERVICE_FIRE_EVENT)
     hass.data[DOMAIN].pop(entry.entry_id)
     return True

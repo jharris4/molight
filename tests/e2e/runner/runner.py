@@ -48,6 +48,8 @@ MAINTAIN_LIGHT = "light.e2e_maintain"
 GRACE_OCCUPANCY = "binary_sensor.e2e_grace_occupancy"
 GRACE_LIGHT = "light.e2e_grace"
 HOLD_LIGHT = "light.e2e_hold"
+LATE_OCCUPANCY = "binary_sensor.e2e_late_occupancy"
+LATE_LIGHT = "light.e2e_late"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -74,6 +76,7 @@ FIXTURES_SNAPSHOT = Path("/ha-config/e2e-fixtures-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
 RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
+LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -331,6 +334,14 @@ class HomeAssistantClient:
             "molight_testbed",
             "set_behavior",
             {"entity_id": entity_id, "behavior": behavior},
+        )
+
+    def set_startup_delay(self, entity_id: str, seconds: float) -> None:
+        """Hold a simulated sensor back for this long at the next boot."""
+        self.call_service(
+            "molight_testbed",
+            "set_startup_delay",
+            {"entity_id": entity_id, "seconds": seconds},
         )
 
     def fire_event(
@@ -4301,6 +4312,135 @@ def run_false_detection_verify() -> None:
     print("PASS: restart while occupied took the countdown, not a false-detection off")
 
 
+def run_late_source_prepare() -> None:
+    """Leave a room occupied and make its occupancy source load late next boot."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    sensor_entry_id = create_entry(
+        client,
+        "occupancy",
+        {
+            "name": "E2E Late Occupancy",
+            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_timeout": 2,
+            "advanced": {
+                "false_detection_grace": 1,
+                "clear_on_unavailable_timeout": 1,
+                "entity_id": "e2e_late_occupancy",
+            },
+        },
+        "Late occupancy",
+    )
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Late",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": LATE_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
+            "advanced": {"entity_id": "e2e_late"},
+        },
+        "Late light",
+    )
+    wait_entry_loaded(client, sensor_entry_id)
+    wait_entry_loaded(client, light_entry_id)
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    client.wait_state(LATE_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", LATE_LIGHT)
+    client.set_startup_delay(RAW_REMOVAL_MOTION, 20)
+    LATE_SOURCE_SNAPSHOT.write_text(
+        json.dumps(
+            {"sensor_entry_id": sensor_entry_id, "light_entry_id": light_entry_id}
+        )
+    )
+    print("PASS: occupied room prepared with an occupancy source that loads late")
+
+
+def run_late_source_verify() -> None:
+    """A source that appears well after boot is adopted, not misread as a blip.
+
+    Not yet wired into scripts/e2e: MoLight currently stamps a source's first
+    sighting after boot with the arrival time once HA is running, so a clear
+    soon after reads as a false detection. Run it ad hoc until that changes.
+    """
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(LATE_SOURCE_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["sensor_entry_id"])
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    client.wait_state(
+        LATE_LIGHT,
+        lambda state: state["state"] == "on",
+        "restored on",
+        timeout=WAIT_TIMEOUT,
+    )
+    # The source is still absent (HA shows a restored-placeholder unavailable
+    # state for a registered entity its platform has not provided yet); the
+    # light rides its own timer meanwhile.
+    try:
+        before = client.state(RAW_REMOVAL_MOTION)
+    except ApiError as err:
+        if err.status != 404:
+            raise
+    else:
+        if before["state"] != "unavailable":
+            raise AssertionError(
+                f"The delayed source was already live after boot: {before}"
+            )
+    client.wait_state(
+        RAW_REMOVAL_MOTION,
+        lambda state: state["state"] == "on",
+        "loaded late with its pre-restart detection",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(LATE_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        LATE_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "occupied by the late-loading source",
+    )
+    # Clearing soon after the late arrival is a person leaving, not a blip:
+    # the cycle's real start is unknown, so it must not be classified false.
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.wait_state(
+        LATE_OCCUPANCY,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("last_clear_false_detection") is False
+        ),
+        "cleared without a false-detection flag",
+    )
+    wait_machine_state(client, "countdown", LATE_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the false-detection delay after a late-source clear",
+        duration=4,
+    )
+    client.call_service("light", "turn_off", {"entity_id": LATE_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    for entry_id, entity_id in (
+        (snapshot["light_entry_id"], LATE_LIGHT),
+        (snapshot["sensor_entry_id"], LATE_OCCUPANCY),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: a late-loading occupancy source was adopted and cleared normally")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -4361,6 +4501,8 @@ def main() -> None:
         "scenarios": run_scenarios,
         "false-detection-prepare": run_false_detection_prepare,
         "false-detection-verify": run_false_detection_verify,
+        "late-source-prepare": run_late_source_prepare,
+        "late-source-verify": run_late_source_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,

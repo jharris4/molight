@@ -68,3 +68,21 @@ set_behavior:
       required: true
       selector:
         object: {}
+
+set_startup_delay:
+  name: Delay an entity at the next startup
+  description: Add a testbed binary sensor only this many seconds after the next boot, like a slow source integration. One-shot.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: binary_sensor
+    seconds:
+      name: Seconds
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 300
