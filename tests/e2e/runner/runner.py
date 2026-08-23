@@ -2993,9 +2993,20 @@ def wait_entry_removed(
 
 
 def stored_config_entries() -> list[dict[str, Any]]:
-    """Read Home Assistant's persisted config-entry records."""
-    payload = json.loads(CONFIG_ENTRIES_STORAGE.read_text())
-    return payload["data"]["entries"]
+    """Read Home Assistant's persisted config-entry records.
+
+    HA rewrites the file on every change, so a read can land on a missing or
+    half-written file; retry briefly rather than fail on that instant.
+    """
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            payload = json.loads(CONFIG_ENTRIES_STORAGE.read_text())
+            return payload["data"]["entries"]
+        except (FileNotFoundError, json.JSONDecodeError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.2)
 
 
 def assert_removal_storage_clean(snapshot: dict[str, str]) -> None:
