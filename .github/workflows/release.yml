@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
 
+env:
+  MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+  # Lane scripts pin their run directory here so failures can be uploaded.
+  MOLIGHT_E2E_RUN_ROOT: ${{ github.workspace }}/.e2e-run
+
 jobs:
   guard:
     name: Release guard
@@ -41,5 +46,51 @@ jobs:
           previous=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^")
           echo "Testing upgrade from $previous to $GITHUB_REF_NAME"
           MOLIGHT_E2E_PREVIOUS_TAG="$previous" npm run test:e2e:upgrade
-        env:
-          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Make the retained run directory readable
+        if: failure()
+        run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-e2e-failure-upgrade
+          path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+          if-no-files-found: ignore
+          retention-days: 7
+
+  suites:
+    # The tagged commit normally already passed these on push, but a tag cut
+    # from a commit that never went through a push run would otherwise skip them.
+    name: Live E2E (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        if: matrix.suite == 'browser'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the pinned Playwright test package
+        if: matrix.suite == 'browser'
+        run: npm ci
+      - name: Run the ${{ matrix.suite }} suite
+        run: npm run test:e2e:${{ matrix.suite }}
+      - name: Make the retained artifacts readable
+        if: failure()
+        run: |
+          sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-e2e-failure-${{ matrix.suite }}
+          path: |
+            ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+            tests/e2e/artifacts/browser
+          if-no-files-found: ignore
+          retention-days: 7

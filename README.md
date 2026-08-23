@@ -460,9 +460,10 @@ already exist locally or on GitHub.
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
 validates that the tag, manifest and changelog versions agree, runs the live
-upgrade suite from the preceding release tag, then puts the release notes
-extracted from the changelog in its job summary. It does **not** create the
-GitHub Release. After the workflow succeeds:
+upgrade suite from the preceding release tag alongside every other live E2E
+suite, then puts the release notes extracted from the changelog in its job
+summary. It does **not** create the GitHub Release. After the workflow
+succeeds:
 
 1. Open its job summary and copy the generated release notes.
 2. In the repository's **Releases** page, choose **Draft a new release** and
@@ -588,8 +589,10 @@ CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite — API lanes, the browser smoke tests, and the previous-release
 upgrade suite — on a minimum-supported/current matrix plus an advisory
-floating `stable` canary. Release tags also run the upgrade suite from the
-preceding tag before the release guard passes.
+floating `stable` canary. Release tags run every suite, including the upgrade
+suite from the preceding tag, before the release guard passes. Every CI job
+uploads the retained run directory (HA config and Compose logs) as a workflow
+artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` pins that directory.
 
 ## Design notes
 
