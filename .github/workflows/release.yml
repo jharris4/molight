@@ -56,6 +56,7 @@ jobs:
           name: molight-e2e-failure-upgrade
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   suites:
@@ -93,4 +94,5 @@ jobs:
             ${{ env.MOLIGHT_E2E_RUN_ROOT }}
             tests/e2e/artifacts/browser
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7

@@ -38,6 +38,7 @@ jobs:
           name: molight-e2e-failure-core
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   restarts:
@@ -61,6 +62,7 @@ jobs:
           name: molight-e2e-failure-restarts
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   scenarios:
@@ -88,6 +90,7 @@ jobs:
           name: molight-e2e-failure-scenarios-${{ matrix.shard }}
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   browser:
@@ -117,6 +120,7 @@ jobs:
           name: molight-browser-e2e-failure
           path: tests/e2e/artifacts/browser
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   compatibility:
@@ -148,7 +152,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           # The upgrade suite needs the previous release tag.
-          fetch-depth: ${{ matrix.suite == 'upgrade' && 0 || 1 }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         if: matrix.suite == 'browser'
         with:
@@ -174,4 +178,5 @@ jobs:
             ${{ env.MOLIGHT_E2E_RUN_ROOT }}
             tests/e2e/artifacts/browser
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
