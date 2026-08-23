@@ -80,44 +80,52 @@ jobs:
           retention-days: 7
 
   compatibility:
-    name: Live E2E (${{ matrix.label }}, ${{ matrix.suite }})
+    name: Live E2E (${{ matrix.ha.label }}, ${{ matrix.suite }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: ${{ matrix.experimental }}
+    continue-on-error: ${{ matrix.ha.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c]
-        include:
+        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser, upgrade]
+        ha:
           - label: HA floor
+            slug: floor
             image: ghcr.io/home-assistant/home-assistant:2026.1.0
             experimental: false
           - label: HA current
+            slug: current
             image: ghcr.io/home-assistant/home-assistant:2026.8.0
             experimental: false
           # Floating stable is an upstream canary: report incompatibilities
           # without blocking the known-good floor/current compatibility legs.
           - label: HA stable canary
+            slug: stable
             image: ghcr.io/home-assistant/home-assistant:stable
             experimental: true
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The upgrade suite needs the previous release tag.
+          fetch-depth: ${{ matrix.suite == 'upgrade' && 0 || 1 }}
+      - uses: actions/setup-node@v4
+        if: matrix.suite == 'browser'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the pinned Playwright test package
+        if: matrix.suite == 'browser'
+        run: npm ci
       - name: Run the ${{ matrix.suite }} suite
         run: npm run test:e2e:${{ matrix.suite }}
         env:
-          MOLIGHT_E2E_HA_IMAGE: ${{ matrix.image }}
-
-  upgrade:
-    name: Previous-release upgrade E2E
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
+          MOLIGHT_E2E_HA_IMAGE: ${{ matrix.ha.image }}
+      - name: Upload browser failure artifacts
+        if: failure() && matrix.suite == 'browser'
+        uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
-      - name: Run the previous-release upgrade suite
-        run: npm run test:e2e:upgrade
-        env:
-          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+          name: molight-browser-e2e-failure-${{ matrix.ha.slug }}
+          path: tests/e2e/artifacts/browser
+          if-no-files-found: ignore
+          retention-days: 7

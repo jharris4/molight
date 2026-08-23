@@ -585,10 +585,11 @@ the isolated HA configuration and Compose logs. That directory contains the
 disposable test account, so remove it after debugging.
 
 CI runs the live suite against the pinned current Home Assistant image on
-pushes and pull requests. Nightly and manually dispatched E2E workflows run a
-minimum-supported/current matrix plus an advisory floating `stable` canary,
-along with the previous-release upgrade suite. Release tags also run the
-upgrade suite from the preceding tag before the release guard passes.
+pushes and pull requests. Nightly and manually dispatched E2E workflows run
+every suite — API lanes, the browser smoke tests, and the previous-release
+upgrade suite — on a minimum-supported/current matrix plus an advisory
+floating `stable` canary. Release tags also run the upgrade suite from the
+preceding tag before the release guard passes.
 
 ## Design notes
 
