@@ -18,6 +18,7 @@ from homeassistant.components.light import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util import color as color_util
@@ -162,8 +163,13 @@ class TestbedLight(TestbedEntity, LightEntity):
         """Expose the last command for black-box service-routing assertions."""
         return {"testbed_last_command": self._reported.get("last_command")}
 
+    def _reject_if_asked(self) -> None:
+        if self.behavior["reject"]:
+            raise HomeAssistantError(f"{self.entity_id} rejected the command (testbed)")
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Apply and persist a turn-on command, then report it per behavior."""
+        self._reject_if_asked()
         previous = int(self.record["attributes"].get(ATTR_BRIGHTNESS, 0) or 0)
         self.record["state"] = "on"
         if ATTR_BRIGHTNESS in kwargs:
@@ -183,6 +189,7 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Apply and persist a turn-off command, then report it per behavior."""
+        self._reject_if_asked()
         self.record["state"] = "off"
         self.record["last_command"] = {"service": "turn_off", "data": kwargs}
         await self.controller.async_save()
@@ -194,6 +201,8 @@ class TestbedLight(TestbedEntity, LightEntity):
         """Publish the record now, or as the delayed/piecewise reports behavior asks."""
         self._cancel_pending()
         behavior = self.behavior
+        if behavior["silent"]:
+            return  # applied, but Home Assistant never hears about it
         latency = float(behavior["latency"])
         steps = int(behavior["transition_steps"]) if transition else 0
         piecewise = bool(behavior["report_steps"]) and self.record["state"] == "on"

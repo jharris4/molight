@@ -60,6 +60,7 @@ LATE_LIGHT = "light.e2e_late"
 EFFECT_LIGHT = "light.e2e_effect"
 AUTO_COLOR_LIGHT = "light.e2e_auto_color"
 DUSK_LIGHT = "light.e2e_dusk"
+FAULTY_LIGHT = "light.e2e_faulty"
 FOLLOW_SCHEDULE = "binary_sensor.e2e_follow_schedule"
 FOLLOW_LIGHT = "light.e2e_follow"
 CYCLE_SCHEDULE = "binary_sensor.e2e_cycle_schedule"
@@ -4525,12 +4526,21 @@ def log_records(content: str) -> list[tuple[str, str, str]]:
     return [(level, first, "\n".join(lines)) for level, first, lines in records]
 
 
+# Known-benign errors, matched against the whole record; anything else fails.
+ALLOWED_ERRORS = (
+    # Deliberately provoked by the faulty-member scenario (testbed `reject`).
+    "rejected the command (testbed)",
+)
+
+
 def log_failures(content: str) -> list[str]:
     """Return the first line of every MoLight error, warning, or traceback."""
     failures: list[str] = []
     for level, first, record in log_records(content):
         if level in ("ERROR", "CRITICAL"):
-            bad = MOLIGHT_LOG.search(first) or MOLIGHT_TRACEBACK.search(record)
+            bad = (
+                MOLIGHT_LOG.search(first) or MOLIGHT_TRACEBACK.search(record)
+            ) and not any(allowed in record for allowed in ALLOWED_ERRORS)
         elif level == "WARNING":
             bad = MOLIGHT_LOG.search(first) and not any(
                 allowed in first for allowed in ALLOWED_WARNINGS
@@ -6947,6 +6957,107 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: sensor options flows rename in place and re-settle their settings")
 
 
+def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
+    """Members that reject, never report, or reply late must not derail the light."""
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Faulty",
+            "lights": [RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB],
+            "light_timeout": 8,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_faulty"},
+        },
+        "Faulty-member light",
+    )
+    assert_entry_loaded(client, entry_id)
+    for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        client.wait_state(raw, lambda state: state["state"] == "off", "off")
+
+    # One member rejects every command, one applies them silently.
+    client.set_behavior(RAW_MULTI_ON_OFF, reject=True)
+    client.set_behavior(RAW_MULTI_DIMMER, silent=True)
+    client.call_service("light", "turn_on", {"entity_id": FAULTY_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "active", FAULTY_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_MULTI_ON_OFF,
+        lambda state: state["state"] == "off",
+        "off: the rejecting member never turned on",
+        duration=2,
+    )
+    client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "off", "off")
+    checkpoint(
+        "a rejecting and a silent member left the other member and the light working"
+    )
+    # The countdown still finishes and turns the working member off.
+    client.wait_state(
+        FAULTY_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after its timeout despite the faulty members",
+        timeout=20,
+    )
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", FAULTY_LIGHT)
+
+    # The silent member finally reports — on, contradicting the off it was
+    # last sent — which reads as a physical turn-on and is adopted.
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 180})
+    client.wait_state(
+        FAULTY_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("last_on_physical") is not None
+        ),
+        "on and active: the late contradicting report was adopted as physical",
+    )
+    client.set_behavior(RAW_MULTI_ON_OFF, reject=False)
+    client.set_behavior(RAW_MULTI_DIMMER, silent=False)
+    client.call_service("light", "turn_off", {"entity_id": FAULTY_LIGHT})
+    client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", FAULTY_LIGHT)
+    checkpoint("a silent member's late contradicting report was adopted")
+
+    # A slow bulb whose full reply arrives after HA stops reusing our context
+    # is still an echo: the countdown is not restarted by it.
+    client.set_behavior(RAW_MULTI_RGB, latency=5)
+    physical_before = client.state(FAULTY_LIGHT)["attributes"].get("last_on_physical")
+    started = time.monotonic()
+    client.call_service(
+        "light", "turn_on", {"entity_id": FAULTY_LIGHT, "brightness": 200}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 200
+        ),
+        "on at 200 (late)",
+        timeout=10,
+    )
+    client.wait_state(
+        FAULTY_LIGHT,
+        lambda state: state["state"] == "off",
+        "off on the original timeout",
+        timeout=20,
+    )
+    elapsed = time.monotonic() - started
+    checkpoint(f"the light went off {elapsed:.1f}s after the turn-on (timeout 8s)")
+    if elapsed > 11:
+        raise AssertionError(
+            f"The late echo restarted the countdown: off after {elapsed:.1f}s, not ~8s"
+        )
+    physical_after = client.state(FAULTY_LIGHT)["attributes"].get("last_on_physical")
+    if physical_after != physical_before:
+        raise AssertionError("A slow bulb's matching reply was read as a physical on")
+    client.set_behavior(RAW_MULTI_RGB, latency=0)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    remove_entry_and_entity(client, entry_id, FAULTY_LIGHT)
+    print("PASS: rejecting, silent, and slow members handled; a late match is an echo")
+
+
 def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
     """Nested combined sensors, their form rejections, and an all-false cycle."""
     trigger_id = create_grace_occupancy(
@@ -7453,6 +7564,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_color_temp_scenarios,
     ],
     "b": [
+        run_faulty_member_scenarios,
         run_schedule_end_action_scenarios,
         run_schedule_mode_scenarios,
         run_combined_and_maintain_scenarios,

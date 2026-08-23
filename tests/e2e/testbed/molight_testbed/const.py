@@ -29,6 +29,8 @@ DEFAULT_BEHAVIOR: Final = {
     "transition_steps": 0,  # intermediate brightness reports across a fade
     "brightness_levels": 0,  # quantise reported brightness to N device levels
     "xy_color": False,  # advertise and report XY instead of RGB
+    "reject": False,  # raise on every command (an unreachable bulb)
+    "silent": False,  # apply commands but never report them back
 }
 
 LIGHT_MAIN: Final = "light_main"
