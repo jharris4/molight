@@ -112,10 +112,10 @@ longer needs a custom repository.
   unchanged no longer counts as a real change — a standing-open door recovering
   from a blip was read as someone opening it.
 - When the light level drops, a room whose lights have no recent history of
-  being on is no longer turned on — there is nothing to resume, so a long-empty
-  or never-lit room now stays dark at dusk. The first illuminance reading after
-  startup is also judged against the plain threshold rather than the hysteresis
-  band.
+  being on (and no occupancy sensor to anchor to) is no longer turned on — there
+  is nothing to resume, so a long-empty or never-lit room now stays dark at dusk.
+  The first illuminance reading after startup is also judged against the plain
+  threshold rather than the hysteresis band.
 - Dimming a real light directly during its pre-off warning now restores the
   color the warning replaced. Such an external dim cancels the warning and
   restarts the timer but brings no color of its own, so the warning's color was
