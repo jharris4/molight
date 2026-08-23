@@ -377,6 +377,31 @@ async def test_restart_readopts_window_already_applied(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+async def test_restart_spanning_into_next_window_applies_its_start(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Down from inside one window into the next: the earlier window's marker is
+    stale, so the new window's start is applied and stamped."""
+    later = "2026-07-03T21:00:00+00:00"
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
+    hass.states.async_set(SCHED, "on", {"current_window_start": later})
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, _follow_entry())
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == later
+
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_restart_schedule_state_missing_falls_through(
     hass: HomeAssistant,
 ) -> None:

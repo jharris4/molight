@@ -62,6 +62,8 @@ AUTO_COLOR_LIGHT = "light.e2e_auto_color"
 DUSK_LIGHT = "light.e2e_dusk"
 FOLLOW_SCHEDULE = "binary_sensor.e2e_follow_schedule"
 FOLLOW_LIGHT = "light.e2e_follow"
+CYCLE_SCHEDULE = "binary_sensor.e2e_cycle_schedule"
+CYCLE_LIGHT = "light.e2e_cycle"
 END_HOLD_LIGHT = "light.e2e_end_hold"
 END_HOLD_SWITCH = "switch.e2e_end_hold_auto_off"
 END_SWITCH_LIGHT = "light.e2e_end_switch"
@@ -5219,12 +5221,58 @@ def run_follow_restart_prepare() -> None:
     wait_entry_loaded(client, light_entry_id)
     client.wait_state(FOLLOW_SCHEDULE, lambda state: state["state"] == "off", "off")
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    # A second follow light whose whole window elapses while HA is down: a
+    # start and end both missed must not be caught up at boot.
+    now = datetime.now(UTC)
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Cycle Schedule",
+            "start": {"time": (now + timedelta(seconds=6)).strftime("%H:%M:%S")},
+            "end": {"time": (now + timedelta(seconds=10)).strftime("%H:%M:%S")},
+            "advanced": {"entity_id": "e2e_cycle_schedule"},
+        },
+    )
+    cycle_schedule_entry_id = finish_creation(result, "Cycle schedule")
+    cycle_light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Cycle",
+            "lights": [RAW_CT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_entity": CYCLE_SCHEDULE,
+                "schedule_mode": "follow",
+            },
+            "advanced": {"entity_id": "e2e_cycle"},
+        },
+        "Cycle light",
+    )
+    wait_entry_loaded(client, cycle_schedule_entry_id)
+    wait_entry_loaded(client, cycle_light_entry_id)
+    client.wait_state(CYCLE_SCHEDULE, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
     FOLLOW_RESTART_SNAPSHOT.write_text(
         json.dumps(
-            {"schedule_entry_id": schedule_entry_id, "light_entry_id": light_entry_id}
+            {
+                "schedule_entry_id": schedule_entry_id,
+                "light_entry_id": light_entry_id,
+                "cycle_schedule_entry_id": cycle_schedule_entry_id,
+                "cycle_light_entry_id": cycle_light_entry_id,
+            }
         )
     )
-    print("PASS: follow-mode light prepared; its window opens during the restart")
+    print(
+        "PASS: follow lights prepared; one window opens, one elapses during the restart"
+    )
 
 
 def run_follow_restart_verify() -> None:
@@ -5257,6 +5305,43 @@ def run_follow_restart_verify() -> None:
     )
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
 
+    # The window that opened and closed while HA was down leaves no trace.
+    wait_entry_loaded(client, snapshot["cycle_schedule_entry_id"])
+    wait_entry_loaded(client, snapshot["cycle_light_entry_id"])
+    client.wait_state(
+        CYCLE_SCHEDULE,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("current_window_start") is None
+        ),
+        "off: the whole window elapsed during the restart",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        CYCLE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("schedule_window_start") is None
+        ),
+        "off and idle with no window marker: a fully missed window is not caught up",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        RAW_CT,
+        lambda state: state["state"] == "off",
+        "off: no catch-up for a window that both opened and closed while down",
+        duration=4,
+    )
+    for entry_id, entity_id in (
+        (snapshot["cycle_light_entry_id"], CYCLE_LIGHT),
+        (snapshot["cycle_schedule_entry_id"], CYCLE_SCHEDULE),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+
     # A manual off mid-window hands the light back to its sensors ...
     client.call_service("light", "turn_off", {"entity_id": FOLLOW_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
@@ -5272,7 +5357,10 @@ def run_follow_restart_verify() -> None:
     client.call_service("light", "turn_off", {"entity_id": FOLLOW_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", FOLLOW_LIGHT)
-    print("PASS: missed follow start applied once; manual off/on mid-window behaved")
+    print(
+        "PASS: missed follow start applied once, a fully missed window was not; "
+        "manual off/on mid-window behaved"
+    )
 
 
 def run_follow_restart_verify_off() -> None:
