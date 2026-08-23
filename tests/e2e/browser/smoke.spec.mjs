@@ -19,18 +19,29 @@ async function login(page) {
   await expect(page.locator("home-assistant")).toBeVisible();
 }
 
+// Dialogs on some frontend versions keep hidden duplicates of their text; pick the last visible one.
+function visibleText(page, text) {
+  return page.getByText(text, { exact: true }).filter({ visible: true }).last();
+}
+
 async function openAddFlow(page) {
-  await page.goto("/config/integrations/dashboard/add?domain=molight");
-  const confirmation = page.getByRole("heading", {
-    name: "Do you want to set up MoLight?",
-  });
-  await expect(confirmation).toBeVisible();
-  await page.getByRole("button", { name: "OK", exact: true }).click();
-  await expect(page.getByText("Add MoLight entities", { exact: true }).last()).toBeVisible();
+  // Older frontends sometimes close the confirmation dialog on their own right
+  // after it opens, so retry the whole sequence when the menu does not appear.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await page.goto("/config/integrations/dashboard/add?domain=molight");
+      await expect(visibleText(page, "Do you want to set up MoLight?")).toBeVisible();
+      await page.getByRole("button", { name: "OK", exact: true }).click({ timeout: 5000 });
+      await expect(visibleText(page, "Add MoLight entities")).toBeVisible({ timeout: 5000 });
+      return;
+    } catch (error) {
+      if (attempt >= 4) throw error;
+    }
+  }
 }
 
 async function expectFlowTitle(page, title) {
-  await expect(page.getByText(title, { exact: true }).last()).toBeVisible();
+  await expect(visibleText(page, title)).toBeVisible();
 }
 
 async function clickFlowChoice(page, name) {
@@ -40,7 +51,15 @@ async function clickFlowChoice(page, name) {
 async function selectHaOption(page, label, option) {
   const field = page.getByLabel(label, { exact: true });
   await field.click();
-  await page.getByText(option, { exact: true }).last().click();
+  // Older frontends expose the menu entries as nameless options whose text
+  // also appears in the closed select, so prefer the option role when present.
+  const entries = page.getByRole("option").filter({ hasText: option }).filter({ visible: true });
+  await expect(entries.or(visibleText(page, option)).first()).toBeVisible();
+  if ((await entries.count()) > 0) {
+    await entries.last().click();
+  } else {
+    await visibleText(page, option).click();
+  }
 }
 
 async function selectHaEntity(page, fieldIndex, entityName) {
@@ -49,9 +68,7 @@ async function selectHaEntity(page, fieldIndex, entityName) {
     .nth(fieldIndex)
     .getByRole("listitem")
     .click();
-  const option = page.getByText(entityName, { exact: true }).last();
-  await expect(option).toBeVisible();
-  await option.click();
+  await visibleText(page, entityName).click();
 }
 
 async function submit(page) {
@@ -127,11 +144,11 @@ async function convert(page, menuChoice, entityLabel) {
     name: confirmationLabel,
     exact: true,
   });
-  await page.getByText(confirmationLabel, { exact: true }).last().click();
+  await visibleText(page, confirmationLabel).click();
   await expect(confirmation).toBeChecked();
   await submit(page);
   await expect(page.getByText(/converted 1 virtual light/i)).toBeVisible();
-  await page.getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("button", { name: "Close", exact: true }).filter({ visible: true }).last().click();
 }
 
 async function entityState(page, entityId) {
@@ -189,9 +206,7 @@ async function pickEntity(page, scope, label, entityName) {
   await picker.scrollIntoViewIfNeeded();
   // Multi-entity pickers list chosen entities first and an empty row last.
   await picker.getByRole("listitem").last().click();
-  const option = page.getByText(entityName, { exact: true }).last();
-  await expect(option).toBeVisible();
-  await option.click();
+  await visibleText(page, entityName).click();
 }
 
 async function finishCreated(page, name) {
@@ -201,7 +216,7 @@ async function finishCreated(page, name) {
 
 async function closeAbort(page, pattern) {
   await expect(page.getByText(pattern)).toBeVisible();
-  await page.getByRole("button", { name: "Close", exact: true }).last().click();
+  await page.getByRole("button", { name: "Close", exact: true }).filter({ visible: true }).last().click();
 }
 
 async function startCreate(page, entityType) {
