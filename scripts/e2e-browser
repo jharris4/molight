@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
+source tests/e2e/env.sh
 
 COMPOSE_FILE="tests/e2e/compose.yaml"
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-browser.XXXXXX")"

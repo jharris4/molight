@@ -19,7 +19,7 @@ services:
       - homeassistant
 
   browser:
-    image: mcr.microsoft.com/playwright:v1.62.0-noble
+    image: mcr.microsoft.com/playwright:v${MOLIGHT_E2E_PLAYWRIGHT_VERSION:?set by tests/e2e/env.sh from package.json}-noble
     init: true
     ipc: host
     working_dir: /workspace

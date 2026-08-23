@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
+source tests/e2e/env.sh
 
 PROJECT_ROOT="$PWD"
 COMPOSE_FILE="tests/e2e/compose.yaml"
