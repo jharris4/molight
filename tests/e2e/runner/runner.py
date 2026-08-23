@@ -52,6 +52,7 @@ HOLD_LIGHT = "light.e2e_hold"
 LATE_OCCUPANCY = "binary_sensor.e2e_late_occupancy"
 LATE_LIGHT = "light.e2e_late"
 EFFECT_LIGHT = "light.e2e_effect"
+AUTO_COLOR_LIGHT = "light.e2e_auto_color"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -4772,6 +4773,67 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: effect colour and fades, colourless warn undo, and blink-off effect")
 
 
+def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
+    """An automatic turn-on applies the auto-on colour; a manual one does not."""
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Auto Color",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60, "auto_on_rgb_color": [255, 0, 255]},
+            "advanced": {"entity_id": "e2e_auto_color"},
+        },
+        "Auto-color light",
+    )
+    assert_entry_loaded(client, entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and list(state["attributes"].get("rgb_color") or []) == [255, 0, 255]
+        ),
+        "on at the auto-on brightness and colour",
+    )
+    client.wait_state(
+        AUTO_COLOR_LIGHT,
+        lambda state: state["attributes"].get("last_color_change_virtual") is None,
+        "attributing the auto-on colour to automation, not a virtual change",
+    )
+    # Leave the member blue and off, then turn on by hand: no auto-on values.
+    client.call_service(
+        "light", "turn_on", {"entity_id": AUTO_COLOR_LIGHT, "hs_color": [240, 100]}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: list(state["attributes"].get("rgb_color") or []) == [0, 0, 255],
+        "blue",
+    )
+    set_timer_motion(client, False)
+    client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_on", {"entity_id": AUTO_COLOR_LIGHT})
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and list(state["attributes"].get("rgb_color") or []) == [0, 0, 255]
+            and not has_color_command(command_data(state))
+            and command_data(state).get("brightness") is None
+        ),
+        "on by hand with no auto-on colour or brightness applied",
+    )
+    client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    remove_entry_and_entity(client, entry_id, AUTO_COLOR_LIGHT)
+    print("PASS: auto-on colour applied to automatic turn-ons only")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -4805,6 +4867,7 @@ def run_scenarios() -> None:
     run_hold_entity_scenarios(client)
     run_fast_physical_scenarios(client)
     run_effect_color_scenarios(client)
+    run_auto_on_color_scenario(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
