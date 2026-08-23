@@ -6655,13 +6655,18 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     )
     for entry_id in (schedule_entry_id, illuminance_entry_id, light_entry_id):
         assert_entry_loaded(client, entry_id)
+    # Manual turn-ons are never gated, so show the sensor's effect with the
+    # dark -> bright edge, which forces an on light off in control mode.
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(REF_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
+    client.call_service("light", "turn_on", {"entity_id": REF_LIGHT})
+    client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "on", "on")
     client.set_state(RAW_ILLUMINANCE, 50)
     client.wait_state(REF_ILLUMINANCE, lambda state: state["state"] == "on", "bright")
-    client.call_service("light", "turn_on", {"entity_id": REF_LIGHT})
     client.wait_state(
         RAW_MULTI_DIMMER,
         lambda state: state["state"] == "off",
-        "forced off while bright",
+        "forced off by going bright",
     )
 
     client.remove_entry(illuminance_entry_id)
@@ -6672,12 +6677,15 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
         lambda cfg: not cfg.get("illuminance_entity"),
         "stored without the deleted illuminance sensor",
     )
+    client.set_state(RAW_ILLUMINANCE, 5)
     client.call_service("light", "turn_on", {"entity_id": REF_LIGHT})
+    client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "on", "on")
+    client.set_state(RAW_ILLUMINANCE, 50)
     assert_state_stays(
         client,
         RAW_MULTI_DIMMER,
         lambda state: state["state"] == "on",
-        "on while bright: the deleted illuminance sensor no longer forces off",
+        "on through going bright: the deleted illuminance sensor no longer forces off",
         duration=2,
     )
     client.set_state(RAW_ILLUMINANCE, 5)
