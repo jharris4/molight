@@ -137,6 +137,10 @@ longer needs a custom repository.
   now sticks. The emptied field is omitted from the form submission, and the
   schema default silently refilled the previous list, so the last maintain
   sensor could never be removed.
+- An explicit entity ID with no usable characters (for example `!!!` or a bare
+  `light.`) is now rejected with a form error. Previously it was silently
+  dropped in favour of the name-derived ID, or worse, munged into
+  `light.unknown`.
 
 ## [1.5.0] - 2026-07-28
 

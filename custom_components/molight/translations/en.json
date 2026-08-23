@@ -927,6 +927,7 @@
       "schedule_source_molight_schedule": "Select a binary sensor that is not another Virtual Schedule Sensor.",
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor created by MoLight.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
+      "entity_id_invalid": "That entity ID has no usable characters. Use letters and numbers, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0 — this sensor could never report dark.",

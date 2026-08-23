@@ -3494,6 +3494,44 @@ async def test_manual_explicit_entity_id_conflict_errors(
 
 
 @pytest.mark.asyncio
+async def test_manual_explicit_entity_id_no_usable_characters_errors(
+    hass: HomeAssistant,
+) -> None:
+    """Garbage explicit ids error instead of being silently dropped or munged.
+
+    "light." slugifies to nothing (previously fell back to the name-derived
+    id without a word) and "!!!" is munged to "unknown" by HA's slugify
+    (previously created binary_sensor.unknown). A literal "unknown" remains
+    a legitimate, if odd, choice.
+    """
+    result = await _reach_occupancy_form(hass)
+    for garbage in ("light.", "???...", "!!!"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall Occupancy",
+                CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+                CONF_OCCUPANCY_TIMEOUT: 60,
+                SECTION_ADVANCED: {CONF_ENTITY_ID: garbage},
+            },
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "entity_id_invalid"}, garbage
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.hall_motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "unknown"},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_manual_blank_entity_id_conflict_confirm_proceed(
     hass: HomeAssistant,
 ) -> None:

@@ -1672,10 +1672,11 @@ class MoLightConfigFlow(
 
         Returns (object_id, errors, needs_confirm, candidate):
           object_id     — slug to store in CONF_ENTITY_ID, or None to derive it
-          errors        — {"base": "entity_id_conflict"} on an explicit clash
-                          (base, not field: the entity_id field sits inside a
-                          collapsed section where a field error can't anchor);
-                          the caller re-shows the form
+          errors        — {"base": "entity_id_conflict"} on an explicit clash,
+                          {"base": "entity_id_invalid"} on an explicit id with
+                          no usable characters (base, not field: the entity_id
+                          field sits inside a collapsed section where a field
+                          error can't anchor); the caller re-shows the form
           needs_confirm — True when blank and the name-derived id already
                           exists (divert to the confirm step)
           candidate     — the would-be entity_id, for the confirm message
@@ -1684,10 +1685,15 @@ class MoLightConfigFlow(
         if explicit:
             # Tolerate a typed domain prefix (e.g. "light.kitchen").
             obj = slugify(explicit.split(".")[-1])
+            # Garbage slugifies to "" ("light.") or to slugify's "unknown"
+            # substitute ("!!!"): erroring beats silently dropping the input
+            # or creating <domain>.unknown. Typing "unknown" itself stands.
+            if not obj or (obj == "unknown" and "unknown" not in explicit.lower()):
+                return None, {"base": "entity_id_invalid"}, False, explicit
             candidate = entity_id_format.format(obj)
-            if obj and self._entity_id_taken(candidate):
+            if self._entity_id_taken(candidate):
                 return None, {"base": "entity_id_conflict"}, False, candidate
-            return (obj or None), {}, False, candidate
+            return obj, {}, False, candidate
         candidate = entity_id_format.format(slugify(name))
         if self._entity_id_taken(candidate):
             return None, {}, True, candidate
