@@ -744,8 +744,12 @@ def wait_profile(client: HomeAssistantClient, profile: str) -> dict[str, Any]:
     """Wait for a scheduled light to expose the selected settings profile."""
     return client.wait_state(
         VIRTUAL_LIGHT,
-        lambda state: state["attributes"].get("active_settings") == profile,
-        f"using the {profile} profile",
+        lambda state: (
+            state["attributes"].get("active_settings") == profile
+            and state["attributes"].get("active_settings_schedule") == VIRTUAL_SCHEDULE
+            and state["attributes"].get("schedule_end_off_pending") is False
+        ),
+        f"using the {profile} profile of {VIRTUAL_SCHEDULE}, no boundary off pending",
     )
 
 
@@ -772,7 +776,10 @@ def set_timer_motion(client: HomeAssistantClient, on: bool) -> None:
 
 
 def trigger_and_assert(
-    client: HomeAssistantClient, brightness: int, selection: str
+    client: HomeAssistantClient,
+    brightness: int,
+    selection: str,
+    source: str = SOURCE_SELECT,
 ) -> None:
     """Trigger occupancy and assert routed light/select service effects."""
     client.set_state(RAW_MOTION, "on")
@@ -790,6 +797,14 @@ def trigger_and_assert(
         TARGET_SELECT,
         lambda state: state["state"] == selection,
         f"selected as {selection}",
+    )
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_turn_on_selection_option") == selection
+            and state["attributes"].get("last_turn_on_selection_source") == source
+        ),
+        f"reporting the {selection!r} selection from {source}",
     )
 
 
@@ -2275,7 +2290,7 @@ def run_primary() -> None:
 
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, False)
-    trigger_and_assert(client, pct(30), "Cozy")
+    trigger_and_assert(client, pct(30), "Cozy", source="fixed")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
     checkpoint("turn-on selection follows its source and falls back when unavailable")
