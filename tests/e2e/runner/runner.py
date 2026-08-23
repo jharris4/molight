@@ -1172,6 +1172,78 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: physical on, dim, dim-during-warning, and member outage handled")
 
 
+def run_fast_physical_scenarios() -> None:
+    """Physical changes inside HA's 5 s command-context window must still count.
+
+    Home Assistant stamps MoLight's service-call context on a member for 5 s,
+    so a wall-switch change in that window arrives under MoLight's own context.
+    MoLight judges such writes against what it asked for, so a contradicting
+    one still counts as a real change.
+    """
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    entry_id = create_physical_light(client)
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
+
+    # Wall-switch on one second after MoLight turned the light off.
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": pct(60)})
+    wait_machine_state(client, "active", PHYSICAL_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": PHYSICAL_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", PHYSICAL_LIGHT)
+    assert_state_stays(
+        client, RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", duration=1
+    )
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": pct(60)})
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "on and active after a wall-switch on 1 s after MoLight's own turn-off",
+        timeout=10,
+    )
+
+    # Physical dim one second into the warning, while MoLight's warn command
+    # context is still fresh on the member.
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: state["attributes"].get("warning_active") is True,
+        "in its warning",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["attributes"].get("brightness") == pct(20),
+        "showing the warning brightness",
+    )
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["attributes"].get("brightness") == pct(20),
+        "at the warning brightness",
+        duration=1,
+    )
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": 120})
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("warning_active") is False
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "out of its warning after a physical dim 1 s into it",
+        timeout=10,
+    )
+
+    client.call_service("light", "turn_off", {"entity_id": PHYSICAL_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    client.remove_entry(entry_id)
+    wait_entry_removed(client, entry_id, "Temporary physical-change light")
+    print("PASS: physical changes inside the command-context window were honoured")
+
+
 def command_data(state: dict[str, Any]) -> dict[str, Any]:
     """Return the payload most recently received by one testbed light."""
     command = state["attributes"].get("testbed_last_command") or {}
@@ -2890,6 +2962,7 @@ def main() -> None:
     commands = {
         "primary": run_primary,
         "browser-prepare": run_browser_prepare,
+        "fast-physical": run_fast_physical_scenarios,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,

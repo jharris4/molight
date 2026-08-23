@@ -91,6 +91,14 @@ longer needs a custom repository.
 
 ### Fixed
 
+- A physical change to a real light made within five seconds of a MoLight command
+  on that light — a wall switch flipped back on right after an automatic turn-off,
+  a dimmer turned during the first seconds of a warning — is no longer mistaken for
+  the echo of MoLight's own command. Home Assistant reuses a service call's context
+  for the targeted light's state writes for five seconds, so MoLight now judges
+  such writes against what it actually asked for (allowing for bulbs that reply
+  late, in two parts, in fade steps, quantised, or in another color mode) instead
+  of trusting the context alone.
 - Combined occupancy no longer holds forever when its last `on` constituent
   drops out of the state machine; it clears, advancing `latest_occupied_time` to
   the dropout moment so dependent lights run a normal countdown.

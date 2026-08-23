@@ -211,6 +211,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections import deque
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -387,6 +388,116 @@ async def async_setup_entry(
         async_add_entities([entity])
 
 
+# Home Assistant keeps our service-call context on a member for 5 s, so a human
+# change in that window arrives under our own context. A member write is only
+# our echo if it is consistent with what we asked for, allowing for bulbs that
+# reply late, in two parts, in fade steps, quantised, or in another color mode.
+ECHO_SETTLE_SECONDS = 3.0
+ECHO_BRIGHTNESS_TOLERANCE = 5
+ECHO_HUE_TOLERANCE = 10.0
+ECHO_SATURATION_TOLERANCE = 10.0
+ECHO_KELVIN_TOLERANCE = 150
+
+
+def _state_color(state: State) -> tuple[ColorMode, tuple] | None:
+    """Return the color a real light's state reports, in canonical terms.
+
+    A color-temp member also carries a derived hs_color, so its own
+    color_mode decides which attribute is authoritative.
+    """
+    attrs = state.attributes
+    if attrs.get(ATTR_COLOR_MODE) == ColorMode.COLOR_TEMP and (
+        kelvin := attrs.get(ATTR_COLOR_TEMP_KELVIN)
+    ):
+        return (ColorMode.COLOR_TEMP, kelvin)
+    if hs := attrs.get(ATTR_HS_COLOR):
+        return (ColorMode.HS, tuple(hs))
+    return None
+
+
+def _service_color(color: dict | None) -> tuple[ColorMode, tuple] | None:
+    """Canonicalise turn-on color service data like a member state would."""
+    if not color:
+        return None
+    if ATTR_COLOR_TEMP_KELVIN in color:
+        return (ColorMode.COLOR_TEMP, color[ATTR_COLOR_TEMP_KELVIN])
+    if ATTR_HS_COLOR in color:
+        return (ColorMode.HS, tuple(color[ATTR_HS_COLOR]))
+    if ATTR_RGB_COLOR in color:
+        return (ColorMode.HS, color_util.color_RGB_to_hs(*color[ATTR_RGB_COLOR]))
+    return None
+
+
+def _as_hs(color: tuple[ColorMode, tuple]) -> tuple[float, float]:
+    mode, value = color
+    if mode is ColorMode.COLOR_TEMP:
+        return color_util.color_RGB_to_hs(*color_util.color_temperature_to_rgb(value))
+    return (float(value[0]), float(value[1]))
+
+
+def _colors_close(a: tuple[ColorMode, tuple], b: tuple[ColorMode, tuple]) -> bool:
+    """Whether two canonical colors are the same allowing for conversion drift."""
+    if a[0] is ColorMode.COLOR_TEMP and b[0] is ColorMode.COLOR_TEMP:
+        return abs(a[1] - b[1]) <= ECHO_KELVIN_TOLERANCE
+    (hue_a, sat_a), (hue_b, sat_b) = _as_hs(a), _as_hs(b)
+    if abs(sat_a - sat_b) > ECHO_SATURATION_TOLERANCE:
+        return False
+    if sat_a <= ECHO_SATURATION_TOLERANCE and sat_b <= ECHO_SATURATION_TOLERANCE:
+        return True  # both near white: hue is noise
+    hue_delta = abs(hue_a - hue_b) % 360
+    return min(hue_delta, 360 - hue_delta) <= ECHO_HUE_TOLERANCE
+
+
+def _toward(old: int, new: int, target: int) -> bool:
+    """Whether a brightness moved from old toward target without reaching it."""
+    return (target - old) * (new - old) > 0 and abs(new - target) < abs(old - target)
+
+
+@dataclass
+class _EchoExpectation:
+    """What a member should report back after one of our commands."""
+
+    on: bool
+    brightness: int | None
+    color: tuple[ColorMode, tuple] | None
+    transition: float
+    issued: float
+
+    def judge(self, old_state: State | None, new_state: State) -> str:
+        """Return "match", "pending" (echo still arriving), or "contradiction"."""
+        attrs = new_state.attributes
+        is_on = new_state.state == "on" and attrs.get(ATTR_BRIGHTNESS) != 0
+        if not self.on:
+            return "match" if not is_on else "contradiction"
+        if not is_on:
+            return "contradiction"
+        # Before the member was on we cannot judge its attributes: a bulb that
+        # reports power first still carries its previous brightness and color.
+        was_on = old_state is not None and old_state.state == "on"
+        settled = True
+        if (
+            self.brightness is not None
+            and (new_b := attrs.get(ATTR_BRIGHTNESS))
+            and abs(new_b - self.brightness) > ECHO_BRIGHTNESS_TOLERANCE
+        ):
+            old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
+            if was_on and not (
+                new_b == old_b
+                or (old_b is not None and _toward(old_b, new_b, self.brightness))
+            ):
+                return "contradiction"
+            settled = False
+        if (
+            self.color is not None
+            and (new_color := _state_color(new_state))
+            and not _colors_close(new_color, self.color)
+        ):
+            if was_on and new_color != _state_color(old_state):
+                return "contradiction"
+            settled = False
+        return "match" if settled else "pending"
+
+
 class VirtualLight(LightEntity, RestoreEntity):
     """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
@@ -484,6 +595,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Context ids of our own light service calls, used to tell self-caused
         # state echoes apart from genuinely external changes.
         self._self_context_ids: deque[str] = deque(maxlen=16)
+        # What each member should echo for our latest command (see judge()).
+        self._echo_expectations: dict[str, _EchoExpectation] = {}
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1138,7 +1251,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             # re-derive on every member event, before the echo check — our own
             # service calls still surface a member's first real state.
             self._update_capabilities()
-            if event.context.id in self._self_context_ids:
+            if event.context.id in self._self_context_ids and self._is_own_echo(
+                entity_id, old_state, new_state
+            ):
                 return  # echo of our own service call; call sites manage state
             if same_state:
                 if new_state.state == "on":
@@ -1468,19 +1583,47 @@ class VirtualLight(LightEntity, RestoreEntity):
         return None
 
     def _member_color(self, state: State) -> tuple[ColorMode, tuple] | None:
-        """Return the color a real light's state reports, in canonical terms.
+        """Return the color a real light's state reports, in canonical terms."""
+        return _state_color(state)
 
-        A color-temp member also carries a derived hs_color, so its own
-        color_mode decides which attribute is authoritative.
+    def _expect_echo(
+        self,
+        on: bool,
+        brightness: int | None,
+        color: dict | None,
+        transition: float | None,
+    ) -> None:
+        """Record what every member should report back for our own command."""
+        expectation = _EchoExpectation(
+            on,
+            brightness if on else None,
+            _service_color(color) if on else None,
+            float(transition or 0),
+            self.hass.loop.time(),
+        )
+        for entity_id in self._lights:
+            self._echo_expectations[entity_id] = expectation
+
+    def _is_own_echo(
+        self, entity_id: str, old_state: State | None, new_state: State
+    ) -> bool:
+        """Judge a member write made under our context against our command.
+
+        Only a write consistent with what we asked for is our echo; a stale,
+        missing, or contradicted expectation means a real change arrived under
+        a context Home Assistant was still reusing for that member.
         """
-        attrs = state.attributes
-        if attrs.get(ATTR_COLOR_MODE) == ColorMode.COLOR_TEMP and (
-            kelvin := attrs.get(ATTR_COLOR_TEMP_KELVIN)
-        ):
-            return (ColorMode.COLOR_TEMP, kelvin)
-        if hs := attrs.get(ATTR_HS_COLOR):
-            return (ColorMode.HS, tuple(hs))
-        return None
+        expectation = self._echo_expectations.get(entity_id)
+        if expectation is None:
+            return False
+        age = self.hass.loop.time() - expectation.issued
+        if age > ECHO_SETTLE_SECONDS + expectation.transition:
+            self._echo_expectations.pop(entity_id, None)
+            return False
+        verdict = expectation.judge(old_state, new_state)
+        if verdict != "pending":
+            self._echo_expectations.pop(entity_id, None)
+        return verdict != "contradiction"
 
     def _physical_color(self) -> tuple[ColorMode, tuple] | None:
         """Color of the first on real light reporting one, else None."""
@@ -2328,6 +2471,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         context = Context()
         self._self_context_ids.append(context.id)
+        self._expect_echo(bool(brightness), brightness or None, color, transition)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
         )
@@ -2419,6 +2563,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # they can.
             service_data.update(color)
             self._adopt_color_data(color)
+        self._expect_echo(on, brightness, color, transition)
         await self.hass.services.async_call(
             "light",
             "turn_on" if on else "turn_off",

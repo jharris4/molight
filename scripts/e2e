@@ -64,6 +64,9 @@ compose run --rm runner python runner.py restart-warning-prepare
 compose restart homeassistant
 compose run --rm runner python runner.py restart-warning-verify
 
+echo "Checking physical changes inside the command-context window..."
+compose run --rm runner python runner.py fast-physical
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 
