@@ -10,7 +10,12 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import (
+    area_registry as ar,
+    config_validation as cv,
+    entity_registry as er,
+    label_registry as lr,
+)
 from homeassistant.helpers.storage import Store
 
 from .const import (
@@ -230,7 +235,31 @@ async def async_setup_entry(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _assign_area_and_label(hass)
     return True
+
+
+# Discovery filters by area and label; give two lights one each to filter on.
+AREA_NAME = "E2E Kitchen"
+AREA_LIGHT = "light.e2e_multi_dimmer"
+LABEL_NAME = "E2E Porch"
+LABEL_LIGHT = "light.e2e_multi_rgb"
+
+
+@callback
+def _assign_area_and_label(hass: HomeAssistant) -> None:
+    """Put one testbed light in an area and one under a label (idempotent)."""
+    areas = ar.async_get(hass)
+    area = areas.async_get_area_by_name(AREA_NAME) or areas.async_create(AREA_NAME)
+    labels = lr.async_get(hass)
+    label = labels.async_get_label_by_name(LABEL_NAME) or labels.async_create(
+        LABEL_NAME
+    )
+    registry = er.async_get(hass)
+    if registry.async_get(AREA_LIGHT):
+        registry.async_update_entity(AREA_LIGHT, area_id=area.id)
+    if registry.async_get(LABEL_LIGHT):
+        registry.async_update_entity(LABEL_LIGHT, labels={label.label_id})
 
 
 async def async_unload_entry(

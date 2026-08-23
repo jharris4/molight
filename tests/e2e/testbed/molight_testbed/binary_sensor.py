@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
 from . import controller_for_entry
-from .const import DOOR, MOTION, MOTION_REMOVAL, OCCUPANCY, SCHEDULE
+from .const import DOOR, MOTION, MOTION_DISABLED, MOTION_REMOVAL, OCCUPANCY, SCHEDULE
 from .entity import TestbedEntity
 
 
@@ -23,11 +23,15 @@ class TestbedBinarySensor(TestbedEntity, BinarySensorEntity):
     """A persistent simulated binary sensor."""
 
     def __init__(
-        self, *args: Any, device_class: BinarySensorDeviceClass | None = None
+        self,
+        *args: Any,
+        device_class: BinarySensorDeviceClass | None = None,
+        enabled_default: bool = True,
     ) -> None:
         """Initialize a binary sensor with a fixed device class."""
         super().__init__(*args)
         self._attr_device_class = device_class
+        self._attr_entity_registry_enabled_default = enabled_default
 
     @property
     def is_on(self) -> bool:
@@ -66,6 +70,15 @@ async def async_setup_entry(
             "binary_sensor.e2e_removal_motion",
             "E2E Removal Motion",
             device_class=BinarySensorDeviceClass.MOTION,
+        ),
+        # Registered but disabled: discovery must never offer it.
+        TestbedBinarySensor(
+            controller,
+            MOTION_DISABLED,
+            "binary_sensor.e2e_disabled_motion",
+            "E2E Disabled Motion",
+            device_class=BinarySensorDeviceClass.MOTION,
+            enabled_default=False,
         ),
         TestbedBinarySensor(
             controller,

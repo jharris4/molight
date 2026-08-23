@@ -1179,6 +1179,26 @@ def remove_entry_and_entity(
     wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
 
 
+def form_default(result: dict[str, Any], field: str) -> Any:
+    """Return a form field's default (what the checklist pre-selects)."""
+    for item in result.get("data_schema") or []:
+        if item.get("name") == field:
+            return item.get("default")
+    raise AssertionError(f"Form has no field {field!r}: {result}")
+
+
+def discover_lights_filtered(
+    client: HomeAssistantClient, areas: list[str], labels: list[str]
+) -> dict[str, Any]:
+    """Open light discovery with filters and return the selection step."""
+    result = start_menu(client, "discover_light")
+    expect_step(result, "discover_light")
+    return client.continue_flow(
+        result,
+        {"filter_areas": areas, "filter_labels": labels, "preselect_all": True},
+    )
+
+
 def run_discovery_scenarios(client: HomeAssistantClient) -> None:
     """Discovery offers only unwrapped sources, applies affixes, reports its count."""
     result = start_menu(client, "discover_occupancy")
@@ -1220,6 +1240,24 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
         "binary_sensor.v_e2e_removal_motion",
     )
 
+    # Area and label filters narrow the checklist to the matching lights only;
+    # both at once must match an area and a label, which nothing does here.
+    for filters, expected in (
+        ((["e2e_kitchen"], []), [RAW_MULTI_DIMMER]),
+        (([], ["e2e_porch"]), [RAW_MULTI_RGB]),
+    ):
+        result = discover_lights_filtered(client, *filters)
+        expect_step(result, "discover_light_select")
+        offered = sorted(form_default(result, "selected_entities") or [])
+        if offered != expected:
+            raise AssertionError(f"Filter {filters} offered {offered}, not {expected}")
+        client.abort_flow(result)
+    expect_rejection(
+        client,
+        discover_lights_filtered(client, ["e2e_kitchen"], ["e2e_porch"]),
+        "no_filter_matches",
+    )
+
     result = start_menu(client, "discover_light")
     expect_step(result, "discover_light")
     result = client.continue_flow(
@@ -1251,7 +1289,8 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
         "light.e2e_multi_dimmer_v",
     )
     checkpoint(
-        "discovery wraps only unwrapped sources, applies affixes, reports its count"
+        "discovery wraps only unwrapped, enabled sources, filters by area/label, "
+        "applies affixes, reports its count"
     )
 
 

@@ -38,6 +38,7 @@ LIGHT_MULTI_ON_OFF: Final = "light_multi_on_off"
 LIGHT_MULTI_DIMMER: Final = "light_multi_dimmer"
 LIGHT_MULTI_RGB: Final = "light_multi_rgb"
 MOTION: Final = "motion"
+MOTION_DISABLED: Final = "motion_disabled"
 MOTION_REMOVAL: Final = "motion_removal"
 OCCUPANCY: Final = "occupancy"
 DOOR: Final = "door"
@@ -80,6 +81,7 @@ DEFAULT_STATES: Final = {
     },
     MOTION: {"state": "off", "available": True, "attributes": {}},
     MOTION_REMOVAL: {"state": "off", "available": True, "attributes": {}},
+    MOTION_DISABLED: {"state": "off", "available": True, "attributes": {}},
     OCCUPANCY: {"state": "off", "available": True, "attributes": {}},
     DOOR: {"state": "off", "available": True, "attributes": {}},
     SCHEDULE: {"state": "off", "available": True, "attributes": {}},
