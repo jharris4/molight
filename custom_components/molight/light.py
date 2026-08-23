@@ -466,11 +466,15 @@ class _EchoExpectation:
     def judge(self, old_state: State | None, new_state: State) -> str:
         """Return "match", "pending" (echo still arriving), or "contradiction"."""
         attrs = new_state.attributes
-        is_on = new_state.state == "on" and attrs.get(ATTR_BRIGHTNESS) != 0
+        powered = new_state.state == "on"
         if not self.on:
-            return "match" if not is_on else "contradiction"
-        if not is_on:
+            # On at brightness 0 is off in disguise, as the state machine reads it.
+            lit = powered and attrs.get(ATTR_BRIGHTNESS) != 0
+            return "match" if not lit else "contradiction"
+        if not powered:
             return "contradiction"
+        # A member may report on at brightness 0 first (a dimmer with no level
+        # yet): only power contradicts an on command; brightness is judged below.
         # Before the member was on we cannot judge its attributes: a bulb that
         # reports power first still carries its previous brightness and color.
         was_on = old_state is not None and old_state.state == "on"

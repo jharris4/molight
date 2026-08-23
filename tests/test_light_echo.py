@@ -84,6 +84,20 @@ async def test_matching_echo_is_not_physical(
 
 
 @pytest.mark.asyncio
+async def test_on_at_brightness_zero_echo_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A dimmer echoing `on` at brightness 0 must not read as an off in disguise."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on")
+    await _write(hass, "on", contexts[-1], brightness=0)
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert hass.states.get(VIRTUAL).state == "on"
+
+
+@pytest.mark.asyncio
 async def test_two_part_and_stepwise_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
