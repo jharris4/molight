@@ -377,6 +377,44 @@ async def test_early_clear_is_false_detection(hass: HomeAssistant, freezer) -> N
 
 
 @pytest.mark.asyncio
+async def test_late_loading_source_clear_is_not_false_detection(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A source first provided after boot has an unknown start: no false flag.
+
+    Until a slow integration provides it, HA shows the source as a restored
+    placeholder; a detection arriving then may be a replay of one that began
+    long before, so an early clear must take the normal countdown.
+    """
+    hass.states.async_set("binary_sensor.motion_1", "unavailable", {"restored": True})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Late Source Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.late_source_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+    assert state.attributes["latest_occupied_time"] is not None
+
+
+@pytest.mark.asyncio
 async def test_false_detection_classification_and_count(
     hass: HomeAssistant, freezer
 ) -> None:

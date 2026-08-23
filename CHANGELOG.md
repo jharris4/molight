@@ -104,9 +104,10 @@ longer needs a custom repository.
   from an on-duration guess, and a `last_on_time` restored alongside an `off`
   state is discarded.
 - Lights no longer snap off seconds after a restart while someone is still in
-  the room. Occupancy in progress at boot — or re-sent by a source integration
-  that loads late — was timed from the restart moment, so it was misread as a
-  false detection; it now takes the normal countdown.
+  the room. Occupancy in progress at boot — or first provided by a source
+  integration that loads late, even well after Home Assistant reports running —
+  was timed from the moment it appeared, so it was misread as a false detection;
+  it now takes the normal countdown.
 - A door or illuminance sensor that briefly drops to unavailable and comes back
   unchanged no longer counts as a real change — a standing-open door recovering
   from a blip was read as someone opening it.

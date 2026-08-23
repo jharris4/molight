@@ -4364,12 +4364,7 @@ def run_late_source_prepare() -> None:
 
 
 def run_late_source_verify() -> None:
-    """A source that appears well after boot is adopted, not misread as a blip.
-
-    Not yet wired into scripts/e2e: MoLight currently stamps a source's first
-    sighting after boot with the arrival time once HA is running, so a clear
-    soon after reads as a false detection. Run it ad hoc until that changes.
-    """
+    """A source that appears well after boot is adopted, not misread as a blip."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()

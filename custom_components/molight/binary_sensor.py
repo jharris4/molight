@@ -22,7 +22,7 @@ from homeassistant.components.binary_sensor import (
     ENTITY_ID_FORMAT,
     BinarySensorEntity,
 )
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import ATTR_RESTORED, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
@@ -256,8 +256,19 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                 # Before startup finishes, an on-event is a late-loading
                 # source replaying a pre-restart detection: its true start is
                 # unknown, so leave the cycle unclassified (as in _seed_state).
+                # The same holds when the source is first provided after boot
+                # (HA kept a restored placeholder for it until its integration
+                # loaded), however long after HA reported running that is.
+                old_state = event.data.get("old_state")
+                first_sighting = (
+                    old_state is not None
+                    and old_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+                    and bool(old_state.attributes.get(ATTR_RESTORED))
+                )
                 self._last_on_time = (
-                    datetime.now(UTC) if self.hass.state is CoreState.running else None
+                    None
+                    if first_sighting or self.hass.state is not CoreState.running
+                    else datetime.now(UTC)
                 )
             self._attr_is_on = True
         else:
