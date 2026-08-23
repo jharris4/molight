@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.util import color as color_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import STATE_ACTIVE, STATE_IDLE, STATE_WARN
@@ -24,6 +25,19 @@ if TYPE_CHECKING:
 
 MEMBER = "light.living_room"
 VIRTUAL = "light.test_light"
+
+HS_TEMP_CAPS = {
+    "supported_color_modes": ["hs", "color_temp"],
+    "min_color_temp_kelvin": 2202,
+    "max_color_temp_kelvin": 6535,
+}
+
+
+async def _setup_color(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Set up with a color-capable member so color commands reach the light."""
+    await _setup(hass, entry)
+    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    await settle(hass)
 
 
 def _member_contexts(hass: HomeAssistant) -> list[Context]:
@@ -253,6 +267,183 @@ async def test_dim_during_warning_under_our_context_cancels_it(
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
     assert _attrs(hass)["warning_active"] is False
     assert _attrs(hass)["last_brightness_change_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_kelvin_echo_within_tolerance_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A bulb replying 2900 K for a 3000 K command is still echoing it."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=3000)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=2900,
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["color_temp_kelvin"] == 3000  # ours kept, not mirrored
+
+
+@pytest.mark.asyncio
+async def test_hue_wraparound_echo_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Hue 3 echoing hue 358 is 5 degrees away across the wrap, not 355."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[358, 80])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[3, 75],
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_near_white_echo_ignores_hue(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """At near-zero saturation the hue is noise: any hue still echoes white."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[30, 4])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[200, 2],
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_kelvin_command_echoed_as_hs_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An RGB bulb showing a color temperature reports its hs equivalent."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    hs = color_util.color_RGB_to_hs(*color_util.color_temperature_to_rgb(3000))
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=3000)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=list(hs),
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_recolor_while_settling_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A color far from both the command and the old color is a human recolor."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[100, 80])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[100, 80],
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[10, 80],
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is not None
+    assert tuple(_attrs(hass)["hs_color"]) == (10, 80)
+
+
+@pytest.mark.asyncio
+async def test_stale_color_while_recolor_settles_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A reply still showing the previous color is the recolor's echo settling."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[100, 80])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[100, 80],
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+
+    for hs in ([100, 80], [240, 80]):  # stale first, then the new color lands
+        await _write(
+            hass,
+            "on",
+            contexts[-1],
+            brightness=153,
+            color_mode="hs",
+            hs_color=hs,
+            **HS_TEMP_CAPS,
+        )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
+
+
+@pytest.mark.asyncio
+async def test_late_color_mismatch_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Past the settle window only a full match counts, color included."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+    _age_expectations(hass, 10)
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[100, 80],
+        **HS_TEMP_CAPS,
+    )
+
+    # Treated as a real change: the member's color is mirrored, not ours kept.
+    assert tuple(_attrs(hass)["hs_color"]) == (100, 80)
 
 
 def _age_expectations(hass: HomeAssistant, seconds: float) -> None:
