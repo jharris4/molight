@@ -148,6 +148,11 @@ longer needs a custom repository.
   entry gone) no longer pins its virtual light on: turning the remaining
   members off releases the virtual light as usual. A member that is merely
   unloaded — registered but without a state yet — is still never assumed off.
+- A bulb that answers a brightness command in two parts — power first with no
+  level at all, then its fade steps — is no longer misread as a human dim
+  that restarts the auto-off timer. The power-only reply was consumed as the
+  complete echo, leaving the fade steps to count as activity. A slow
+  on/off-only bulb's late power-only reply still counts as its full echo.
 
 ## [1.5.0] - 2026-07-28
 

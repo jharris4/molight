@@ -179,6 +179,37 @@ async def test_dim_away_from_target_while_settling_is_physical(
 
 
 @pytest.mark.asyncio
+async def test_power_only_reply_then_fade_steps_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A bulb replying power first with no level, then fade steps, stays our echo."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=204, transition=2)
+    await _write(hass, "on", contexts[-1])  # power-only: no brightness attribute
+    for brightness in (90, 150, 204):
+        await _write(hass, "on", contexts[-1], brightness=brightness)
+
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+    assert _attrs(hass)["brightness"] == 204
+
+
+@pytest.mark.asyncio
+async def test_late_power_only_reply_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An on/off-only member's late reply carries no level and is its full echo."""
+    await _setup(hass, light_entry)
+    await _virtual(hass, "turn_on", brightness=153)
+    _age_expectations(hass, 10)
+
+    await _write(hass, "on", Context())
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
 async def test_dim_after_echo_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:

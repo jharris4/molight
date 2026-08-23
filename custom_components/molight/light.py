@@ -489,18 +489,25 @@ class _EchoExpectation:
         # reports power first still carries its previous brightness and color.
         was_on = old_state is not None and old_state.state == "on"
         settled = True
-        if (
-            self.brightness is not None
-            and (new_b := attrs.get(ATTR_BRIGHTNESS))
-            and abs(new_b - self.brightness) > ECHO_BRIGHTNESS_TOLERANCE
-        ):
-            old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
-            if was_on and not (
-                new_b == old_b
-                or (old_b is not None and _toward(old_b, new_b, self.brightness))
-            ):
-                return "contradiction"
-            settled = False
+        if self.brightness is not None:
+            new_b = attrs.get(ATTR_BRIGHTNESS)
+            if not new_b:
+                # A power-only reply shows no level: while settling the level
+                # may still be coming (two-part repliers), so keep waiting;
+                # late, this is an on/off-only member's complete reply.
+                if settling:
+                    settled = False
+            elif abs(new_b - self.brightness) > ECHO_BRIGHTNESS_TOLERANCE:
+                old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
+                if (
+                    was_on
+                    and old_b is not None
+                    and not (new_b == old_b or _toward(old_b, new_b, self.brightness))
+                ):
+                    return "contradiction"
+                # Without an old level there is no direction to judge — a
+                # power-first bulb's fade step must not read as a human dim.
+                settled = False
         if (
             self.color is not None
             and (new_color := _state_color(new_state))
