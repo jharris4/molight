@@ -45,6 +45,8 @@ GATE_MODE_LIGHT = "light.e2e_gate_mode"
 TRIGGER_OCCUPANCY = "binary_sensor.e2e_trigger_occupancy"
 COMBINED_OCCUPANCY = "binary_sensor.e2e_combined"
 MAINTAIN_LIGHT = "light.e2e_maintain"
+GRACE_OCCUPANCY = "binary_sensor.e2e_grace_occupancy"
+GRACE_LIGHT = "light.e2e_grace"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -69,6 +71,7 @@ UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
 FIXTURES_SNAPSHOT = Path("/ha-config/e2e-fixtures-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
 RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
+FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -3462,6 +3465,171 @@ def log_failures(content: str) -> list[str]:
     return failures
 
 
+def set_grace_motion(client: HomeAssistantClient, on: bool) -> None:
+    """Drive the source wrapped by the false-detection occupancy sensor."""
+    state = "on" if on else "off"
+    client.set_state(RAW_REMOVAL_MOTION, state)
+    client.wait_state(GRACE_OCCUPANCY, lambda current: current["state"] == state, state)
+
+
+def run_false_detection_prepare() -> None:
+    """Classify a blip as false and a real stay as genuine, then leave occupied."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    sensor_entry_id = create_entry(
+        client,
+        "occupancy",
+        {
+            "name": "E2E Grace Occupancy",
+            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_timeout": 2,
+            "advanced": {
+                "false_detection_grace": 1,
+                "clear_on_unavailable_timeout": 1,
+                "entity_id": "e2e_grace_occupancy",
+            },
+        },
+        "Grace occupancy",
+    )
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Grace",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": GRACE_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
+            "advanced": {"entity_id": "e2e_grace"},
+        },
+        "Grace light",
+    )
+    wait_entry_loaded(client, sensor_entry_id)
+    wait_entry_loaded(client, light_entry_id)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    # A blip shorter than timeout + grace is a false detection: not counted as
+    # presence, and the light it lit goes off after the short delay.
+    set_grace_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_grace_motion(client, False)
+    client.wait_state(
+        GRACE_OCCUPANCY,
+        lambda state: (
+            state["attributes"].get("last_clear_false_detection") is True
+            and state["attributes"].get("false_detection_count") == 1
+            and state["attributes"].get("latest_occupied_time") is None
+        ),
+        "flagging the blip as a false detection without advancing occupancy",
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the false-detection delay, well before the timeout",
+        timeout=4,
+    )
+    wait_machine_state(client, "idle", GRACE_LIGHT)
+
+    # A stay longer than timeout + grace is genuine: the normal countdown runs.
+    set_grace_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on",
+        duration=3.5,
+    )
+    set_grace_motion(client, False)
+    client.wait_state(
+        GRACE_OCCUPANCY,
+        lambda state: (
+            state["attributes"].get("last_clear_false_detection") is False
+            and state["attributes"].get("false_detection_count") == 1
+            and state["attributes"].get("latest_occupied_time") is not None
+        ),
+        "clearing a genuine stay",
+    )
+    wait_machine_state(client, "countdown", GRACE_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the false-detection delay: a genuine clear gets the countdown",
+        duration=4,
+    )
+    client.call_service("light", "turn_off", {"entity_id": GRACE_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+
+    # Leave the room occupied across the restart.
+    set_grace_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", GRACE_LIGHT)
+    FALSE_DETECTION_SNAPSHOT.write_text(
+        json.dumps(
+            {"sensor_entry_id": sensor_entry_id, "light_entry_id": light_entry_id}
+        )
+    )
+    print("PASS: false-detection quick-off, genuine countdown, occupied for restart")
+
+
+def run_false_detection_verify() -> None:
+    """Occupancy in progress at boot is not a false detection after a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(FALSE_DETECTION_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["sensor_entry_id"])
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    client.wait_state(GRACE_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        GRACE_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "restored on and occupied",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: occupancy in progress at boot is not a false detection",
+        duration=5,
+    )
+    set_grace_motion(client, False)
+    client.wait_state(
+        GRACE_OCCUPANCY,
+        lambda state: state["attributes"].get("last_clear_false_detection") is False,
+        "clearing without a false-detection flag",
+    )
+    wait_machine_state(client, "countdown", GRACE_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the false-detection delay after the post-restart clear",
+        duration=4,
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=12
+    )
+    wait_machine_state(client, "idle", GRACE_LIGHT)
+    for entry_id, entity_id in (
+        (snapshot["light_entry_id"], GRACE_LIGHT),
+        (snapshot["sensor_entry_id"], GRACE_OCCUPANCY),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: restart while occupied took the countdown, not a false-detection off")
+
+
 def check_logs() -> None:
     """Fail for MoLight errors, warnings, or tracebacks in all HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
@@ -3485,6 +3653,8 @@ def main() -> None:
         "primary": run_primary,
         "browser-prepare": run_browser_prepare,
         "fast-physical": run_fast_physical_scenarios,
+        "false-detection-prepare": run_false_detection_prepare,
+        "false-detection-verify": run_false_detection_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
