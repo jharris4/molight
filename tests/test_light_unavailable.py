@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -482,21 +483,55 @@ async def test_unavailable_real_light_counts_as_off(hass: HomeAssistant) -> None
 
 
 @pytest.mark.asyncio
-async def test_light_with_no_state_never_counts_as_off(hass: HomeAssistant) -> None:
-    """A controlled light that has never reported a state is not assumed off."""
+async def test_registered_light_with_no_state_never_counts_as_off(
+    hass: HomeAssistant,
+) -> None:
+    """A registered member that has not reported a state is not assumed off."""
+    registered = er.async_get(hass).async_get_or_create(
+        "light", "test", "real2-unique", suggested_object_id="real_2"
+    )
+    assert registered.entity_id == REAL2
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
 
     hass.states.async_set(REAL, "on")
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # REAL2 has no state at all — turning REAL off must not release the
-    # virtual light, since REAL2 may well still be burning.
+    # REAL2 is registered but has no state — its integration has not loaded
+    # (yet); turning REAL off must not release the virtual light, since REAL2
+    # may well still be burning.
     hass.states.async_set(REAL, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
+    """A member gone from HA entirely no longer pins the virtual light on.
+
+    A deleted entity loses both its state and its registry entry, and can
+    never report again — treating it as "maybe still on" would keep the
+    virtual light from ever reaching IDLE on external offs.
+    """
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
+
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(REAL2, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_remove(REAL2)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio

@@ -87,6 +87,9 @@ async def test_selection_is_not_reapplied_while_already_on(
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
     )
+    # The member reports on, as a real bulb would after the command.
+    hass.states.async_set("light.ambient", "on")
+    await settle(hass)
     await hass.services.async_call(
         "light",
         "turn_on",

@@ -144,6 +144,10 @@ longer needs a custom repository.
 - Renaming an entry through its options flow now reloads it once instead of
   twice — the title sync and the options were stored as two separate updates,
   each triggering a reload.
+- A member light deleted from Home Assistant outright (its entity and registry
+  entry gone) no longer pins its virtual light on: turning the remaining
+  members off releases the virtual light as usual. A member that is merely
+  unloaded — registered but without a state yet — is still never assumed off.
 
 ## [1.5.0] - 2026-07-28
 

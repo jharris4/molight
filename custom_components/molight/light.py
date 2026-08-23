@@ -249,6 +249,7 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_call_later,
@@ -1450,7 +1451,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         for entity_id in self._lights:
             state = self.hass.states.get(entity_id)
             if state is None:
-                return False  # unknown entity — don't assume it's off
+                # Registered but stateless: an integration that hasn't loaded
+                # (yet) — the bulb may still be burning, so don't assume off.
+                # No registry entry either means the member is gone from HA
+                # entirely and can never report again; counting such a ghost
+                # as "maybe on" would pin the virtual light on forever.
+                if er.async_get(self.hass).async_get(entity_id) is not None:
+                    return False
+                continue
             if state.state == "on" and state.attributes.get("brightness") != 0:
                 return False
         return True
