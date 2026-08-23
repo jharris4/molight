@@ -63,6 +63,21 @@ RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
+LIGHT_ENTRY_KEYS = (
+    "name",
+    "lights",
+    "schedule_entity",
+    "schedule_mode",
+    "schedule_end_action",
+    "entity_id",
+)
+# Inputs conversion strips from the outside profile when promoting a light.
+CONVERSION_INPUT_KEYS = (
+    "occupancy_entity",
+    "maintain_occupancy_entity",
+    "illuminance_entity",
+    "door_entity",
+)
 EMPTY_REMOTE_SECTIONS = {
     "turn_on": {},
     "turn_off": {},
@@ -421,6 +436,24 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
             "turn_on_select_entity": TARGET_SELECT,
         },
     }
+
+
+def flat_light_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a sectioned light form into the per-profile settings MoLight stores."""
+    flat: dict[str, Any] = {}
+    for key, value in payload.items():
+        if isinstance(value, dict):
+            flat.update(value)
+        else:
+            flat[key] = value
+    return {key: value for key, value in flat.items() if key not in LIGHT_ENTRY_KEYS}
+
+
+SCHEDULED_INSIDE_SETTINGS = {
+    **flat_light_settings(light_settings(80, inside=True)),
+    "turn_on_select_option": "Cozy",
+    "turn_on_select_source_entity": SOURCE_SELECT,
+}
 
 
 def submit_selection(
@@ -1466,6 +1499,96 @@ def assert_removal_storage_clean(snapshot: dict[str, str]) -> None:
         )
 
 
+def wait_stored_entry(
+    entry_id: str,
+    predicate: Callable[[dict[str, Any]], bool],
+    description: str,
+    timeout: float = 20,
+) -> dict[str, Any]:
+    """Poll persisted config entries until one's effective config matches."""
+    deadline = time.monotonic() + timeout
+    effective: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        for entry in stored_config_entries():
+            if entry["entry_id"] == entry_id:
+                effective = entry["options"] or entry["data"]
+        if effective is not None and predicate(effective):
+            return effective
+        time.sleep(0.2)
+    raise AssertionError(
+        f"Stored entry {entry_id} never became {description}; last={effective}"
+    )
+
+
+def assert_subset(actual: dict[str, Any], expected: dict[str, Any], what: str) -> None:
+    """Assert every expected key is stored with the expected value."""
+    mismatched = {
+        key: (value, actual.get(key))
+        for key, value in expected.items()
+        if actual.get(key) != value
+    }
+    if mismatched:
+        raise AssertionError(f"{what} differ (expected, stored): {mismatched}")
+
+
+def assert_converted_to_regular(
+    entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
+) -> None:
+    """Assert a demoted entry stores the inside profile as a gated light."""
+    effective = wait_stored_entry(
+        entry_id, lambda cfg: cfg.get("entity_type") == "light", "a regular light"
+    )
+    assert_subset(
+        effective,
+        {
+            **settings,
+            "schedule_entity": schedule_entity,
+            "schedule_mode": schedule_mode,
+        },
+        "Demoted light settings",
+    )
+    leftovers = [
+        key
+        for key in ("outside_schedule_settings", "inside_schedule_settings")
+        if key in effective
+    ]
+    if leftovers:
+        raise AssertionError(f"Demoted light kept profile sections: {leftovers}")
+
+
+def assert_converted_to_scheduled(
+    entry_id: str, schedule_entity: str, end_action: str, settings: dict[str, Any]
+) -> None:
+    """Assert a promoted entry keeps old settings inside and strips inputs outside."""
+    effective = wait_stored_entry(
+        entry_id,
+        lambda cfg: cfg.get("entity_type") == "scheduled_light",
+        "a scheduled light",
+    )
+    assert_subset(
+        effective,
+        {"schedule_entity": schedule_entity, "schedule_end_action": end_action},
+        "Promoted light schedule settings",
+    )
+    assert_subset(
+        effective.get("inside_schedule_settings", {}),
+        settings,
+        "Promoted inside profile",
+    )
+    outside = effective.get("outside_schedule_settings", {})
+    retained = {
+        key: value
+        for key, value in settings.items()
+        if key not in CONVERSION_INPUT_KEYS
+    }
+    assert_subset(outside, retained, "Promoted outside profile")
+    inputs = [key for key in CONVERSION_INPUT_KEYS if key in outside]
+    if inputs:
+        raise AssertionError(
+            f"Promoted outside profile kept automatic inputs: {inputs}"
+        )
+
+
 def assert_state_stays(
     client: HomeAssistantClient,
     entity_id: str,
@@ -1581,6 +1704,9 @@ def upgrade_light_payload(name: str, brightness: int) -> dict[str, Any]:
         },
         "warning": {},
     }
+
+
+UPGRADE_LIGHT_SETTINGS = flat_light_settings(upgrade_light_payload("", 60))
 
 
 def create_and_edit_upgrade_light(client: HomeAssistantClient) -> str:
@@ -1746,6 +1872,9 @@ def run_upgrade_verification() -> None:
         UPGRADE_LIGHT,
     )
     assert_entry_loaded(client, entry_ids["light"])
+    assert_converted_to_scheduled(
+        entry_ids["light"], UPGRADE_SCHEDULE, "turn_off", UPGRADE_LIGHT_SETTINGS
+    )
     client.wait_state(
         UPGRADE_LIGHT,
         lambda state: "active_settings" in state["attributes"],
@@ -1758,8 +1887,13 @@ def run_upgrade_verification() -> None:
         UPGRADE_LIGHT,
     )
     assert_entry_loaded(client, entry_ids["light"])
+    assert_converted_to_regular(
+        entry_ids["light"], UPGRADE_SCHEDULE, "gate", UPGRADE_LIGHT_SETTINGS
+    )
     client.wait_state(
-        UPGRADE_LIGHT, lambda _state: True, "regular after conversion round trip"
+        UPGRADE_LIGHT,
+        lambda state: "active_settings" not in state["attributes"],
+        "regular after conversion round trip",
     )
     print("PASS: previous-release entries, ids, options, behavior, and conversion")
 
@@ -1827,10 +1961,45 @@ def run_primary() -> None:
 
     convert_light(client, "convert_to_regular", "confirm_convert_to_regular")
     assert_entry_loaded(client, light_entry_id)
-    client.wait_state(VIRTUAL_LIGHT, lambda _state: True, "present after conversion")
+    assert_converted_to_regular(
+        light_entry_id, VIRTUAL_SCHEDULE, "gate_keep", SCHEDULED_INSIDE_SETTINGS
+    )
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: "active_settings" not in state["attributes"],
+        "a regular light after conversion",
+    )
+    reset_trigger(client)
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off outside the window: the demoted light kept its schedule gate",
+    )
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    trigger_and_assert(client, 204, "Night")
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+
     convert_light(client, "convert_to_scheduled", "confirm_convert_to_scheduled")
     assert_entry_loaded(client, light_entry_id)
-    client.wait_state(VIRTUAL_LIGHT, lambda _state: True, "present after round trip")
+    assert_converted_to_scheduled(
+        light_entry_id, VIRTUAL_SCHEDULE, "keep", SCHEDULED_INSIDE_SETTINGS
+    )
+    wait_profile(client, PROFILE_OUTSIDE)
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: promotion left the outside profile without an occupancy input",
+    )
 
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
