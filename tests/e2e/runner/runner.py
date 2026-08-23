@@ -75,6 +75,8 @@ GRACE_TRIGGER = "binary_sensor.e2e_grace_trigger"
 GRACE_MAINTAIN = "binary_sensor.e2e_grace_maintain"
 GRACE_BOTH_LIGHT = "light.e2e_grace_both"
 MAINTAIN_BOOT_LIGHT = "light.e2e_maintain_boot"
+DOOR_GATE_LIGHT = "light.e2e_door_gate"
+DOOR_BOOT_LIGHT = "light.e2e_door_boot"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -110,6 +112,7 @@ END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
 RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
+DOOR_RESTART_SNAPSHOT = Path("/ha-config/e2e-door-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -5135,6 +5138,12 @@ def run_follow_restart_verify_off() -> None:
     client.wait_state(
         FOLLOW_LIGHT, lambda _state: True, "present", timeout=WAIT_TIMEOUT
     )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off",
+        timeout=WAIT_TIMEOUT,
+    )
     assert_state_stays(
         client,
         RAW_TIMER_LIGHT,
@@ -6182,6 +6191,152 @@ def run_maintain_restart_verify() -> None:
     print("PASS: a maintain-held light restored occupied and released normally")
 
 
+def create_door_gate_light(client: HomeAssistantClient, door_mode: str) -> str:
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Door Gate",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "door_entity": RAW_DOOR,
+                "door_mode": door_mode,
+                "schedule_entity": END_SCHEDULE,
+                "schedule_mode": "gate",
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_door_gate"},
+        },
+        f"Door-gate {door_mode} light",
+    )
+
+
+def run_door_gate_scenarios(client: HomeAssistantClient) -> None:
+    """A standing-open door at the gate lift: ignored in open, adopted in open_close."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    set_end_schedule(client, False)
+    client.set_state(RAW_DOOR, "off")
+
+    entry_id = create_door_gate_light(client, "open")
+    assert_entry_loaded(client, entry_id)
+    client.set_state(RAW_DOOR, "on")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: an opening outside the gate window does not light the room",
+    )
+    set_end_schedule(client, True)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: in open mode a door already standing open does nothing at the gate lift",
+        duration=2,
+    )
+    client.set_state(RAW_DOOR, "off")
+    client.set_state(RAW_DOOR, "on")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "active", DOOR_GATE_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": DOOR_GATE_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    set_end_schedule(client, False)
+    remove_entry_and_entity(client, entry_id, DOOR_GATE_LIGHT)
+
+    entry_id = create_door_gate_light(client, "open_close")
+    assert_entry_loaded(client, entry_id)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: the standing-open door is gated outside the window",
+    )
+    set_end_schedule(client, True)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: open_close re-evaluates the standing-open door at the gate lift",
+    )
+    wait_machine_state(client, "occupied", DOOR_GATE_LIGHT)
+    client.set_state(RAW_DOOR, "off")
+    wait_machine_state(client, "countdown", DOOR_GATE_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": DOOR_GATE_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    set_end_schedule(client, False)
+    remove_entry_and_entity(client, entry_id, DOOR_GATE_LIGHT)
+    remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
+    print(
+        "PASS: standing-open door at gate lift: ignored in open, adopted in open_close"
+    )
+
+
+def run_door_restart_prepare() -> None:
+    """Leave an on light with its open_close door standing open across a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Door Boot",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"door_entity": RAW_DOOR, "door_mode": "open_close"},
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_door_boot"},
+        },
+        "Door-boot light",
+    )
+    wait_entry_loaded(client, entry_id)
+    client.set_state(RAW_DOOR, "on")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", DOOR_BOOT_LIGHT)
+    DOOR_RESTART_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print("PASS: door-held light prepared for a container restart")
+
+
+def run_door_restart_verify() -> None:
+    """An on light whose open_close door is open at startup is adopted as occupied."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(DOOR_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["entry_id"])
+    client.wait_state(
+        DOOR_BOOT_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "restored occupied by the standing-open door",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the timeout while the door stays open",
+        duration=5,
+    )
+    client.set_state(RAW_DOOR, "off")
+    wait_machine_state(client, "countdown", DOOR_BOOT_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, DOOR_BOOT_LIGHT)
+    wait_entry_removed(client, snapshot["entry_id"], "Temporary door-boot light")
+    print("PASS: a door-held light restored occupied and released on close")
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6221,6 +6376,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_scheduled_light_depth_scenarios,
         run_time_window_scenario,
         run_hold_release_scenarios,
+        run_door_gate_scenarios,
     ],
 }
 
@@ -6282,6 +6438,8 @@ def main() -> None:
         "hold-restart-verify": run_hold_restart_verify,
         "maintain-restart-prepare": run_maintain_restart_prepare,
         "maintain-restart-verify": run_maintain_restart_verify,
+        "door-restart-prepare": run_door_restart_prepare,
+        "door-restart-verify": run_door_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
