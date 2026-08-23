@@ -25,15 +25,31 @@ jobs:
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
 
-  scenarios:
-    name: Behaviour scenarios (HA current)
+  restarts:
+    name: Restart scenarios (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Run the self-contained behaviour scenarios
-        run: npm run test:e2e:scenarios
+      - name: Run the independent restart scenarios
+        run: npm run test:e2e:restarts
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+
+  scenarios:
+    name: Behaviour scenarios ${{ matrix.shard }} (HA current)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [a, b, c]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run behaviour scenario shard ${{ matrix.shard }}
+        run: npm run test:e2e:scenarios-${{ matrix.shard }}
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
 
@@ -72,7 +88,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [core, scenarios]
+        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c]
         include:
           - label: HA floor
             image: ghcr.io/home-assistant/home-assistant:2026.1.0

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Independent restart scenarios: each prepares its own fixture on top of the
+# base set, restarts the container, and verifies. Runs alongside scripts/e2e.
+set -Eeuo pipefail
+
+cd "$(dirname "$0")/.."
+source tests/e2e/env.sh
+
+COMPOSE_FILE="tests/e2e/compose.yaml"
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-restarts.XXXXXX")"
+export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
+export COMPOSE_PROJECT_NAME="molight-e2e-restarts-$$"
+mkdir -p "$MOLIGHT_E2E_CONFIG_DIR"
+cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
+
+compose() {
+    docker compose --file "$COMPOSE_FILE" "$@"
+}
+
+cleanup() {
+    status=$?
+    set +e
+    compose logs --no-color > "$RUN_ROOT/docker-compose.log" 2>&1
+    compose down --volumes --remove-orphans >/dev/null 2>&1
+    if [ "$status" -eq 0 ]; then
+        rm -rf "$RUN_ROOT"
+    else
+        echo ""
+        echo "E2E restarts failure artifacts retained at: $RUN_ROOT"
+        echo "The config contains the isolated test account; delete it after debugging."
+    fi
+    exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+echo "Starting isolated Home Assistant for the restart scenarios..."
+compose up --detach homeassistant
+
+echo "Creating the base fixtures and a live effect stage..."
+compose run --rm runner python runner.py bootstrap restart-effect-prepare
+
+echo "Restarting during a live effect stage..."
+compose restart homeassistant
+compose run --rm runner python runner.py restart-effect-verify hold-restart-prepare
+
+echo "Restarting with a keep-on entity unavailable..."
+compose restart homeassistant
+compose run --rm runner python runner.py hold-restart-verify false-detection-prepare
+
+echo "Restarting with occupancy in progress under false-detection grace..."
+compose restart homeassistant
+compose run --rm runner python runner.py false-detection-verify late-source-prepare
+
+echo "Restarting with an occupancy source that loads late..."
+compose restart homeassistant
+compose run --rm runner python runner.py late-source-verify follow-restart-prepare
+
+echo "Restarting across a follow-mode window start..."
+compose restart homeassistant
+compose run --rm runner python runner.py follow-restart-verify
+
+echo "Restarting again inside the follow window..."
+compose restart homeassistant
+compose run --rm runner python runner.py follow-restart-verify-off end-restart-prepare
+
+echo "Restarting across a scheduled light's turn_off window end..."
+compose restart homeassistant
+compose run --rm runner python runner.py end-restart-verify logs
+
+echo "MoLight E2E restart scenarios passed."

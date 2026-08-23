@@ -9,6 +9,7 @@ import sys
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
@@ -3630,13 +3631,8 @@ def run_upgrade_verification() -> None:
     print("PASS: previous-release entries, ids, options, behavior, and conversion")
 
 
-def run_primary() -> None:
-    """Run creation, behavior, editing, conversion, and core-restart checks."""
-    client = HomeAssistantClient()
-    client.wait_ready()
-    client.authenticate()
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
-
+def create_base_fixtures(client: HomeAssistantClient) -> dict[str, str]:
+    """Create the shared fixtures every restart phase relies on."""
     fixtures: dict[str, str] = {
         "schedule": create_virtual_schedule(client),
         "occupancy": create_virtual_occupancy(client),
@@ -3645,11 +3641,33 @@ def run_primary() -> None:
         ),
         "illuminance": create_virtual_illuminance(client),
     }
-    light_entry_id = create_scheduled_light(client)
-    fixtures["light"] = light_entry_id
-    assert_entry_loaded(client, light_entry_id)
+    fixtures["light"] = create_scheduled_light(client)
+    assert_entry_loaded(client, fixtures["light"])
     wait_profile(client, PROFILE_OUTSIDE)
     checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
+    return fixtures
+
+
+def run_bootstrap() -> None:
+    """Create the base fixtures on a fresh HA for the independent restart lane."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    fixtures = create_base_fixtures(client)
+    save_fixtures({"entries": fixtures, "removed_sensor": None})
+    print("PASS: base fixtures created for the restart lane")
+
+
+def run_primary() -> None:
+    """Run creation, behavior, editing, conversion, and core-restart checks."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+
+    fixtures = create_base_fixtures(client)
+    light_entry_id = fixtures["light"]
     run_inverted_schedule_scenario(client)
     run_config_flow_rejections(client)
     run_discovery_scenarios(client)
@@ -5943,21 +5961,8 @@ def run_hold_restart_verify() -> None:
     print("PASS: an unavailable keep-on entity at boot did not hold the restored light")
 
 
-def run_scenarios() -> None:
-    """Self-contained behaviour scenarios on a fresh Home Assistant.
-
-    Everything here builds its own fixtures, so it runs alongside the
-    restart-chain suite rather than lengthening it.
-    """
-    client = HomeAssistantClient()
-    client.wait_ready()
-    client.authenticate()
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
-    run_cold_illuminance_scenario(client)
-    timer_occupancy_id = create_virtual_occupancy(
-        client, "E2E Timer Occupancy", RAW_TIMER_MOTION, "e2e_timer_occupancy"
-    )
-    assert_entry_loaded(client, timer_occupancy_id)
+def run_timer_scenarios(client: HomeAssistantClient) -> None:
+    """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
@@ -5969,20 +5974,48 @@ def run_scenarios() -> None:
         client, timer_entry_id, "slow two-part bulb", light_timeout=10
     )
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
-    run_physical_change_scenarios(client)
-    run_schedule_end_action_scenarios(client)
-    run_schedule_mode_scenarios(client)
-    run_combined_and_maintain_scenarios(client)
-    run_hold_entity_scenarios(client)
-    run_fast_physical_scenarios(client)
-    run_effect_color_scenarios(client)
-    run_auto_on_color_scenario(client)
-    run_dark_arrival_scenarios(client)
-    run_scheduled_light_depth_scenarios(client)
-    run_time_window_scenario(client)
-    run_wall_brightness_scenarios(client)
-    run_hold_release_scenarios(client)
-    print("PASS: behaviour scenarios completed on a fresh Home Assistant")
+
+
+# Self-contained behaviour scenarios, grouped into shards of similar duration
+# that each run on their own fresh Home Assistant.
+SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
+    "a": [
+        run_cold_illuminance_scenario,
+        run_timer_scenarios,
+        run_physical_change_scenarios,
+        run_fast_physical_scenarios,
+        run_effect_color_scenarios,
+        run_auto_on_color_scenario,
+        run_wall_brightness_scenarios,
+    ],
+    "b": [
+        run_schedule_end_action_scenarios,
+        run_schedule_mode_scenarios,
+        run_combined_and_maintain_scenarios,
+        run_hold_entity_scenarios,
+    ],
+    "c": [
+        run_dark_arrival_scenarios,
+        run_scheduled_light_depth_scenarios,
+        run_time_window_scenario,
+        run_hold_release_scenarios,
+    ],
+}
+
+
+def run_scenarios(shard: str) -> None:
+    """Run one shard of behaviour scenarios on a fresh Home Assistant."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    timer_occupancy_id = create_virtual_occupancy(
+        client, "E2E Timer Occupancy", RAW_TIMER_MOTION, "e2e_timer_occupancy"
+    )
+    assert_entry_loaded(client, timer_occupancy_id)
+    for scenario in SCENARIO_SHARDS[shard]:
+        scenario(client)
+    print(f"PASS: behaviour scenario shard {shard} completed on a fresh Home Assistant")
 
 
 def check_logs() -> None:
@@ -6006,8 +6039,12 @@ def main() -> None:
     """Dispatch the phase selected by the host orchestrator."""
     commands = {
         "primary": run_primary,
+        "bootstrap": run_bootstrap,
         "browser-prepare": run_browser_prepare,
-        "scenarios": run_scenarios,
+        **{
+            f"scenarios-{shard}": partial(run_scenarios, shard)
+            for shard in SCENARIO_SHARDS
+        },
         "false-detection-prepare": run_false_detection_prepare,
         "false-detection-verify": run_false_detection_verify,
         "late-source-prepare": run_late_source_prepare,
@@ -6034,10 +6071,16 @@ def main() -> None:
         "upgrade-verify": run_upgrade_verification,
         "logs": check_logs,
     }
-    if len(sys.argv) != 2 or sys.argv[1] not in commands:
+    names = sys.argv[1:]
+    if not names or any(name not in commands for name in names):
         choices = ", ".join(commands)
-        raise SystemExit(f"usage: runner.py [{choices}]")
-    commands[sys.argv[1]]()
+        raise SystemExit(
+            f"usage: runner.py <command>... where each is one of {choices}"
+        )
+    for (
+        name
+    ) in names:  # several phases may share one container when no restart separates them
+        commands[name]()
 
 
 if __name__ == "__main__":

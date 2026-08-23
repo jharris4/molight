@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SHARD="${1:?usage: scripts/e2e-scenarios <a|b|c>}"
 cd "$(dirname "$0")/.."
 source tests/e2e/env.sh
 
 COMPOSE_FILE="tests/e2e/compose.yaml"
-RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-scenarios.XXXXXX")"
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-scenarios-$SHARD.XXXXXX")"
 export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
-export COMPOSE_PROJECT_NAME="molight-e2e-scenarios-$$"
+export COMPOSE_PROJECT_NAME="molight-e2e-scenarios-$SHARD-$$"
 mkdir -p "$MOLIGHT_E2E_CONFIG_DIR"
 cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
 
@@ -31,13 +32,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting isolated Home Assistant for the behaviour scenarios..."
+echo "Starting isolated Home Assistant for behaviour scenario shard $SHARD..."
 compose up --detach homeassistant
 
-echo "Running self-contained behaviour scenarios..."
-compose run --rm runner python runner.py scenarios
+echo "Running behaviour scenario shard $SHARD..."
+compose run --rm runner python runner.py "scenarios-$SHARD" logs
 
-echo "Checking Home Assistant logs..."
-compose run --rm runner python runner.py logs
-
-echo "MoLight E2E behaviour scenarios passed."
+echo "MoLight E2E behaviour scenario shard $SHARD passed."

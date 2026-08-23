@@ -533,9 +533,10 @@ it is mounted only into the disposable acceptance environment and is never
 part of a MoLight release.
 
 ```bash
-npm run test:e2e            # restart-chain suite and behaviour scenarios, concurrently
-npm run test:e2e:core       # the restart-chain suite alone
-npm run test:e2e:scenarios  # the self-contained behaviour scenarios alone
+npm run test:e2e              # every lane below, concurrently
+npm run test:e2e:core         # the sequential restart chain
+npm run test:e2e:restarts     # independent restart scenarios on their own fixtures
+npm run test:e2e:scenarios-a  # behaviour scenario shards a, b, c (one fresh HA each)
 npm run test:e2e:upgrade
 ```
 

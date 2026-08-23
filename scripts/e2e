@@ -31,6 +31,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Phases that no restart separates share one runner container.
 echo "Starting isolated Home Assistant (${MOLIGHT_E2E_HA_IMAGE:-2026.8.0})..."
 compose up --detach homeassistant
 
@@ -39,10 +40,9 @@ compose run --rm runner python runner.py primary
 
 echo "Restarting the full Home Assistant container..."
 compose restart homeassistant
-compose run --rm runner python runner.py restart
+compose run --rm runner python runner.py restart unavailable-light-prepare
 
-echo "Preparing a restart with the physical light unavailable..."
-compose run --rm runner python runner.py unavailable-light-prepare
+echo "Restarting with the physical light unavailable..."
 compose restart homeassistant
 compose run --rm runner python runner.py unavailable-light-recover
 
@@ -52,51 +52,14 @@ compose run --rm runner python runner.py unavailable-sensors-motion-first
 
 echo "Restarting to recover the unavailable sensors in reverse order..."
 compose restart homeassistant
-compose run --rm runner python runner.py unavailable-sensors-schedule-first
+compose run --rm runner python runner.py unavailable-sensors-schedule-first auto-off-prepare
 
-echo "Disabling auto-off and preparing its restart-persistence check..."
-compose run --rm runner python runner.py auto-off-prepare
+echo "Restarting with auto-off disabled..."
 compose restart homeassistant
-compose run --rm runner python runner.py auto-off-restart
+compose run --rm runner python runner.py auto-off-restart restart-warning-prepare
 
 echo "Restarting during a live warning stage..."
-compose run --rm runner python runner.py restart-warning-prepare
 compose restart homeassistant
-compose run --rm runner python runner.py restart-warning-verify
-
-echo "Restarting during a live effect stage..."
-compose run --rm runner python runner.py restart-effect-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py restart-effect-verify
-
-echo "Restarting with a keep-on entity unavailable..."
-compose run --rm runner python runner.py hold-restart-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py hold-restart-verify
-
-echo "Restarting with occupancy in progress under false-detection grace..."
-compose run --rm runner python runner.py false-detection-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py false-detection-verify
-
-echo "Restarting with an occupancy source that loads late..."
-compose run --rm runner python runner.py late-source-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py late-source-verify
-
-echo "Restarting across a follow-mode window start..."
-compose run --rm runner python runner.py follow-restart-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py follow-restart-verify
-compose restart homeassistant
-compose run --rm runner python runner.py follow-restart-verify-off
-
-echo "Restarting across a scheduled light's turn_off window end..."
-compose run --rm runner python runner.py end-restart-prepare
-compose restart homeassistant
-compose run --rm runner python runner.py end-restart-verify
-
-echo "Checking Home Assistant logs..."
-compose run --rm runner python runner.py logs
+compose run --rm runner python runner.py restart-warning-verify logs
 
 echo "MoLight E2E acceptance suite passed."

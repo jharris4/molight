@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Run the restart-chain suite and the behaviour scenarios concurrently.
+# Run every e2e lane concurrently: the core restart chain, the independent
+# restart scenarios, and the behaviour scenario shards.
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
@@ -8,14 +9,20 @@ prefix() {
     while IFS= read -r line; do printf '[%s] %s\n' "$1" "$line"; done
 }
 
+pids=()
 bash scripts/e2e 2>&1 | prefix core &
-core=$!
-bash scripts/e2e-scenarios 2>&1 | prefix scenarios &
-scenarios=$!
+pids+=($!)
+bash scripts/e2e-restarts 2>&1 | prefix restarts &
+pids+=($!)
+for shard in a b c; do
+    bash scripts/e2e-scenarios "$shard" 2>&1 | prefix "scenarios-$shard" &
+    pids+=($!)
+done
 
 status=0
-wait "$core" || status=1
-wait "$scenarios" || status=1
+for pid in "${pids[@]}"; do
+    wait "$pid" || status=1
+done
 if [ "$status" -eq 0 ]; then
     echo "MoLight E2E suites passed."
 fi
