@@ -64,6 +64,7 @@ END_RESTART_SCHEDULE = "binary_sensor.e2e_end_restart_schedule"
 END_RESTART_LIGHT = "light.e2e_end_restart"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
 WALL_LIGHT = "light.e2e_wall"
+RESTART_EFFECT_LIGHT = "light.e2e_restart_effect"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -96,6 +97,7 @@ FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
+RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -5567,6 +5569,130 @@ def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: wall brightness 0 reads as off, 0 -> on as a turn-on, all off as idle")
 
 
+def run_restart_effect_prepare() -> None:
+    """Enter a live effect stage (dim + recolour) and leave it for a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Restart Effect",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {
+                "effect_timeout": 10,
+                "effect_brightness": 20,
+                "effect_rgb_color": [255, 0, 0],
+            },
+            "advanced": {"entity_id": "e2e_restart_effect"},
+        },
+        "Restart-effect light",
+    )
+    wait_entry_loaded(client, entry_id)
+    client.wait_state(
+        RESTART_EFFECT_LIGHT, lambda state: state["state"] == "off", "off"
+    )
+    set_timer_motion(client, True)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    client.call_service(
+        "light", "turn_on", {"entity_id": RESTART_EFFECT_LIGHT, "hs_color": [240, 100]}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(60)
+            and list(state["attributes"].get("rgb_color") or []) == [0, 0, 255]
+        ),
+        "blue at 60 % before the sequence",
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", RESTART_EFFECT_LIGHT)
+    client.wait_state(
+        RESTART_EFFECT_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "effect"
+            and state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
+            and (
+                hs := (state["attributes"].get("pre_warn_color") or {}).get("hs_color")
+            )
+            and abs(hs[0] - 240) < 1
+        ),
+        "in its effect stage with the pre-warning appearance saved",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(20)
+            and list(state["attributes"].get("rgb_color") or []) == [255, 0, 0]
+        ),
+        "showing the effect brightness and red",
+    )
+    RESTART_EFFECT_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print("PASS: live effect stage prepared for a container restart")
+
+
+def run_restart_effect_verify() -> None:
+    """Restored mid-effect, the light gets its pre-warning look back, then finishes."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(RESTART_EFFECT_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["entry_id"])
+    client.wait_state(
+        RESTART_EFFECT_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("warning_active") is False
+            and state["attributes"].get("pre_warn_brightness") is None
+            and state["attributes"].get("pre_warn_color") is None
+        ),
+        "restored active with the interrupted effect undone",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and list(state["attributes"].get("rgb_color") or []) == [0, 0, 255]
+        ),
+        "back at the pre-warning 60 % blue",
+        timeout=WAIT_TIMEOUT,
+    )
+    # A fresh timer runs: effect again, then off, and nothing relights it.
+    client.wait_state(
+        RESTART_EFFECT_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "effect",
+        "in a fresh effect stage",
+        timeout=20,
+    )
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=20
+    )
+    wait_machine_state(client, "idle", RESTART_EFFECT_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off (no relight)",
+        duration=2.5,
+    )
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, RESTART_EFFECT_LIGHT)
+    wait_entry_removed(client, snapshot["entry_id"], "Temporary restart-effect light")
+    print(
+        "PASS: restart mid-effect restored the pre-warning look, then finished cleanly"
+    )
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5640,6 +5766,8 @@ def main() -> None:
         "follow-restart-verify-off": run_follow_restart_verify_off,
         "end-restart-prepare": run_end_restart_prepare,
         "end-restart-verify": run_end_restart_verify,
+        "restart-effect-prepare": run_restart_effect_prepare,
+        "restart-effect-verify": run_restart_effect_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
