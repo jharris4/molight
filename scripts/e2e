@@ -69,6 +69,11 @@ compose run --rm runner python runner.py restart-effect-prepare
 compose restart homeassistant
 compose run --rm runner python runner.py restart-effect-verify
 
+echo "Restarting with a keep-on entity unavailable..."
+compose run --rm runner python runner.py hold-restart-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py hold-restart-verify
+
 echo "Restarting with occupancy in progress under false-detection grace..."
 compose run --rm runner python runner.py false-detection-prepare
 compose restart homeassistant

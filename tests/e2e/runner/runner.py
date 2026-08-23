@@ -65,6 +65,10 @@ END_RESTART_LIGHT = "light.e2e_end_restart"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
 WALL_LIGHT = "light.e2e_wall"
 RESTART_EFFECT_LIGHT = "light.e2e_restart_effect"
+HOLD_RULES_LIGHT = "light.e2e_hold_rules"
+HOLD_ILLUMINANCE = "binary_sensor.e2e_hold_illuminance"
+HOLD_WARN_LIGHT = "light.e2e_hold_warn"
+HOLD_BOOT_LIGHT = "light.e2e_hold_boot"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -98,6 +102,7 @@ LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
 RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
+HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -5693,6 +5698,251 @@ def run_restart_effect_verify() -> None:
     )
 
 
+def set_door_hold(client: HomeAssistantClient, light: str, on: bool) -> None:
+    """Use the idle door sensor as a keep-on entity in the scenarios suite."""
+    client.set_state(RAW_DOOR, "on" if on else "off")
+    client.wait_state(
+        light,
+        lambda state: state["attributes"].get("auto_off_held") is on,
+        "held" if on else "released",
+    )
+
+
+def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
+    """Release under a forced-off rule turns off now; a hold mid-warning aborts it."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    illuminance_entry_id = create_entry(
+        client,
+        "illuminance",
+        {
+            "name": "E2E Hold Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 0,
+            "advanced": {"entity_id": "e2e_hold_illuminance"},
+        },
+        "Hold illuminance",
+    )
+    rules_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Hold Rules",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_entity": HOLD_ILLUMINANCE,
+                "illuminance_mode": "control",
+                "schedule_entity": END_SCHEDULE,
+                "schedule_mode": "gate",
+                "hold_entities": [RAW_DOOR],
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_hold_rules"},
+        },
+        "Hold-rules light",
+    )
+    for entry_id in (schedule_entry_id, illuminance_entry_id, rules_entry_id):
+        assert_entry_loaded(client, entry_id)
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(HOLD_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
+    set_end_schedule(client, True)
+
+    # Held, then bright in control mode: off is suppressed until the release.
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_door_hold(client, HOLD_RULES_LIGHT, True)
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(HOLD_ILLUMINANCE, lambda state: state["state"] == "on", "bright")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: bright-forces-off is suspended while held",
+        duration=2,
+    )
+    set_timer_motion(client, False)
+    set_door_hold(client, HOLD_RULES_LIGHT, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off on release: bright in control mode applies now",
+    )
+    wait_machine_state(client, "idle", HOLD_RULES_LIGHT)
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(HOLD_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
+
+    # Held, then the gate window ends: the forced off waits for the release.
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_door_hold(client, HOLD_RULES_LIGHT, True)
+    set_end_schedule(client, False)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: the gate window's end is suspended while held",
+        duration=2,
+    )
+    set_timer_motion(client, False)
+    set_door_hold(client, HOLD_RULES_LIGHT, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off on release: the ended gate window applies now",
+    )
+    wait_machine_state(client, "idle", HOLD_RULES_LIGHT)
+    remove_entry_and_entity(client, rules_entry_id, HOLD_RULES_LIGHT)
+    remove_entry_and_entity(client, illuminance_entry_id, HOLD_ILLUMINANCE)
+    remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
+
+    # A hold engaged mid-warning aborts it and restores the pre-warning look.
+    warn_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Hold Warn",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 6,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "hold_entities": [RAW_DOOR],
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {"warn_timeout": 3, "warn_brightness": 20},
+            "advanced": {"entity_id": "e2e_hold_warn"},
+        },
+        "Hold-warn light",
+    )
+    assert_entry_loaded(client, warn_entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["attributes"].get("brightness") == pct(20),
+        "dimmed to the warning brightness",
+        timeout=15,
+    )
+    set_door_hold(client, HOLD_WARN_LIGHT, True)
+    client.wait_state(
+        HOLD_WARN_LIGHT,
+        lambda state: (
+            state["attributes"].get("warning_active") is False
+            and state["attributes"].get("pre_warn_brightness") is None
+        ),
+        "out of its warning once held",
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["attributes"].get("brightness") == pct(60),
+        "restored to the pre-warning brightness",
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the old deadline while held",
+        duration=5,
+    )
+    set_door_hold(client, HOLD_WARN_LIGHT, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the fresh full timer that the release started",
+        timeout=15,
+    )
+    wait_machine_state(client, "idle", HOLD_WARN_LIGHT)
+    remove_entry_and_entity(client, warn_entry_id, HOLD_WARN_LIGHT)
+    print(
+        "PASS: hold release applies ended-window/bright offs; a hold aborts a warning"
+    )
+
+
+def run_hold_restart_prepare() -> None:
+    """Leave a held-on light whose keep-on entity is unavailable across a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Hold Boot",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "hold_entities": [RAW_REMOVAL_MOTION],
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_hold_boot"},
+        },
+        "Hold-boot light",
+    )
+    wait_entry_loaded(client, entry_id)
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    client.wait_state(
+        HOLD_BOOT_LIGHT,
+        lambda state: state["attributes"].get("auto_off_held") is True,
+        "held",
+    )
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    client.set_available(RAW_REMOVAL_MOTION, False)
+    assert_state_stays(
+        client,
+        HOLD_BOOT_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("auto_off_held") is True
+        ),
+        "still held: an unavailable keep-on entity keeps its last known value",
+        duration=5,
+    )
+    HOLD_RESTART_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print(
+        "PASS: held light prepared with its keep-on entity unavailable for the restart"
+    )
+
+
+def run_hold_restart_verify() -> None:
+    """A keep-on entity unavailable at boot counts as not holding."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(HOLD_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["entry_id"])
+    client.wait_state(
+        HOLD_BOOT_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("auto_off_held") is False
+        ),
+        "restored on but not held: the keep-on entity is unavailable at boot",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the fresh timer an unheld restored light gets",
+        timeout=12,
+    )
+    wait_machine_state(client, "idle", HOLD_BOOT_LIGHT)
+    client.set_available(RAW_REMOVAL_MOTION, True)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, HOLD_BOOT_LIGHT)
+    wait_entry_removed(client, snapshot["entry_id"], "Temporary hold-boot light")
+    print("PASS: an unavailable keep-on entity at boot did not hold the restored light")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5731,6 +5981,7 @@ def run_scenarios() -> None:
     run_scheduled_light_depth_scenarios(client)
     run_time_window_scenario(client)
     run_wall_brightness_scenarios(client)
+    run_hold_release_scenarios(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
@@ -5768,6 +6019,8 @@ def main() -> None:
         "end-restart-verify": run_end_restart_verify,
         "restart-effect-prepare": run_restart_effect_prepare,
         "restart-effect-verify": run_restart_effect_verify,
+        "hold-restart-prepare": run_hold_restart_prepare,
+        "hold-restart-verify": run_hold_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
