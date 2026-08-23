@@ -452,6 +452,7 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
         },
         "behavior": {
             "auto_on_brightness": brightness,
+            "auto_on_transition": 1,
             "turn_on_select_entity": TARGET_SELECT,
         },
     }
@@ -774,8 +775,9 @@ def trigger_and_assert(
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("brightness") == brightness
+            and command_data(state).get("transition") == 1
         ),
-        f"on at brightness {brightness}",
+        f"on at brightness {brightness} with the automatic fade",
     )
     client.wait_state(
         TARGET_SELECT,
@@ -1031,7 +1033,7 @@ def has_color_command(data: dict[str, Any]) -> bool:
 
 
 def assert_multi_light_routing(client: HomeAssistantClient) -> None:
-    """Prove HA filters brightness and color for mixed-capability members."""
+    """Prove brightness, color, and transition reach only capable members."""
     client.call_service(
         "light",
         "turn_on",
@@ -1039,6 +1041,7 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
             "entity_id": VIRTUAL_MULTI_LIGHT,
             "brightness": 128,
             "hs_color": [120, 50],
+            "transition": 2,
         },
     )
     client.wait_state(
@@ -1047,8 +1050,9 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and command_data(state).get("brightness") is None
             and not has_color_command(command_data(state))
+            and command_data(state).get("transition") is None
         ),
-        "on without unsupported brightness or color",
+        "on without unsupported brightness, color, or transition",
     )
     client.wait_state(
         RAW_MULTI_DIMMER,
@@ -1056,17 +1060,39 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and command_data(state).get("brightness") == 128
             and not has_color_command(command_data(state))
+            and command_data(state).get("transition") is None
         ),
-        "on with brightness but no unsupported color",
+        "on with brightness but no unsupported color or transition",
     )
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: (
             state["state"] == "on"
             and command_data(state).get("brightness") == 128
-            and has_color_command(command_data(state))
+            and list(command_data(state).get("rgb_color") or []) == [128, 255, 128]
+            and command_data(state).get("transition") == 2
         ),
-        "on with brightness and converted color",
+        "on with brightness, the converted color, and the transition",
+    )
+
+    client.call_service(
+        "light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT, "transition": 1}
+    )
+    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER):
+        client.wait_state(
+            entity_id,
+            lambda state: (
+                state["state"] == "off"
+                and command_data(state).get("transition") is None
+            ),
+            "off without an unsupported transition",
+        )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "off" and command_data(state).get("transition") == 1
+        ),
+        "off with the forwarded transition",
     )
 
 
@@ -1081,9 +1107,6 @@ def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
         "advertising the mixed group's color and transition capabilities",
     )
     assert_multi_light_routing(client)
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
-    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
-        client.wait_state(entity_id, lambda state: state["state"] == "off", "off")
 
     client.set_available(RAW_MULTI_RGB, False)
     client.wait_state(
@@ -1139,9 +1162,6 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
         "advertising recovered color and transition capabilities",
     )
     assert_multi_light_routing(client)
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
-    for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
-        client.wait_state(entity_id, lambda state: state["state"] == "off", "off")
 
     client.remove_entry(entry_id)
     deadline = time.monotonic() + 20
