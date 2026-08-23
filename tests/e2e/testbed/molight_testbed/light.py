@@ -21,7 +21,6 @@ from .const import (
     LIGHT_MULTI_DIMMER,
     LIGHT_MULTI_ON_OFF,
     LIGHT_MULTI_RGB,
-    LIGHT_ON_OFF,
     LIGHT_TIMER,
 )
 from .entity import TestbedEntity
@@ -141,13 +140,6 @@ async def async_setup_entry(
                 "E2E Main Light",
                 color_modes={ColorMode.RGB},
                 features=LightEntityFeature.TRANSITION,
-            ),
-            TestbedLight(
-                controller,
-                LIGHT_ON_OFF,
-                "light.e2e_on_off",
-                "E2E On/Off Light",
-                color_modes={ColorMode.ONOFF},
             ),
             TestbedLight(
                 controller,

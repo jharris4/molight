@@ -18,7 +18,6 @@ STORAGE_KEY: Final = f"{DOMAIN}.states"
 STORAGE_VERSION: Final = 1
 
 LIGHT_MAIN: Final = "light_main"
-LIGHT_ON_OFF: Final = "light_on_off"
 LIGHT_TIMER: Final = "light_timer"
 LIGHT_MULTI_ON_OFF: Final = "light_multi_on_off"
 LIGHT_MULTI_DIMMER: Final = "light_multi_dimmer"
@@ -39,7 +38,6 @@ DEFAULT_STATES: Final = {
         "available": True,
         "attributes": {"brightness": 0, "rgb_color": [255, 255, 255]},
     },
-    LIGHT_ON_OFF: {"state": "off", "available": True, "attributes": {}},
     LIGHT_TIMER: {
         "state": "off",
         "available": True,
