@@ -1151,14 +1151,19 @@ def wait_remote_action(
     )
 
 
-def turn_off_multi_members(client: HomeAssistantClient) -> None:
-    """Return the temporary remote target and its available members to off."""
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+def wait_multi_members_off(client: HomeAssistantClient) -> None:
+    """Wait for the remote target and its available members to report off."""
     client.wait_state(VIRTUAL_MULTI_LIGHT, lambda state: state["state"] == "off", "off")
     for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
         state = client.state(entity_id)
         if state["state"] != "unavailable":
             client.wait_state(entity_id, lambda item: item["state"] == "off", "off")
+
+
+def turn_off_multi_members(client: HomeAssistantClient) -> None:
+    """Return the temporary remote target and its available members to off."""
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+    wait_multi_members_off(client)
 
 
 def exercise_created_remote(client: HomeAssistantClient) -> None:
@@ -1170,7 +1175,7 @@ def exercise_created_remote(client: HomeAssistantClient) -> None:
 
     client.fire_event(EVENT_BUTTON, "multi_press_2")
     wait_remote_action(client, "turn_off", "double", "multi_press_2")
-    turn_off_multi_members(client)
+    wait_multi_members_off(client)
 
 
 def exercise_edited_remote(client: HomeAssistantClient) -> None:
@@ -1197,6 +1202,13 @@ def exercise_edited_remote(client: HomeAssistantClient) -> None:
 
     client.fire_event(EVENT_BUTTON, "multi_press_2")
     wait_remote_action(client, "toggle", "double", "multi_press_2")
+    wait_multi_members_off(client)
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: state["state"] == "on",
+        "on again after a second toggle double click",
+    )
     turn_off_multi_members(client)
 
 
