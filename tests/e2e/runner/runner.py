@@ -1046,6 +1046,73 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     wait_profile(client, PROFILE_OUTSIDE)
 
 
+def run_sensor_blip_scenarios(client: HomeAssistantClient) -> None:
+    """A door or lux source blipping unavailable and back unchanged is no event."""
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_profile(client, PROFILE_INSIDE)  # inside: door_mode open_close, control
+    client.set_state(RAW_DOOR, "on")
+    held = client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("last_on_door") is not None
+        ),
+        "on and held by the open door",
+    )
+    last_on_door = held["attributes"]["last_on_door"]
+    last_on_illuminance = held["attributes"].get("last_on_illuminance")
+    machine_state = held["attributes"]["molight_state"]
+
+    client.set_available(RAW_DOOR, False)
+    client.wait_state(
+        RAW_DOOR, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.set_available(RAW_DOOR, True)
+    client.wait_state(RAW_DOOR, lambda state: state["state"] == "on", "recovered open")
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_on_door") == last_on_door
+            and state["attributes"].get("molight_state") == machine_state
+        ),
+        "unchanged: the door blip was not read as a fresh opening",
+    )
+
+    client.set_available(RAW_ILLUMINANCE, False)
+    client.wait_state(
+        RAW_ILLUMINANCE, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    assert_state_stays(
+        client,
+        VIRTUAL_ILLUMINANCE,
+        lambda state: state["state"] == "off",
+        "dark: the illuminance sensor holds its last reading while its source is out",
+    )
+    client.set_available(RAW_ILLUMINANCE, True)
+    client.wait_state(
+        RAW_ILLUMINANCE, lambda state: state["state"] == "5.0", "recovered"
+    )
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_on_illuminance") == last_on_illuminance
+            and state["attributes"].get("molight_state") == machine_state
+        ),
+        "unchanged: the lux blip was not read as a fresh dark edge",
+    )
+
+    client.set_state(RAW_DOOR, "off")
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+    wait_profile(client, PROFILE_OUTSIDE)
+    checkpoint("door and lux blips to unavailable and back are not read as changes")
+
+
 def wait_timer_stage(
     client: HomeAssistantClient, stage: str, target_brightness: int
 ) -> None:
@@ -2769,6 +2836,7 @@ def run_primary() -> None:
     run_inverted_schedule_scenario(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
+    run_sensor_blip_scenarios(client)
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
