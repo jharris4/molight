@@ -33,6 +33,8 @@ EVENT_BUTTON = "event.e2e_button"
 TARGET_SELECT = "select.e2e_target_mode"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
+RAW_TIMER_MOTION = "binary_sensor.e2e_raw_occupancy"
+VIRTUAL_TIMER_OCCUPANCY = "binary_sensor.e2e_timer_occupancy"
 VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
@@ -55,8 +57,7 @@ UPGRADE_SCHEDULE = "binary_sensor.upgrade_schedule"
 UPGRADE_LIGHT = "light.upgrade_gated"
 UPGRADE_REMOTE_SENSOR = "sensor.upgrade_remote_last_action"
 UPGRADE_SNAPSHOT = Path("/ha-config/e2e-upgrade-snapshot.json")
-REMOVAL_SNAPSHOT = Path("/ha-config/e2e-removal-snapshot.json")
-REMOTE_SNAPSHOT = Path("/ha-config/e2e-remote-snapshot.json")
+FIXTURES_SNAPSHOT = Path("/ha-config/e2e-fixtures-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
 RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
@@ -357,25 +358,30 @@ def create_virtual_schedule(client: HomeAssistantClient) -> str:
     return result["result"]["entry_id"]
 
 
-def create_virtual_occupancy(client: HomeAssistantClient) -> str:
-    """Create a MoLight occupancy sensor wrapping the simulated motion sensor."""
+def create_virtual_occupancy(
+    client: HomeAssistantClient,
+    name: str = "E2E Occupancy",
+    source: str = RAW_MOTION,
+    entity_id: str = "e2e_occupancy",
+) -> str:
+    """Create a MoLight occupancy sensor wrapping a simulated motion sensor."""
     result = start_create(client, "occupancy")
     expect_step(result, "occupancy")
     result = client.continue_flow(
         result,
         {
-            "name": "E2E Occupancy",
-            "occupancy_sensor": RAW_MOTION,
+            "name": name,
+            "occupancy_sensor": source,
             "occupancy_timeout": 1,
             "advanced": {
                 "false_detection_grace": 0,
                 "clear_on_unavailable_timeout": 1,
-                "entity_id": "e2e_occupancy",
+                "entity_id": entity_id,
             },
         },
     )
     if result.get("type") != "create_entry":
-        raise AssertionError(f"Occupancy creation failed: {result}")
+        raise AssertionError(f"{name} creation failed: {result}")
     return result["result"]["entry_id"]
 
 
@@ -468,7 +474,7 @@ def create_timeout_light(client: HomeAssistantClient) -> str:
             "name": "E2E Timer",
             "lights": [RAW_TIMER_LIGHT],
             "light_timeout": 4,
-            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "false_detection_off_delay": 0,
                 "auto_on_brightness": 60,
@@ -497,7 +503,7 @@ def create_auto_off_light(client: HomeAssistantClient) -> str:
             "name": "E2E Auto-off",
             "lights": [RAW_TIMER_LIGHT],
             "light_timeout": 3,
-            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {},
             "advanced": {"entity_id": "e2e_auto_off"},
@@ -518,7 +524,7 @@ def create_restart_warning_light(client: HomeAssistantClient) -> str:
             "name": "E2E Restart Warning",
             "lights": [RAW_TIMER_LIGHT],
             "light_timeout": 10,
-            "sensors": {"occupancy_entity": VIRTUAL_OCCUPANCY},
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {
                 "effect_timeout": 0,
@@ -590,28 +596,6 @@ def edit_remote(client: HomeAssistantClient, entry_id: str) -> None:
     )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Remote options failed: {result}")
-
-
-def create_removal_occupancy(client: HomeAssistantClient) -> str:
-    """Create the temporary virtual sensor that will be removed live."""
-    result = start_create(client, "occupancy")
-    expect_step(result, "occupancy")
-    result = client.continue_flow(
-        result,
-        {
-            "name": "E2E Removed Occupancy",
-            "occupancy_sensor": RAW_REMOVAL_MOTION,
-            "occupancy_timeout": 1,
-            "advanced": {
-                "false_detection_grace": 0,
-                "clear_on_unavailable_timeout": 1,
-                "entity_id": "e2e_removed_occupancy",
-            },
-        },
-    )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Removal occupancy creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_removal_light(client: HomeAssistantClient) -> str:
@@ -716,6 +700,15 @@ def reset_trigger(client: HomeAssistantClient) -> None:
     )
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+
+
+def set_timer_motion(client: HomeAssistantClient, on: bool) -> None:
+    """Drive the occupancy source dedicated to the timer-style lights."""
+    state = "on" if on else "off"
+    client.set_state(RAW_TIMER_MOTION, state)
+    client.wait_state(
+        VIRTUAL_TIMER_OCCUPANCY, lambda current: current["state"] == state, state
+    )
 
 
 def trigger_and_assert(
@@ -894,12 +887,10 @@ def run_timeout_warning_scenario(
     client: HomeAssistantClient, timer_entry_id: str
 ) -> None:
     """Run one real countdown/effect/warn/off sequence and cancel another."""
-    reset_trigger(client)
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
-    client.set_state(RAW_MOTION, "on")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
@@ -907,9 +898,7 @@ def run_timeout_warning_scenario(
         ),
         "on at the configured automatic brightness",
     )
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     wait_machine_state(client, "countdown", VIRTUAL_TIMER_LIGHT)
     wait_timer_stage(client, "effect", 26)
     wait_timer_stage(client, "warn", 51)
@@ -918,8 +907,7 @@ def run_timeout_warning_scenario(
     if final["attributes"].get("warning_active") is not False:
         raise AssertionError(f"Warning flag remained set after final turn-off: {final}")
 
-    client.set_state(RAW_MOTION, "on")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
@@ -927,12 +915,9 @@ def run_timeout_warning_scenario(
         ),
         "retrigger test initially on",
     )
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     wait_timer_stage(client, "effect", 26)
-    client.set_state(RAW_MOTION, "on")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
     restored = wait_machine_state(client, "occupied", VIRTUAL_TIMER_LIGHT)
     if (
         restored["attributes"].get("warning_active") is not False
@@ -956,12 +941,9 @@ def run_timeout_warning_scenario(
         duration=2.5,
     )
 
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
     client.remove_entry(timer_entry_id)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -1204,9 +1186,6 @@ def prepare_current_remote(client: HomeAssistantClient) -> str:
         "reloaded with its edited name and a fresh diagnostic state",
     )
     exercise_edited_remote(client)
-    REMOTE_SNAPSHOT.write_text(
-        json.dumps({"entry_id": entry_id}, indent=2, sort_keys=True) + "\n"
-    )
     print("PASS: current remote creation, editing, events, and diagnostics")
     return entry_id
 
@@ -1231,10 +1210,10 @@ def verify_current_remote_after_restart(
     exercise_edited_remote(client)
 
 
-def finish_current_remote_target_cleanup(client: HomeAssistantClient) -> None:
+def finish_current_remote_target_cleanup(
+    client: HomeAssistantClient, entry_id: str
+) -> None:
     """Prove target removal makes the surviving remote inert, then remove it."""
-    snapshot: dict[str, str] = json.loads(REMOTE_SNAPSHOT.read_text())
-    entry_id = snapshot["entry_id"]
     wait_entry_loaded(client, entry_id)
     wait_entity_absent(client, VIRTUAL_MULTI_LIGHT)
     client.wait_state(
@@ -1277,7 +1256,9 @@ def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, 
     client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
-    sensor_entry_id = create_removal_occupancy(client)
+    sensor_entry_id = create_virtual_occupancy(
+        client, "E2E Removed Occupancy", RAW_REMOVAL_MOTION, "e2e_removed_occupancy"
+    )
     light_entry_id = create_removal_light(client)
     wait_entry_loaded(client, sensor_entry_id)
     wait_entry_loaded(client, light_entry_id)
@@ -1315,7 +1296,6 @@ def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, 
         "sensor_entry_id": sensor_entry_id,
         "light_entry_id": light_entry_id,
     }
-    REMOVAL_SNAPSHOT.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
     print("PASS: sensor removal cleaned its surviving light's live reference")
     return snapshot
 
@@ -1351,9 +1331,10 @@ def verify_removal_reference_cleanup(
     assert_removal_storage_clean(snapshot)
 
 
-def finish_removal_reference_cleanup(client: HomeAssistantClient) -> None:
+def finish_removal_reference_cleanup(
+    client: HomeAssistantClient, snapshot: dict[str, str]
+) -> None:
     """Verify cold-start cleanup, then remove the surviving temporary light."""
-    snapshot: dict[str, str] = json.loads(REMOVAL_SNAPSHOT.read_text())
     verify_removal_reference_cleanup(client, snapshot, "a full container restart")
 
     client.set_state(RAW_REMOVAL_MOTION, "off")
@@ -1389,6 +1370,23 @@ def assert_entry_loaded(client: HomeAssistantClient, entry_id: str) -> None:
         raise AssertionError(f"MoLight entry is not loaded: {matches}")
 
 
+def save_fixtures(fixtures: dict[str, Any]) -> None:
+    """Record the fixture entries a phase leaves behind for later phases."""
+    FIXTURES_SNAPSHOT.write_text(json.dumps(fixtures, indent=2, sort_keys=True) + "\n")
+
+
+def load_fixtures() -> dict[str, Any]:
+    """Read the fixture entries recorded by the previous phase."""
+    return json.loads(FIXTURES_SNAPSHOT.read_text())
+
+
+def expect_fixtures_loaded(client: HomeAssistantClient) -> dict[str, Any]:
+    """Require exactly the recorded fixture entries to be loaded."""
+    fixtures = load_fixtures()
+    wait_entries_loaded(client, set(fixtures["entries"].values()))
+    return fixtures
+
+
 def wait_entries_loaded(
     client: HomeAssistantClient, expected_ids: set[str], timeout: float = WAIT_TIMEOUT
 ) -> list[dict[str, Any]]:
@@ -1402,7 +1400,10 @@ def wait_entries_loaded(
         ):
             return entries
         time.sleep(0.2)
-    raise AssertionError(f"MoLight entries did not finish loading: {entries}")
+    raise AssertionError(
+        f"MoLight entries did not load as the expected set {sorted(expected_ids)}:"
+        f" {entries}"
+    )
 
 
 def wait_entry_loaded(
@@ -1770,10 +1771,16 @@ def run_primary() -> None:
     client.authenticate()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
 
-    create_virtual_schedule(client)
-    create_virtual_occupancy(client)
-    create_virtual_illuminance(client)
+    fixtures: dict[str, str] = {
+        "schedule": create_virtual_schedule(client),
+        "occupancy": create_virtual_occupancy(client),
+        "timer_occupancy": create_virtual_occupancy(
+            client, "E2E Timer Occupancy", RAW_TIMER_MOTION, "e2e_timer_occupancy"
+        ),
+        "illuminance": create_virtual_illuminance(client),
+    }
     light_entry_id = create_scheduled_light(client)
+    fixtures["light"] = light_entry_id
     assert_entry_loaded(client, light_entry_id)
     wait_profile(client, PROFILE_OUTSIDE)
     run_illuminance_and_door_scenarios(client)
@@ -1781,6 +1788,7 @@ def run_primary() -> None:
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
 
+    reset_trigger(client)
     client.call_service(
         "select",
         "select_option",
@@ -1831,9 +1839,12 @@ def run_primary() -> None:
     trigger_and_assert(client, 204, "Night")
 
     removal_snapshot = prepare_removal_reference_cleanup(client)
+    fixtures["removal_light"] = removal_snapshot["light_entry_id"]
     multi_entry_id = create_multi_light(client)
     assert_entry_loaded(client, multi_entry_id)
+    fixtures["multi"] = multi_entry_id
     remote_entry_id = prepare_current_remote(client)
+    fixtures["remote"] = remote_entry_id
     prepare_multi_light_restart(client)
 
     client.restart_core()
@@ -1864,6 +1875,9 @@ def run_primary() -> None:
     verify_removal_reference_cleanup(
         client, removal_snapshot, "a Home Assistant core restart"
     )
+    save_fixtures(
+        {"entries": fixtures, "removed_sensor": removal_snapshot["sensor_entry_id"]}
+    )
     print("PASS: live creation, behavior, options, conversion, and core restart")
 
 
@@ -1888,17 +1902,20 @@ def run_container_restart_verification() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
-    entries = client.molight_entries()
-    if len(entries) != 7:
-        raise AssertionError(f"Expected seven restored MoLight entries: {entries}")
-    wait_entries_loaded(client, {entry["entry_id"] for entry in entries})
-    remote_snapshot: dict[str, str] = json.loads(REMOTE_SNAPSHOT.read_text())
+    fixtures = expect_fixtures_loaded(client)
+    entries: dict[str, str] = fixtures["entries"]
     verify_current_remote_after_restart(
-        client, remote_snapshot["entry_id"], "a full container restart"
+        client, entries["remote"], "a full container restart"
     )
     verify_and_remove_multi_light(client)
-    finish_current_remote_target_cleanup(client)
-    finish_removal_reference_cleanup(client)
+    finish_current_remote_target_cleanup(client, entries["remote"])
+    finish_removal_reference_cleanup(
+        client,
+        {
+            "sensor_entry_id": fixtures["removed_sensor"],
+            "light_entry_id": entries["removal_light"],
+        },
+    )
     client.wait_state(
         RAW_SCHEDULE, lambda state: state["state"] == "on", "persisted on"
     )
@@ -1920,9 +1937,12 @@ def run_container_restart_verification() -> None:
         ),
         "persisted on at brightness 204",
     )
-    entries = client.molight_entries()
-    if len(entries) != 4 or any(entry.get("state") != "loaded" for entry in entries):
-        raise AssertionError(f"Expected four loaded MoLight entries: {entries}")
+    removed = {"multi", "remote", "removal_light"}
+    fixtures["entries"] = {
+        name: entry_id for name, entry_id in entries.items() if name not in removed
+    }
+    wait_entries_loaded(client, set(fixtures["entries"].values()))
+    save_fixtures(fixtures)
     print("PASS: state and entries survived a full container restart")
 
 
@@ -1931,6 +1951,7 @@ def run_unavailable_light_prepare() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
     client.wait_state(VIRTUAL_LIGHT, lambda _state: True, "loaded")
 
     reset_trigger(client)
@@ -1952,6 +1973,7 @@ def run_unavailable_light_recovery() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
     client.wait_state(
         RAW_LIGHT, lambda state: state["state"] == "unavailable", "unavailable"
     )
@@ -2007,6 +2029,7 @@ def run_unavailable_sensors_motion_first() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
     client.wait_state(
         RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
     )
@@ -2069,6 +2092,7 @@ def run_unavailable_sensors_schedule_first() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
     client.wait_state(
         RAW_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
     )
@@ -2118,11 +2142,9 @@ def run_auto_off_prepare() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
 
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
@@ -2139,11 +2161,9 @@ def run_auto_off_prepare() -> None:
         "holding automatic turn-offs",
     )
 
-    client.set_state(RAW_MOTION, "on")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     assert_state_stays(
         client,
         RAW_TIMER_LIGHT,
@@ -2207,11 +2227,9 @@ def run_restart_warning_prepare() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
+    expect_fixtures_loaded(client)
 
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
-    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     client.call_service("light", "turn_off", {"entity_id": RAW_TIMER_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
@@ -2219,8 +2237,7 @@ def run_restart_warning_prepare() -> None:
     wait_entry_loaded(client, entry_id)
     client.wait_state(VIRTUAL_RESTART_WARNING_LIGHT, lambda _state: True, "loaded")
 
-    client.set_state(RAW_MOTION, "on")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
@@ -2228,9 +2245,7 @@ def run_restart_warning_prepare() -> None:
         ),
         "on at the configured automatic brightness",
     )
-    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
-    client.set_state(RAW_MOTION, "off")
-    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
     wait_machine_state(client, "countdown", VIRTUAL_RESTART_WARNING_LIGHT)
     warning = client.wait_state(
         VIRTUAL_RESTART_WARNING_LIGHT,
