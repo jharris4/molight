@@ -479,13 +479,23 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         new_state = event.data["new_state"]
         entity_id = event.data["entity_id"]
         # A maintain sensor showing presence while startup is still under
-        # way, or on its first sighting after that, carries a restored "on"
-        # across (see _seed_state); any later report cannot start occupancy.
+        # way, on its first sighting after that, or with a start it did not
+        # witness (a virtual sensor whose source loaded late reports
+        # last_on_time: None) carries a restored "on" across (see
+        # _seed_state); any later report cannot start occupancy.
+        unknown_start = (
+            "last_on_time" in new_state.attributes
+            and new_state.attributes["last_on_time"] is None
+        )
         carry = (
             self._restored_carry
             and entity_id in self._maintain_sensors
             and new_state.state == "on"
-            and (not self._startup_done or entity_id in self._unreported_maintain)
+            and (
+                not self._startup_done
+                or entity_id in self._unreported_maintain
+                or unknown_start
+            )
         )
         self._unreported_maintain.discard(entity_id)
 

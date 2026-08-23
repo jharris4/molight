@@ -7080,10 +7080,16 @@ def run_combined_restart_prepare() -> None:
     assert_state_stays(
         client, COMBINED_BOOT, lambda state: state["state"] == "on", "held by maintain"
     )
+    # Force the load-order race every run: the maintain sensor's own source
+    # arrives only after boot, so the maintain sensor seeds off while the
+    # combined sensor restores, and its later "on" must carry the occupancy.
+    client.set_startup_delay(RAW_TIMER_MOTION, 6)
     COMBINED_RESTART_SNAPSHOT.write_text(
         json.dumps({"trigger_id": trigger_id, "combined_id": combined_id})
     )
-    print("PASS: maintain-held combined sensor prepared for a container restart")
+    print(
+        "PASS: maintain-held combined sensor prepared; its maintain source loads late"
+    )
 
 
 def run_combined_restart_verify() -> None:
@@ -7095,9 +7101,17 @@ def run_combined_restart_verify() -> None:
     wait_entry_loaded(client, snapshot["trigger_id"])
     wait_entry_loaded(client, snapshot["combined_id"])
     client.wait_state(
+        VIRTUAL_TIMER_OCCUPANCY,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("last_on_time") is None
+        ),
+        "on with an unwitnessed start: the maintain source arrived after boot",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
         COMBINED_BOOT,
         lambda state: state["state"] == "on",
-        "seeded on at boot: restored on and its maintain sensor still shows presence",
+        "on after boot: restored on and the late maintain sensor shows presence",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
@@ -7112,7 +7126,9 @@ def run_combined_restart_verify() -> None:
         client.remove_entry(entry_id)
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
-    print("PASS: a maintain-held combined sensor was seeded on after the restart")
+    print(
+        "PASS: a maintain-held combined sensor carried its occupancy across the restart"
+    )
 
 
 def run_color_temp_scenarios(client: HomeAssistantClient) -> None:

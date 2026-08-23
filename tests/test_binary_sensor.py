@@ -829,6 +829,32 @@ async def test_combined_restored_on_not_carried_by_maintain_after_startup(
 
 
 @pytest.mark.asyncio
+async def test_combined_restored_on_carried_by_maintain_with_unknown_start(
+    hass: HomeAssistant,
+) -> None:
+    """After startup, a maintain sensor reporting an unwitnessed start (a virtual
+    sensor whose source loaded late: last_on_time None) still carries; one that
+    saw its own start does not."""
+    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set(
+        "binary_sensor.m2", "on", {"last_on_time": "2026-07-02T21:00:00+00:00"}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.states.async_set("binary_sensor.m2", "on", {"last_on_time": None})
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_combined_late_maintain_reporting_off_does_not_carry(
     hass: HomeAssistant,
 ) -> None:
