@@ -74,6 +74,13 @@ compose run --rm runner python runner.py late-source-prepare
 compose restart homeassistant
 compose run --rm runner python runner.py late-source-verify
 
+echo "Restarting across a follow-mode window start..."
+compose run --rm runner python runner.py follow-restart-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py follow-restart-verify
+compose restart homeassistant
+compose run --rm runner python runner.py follow-restart-verify-off
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 

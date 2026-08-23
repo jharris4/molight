@@ -8,7 +8,7 @@ import re
 import sys
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
@@ -54,6 +54,8 @@ LATE_LIGHT = "light.e2e_late"
 EFFECT_LIGHT = "light.e2e_effect"
 AUTO_COLOR_LIGHT = "light.e2e_auto_color"
 DUSK_LIGHT = "light.e2e_dusk"
+FOLLOW_SCHEDULE = "binary_sensor.e2e_follow_schedule"
+FOLLOW_LIGHT = "light.e2e_follow"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -84,6 +86,7 @@ AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
 RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
+FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -4979,6 +4982,137 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: going dark re-lights only a room with countdown left, stamped as such")
 
 
+def run_follow_restart_prepare() -> None:
+    """Create a follow-mode light whose time window opens while HA restarts."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    now = datetime.now(UTC)  # the isolated HA runs in UTC (configuration.yaml)
+    start = (now + timedelta(seconds=7)).strftime("%H:%M:%S")
+    end = (now + timedelta(seconds=150)).strftime("%H:%M:%S")
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Follow Schedule",
+            "start": {"time": start},
+            "end": {"time": end},
+            "advanced": {"entity_id": "e2e_follow_schedule"},
+        },
+    )
+    schedule_entry_id = finish_creation(result, "Follow schedule")
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Follow",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_entity": FOLLOW_SCHEDULE,
+                "schedule_mode": "follow",
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_follow"},
+        },
+        "Follow light",
+    )
+    wait_entry_loaded(client, schedule_entry_id)
+    wait_entry_loaded(client, light_entry_id)
+    client.wait_state(FOLLOW_SCHEDULE, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    FOLLOW_RESTART_SNAPSHOT.write_text(
+        json.dumps(
+            {"schedule_entry_id": schedule_entry_id, "light_entry_id": light_entry_id}
+        )
+    )
+    print("PASS: follow-mode light prepared; its window opens during the restart")
+
+
+def run_follow_restart_verify() -> None:
+    """The start missed while HA was down is applied once; a manual off sticks."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(FOLLOW_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["schedule_entry_id"])
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    window = client.wait_state(
+        FOLLOW_SCHEDULE,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("current_window_start") is not None
+        ),
+        "inside the window that opened during the restart",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        FOLLOW_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "scheduled"
+            and state["attributes"].get("schedule_window_start")
+            == window["attributes"]["current_window_start"]
+        ),
+        "on and scheduled: the missed window start was applied at startup",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+
+    # A manual off mid-window hands the light back to its sensors ...
+    client.call_service("light", "turn_off", {"entity_id": FOLLOW_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", FOLLOW_LIGHT)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", FOLLOW_LIGHT)
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", FOLLOW_LIGHT)
+    # ... and a manual on mid-window rejoins the window instead of a timer.
+    client.call_service("light", "turn_on", {"entity_id": FOLLOW_LIGHT})
+    wait_machine_state(client, "scheduled", FOLLOW_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": FOLLOW_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", FOLLOW_LIGHT)
+    print("PASS: missed follow start applied once; manual off/on mid-window behaved")
+
+
+def run_follow_restart_verify_off() -> None:
+    """A restart inside the same window must not re-apply the start after manual off."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(FOLLOW_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["schedule_entry_id"])
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    client.wait_state(FOLLOW_SCHEDULE, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        FOLLOW_LIGHT, lambda _state: True, "present", timeout=WAIT_TIMEOUT
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: the manual off mid-window is respected across the restart",
+        duration=4,
+    )
+    wait_machine_state(client, "idle", FOLLOW_LIGHT)
+    for entry_id, entity_id in (
+        (snapshot["light_entry_id"], FOLLOW_LIGHT),
+        (snapshot["schedule_entry_id"], FOLLOW_SCHEDULE),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: a restart inside the window did not re-apply the missed start")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5044,6 +5178,9 @@ def main() -> None:
         "false-detection-verify": run_false_detection_verify,
         "late-source-prepare": run_late_source_prepare,
         "late-source-verify": run_late_source_verify,
+        "follow-restart-prepare": run_follow_restart_prepare,
+        "follow-restart-verify": run_follow_restart_verify,
+        "follow-restart-verify-off": run_follow_restart_verify_off,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
