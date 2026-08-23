@@ -133,6 +133,10 @@ longer needs a custom repository.
 - On the night the clocks change, a schedule's start and end times are now
   compared by real elapsed time instead of by wall clock, so a window spanning
   the change no longer switches in the wrong order.
+- Clearing a combined occupancy sensor's maintain sensors in the options flow
+  now sticks. The emptied field is omitted from the form submission, and the
+  schema default silently refilled the previous list, so the last maintain
+  sensor could never be removed.
 
 ## [1.5.0] - 2026-07-28
 

@@ -4002,6 +4002,49 @@ async def test_combined_options_reject_constituent_above_light_timeout(
 
 
 @pytest.mark.asyncio
+async def test_combined_options_clear_maintain_sensors(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """An omitted maintain field clears it rather than resurrecting the old list.
+
+    The frontend drops an emptied optional field from the submission, so a
+    schema default would silently refill the previous maintain sensors.
+    """
+    hall = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Hall Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_hall",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.hall_occupancy"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, hall, combined)
+
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    assert result["step_id"] == "combined_occupancy"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert not combined.options.get(CONF_MAINTAIN_SENSORS)
+
+
+@pytest.mark.asyncio
 async def test_combined_options_reject_direct_self_reference(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:

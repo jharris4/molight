@@ -3349,10 +3349,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         multiple=True,
                     )
                 ),
-                vol.Optional(
-                    CONF_MAINTAIN_SENSORS,
-                    default=cfg.get(CONF_MAINTAIN_SENSORS, []),
-                ): selector.EntitySelector(
+                # Suggested value, not a default: the frontend omits an emptied
+                # optional field, and a default would refill the old list —
+                # making the last maintain sensor impossible to clear.
+                vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         integration=DOMAIN,
                         device_class="occupancy",
@@ -3364,7 +3364,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         )
         return self.async_show_form(
             step_id="combined_occupancy",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            data_schema=self.add_suggested_values_to_schema(schema, user_input or cfg),
             errors=errors,
         )
 
