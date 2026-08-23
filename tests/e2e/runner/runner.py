@@ -41,6 +41,7 @@ VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
 END_SCHEDULE = "binary_sensor.e2e_end_schedule"
 END_ACTION_LIGHT = "light.e2e_end_action"
+GATE_MODE_LIGHT = "light.e2e_gate_mode"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -1481,6 +1482,156 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
     )
 
 
+def create_gate_mode_light(client: HomeAssistantClient, schedule_mode: str) -> str:
+    """Create a regular light gated by the dedicated end schedule."""
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Gate Mode",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 12,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_entity": END_SCHEDULE,
+                "schedule_mode": schedule_mode,
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_gate_mode"},
+        },
+        f"Gate-mode {schedule_mode} light",
+    )
+
+
+def set_end_schedule(client: HomeAssistantClient, on: bool) -> None:
+    """Open or close the dedicated schedule window."""
+    state = "on" if on else "off"
+    client.set_state(RAW_REMOVAL_MOTION, state)
+    client.wait_state(END_SCHEDULE, lambda current: current["state"] == state, state)
+
+
+def run_follow_mode_scenario(client: HomeAssistantClient) -> None:
+    """A follow-mode window owns the light; outside it the sensors are live."""
+    entry_id = create_gate_mode_light(client, "follow")
+    assert_entry_loaded(client, entry_id)
+    set_end_schedule(client, True)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
+        ),
+        "on at the window start",
+    )
+    wait_machine_state(client, "scheduled", GATE_MODE_LIGHT)
+    set_timer_motion(client, True)
+    set_timer_motion(client, False)
+    assert_state_stays(
+        client,
+        GATE_MODE_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "scheduled"
+        ),
+        "scheduled while occupancy changes inside the window are ignored",
+    )
+    set_end_schedule(client, False)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", GATE_MODE_LIGHT)
+
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on from motion outside"
+    )
+    wait_machine_state(client, "occupied", GATE_MODE_LIGHT)
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, GATE_MODE_LIGHT)
+    wait_entry_removed(client, entry_id, "Temporary follow-mode light")
+
+
+def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> None:
+    """Gate, adopt at the start, then apply one end behaviour to an on light."""
+    entry_id = create_gate_mode_light(client, schedule_mode)
+    assert_entry_loaded(client, entry_id)
+    set_timer_motion(client, True)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        f"off: {schedule_mode} gates occupancy outside the window",
+    )
+    set_end_schedule(client, True)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: standing presence is adopted at the window start",
+    )
+    wait_machine_state(client, "occupied", GATE_MODE_LIGHT)
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
+    # Six seconds into the 12 s countdown a manual turn-on restarts the timer,
+    # so the old occupancy history and the live timer now disagree.
+    assert_state_stays(
+        client, RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on", duration=6
+    )
+    client.call_service("light", "turn_on", {"entity_id": GATE_MODE_LIGHT})
+    wait_machine_state(client, "active", GATE_MODE_LIGHT)
+    assert_state_stays(
+        client, RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on", duration=1
+    )
+    set_end_schedule(client, False)
+    if schedule_mode == "gate":
+        client.wait_state(
+            RAW_TIMER_LIGHT,
+            lambda state: state["state"] == "off",
+            "off at the window end",
+        )
+        wait_machine_state(client, "idle", GATE_MODE_LIGHT)
+    elif schedule_mode == "gate_keep":
+        assert_state_stays(
+            client,
+            RAW_TIMER_LIGHT,
+            lambda state: state["state"] == "on",
+            "on: gate_keep leaves the restarted timer untouched past the old history",
+            duration=6,
+        )
+        client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
+    else:
+        # gate_switch recomputes the deadline from when occupancy last saw
+        # someone, which is already nearly due, not from the manual restart.
+        client.wait_state(
+            RAW_TIMER_LIGHT,
+            lambda state: state["state"] == "off",
+            "off soon: gate_switch recomputed the deadline from occupancy history",
+            timeout=8,
+        )
+        wait_machine_state(client, "idle", GATE_MODE_LIGHT)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, GATE_MODE_LIGHT)
+    wait_entry_removed(client, entry_id, f"Temporary {schedule_mode} light")
+
+
+def run_schedule_mode_scenarios(client: HomeAssistantClient) -> None:
+    """Exercise follow and the three gate modes on a regular light."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    set_end_schedule(client, False)
+    run_follow_mode_scenario(client)
+    for schedule_mode in ("gate", "gate_keep", "gate_switch"):
+        run_gate_mode_scenario(client, schedule_mode)
+    client.remove_entry(schedule_entry_id)
+    wait_entity_absent(client, END_SCHEDULE)
+    wait_entry_removed(client, schedule_entry_id, "Temporary end schedule")
+    print("PASS: follow, gate, gate_keep, and gate_switch behaved at both window edges")
+
+
 def command_data(state: dict[str, Any]) -> dict[str, Any]:
     """Return the payload most recently received by one testbed light."""
     command = state["attributes"].get("testbed_last_command") or {}
@@ -2499,6 +2650,7 @@ def run_primary() -> None:
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
     run_physical_change_scenarios(client)
     run_schedule_end_action_scenarios(client)
+    run_schedule_mode_scenarios(client)
 
     reset_trigger(client)
     client.call_service(
