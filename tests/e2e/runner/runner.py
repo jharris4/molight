@@ -39,6 +39,8 @@ VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 COLD_ILLUMINANCE = "binary_sensor.e2e_cold_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
+END_SCHEDULE = "binary_sensor.e2e_end_schedule"
+END_ACTION_LIGHT = "light.e2e_end_action"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -412,6 +414,7 @@ def create_virtual_schedule(
     name: str = "E2E Schedule",
     entity_id: str = "e2e_schedule",
     invert: bool = False,
+    source: str = RAW_SCHEDULE,
 ) -> str:
     """Create a source-backed MoLight Virtual Schedule through its API flow."""
     result = start_create(client, "schedule")
@@ -422,7 +425,7 @@ def create_virtual_schedule(
         result,
         {
             "name": name,
-            "schedule_source": RAW_SCHEDULE,
+            "schedule_source": source,
             "schedule_invert": invert,
             "advanced": {"entity_id": entity_id},
         },
@@ -1362,6 +1365,120 @@ def run_fast_physical_scenarios() -> None:
     client.remove_entry(entry_id)
     wait_entry_removed(client, entry_id, "Temporary physical-change light")
     print("PASS: physical changes inside the command-context window were honoured")
+
+
+def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str:
+    """Create a scheduled light whose inside profile is occupied, outside inert."""
+    result = start_create(client, "scheduled_light")
+    expect_step(result, "scheduled_light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E End Action",
+            "lights": [RAW_TIMER_LIGHT],
+            "schedule_entity": END_SCHEDULE,
+            "schedule_end_action": end_action,
+            "advanced": {"entity_id": "e2e_end_action"},
+        },
+    )
+    expect_step(result, "scheduled_light_outside")
+    result = client.continue_flow(
+        result,
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            "light_timeout": 4,
+            "behavior": {"auto_on_brightness": 50},
+        },
+    )
+    expect_step(result, "scheduled_light_inside")
+    result = client.continue_flow(
+        result,
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+        },
+    )
+    return finish_creation(result, f"End-action {end_action} light")
+
+
+def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
+    """Leave the schedule window with the light on under each end action."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    for end_action in ("turn_off", "switch", "keep"):
+        entry_id = create_end_action_light(client, end_action)
+        assert_entry_loaded(client, entry_id)
+        client.set_state(RAW_REMOVAL_MOTION, "on")
+        client.wait_state(END_SCHEDULE, lambda state: state["state"] == "on", "on")
+        client.wait_state(
+            END_ACTION_LIGHT,
+            lambda state: state["attributes"].get("active_settings") == PROFILE_INSIDE,
+            "using the inside profile",
+        )
+        set_timer_motion(client, True)
+        client.wait_state(
+            RAW_TIMER_LIGHT,
+            lambda state: (
+                state["state"] == "on"
+                and state["attributes"].get("brightness") == pct(60)
+            ),
+            "on at the inside profile's brightness",
+        )
+        wait_machine_state(client, "occupied", END_ACTION_LIGHT)
+        # Leave the window during the inside profile's 30 s countdown, so keep
+        # and switch are told apart by which timer the light runs on.
+        set_timer_motion(client, False)
+        wait_machine_state(client, "countdown", END_ACTION_LIGHT)
+
+        client.set_state(RAW_REMOVAL_MOTION, "off")
+        client.wait_state(END_SCHEDULE, lambda state: state["state"] == "off", "off")
+        client.wait_state(
+            END_ACTION_LIGHT,
+            lambda state: state["attributes"].get("active_settings") == PROFILE_OUTSIDE,
+            "using the outside profile after the window ended",
+        )
+        if end_action == "turn_off":
+            client.wait_state(
+                RAW_TIMER_LIGHT,
+                lambda state: state["state"] == "off",
+                "off at the window end",
+            )
+            wait_machine_state(client, "idle", END_ACTION_LIGHT)
+        elif end_action == "switch":
+            # Recalculated against the outside profile: its 4 s timeout, not
+            # the inside countdown, now decides when the light goes off.
+            client.wait_state(
+                RAW_TIMER_LIGHT,
+                lambda state: state["state"] == "off",
+                "off after the outside profile's timer",
+                timeout=10,
+            )
+            wait_machine_state(client, "idle", END_ACTION_LIGHT)
+        else:
+            assert_state_stays(
+                client,
+                RAW_TIMER_LIGHT,
+                lambda state: state["state"] == "on",
+                "on: keep preserves the inside countdown past the outside timeout",
+                duration=6,
+            )
+            wait_machine_state(client, "countdown", END_ACTION_LIGHT)
+
+        client.call_service("light", "turn_off", {"entity_id": END_ACTION_LIGHT})
+        client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, END_ACTION_LIGHT)
+        wait_entry_removed(client, entry_id, f"Temporary end-action {end_action} light")
+    client.remove_entry(schedule_entry_id)
+    wait_entity_absent(client, END_SCHEDULE)
+    wait_entry_removed(client, schedule_entry_id, "Temporary end schedule")
+    print(
+        "PASS: schedule end actions turn_off, switch, and keep behaved at the boundary"
+    )
 
 
 def command_data(state: dict[str, Any]) -> dict[str, Any]:
@@ -2381,6 +2498,7 @@ def run_primary() -> None:
     )
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
     run_physical_change_scenarios(client)
+    run_schedule_end_action_scenarios(client)
 
     reset_trigger(client)
     client.call_service(

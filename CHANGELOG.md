@@ -37,8 +37,9 @@ longer needs a custom repository.
   entities, automatic brightness and color, fades, warnings, and the turn-on
   selection. A required **At schedule end** setting decides what the end of the
   window does to a light that is still on — *Keep state* (the default) preserves
-  a running countdown or warning, *Switch state* recalculates the light against
-  the outside profile, *Turn off* fades it off. New `active_settings`,
+  a running countdown or warning (a light held on by inputs the outside profile
+  lacks starts the outside timeout instead), *Switch state* recalculates the
+  light against the outside profile, *Turn off* fades it off. New `active_settings`,
   `active_settings_schedule` and `schedule_end_off_pending` attributes report
   which profile is live and whether a boundary off is waiting on a hold.
 - **Convert virtual lights** — an entry flow that promotes an existing gated
