@@ -47,6 +47,7 @@ COMBINED_OCCUPANCY = "binary_sensor.e2e_combined"
 MAINTAIN_LIGHT = "light.e2e_maintain"
 GRACE_OCCUPANCY = "binary_sensor.e2e_grace_occupancy"
 GRACE_LIGHT = "light.e2e_grace"
+HOLD_LIGHT = "light.e2e_hold"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -1278,6 +1279,128 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
     checkpoint("bulk assignment wires, unwires, skips by the timeout guard, sets modes")
+
+
+def set_hold(client: HomeAssistantClient, on: bool) -> None:
+    """Drive the keep-on entity (the otherwise idle removal-motion sensor)."""
+    state = "on" if on else "off"
+    client.set_state(RAW_REMOVAL_MOTION, state)
+    client.wait_state(
+        HOLD_LIGHT,
+        lambda current: current["attributes"].get("auto_off_held") is on,
+        f"{'held' if on else 'released'} by the keep-on entity",
+    )
+
+
+def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
+    """A keep-on entity suspends automatic offs; release re-evaluates the rules."""
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Hold",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "hold_entities": [RAW_REMOVAL_MOTION],
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_hold"},
+        },
+        "Hold light",
+    )
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(HOLD_LIGHT, lambda state: state["state"] == "off", "off")
+
+    # Held: turn-ons still work, the countdown never arms, manual off still works.
+    set_hold(client, True)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", HOLD_LIGHT)
+    set_timer_motion(client, False)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the timeout while the keep-on entity holds auto-off",
+        duration=6,
+    )
+    client.call_service("light", "turn_off", {"entity_id": HOLD_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", HOLD_LIGHT)
+
+    # Release with nobody there: a fresh full timer starts, then the light goes off.
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    assert_state_stays(
+        client, RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on", duration=5
+    )
+    set_hold(client, False)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: the release started a fresh full timer rather than turning off at once",
+        duration=2.5,
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    wait_machine_state(client, "idle", HOLD_LIGHT)
+
+    # Release while occupied: active occupancy keeps the light on.
+    set_hold(client, True)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_hold(client, False)
+    assert_state_stays(
+        client,
+        HOLD_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "occupied after the release while occupancy is active",
+        duration=5,
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", HOLD_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+
+    # A keep-on entity dropping to unavailable holds its last known value.
+    set_hold(client, True)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    client.set_available(RAW_REMOVAL_MOTION, False)
+    client.wait_state(
+        RAW_REMOVAL_MOTION, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    assert_state_stays(
+        client,
+        HOLD_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("auto_off_held") is True
+        ),
+        "held while the keep-on entity is unavailable",
+        duration=5,
+    )
+    client.set_available(RAW_REMOVAL_MOTION, True)
+    client.wait_state(RAW_REMOVAL_MOTION, lambda state: state["state"] == "on", "on")
+    set_hold(client, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    wait_machine_state(client, "idle", HOLD_LIGHT)
+    remove_entry_and_entity(client, entry_id, HOLD_LIGHT)
+    print(
+        "PASS: keep-on entity holds auto-off, survives a blip, and release re-evaluates"
+    )
 
 
 def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
@@ -3321,6 +3444,7 @@ def run_primary() -> None:
     run_config_flow_rejections(client)
     run_discovery_scenarios(client)
     run_assign_scenarios(client)
+    run_hold_entity_scenarios(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     run_sensor_blip_scenarios(client)
