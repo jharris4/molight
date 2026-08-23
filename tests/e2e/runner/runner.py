@@ -70,6 +70,11 @@ HOLD_RULES_LIGHT = "light.e2e_hold_rules"
 HOLD_ILLUMINANCE = "binary_sensor.e2e_hold_illuminance"
 HOLD_WARN_LIGHT = "light.e2e_hold_warn"
 HOLD_BOOT_LIGHT = "light.e2e_hold_boot"
+MAINTAIN_MANUAL_LIGHT = "light.e2e_maintain_manual"
+GRACE_TRIGGER = "binary_sensor.e2e_grace_trigger"
+GRACE_MAINTAIN = "binary_sensor.e2e_grace_maintain"
+GRACE_BOTH_LIGHT = "light.e2e_grace_both"
+MAINTAIN_BOOT_LIGHT = "light.e2e_maintain_boot"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -104,6 +109,7 @@ FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
 RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
+MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -5961,6 +5967,221 @@ def run_hold_restart_verify() -> None:
     print("PASS: an unavailable keep-on entity at boot did not hold the restored light")
 
 
+def create_grace_occupancy(
+    client: HomeAssistantClient, name: str, source: str, entity_id: str
+) -> str:
+    """Create an occupancy sensor that classifies blips as false detections."""
+    return create_entry(
+        client,
+        "occupancy",
+        {
+            "name": name,
+            "occupancy_sensor": source,
+            "occupancy_timeout": 2,
+            "advanced": {
+                "false_detection_grace": 1,
+                "clear_on_unavailable_timeout": 1,
+                "entity_id": entity_id,
+            },
+        },
+        name,
+    )
+
+
+def set_source(client: HomeAssistantClient, raw: str, virtual: str, on: bool) -> None:
+    """Drive a raw occupancy source and wait for its virtual sensor to follow."""
+    state = "on" if on else "off"
+    client.set_state(raw, state)
+    client.wait_state(virtual, lambda current: current["state"] == state, state)
+
+
+def run_maintain_scenarios(client: HomeAssistantClient) -> None:
+    """Maintain holds a manually lit light; both-false is the only quick-off clear."""
+    manual_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Maintain Manual",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_maintain_manual"},
+        },
+        "Maintain-manual light",
+    )
+    assert_entry_loaded(client, manual_entry_id)
+    client.call_service("light", "turn_on", {"entity_id": MAINTAIN_MANUAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "active", MAINTAIN_MANUAL_LIGHT)
+    set_timer_motion(client, True)
+    wait_machine_state(client, "occupied", MAINTAIN_MANUAL_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the timeout: the maintain sensor holds a manually lit light",
+        duration=5,
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", MAINTAIN_MANUAL_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    remove_entry_and_entity(client, manual_entry_id, MAINTAIN_MANUAL_LIGHT)
+
+    trigger_entry_id = create_grace_occupancy(
+        client, "E2E Grace Trigger", RAW_MOTION, "e2e_grace_trigger"
+    )
+    maintain_entry_id = create_grace_occupancy(
+        client, "E2E Grace Maintain", RAW_REMOVAL_MOTION, "e2e_grace_maintain"
+    )
+    both_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Grace Both",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": GRACE_TRIGGER,
+                "maintain_occupancy_entity": GRACE_MAINTAIN,
+            },
+            "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
+            "advanced": {"entity_id": "e2e_grace_both"},
+        },
+        "Grace-both light",
+    )
+    for entry_id in (trigger_entry_id, maintain_entry_id, both_entry_id):
+        assert_entry_loaded(client, entry_id)
+
+    # Both clears false (blips shorter than timeout + grace): quick off.
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, True)
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, False)
+    client.wait_state(
+        GRACE_TRIGGER,
+        lambda state: state["attributes"].get("last_clear_false_detection") is True,
+        "flagging the trigger blip as false",
+    )
+    assert_state_stays(
+        client,
+        GRACE_BOTH_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "occupied",
+        "occupied: the maintain sensor still holds after the trigger's false clear",
+    )
+    set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "quick-off: both sensors flagged their clears false",
+        timeout=4,
+    )
+    wait_machine_state(client, "idle", GRACE_BOTH_LIGHT)
+
+    # Genuine presence on the maintain side earns the normal countdown.
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, True)
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, False)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on",
+        duration=3.5,
+    )
+    set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, False)
+    client.wait_state(
+        GRACE_MAINTAIN,
+        lambda state: state["attributes"].get("last_clear_false_detection") is False,
+        "clearing a genuine maintain stay",
+    )
+    wait_machine_state(client, "countdown", GRACE_BOTH_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the quick-off delay: one genuine clear earns the countdown",
+        duration=4,
+    )
+    client.call_service("light", "turn_off", {"entity_id": GRACE_BOTH_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    for entry_id, entity_id in (
+        (both_entry_id, GRACE_BOTH_LIGHT),
+        (trigger_entry_id, GRACE_TRIGGER),
+        (maintain_entry_id, GRACE_MAINTAIN),
+    ):
+        remove_entry_and_entity(client, entry_id, entity_id)
+    print("PASS: maintain holds a manual light; only a both-false clear quick-offs")
+
+
+def run_maintain_restart_prepare() -> None:
+    """Leave a manually lit light held by its maintain sensor across a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Maintain Boot",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_maintain_boot"},
+        },
+        "Maintain-boot light",
+    )
+    wait_entry_loaded(client, entry_id)
+    client.call_service("light", "turn_on", {"entity_id": MAINTAIN_BOOT_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
+    wait_machine_state(client, "occupied", MAINTAIN_BOOT_LIGHT)
+    MAINTAIN_RESTART_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    print("PASS: maintain-held light prepared for a container restart")
+
+
+def run_maintain_restart_verify() -> None:
+    """A light on with its maintain sensor on at startup is occupied, not timed."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(MAINTAIN_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["entry_id"])
+    client.wait_state(
+        MAINTAIN_BOOT_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "restored occupied by the maintain sensor",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the timeout: maintain holds the restored light",
+        duration=5,
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", MAINTAIN_BOOT_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    client.remove_entry(snapshot["entry_id"])
+    wait_entity_absent(client, MAINTAIN_BOOT_LIGHT)
+    wait_entry_removed(client, snapshot["entry_id"], "Temporary maintain-boot light")
+    print("PASS: a maintain-held light restored occupied and released normally")
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -5993,6 +6214,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_schedule_mode_scenarios,
         run_combined_and_maintain_scenarios,
         run_hold_entity_scenarios,
+        run_maintain_scenarios,
     ],
     "c": [
         run_dark_arrival_scenarios,
@@ -6058,6 +6280,8 @@ def main() -> None:
         "restart-effect-verify": run_restart_effect_verify,
         "hold-restart-prepare": run_hold_restart_prepare,
         "hold-restart-verify": run_hold_restart_verify,
+        "maintain-restart-prepare": run_maintain_restart_prepare,
+        "maintain-restart-verify": run_maintain_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
