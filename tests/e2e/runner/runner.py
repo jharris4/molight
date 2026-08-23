@@ -364,6 +364,11 @@ class HomeAssistantClient:
         return self.request("DELETE", f"/api/config/config_entries/entry/{entry_id}")
 
 
+def checkpoint(message: str) -> None:
+    """Narrate one completed step so a failure is easy to place."""
+    print(f"  ok: {message}", flush=True)
+
+
 def expect_step(result: dict[str, Any], step_id: str) -> None:
     """Assert that a backend config flow reached the expected step."""
     if result.get("step_id") != step_id:
@@ -1941,7 +1946,9 @@ def run_primary() -> None:
     fixtures["light"] = light_entry_id
     assert_entry_loaded(client, light_entry_id)
     wait_profile(client, PROFILE_OUTSIDE)
+    checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
     run_illuminance_and_door_scenarios(client)
+    checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
@@ -1959,6 +1966,7 @@ def run_primary() -> None:
     trigger_and_assert(client, pct(30), "Cozy")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
+    checkpoint("turn-on selection follows its source and falls back when unavailable")
     client.call_service(
         "select",
         "select_option",
@@ -1972,6 +1980,7 @@ def run_primary() -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_profile(client, PROFILE_OUTSIDE)
+    checkpoint("profiles switch with the schedule source")
 
     edit_scheduled_light(client, light_entry_id)
     assert_entry_loaded(client, light_entry_id)
@@ -1982,6 +1991,7 @@ def run_primary() -> None:
         ),
         "renamed without changing entity id",
     )
+    checkpoint("options edit renamed the light without changing its entity id")
 
     convert_light(client, "convert_to_regular", "confirm_convert_to_regular")
     assert_entry_loaded(client, light_entry_id)
@@ -2010,6 +2020,10 @@ def run_primary() -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
 
+    checkpoint(
+        "demoted to a gate_keep light: settings stored, gated outside, lit inside"
+    )
+
     convert_light(client, "convert_to_scheduled", "confirm_convert_to_scheduled")
     assert_entry_loaded(client, light_entry_id)
     assert_converted_to_scheduled(
@@ -2030,6 +2044,10 @@ def run_primary() -> None:
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_profile(client, PROFILE_INSIDE)
     trigger_and_assert(client, pct(80), "Night")
+
+    checkpoint(
+        "promoted back to a scheduled light: settings stored, outside profile inert"
+    )
 
     removal_snapshot = prepare_removal_reference_cleanup(client)
     fixtures["removal_light"] = removal_snapshot["light_entry_id"]
@@ -2067,6 +2085,9 @@ def run_primary() -> None:
     )
     verify_removal_reference_cleanup(
         client, removal_snapshot, "a Home Assistant core restart"
+    )
+    checkpoint(
+        "core restart restored the scheduled light, multi light, remote, and cleanup"
     )
     save_fixtures(
         {"entries": fixtures, "removed_sensor": removal_snapshot["sensor_entry_id"]}
