@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from homeassistant.helpers import entity_registry as er
@@ -114,6 +115,10 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
     if not removed:
         return
+    # Some HA versions dispatch tracked state changes one loop iteration
+    # later; yield once so the removed entities' dropout reaches the entries
+    # that watched them before the reloads below unsubscribe those listeners.
+    await asyncio.sleep(0)
 
     for other in hass.config_entries.async_entries(DOMAIN):
         if other.entry_id == entry.entry_id:

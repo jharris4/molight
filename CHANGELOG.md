@@ -106,6 +106,10 @@ longer needs a custom repository.
   first: a maintain sensor that was still loading when the combined sensor
   seeded — or still waiting for its own source — carries the restored occupancy
   when it shows presence before startup finishes, or on its first sighting.
+- Deleting a constituent no longer loses the combined sensor's dropout clear on
+  Home Assistant releases that deliver state changes a loop iteration late
+  (2026.1): `latest_occupied_time` still advances to the removal before the
+  surviving entries reload without the reference.
 - Lights no longer snap off seconds after a restart while someone is still in
   the room. Occupancy in progress at boot — or first provided by a source
   integration that loads late, even well after Home Assistant reports running —
