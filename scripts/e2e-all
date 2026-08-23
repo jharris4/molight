@@ -9,13 +9,21 @@ prefix() {
     while IFS= read -r line; do printf '[%s] %s\n' "$1" "$line"; done
 }
 
+lane_root() {
+    # Give each lane its own run directory when a shared one is requested.
+    if [ -n "${MOLIGHT_E2E_RUN_ROOT:-}" ]; then
+        echo "${MOLIGHT_E2E_RUN_ROOT}/$1"
+    fi
+}
+
 pids=()
-bash scripts/e2e 2>&1 | prefix core &
+MOLIGHT_E2E_RUN_ROOT="$(lane_root core)" bash scripts/e2e 2>&1 | prefix core &
 pids+=($!)
-bash scripts/e2e-restarts 2>&1 | prefix restarts &
+MOLIGHT_E2E_RUN_ROOT="$(lane_root restarts)" bash scripts/e2e-restarts 2>&1 | prefix restarts &
 pids+=($!)
 for shard in a b c; do
-    bash scripts/e2e-scenarios "$shard" 2>&1 | prefix "scenarios-$shard" &
+    MOLIGHT_E2E_RUN_ROOT="$(lane_root "scenarios-$shard")" \
+        bash scripts/e2e-scenarios "$shard" 2>&1 | prefix "scenarios-$shard" &
     pids+=($!)
 done
 

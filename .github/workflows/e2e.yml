@@ -12,6 +12,10 @@ concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Lane scripts pin their run directory here so failures can be uploaded.
+  MOLIGHT_E2E_RUN_ROOT: ${{ github.workspace }}/.e2e-run
+
 jobs:
   current:
     name: Live E2E (HA current)
@@ -24,6 +28,17 @@ jobs:
         run: npm run test:e2e:core
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Make the retained run directory readable
+        if: failure()
+        run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-e2e-failure-core
+          path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+          if-no-files-found: ignore
+          retention-days: 7
 
   restarts:
     name: Restart scenarios (HA current)
@@ -36,6 +51,17 @@ jobs:
         run: npm run test:e2e:restarts
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Make the retained run directory readable
+        if: failure()
+        run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-e2e-failure-restarts
+          path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+          if-no-files-found: ignore
+          retention-days: 7
 
   scenarios:
     name: Behaviour scenarios ${{ matrix.shard }} (HA current)
@@ -52,6 +78,17 @@ jobs:
         run: npm run test:e2e:scenarios-${{ matrix.shard }}
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Make the retained run directory readable
+        if: failure()
+        run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: molight-e2e-failure-scenarios-${{ matrix.shard }}
+          path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+          if-no-files-found: ignore
+          retention-days: 7
 
   browser:
     name: Browser smoke (HA current)
@@ -70,6 +107,9 @@ jobs:
         run: npm run test:e2e:browser
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+      - name: Make the retained artifacts readable
+        if: failure()
+        run: sudo chmod -R a+rX tests/e2e/artifacts/browser || true
       - name: Upload browser failure artifacts
         if: failure()
         uses: actions/upload-artifact@v4
@@ -121,11 +161,17 @@ jobs:
         run: npm run test:e2e:${{ matrix.suite }}
         env:
           MOLIGHT_E2E_HA_IMAGE: ${{ matrix.ha.image }}
-      - name: Upload browser failure artifacts
-        if: failure() && matrix.suite == 'browser'
+      - name: Make the retained artifacts readable
+        if: failure()
+        run: |
+          sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
+      - name: Upload failure artifacts
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: molight-browser-e2e-failure-${{ matrix.ha.slug }}
-          path: tests/e2e/artifacts/browser
+          name: molight-e2e-failure-${{ matrix.ha.slug }}-${{ matrix.suite }}
+          path: |
+            ${{ env.MOLIGHT_E2E_RUN_ROOT }}
+            tests/e2e/artifacts/browser
           if-no-files-found: ignore
           retention-days: 7

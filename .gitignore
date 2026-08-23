@@ -37,3 +37,6 @@ tests/e2e/artifacts/
 
 # macOS
 .DS_Store
+
+# E2E run directory pinned by CI (MOLIGHT_E2E_RUN_ROOT)
+.e2e-run/

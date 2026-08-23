@@ -7,7 +7,8 @@ source tests/e2e/env.sh
 PROJECT_ROOT="$PWD"
 COMPOSE_FILE="tests/e2e/compose.yaml"
 PREVIOUS_TAG="${MOLIGHT_E2E_PREVIOUS_TAG:-$(git describe --tags --abbrev=0)}"
-RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-upgrade.XXXXXX")"
+# MOLIGHT_E2E_RUN_ROOT pins the run directory (CI uploads it on failure).
+RUN_ROOT="${MOLIGHT_E2E_RUN_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-upgrade.XXXXXX")}"
 export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
 export COMPOSE_PROJECT_NAME="molight-e2e-upgrade-$$"
 mkdir -p "$MOLIGHT_E2E_CONFIG_DIR" "$RUN_ROOT/previous"
