@@ -153,6 +153,10 @@ longer needs a custom repository.
   that restarts the auto-off timer. The power-only reply was consumed as the
   complete echo, leaving the fade steps to count as activity. A slow
   on/off-only bulb's late power-only reply still counts as its full echo.
+- The same held for color: a bulb replying power and level first and its
+  color a moment later was misread as a human recolor. A color-less reply now
+  keeps the echo settling, and a color-incapable member's reply to a color
+  command still counts as its full echo.
 
 ## [1.5.0] - 2026-07-28
 

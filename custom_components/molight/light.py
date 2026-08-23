@@ -508,14 +508,23 @@ class _EchoExpectation:
                 # Without an old level there is no direction to judge — a
                 # power-first bulb's fade step must not read as a human dim.
                 settled = False
-        if (
-            self.color is not None
-            and (new_color := _state_color(new_state))
-            and not _colors_close(new_color, self.color)
-        ):
-            if was_on and new_color != _state_color(old_state):
-                return "contradiction"
-            settled = False
+        if self.color is not None:
+            new_color = _state_color(new_state)
+            if new_color is None:
+                # A color-less reply: while settling the color may still be
+                # coming; late, this is a color-incapable member's full echo.
+                if settling:
+                    settled = False
+            elif not _colors_close(new_color, self.color):
+                if (
+                    was_on
+                    and (old_color := _state_color(old_state)) is not None
+                    and new_color != old_color
+                ):
+                    return "contradiction"
+                # Without an old color there is no anchor to judge against —
+                # a member showing its color late is not a human recolor.
+                settled = False
         if settled:
             return "match"
         return "pending" if settling else "contradiction"

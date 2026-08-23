@@ -446,6 +446,29 @@ async def test_late_color_mismatch_is_physical(
     assert tuple(_attrs(hass)["hs_color"]) == (100, 80)
 
 
+@pytest.mark.asyncio
+async def test_color_after_brightness_two_part_echo_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A bulb replying power and level first, then its color, stays our echo."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+    await _write(hass, "on", contexts[-1], brightness=153, **HS_TEMP_CAPS)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[240, 80],
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+
 def _age_expectations(hass: HomeAssistant, seconds: float) -> None:
     virtual = next(
         entity
