@@ -62,6 +62,7 @@ END_SWITCH_LIGHT = "light.e2e_end_switch"
 END_ILLUMINANCE = "binary_sensor.e2e_end_illuminance"
 END_RESTART_SCHEDULE = "binary_sensor.e2e_end_restart_schedule"
 END_RESTART_LIGHT = "light.e2e_end_restart"
+TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -5422,6 +5423,73 @@ def run_end_restart_verify() -> None:
     print("PASS: a turn_off boundary missed during a restart was caught up once")
 
 
+def near(value: str | None, expected: datetime, tolerance: float = 2.0) -> bool:
+    """Whether a timestamp attribute is within tolerance seconds of expected."""
+    parsed = parse_ts(value)
+    return parsed is not None and abs((parsed - expected).total_seconds()) <= tolerance
+
+
+def run_time_window_scenario(client: HomeAssistantClient) -> None:
+    """A fixed time window opens and closes on its own clock, reporting edges."""
+    now = datetime.now(UTC).replace(microsecond=0)
+    start_at = now + timedelta(seconds=15)
+    end_at = now + timedelta(seconds=35)
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Time Window",
+            "start": {"time": start_at.strftime("%H:%M:%S")},
+            "end": {"time": end_at.strftime("%H:%M:%S")},
+            "advanced": {"entity_id": "e2e_time_window"},
+        },
+    )
+    entry_id = finish_creation(result, "Time-window schedule")
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(
+        TIME_WINDOW_SCHEDULE,
+        lambda state: (
+            state["state"] == "off"
+            and near(state["attributes"].get("next_transition"), start_at)
+            and state["attributes"].get("current_window_start") is None
+            and state["attributes"].get("inverted") is False
+        ),
+        "off before the window, pointing at its start",
+    )
+    client.wait_state(
+        TIME_WINDOW_SCHEDULE,
+        lambda state: (
+            state["state"] == "on"
+            and near(state["attributes"].get("current_window_start"), start_at)
+            and near(state["attributes"].get("next_transition"), end_at)
+        ),
+        "on at the window start, pointing at its end",
+        timeout=30,
+    )
+    if datetime.now(UTC) < start_at - timedelta(seconds=1):
+        raise AssertionError("The window opened before its start time")
+    client.wait_state(
+        TIME_WINDOW_SCHEDULE,
+        lambda state: (
+            state["state"] == "off"
+            and near(
+                state["attributes"].get("next_transition"), start_at + timedelta(days=1)
+            )
+        ),
+        "off at the window end, pointing at tomorrow's start",
+        timeout=30,
+    )
+    if datetime.now(UTC) < end_at - timedelta(seconds=1):
+        raise AssertionError("The window closed before its end time")
+    remove_entry_and_entity(client, entry_id, TIME_WINDOW_SCHEDULE)
+    print(
+        "PASS: a fixed time window opened and closed on time with its edge attributes"
+    )
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5458,6 +5526,7 @@ def run_scenarios() -> None:
     run_auto_on_color_scenario(client)
     run_dark_arrival_scenarios(client)
     run_scheduled_light_depth_scenarios(client)
+    run_time_window_scenario(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
