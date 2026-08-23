@@ -81,6 +81,11 @@ compose run --rm runner python runner.py follow-restart-verify
 compose restart homeassistant
 compose run --rm runner python runner.py follow-restart-verify-off
 
+echo "Restarting across a scheduled light's turn_off window end..."
+compose run --rm runner python runner.py end-restart-prepare
+compose restart homeassistant
+compose run --rm runner python runner.py end-restart-verify
+
 echo "Checking Home Assistant logs..."
 compose run --rm runner python runner.py logs
 

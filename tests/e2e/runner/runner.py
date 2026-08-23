@@ -56,6 +56,12 @@ AUTO_COLOR_LIGHT = "light.e2e_auto_color"
 DUSK_LIGHT = "light.e2e_dusk"
 FOLLOW_SCHEDULE = "binary_sensor.e2e_follow_schedule"
 FOLLOW_LIGHT = "light.e2e_follow"
+END_HOLD_LIGHT = "light.e2e_end_hold"
+END_HOLD_SWITCH = "switch.e2e_end_hold_auto_off"
+END_SWITCH_LIGHT = "light.e2e_end_switch"
+END_ILLUMINANCE = "binary_sensor.e2e_end_illuminance"
+END_RESTART_SCHEDULE = "binary_sensor.e2e_end_restart_schedule"
+END_RESTART_LIGHT = "light.e2e_end_restart"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -87,6 +93,7 @@ RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
+END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -5113,6 +5120,308 @@ def run_follow_restart_verify_off() -> None:
     print("PASS: a restart inside the window did not re-apply the missed start")
 
 
+def create_two_profile_light(
+    client: HomeAssistantClient,
+    name: str,
+    entity_id: str,
+    member: str,
+    schedule_entity: str,
+    end_action: str,
+    outside: dict[str, Any],
+    inside: dict[str, Any],
+) -> str:
+    """Create a scheduled light with explicit outside and inside profiles."""
+    result = start_create(client, "scheduled_light")
+    expect_step(result, "scheduled_light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": name,
+            "lights": [member],
+            "schedule_entity": schedule_entity,
+            "schedule_end_action": end_action,
+            "advanced": {"entity_id": entity_id},
+        },
+    )
+    expect_step(result, "scheduled_light_outside")
+    result = client.continue_flow(result, {**EMPTY_LIGHT_SECTIONS, **outside})
+    expect_step(result, "scheduled_light_inside")
+    result = client.continue_flow(result, {**EMPTY_LIGHT_SECTIONS, **inside})
+    return finish_creation(result, name)
+
+
+def wait_end_light(client: HomeAssistantClient, entity_id: str, profile: str) -> None:
+    client.wait_state(
+        entity_id,
+        lambda state: state["attributes"].get("active_settings") == profile,
+        f"using the {profile} profile",
+    )
+
+
+def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
+    """Held turn_off boundaries and the switch action's forced-off/adopt branches."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    set_end_schedule(client, False)
+
+    # turn_off while Auto-off is held: the boundary off waits for the release.
+    hold_entry_id = create_two_profile_light(
+        client,
+        "E2E End Hold",
+        "e2e_end_hold",
+        RAW_MULTI_RGB,
+        END_SCHEDULE,
+        "turn_off",
+        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+        },
+    )
+    assert_entry_loaded(client, hold_entry_id)
+    for discard_by_manual_off in (False, True):
+        set_end_schedule(client, True)
+        wait_end_light(client, END_HOLD_LIGHT, PROFILE_INSIDE)
+        set_timer_motion(client, True)
+        client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+        client.call_service("switch", "turn_off", {"entity_id": END_HOLD_SWITCH})
+        client.wait_state(
+            END_HOLD_LIGHT,
+            lambda state: state["attributes"].get("auto_off_held") is True,
+            "held",
+        )
+        set_end_schedule(client, False)
+        client.wait_state(
+            END_HOLD_LIGHT,
+            lambda state: (
+                state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+                and state["attributes"].get("schedule_end_off_pending") is True
+                and state["state"] == "on"
+            ),
+            "outside with the boundary off pending behind the hold",
+        )
+        set_timer_motion(client, False)
+        assert_state_stays(
+            client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on while held"
+        )
+        if discard_by_manual_off:
+            client.call_service("light", "turn_off", {"entity_id": END_HOLD_LIGHT})
+            client.wait_state(
+                RAW_MULTI_RGB, lambda state: state["state"] == "off", "off"
+            )
+            client.wait_state(
+                END_HOLD_LIGHT,
+                lambda state: (
+                    state["attributes"].get("schedule_end_off_pending") is False
+                ),
+                "pending boundary off discarded by the manual off",
+            )
+            client.call_service("switch", "turn_on", {"entity_id": END_HOLD_SWITCH})
+            assert_state_stays(
+                client,
+                RAW_MULTI_RGB,
+                lambda state: state["state"] == "off",
+                "off: releasing the hold re-applies nothing",
+            )
+        else:
+            client.call_service("switch", "turn_on", {"entity_id": END_HOLD_SWITCH})
+            client.wait_state(
+                RAW_MULTI_RGB,
+                lambda state: state["state"] == "off",
+                "off: the held boundary off is applied on release",
+            )
+            client.wait_state(
+                END_HOLD_LIGHT,
+                lambda state: (
+                    state["attributes"].get("schedule_end_off_pending") is False
+                ),
+                "no longer pending",
+            )
+    remove_entry_and_entity(client, hold_entry_id, END_HOLD_LIGHT)
+
+    # switch: bright control illuminance outside forces off; outside occupancy adopts.
+    illuminance_entry_id = create_entry(
+        client,
+        "illuminance",
+        {
+            "name": "E2E End Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 0,
+            "advanced": {"entity_id": "e2e_end_illuminance"},
+        },
+        "End illuminance",
+    )
+    switch_entry_id = create_two_profile_light(
+        client,
+        "E2E End Switch",
+        "e2e_end_switch",
+        RAW_MULTI_RGB,
+        END_SCHEDULE,
+        "switch",
+        {
+            "light_timeout": 4,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_entity": END_ILLUMINANCE,
+                "illuminance_mode": "control",
+            },
+            "behavior": {"auto_on_brightness": 50},
+        },
+        {
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+        },
+    )
+    assert_entry_loaded(client, illuminance_entry_id)
+    assert_entry_loaded(client, switch_entry_id)
+    for bright in (True, False):
+        expected_lux = "on" if bright else "off"
+        client.set_state(RAW_ILLUMINANCE, 50 if bright else 5)
+        client.wait_state(
+            END_ILLUMINANCE,
+            lambda state, expected=expected_lux: state["state"] == expected,
+            "bright" if bright else "dark",
+        )
+        set_end_schedule(client, True)
+        wait_end_light(client, END_SWITCH_LIGHT, PROFILE_INSIDE)
+        set_timer_motion(client, True)
+        client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+        wait_machine_state(client, "occupied", END_SWITCH_LIGHT)
+        set_end_schedule(client, False)
+        wait_end_light(client, END_SWITCH_LIGHT, PROFILE_OUTSIDE)
+        if bright:
+            client.wait_state(
+                RAW_MULTI_RGB,
+                lambda state: state["state"] == "off",
+                "forced off: the outside profile is bright in control mode",
+            )
+            wait_machine_state(client, "idle", END_SWITCH_LIGHT)
+            set_timer_motion(client, False)
+        else:
+            assert_state_stays(
+                client,
+                END_SWITCH_LIGHT,
+                lambda state: (
+                    state["state"] == "on"
+                    and state["attributes"].get("molight_state") == "occupied"
+                ),
+                "occupied: outside occupancy adopted the light past the 4 s timeout",
+                duration=5,
+            )
+            set_timer_motion(client, False)
+            wait_machine_state(client, "countdown", END_SWITCH_LIGHT)
+            client.wait_state(
+                RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=10
+            )
+    client.set_state(RAW_ILLUMINANCE, 5)
+    remove_entry_and_entity(client, switch_entry_id, END_SWITCH_LIGHT)
+    remove_entry_and_entity(client, illuminance_entry_id, END_ILLUMINANCE)
+    remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
+    print("PASS: held turn_off boundaries and switch forced-off/adopt branches")
+
+
+def run_end_restart_prepare() -> None:
+    """Leave an occupied scheduled light whose turn_off window ends mid-restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    now = datetime.now(UTC)
+    start = (now - timedelta(seconds=60)).strftime("%H:%M:%S")
+    end = (now + timedelta(seconds=7)).strftime("%H:%M:%S")
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E End Restart Schedule",
+            "start": {"time": start},
+            "end": {"time": end},
+            "advanced": {"entity_id": "e2e_end_restart_schedule"},
+        },
+    )
+    schedule_entry_id = finish_creation(result, "End-restart schedule")
+    light_entry_id = create_two_profile_light(
+        client,
+        "E2E End Restart",
+        "e2e_end_restart",
+        RAW_TIMER_LIGHT,
+        END_RESTART_SCHEDULE,
+        "turn_off",
+        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+        },
+    )
+    wait_entry_loaded(client, schedule_entry_id)
+    wait_entry_loaded(client, light_entry_id)
+    client.wait_state(END_RESTART_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_end_light(client, END_RESTART_LIGHT, PROFILE_INSIDE)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", END_RESTART_LIGHT)
+    END_RESTART_SNAPSHOT.write_text(
+        json.dumps(
+            {"schedule_entry_id": schedule_entry_id, "light_entry_id": light_entry_id}
+        )
+    )
+    print("PASS: occupied scheduled light prepared; its window ends during the restart")
+
+
+def run_end_restart_verify() -> None:
+    """A turn_off boundary missed during the restart is caught up exactly once."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(END_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["schedule_entry_id"])
+    wait_entry_loaded(client, snapshot["light_entry_id"])
+    client.wait_state(
+        END_RESTART_SCHEDULE,
+        lambda state: state["state"] == "off",
+        "off",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        END_RESTART_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+            and state["attributes"].get("schedule_end_off_pending") is False
+            and state["attributes"].get("molight_state") == "idle"
+        ),
+        "off on the outside profile: the missed end boundary was caught up",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    # The light stays off under the outside profile until its next sensor edge.
+    set_timer_motion(client, False)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: a light the boundary turned off stays off",
+        duration=2,
+    )
+    for entry_id, entity_id in (
+        (snapshot["light_entry_id"], END_RESTART_LIGHT),
+        (snapshot["schedule_entry_id"], END_RESTART_SCHEDULE),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: a turn_off boundary missed during a restart was caught up once")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5148,6 +5457,7 @@ def run_scenarios() -> None:
     run_effect_color_scenarios(client)
     run_auto_on_color_scenario(client)
     run_dark_arrival_scenarios(client)
+    run_scheduled_light_depth_scenarios(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
@@ -5181,6 +5491,8 @@ def main() -> None:
         "follow-restart-prepare": run_follow_restart_prepare,
         "follow-restart-verify": run_follow_restart_verify,
         "follow-restart-verify-off": run_follow_restart_verify_off,
+        "end-restart-prepare": run_end_restart_prepare,
+        "end-restart-verify": run_end_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
