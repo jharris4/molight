@@ -6,6 +6,8 @@ const LIGHT_NAME = "Browser Scheduled";
 const EDITED_LIGHT_NAME = "Browser Scheduled Edited";
 const LIGHT_ENTITY_ID = "light.browser_scheduled";
 
+test.describe.configure({ mode: "serial" });
+
 async function login(page) {
   await page.goto("/");
   const username = page.getByRole("textbox", { name: "Username" });
@@ -167,4 +169,145 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
   expect(state.attributes.active_settings).toBeDefined();
   const card = await entryCard(page, EDITED_LIGHT_NAME);
   await expect(card).toBeVisible();
+});
+
+async function sectionPanel(page, title) {
+  const panel = page.locator("ha-expansion-panel").filter({ hasText: title }).first();
+  await expect(panel).toBeVisible();
+  if ((await panel.getAttribute("expanded")) === null) {
+    await panel.getByText(title, { exact: true }).first().click();
+    await expect(panel).toHaveAttribute("expanded", "");
+    // Let the expand animation finish so the pickers inside stay put.
+    await page.waitForTimeout(500);
+  }
+  return panel;
+}
+
+async function pickEntity(page, scope, label, entityName) {
+  const picker = scope.locator("ha-selector-entity").filter({ hasText: label }).first();
+  await expect(picker).toBeVisible();
+  await picker.scrollIntoViewIfNeeded();
+  // Multi-entity pickers list chosen entities first and an empty row last.
+  await picker.getByRole("listitem").last().click();
+  const option = page.getByText(entityName, { exact: true }).last();
+  await expect(option).toBeVisible();
+  await option.click();
+}
+
+async function finishCreated(page, name) {
+  await expect(page.getByText(new RegExp(`created configuration for ${name}`, "i"))).toBeVisible();
+  await page.getByRole("button", { name: /finish/i }).click();
+}
+
+async function closeAbort(page, pattern) {
+  await expect(page.getByText(pattern)).toBeVisible();
+  await page.getByRole("button", { name: "Close", exact: true }).last().click();
+}
+
+async function startCreate(page, entityType) {
+  await openAddFlow(page);
+  await clickFlowChoice(page, "Create a single entity");
+  await selectHaOption(page, "Entity type", entityType);
+  await submit(page);
+}
+
+test("create an occupancy sensor, then hit the entity-id conflict step", async ({ page }) => {
+  await login(page);
+  await startCreate(page, "Virtual Occupancy Sensor");
+  await expectFlowTitle(page, "Virtual Occupancy Sensor");
+  await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Occupancy");
+  await pickEntity(page, page, "Source sensor", "E2E Motion");
+  await submit(page);
+  await finishCreated(page, "Browser Occupancy");
+  const state = await entityState(page, "binary_sensor.browser_occupancy");
+  expect(state.attributes.friendly_name).toBe("Browser Occupancy");
+
+  // The same name with a blank entity id: the flow warns and offers to proceed.
+  await startCreate(page, "Virtual Occupancy Sensor");
+  await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Occupancy");
+  await pickEntity(page, page, "Source sensor", "E2E Raw Occupancy");
+  await submit(page);
+  await expectFlowTitle(page, "Entity ID already exists");
+  await clickFlowChoice(page, "Create it anyway");
+  await finishCreated(page, "Browser Occupancy");
+  const second = await entityState(page, "binary_sensor.browser_occupancy_2");
+  expect(second.attributes.friendly_name).toBe("Browser Occupancy");
+});
+
+test("discover sensors and lights in bulk", async ({ page }) => {
+  await login(page);
+  // Occupancy candidates: removal motion only (the others are wrapped above,
+  // the disabled one is hidden).
+  await openAddFlow(page);
+  await clickFlowChoice(page, "Discover occupancy sensors");
+  await expectFlowTitle(page, "Discover occupancy sensors");
+  await submit(page);
+  const removalMotion = page.getByRole("checkbox", { name: /E2E Removal Motion/ });
+  await expect(removalMotion).toBeVisible();
+  await expect(removalMotion).toBeChecked();
+  await submit(page);
+  await expectFlowTitle(page, "Occupancy sensor defaults");
+  await submit(page);
+  await closeAbort(page, /Created 1 virtual MoLight entit/);
+
+  // Lights: every unwrapped light is offered; the scheduled light's member is not.
+  await openAddFlow(page);
+  await clickFlowChoice(page, "Discover lights");
+  await expectFlowTitle(page, "Discover lights");
+  await submit(page);
+  const timerTarget = page.getByRole("checkbox", { name: /E2E Timer Target/ });
+  await expect(timerTarget).toBeVisible();
+  await expect(timerTarget).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /E2E Main Light/ })).toHaveCount(0);
+  await submit(page);
+  await expectFlowTitle(page, "Light defaults");
+  await submit(page);
+  await closeAbort(page, /Created 5 virtual MoLight entit/);
+  const wrapped = await entityState(page, "light.e2e_timer_target_2");
+  expect(wrapped.attributes.friendly_name).toBe("E2E Timer Target");
+});
+
+test("assign an occupancy sensor to several lights", async ({ page }) => {
+  await login(page);
+  await openAddFlow(page);
+  await clickFlowChoice(page, "Assign a sensor to several lights");
+  await clickFlowChoice(page, "Assign an occupancy sensor");
+  await expectFlowTitle(page, "Assign an occupancy sensor");
+  await pickEntity(page, page, "Occupancy sensor", "Browser Occupancy");
+  await submit(page);
+  await expectFlowTitle(page, "Choose the lights");
+  await pickEntity(page, page, "Lights", "E2E Timer Target");
+  await submit(page);
+  await closeAbort(page, /Assigned the sensor to 1 light\(s\) and removed it from 0/);
+});
+
+test("create a remote through its form", async ({ page }) => {
+  await login(page);
+  await startCreate(page, "Virtual Remote");
+  await expectFlowTitle(page, "Virtual Remote");
+  await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Remote");
+  await pickEntity(page, page, "Lights to control", EDITED_LIGHT_NAME);
+  const turnOn = await sectionPanel(page, "Turn on");
+  await pickEntity(page, turnOn, "Single-click buttons", "E2E Button");
+  await submit(page);
+  await finishCreated(page, "Browser Remote");
+  const sensor = await entityState(page, "sensor.browser_remote_last_action");
+  expect(sensor.state).toBe("unknown");
+});
+
+test("a light with a turn-on selection gets the selection page", async ({ page }) => {
+  await login(page);
+  await startCreate(page, "Virtual Light");
+  await expectFlowTitle(page, "Virtual Light");
+  await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Selected");
+  await pickEntity(page, page, "Lights to control", "E2E CT Light");
+  const behavior = await sectionPanel(page, "Turn-on & turn-off behavior");
+  await pickEntity(page, behavior, "Turn-on selection entity", "E2E Target Mode");
+  await submit(page);
+  await expectFlowTitle(page, "Turn-on selection");
+  await selectHaOption(page, "Fixed/fallback option", "Cozy");
+  await submit(page);
+  await finishCreated(page, "Browser Selected");
+  const state = await entityState(page, "light.browser_selected");
+  expect(state.attributes.friendly_name).toBe("Browser Selected");
 });

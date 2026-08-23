@@ -42,7 +42,7 @@ compose up --detach homeassistant
 echo "Preparing the browser fixture through Home Assistant's API..."
 compose run --rm runner python runner.py browser-prepare
 
-echo "Running the create/edit/convert browser smoke test..."
+echo "Running the browser smoke tests..."
 compose run --rm browser npx playwright test \
     --config tests/e2e/browser/playwright.config.mjs
 
