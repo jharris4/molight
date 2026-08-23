@@ -63,6 +63,7 @@ END_ILLUMINANCE = "binary_sensor.e2e_end_illuminance"
 END_RESTART_SCHEDULE = "binary_sensor.e2e_end_restart_schedule"
 END_RESTART_LIGHT = "light.e2e_end_restart"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
+WALL_LIGHT = "light.e2e_wall"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -5490,6 +5491,82 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
     )
 
 
+def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
+    """Brightness 0 at the wall is off in disguise; 0 -> non-zero is a turn-on."""
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Wall",
+            "lights": [RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_wall"},
+        },
+        "Wall light",
+    )
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(WALL_LIGHT, lambda state: state["state"] == "off", "off")
+
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 100})
+    first_on = client.wait_state(
+        WALL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("last_on_physical") is not None
+        ),
+        "active after a wall turn-on of one member",
+    )["attributes"]["last_on_physical"]
+
+    # A member reporting on at brightness 0 is off in disguise; with the other
+    # member off, every real light is off and the virtual light goes idle.
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 0})
+    client.wait_state(
+        WALL_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("last_brightness_change_physical") is not None
+        ),
+        "idle: a member dimmed to 0 at the wall counts as off",
+    )
+
+    # 0 -> non-zero on an idle light is a turn-on in disguise.
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 120})
+    client.wait_state(
+        WALL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("last_on_physical") not in (None, first_on)
+            and state["attributes"].get("brightness") == 120
+        ),
+        "active again with a fresh wall turn-on stamp and the dimmed brightness",
+    )
+
+    # Every member switched off at the wall -> idle; one still on keeps it on.
+    client.set_state(RAW_MULTI_ON_OFF, "on", {})
+    client.set_state(RAW_MULTI_DIMMER, "off", {})
+    assert_state_stays(
+        client,
+        WALL_LIGHT,
+        lambda state: state["state"] == "on",
+        "on while one member is still on at the wall",
+    )
+    client.set_state(RAW_MULTI_ON_OFF, "off", {})
+    client.wait_state(
+        WALL_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+        ),
+        "idle once every member is off at the wall",
+    )
+    remove_entry_and_entity(client, entry_id, WALL_LIGHT)
+    print("PASS: wall brightness 0 reads as off, 0 -> on as a turn-on, all off as idle")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -5527,6 +5604,7 @@ def run_scenarios() -> None:
     run_dark_arrival_scenarios(client)
     run_scheduled_light_depth_scenarios(client)
     run_time_window_scenario(client)
+    run_wall_brightness_scenarios(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
