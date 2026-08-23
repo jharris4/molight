@@ -58,6 +58,7 @@ RESTART_WARNING_SWITCH = "switch.e2e_restart_warning_auto_off"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
+PRESET_REMOTE_LAST_ACTION = "sensor.e2e_preset_remote_last_action"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -2042,11 +2043,15 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
 
 
 def wait_remote_action(
-    client: HomeAssistantClient, action: str, click: str, event_type: str
+    client: HomeAssistantClient,
+    action: str,
+    click: str,
+    event_type: str,
+    sensor: str = REMOTE_LAST_ACTION,
 ) -> dict[str, Any]:
     """Wait for the remote's diagnostic sensor to record one binding."""
     return client.wait_state(
-        REMOTE_LAST_ACTION,
+        sensor,
         lambda state: (
             state["state"] == action
             and state["attributes"].get("button") == EVENT_BUTTON
@@ -2070,6 +2075,137 @@ def turn_off_multi_members(client: HomeAssistantClient) -> None:
     """Return the temporary remote target and its available members to off."""
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
     wait_multi_members_off(client)
+
+
+def create_preset_remote(
+    client: HomeAssistantClient, bindings: dict[str, dict[str, Any]]
+) -> str:
+    """Create a temporary remote on the multi light with the given bindings."""
+    return create_entry(
+        client,
+        "remote",
+        {
+            "name": "E2E Preset Remote",
+            "target_lights": [VIRTUAL_MULTI_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            **bindings,
+        },
+        "Preset remote",
+    )
+
+
+def wait_multi_brightness(client: HomeAssistantClient, brightness: int) -> None:
+    """Wait for the multi light and its dimmer member to show one brightness."""
+    for entity_id in (VIRTUAL_MULTI_LIGHT, RAW_MULTI_DIMMER):
+        client.wait_state(
+            entity_id,
+            lambda state: (
+                state["state"] == "on"
+                and state["attributes"].get("brightness") == brightness
+            ),
+            f"on at brightness {brightness}",
+        )
+
+
+def remove_preset_remote(client: HomeAssistantClient, entry_id: str) -> None:
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, PRESET_REMOTE_LAST_ACTION)
+    wait_entry_removed(client, entry_id, "Temporary preset remote")
+
+
+def run_remote_step_and_preset_scenarios(client: HomeAssistantClient) -> None:
+    """Brightness steps by the configured percent; presets apply their values."""
+    entry_id = create_preset_remote(
+        client,
+        {
+            "brightness_down": {"brightness_down_buttons_single": [EVENT_BUTTON]},
+            "preset_1": {
+                "preset_1_buttons_double": [EVENT_BUTTON],
+                "preset_1_brightness": 40,
+                "preset_1_rgb_color": [0, 0, 255],
+            },
+        },
+    )
+    assert_entry_loaded(client, entry_id)
+    turn_off_multi_members(client)
+    client.call_service(
+        "light", "turn_on", {"entity_id": VIRTUAL_MULTI_LIGHT, "brightness": 128}
+    )
+    wait_multi_brightness(client, 128)
+    # HA steps in whole percent of the current level: 50 % -> 30 % -> 10 % -> off.
+    for expected in (pct(30), pct(10)):
+        client.fire_event(EVENT_BUTTON, "short_release")
+        wait_remote_action(
+            client,
+            "brightness_down",
+            "single",
+            "short_release",
+            PRESET_REMOTE_LAST_ACTION,
+        )
+        wait_multi_brightness(client, expected)
+    client.fire_event(EVENT_BUTTON, "short_release")
+    wait_multi_members_off(client)  # stepping below the minimum turns it off
+
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    wait_remote_action(
+        client, "preset_1", "double", "multi_press_2", PRESET_REMOTE_LAST_ACTION
+    )
+    wait_multi_brightness(client, pct(40))
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(40)
+            and list(state["attributes"].get("rgb_color") or []) == [0, 0, 255]
+        ),
+        "on at the preset brightness and RGB color",
+    )
+    turn_off_multi_members(client)
+    remove_preset_remote(client, entry_id)
+
+    entry_id = create_preset_remote(
+        client,
+        {
+            "preset_2": {
+                "preset_2_buttons_single": [EVENT_BUTTON],
+                "preset_2_brightness": 70,
+                "preset_2_color_temp": 3000,
+            },
+            "brightness_up": {"brightness_up_buttons_double": [EVENT_BUTTON]},
+        },
+    )
+    assert_entry_loaded(client, entry_id)
+    client.fire_event(EVENT_BUTTON, "short_release")
+    wait_remote_action(
+        client, "preset_2", "single", "short_release", PRESET_REMOTE_LAST_ACTION
+    )
+    wait_multi_brightness(client, pct(70))
+    member = client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(70)
+            and state["attributes"].get("rgb_color") is not None
+        ),
+        "on at the preset brightness with a converted color temperature",
+    )
+    red, _green, blue = member["attributes"]["rgb_color"]
+    if not red > blue:
+        raise AssertionError(f"3000 K preset did not read as a warm color: {member}")
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    wait_remote_action(
+        client, "brightness_up", "double", "multi_press_2", PRESET_REMOTE_LAST_ACTION
+    )
+    wait_multi_brightness(client, pct(90))
+    turn_off_multi_members(client)
+    client.fire_event(EVENT_BUTTON, "multi_press_2")
+    wait_multi_brightness(client, 51)  # stepping up from off turns on one step dim
+    turn_off_multi_members(client)
+    remove_preset_remote(client, entry_id)
+    print(
+        "PASS: remote brightness steps are exact and presets apply brightness and color"
+    )
 
 
 def exercise_created_remote(client: HomeAssistantClient) -> None:
@@ -2978,6 +3114,7 @@ def run_primary() -> None:
     multi_entry_id = create_multi_light(client)
     assert_entry_loaded(client, multi_entry_id)
     fixtures["multi"] = multi_entry_id
+    run_remote_step_and_preset_scenarios(client)
     remote_entry_id = prepare_current_remote(client)
     fixtures["remote"] = remote_entry_id
     prepare_multi_light_restart(client)
