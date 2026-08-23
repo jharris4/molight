@@ -37,6 +37,7 @@ RAW_TIMER_MOTION = "binary_sensor.e2e_raw_occupancy"
 VIRTUAL_TIMER_OCCUPANCY = "binary_sensor.e2e_timer_occupancy"
 VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
+INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -405,7 +406,12 @@ def create_entry(
     return finish_creation(client.continue_flow(result, payload), description)
 
 
-def create_virtual_schedule(client: HomeAssistantClient) -> str:
+def create_virtual_schedule(
+    client: HomeAssistantClient,
+    name: str = "E2E Schedule",
+    entity_id: str = "e2e_schedule",
+    invert: bool = False,
+) -> str:
     """Create a source-backed MoLight Virtual Schedule through its API flow."""
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
@@ -414,13 +420,48 @@ def create_virtual_schedule(client: HomeAssistantClient) -> str:
     result = client.continue_flow(
         result,
         {
-            "name": "E2E Schedule",
+            "name": name,
             "schedule_source": RAW_SCHEDULE,
-            "schedule_invert": False,
-            "advanced": {"entity_id": "e2e_schedule"},
+            "schedule_invert": invert,
+            "advanced": {"entity_id": entity_id},
         },
     )
-    return finish_creation(result, "Schedule")
+    return finish_creation(result, name)
+
+
+def wait_inverted_schedule(client: HomeAssistantClient, raw_state: str) -> None:
+    """Assert the inverted schedule mirrors the opposite of its source."""
+    expected = "off" if raw_state == "on" else "on"
+    client.wait_state(
+        INVERTED_SCHEDULE,
+        lambda state: (
+            state["state"] == expected
+            and state["attributes"].get("inverted") is True
+            and state["attributes"].get("source_entity") == RAW_SCHEDULE
+        ),
+        f"{expected} while its source is {raw_state}, reporting inversion",
+    )
+
+
+def run_inverted_schedule_scenario(client: HomeAssistantClient) -> None:
+    """An inverted source-backed schedule is on exactly when its source is off."""
+    entry_id = create_virtual_schedule(
+        client, "E2E Inverted Schedule", "e2e_inverted_schedule", invert=True
+    )
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(RAW_SCHEDULE, lambda state: state["state"] == "off", "off")
+    wait_inverted_schedule(client, "off")
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_inverted_schedule(client, "on")
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+    wait_inverted_schedule(client, "off")
+    wait_profile(client, PROFILE_OUTSIDE)
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, INVERTED_SCHEDULE)
+    wait_entry_removed(client, entry_id, "Temporary inverted schedule")
+    checkpoint("inverted source-backed schedule mirrors the opposite of its source")
 
 
 def create_virtual_occupancy(
@@ -2265,6 +2306,7 @@ def run_primary() -> None:
     assert_entry_loaded(client, light_entry_id)
     wait_profile(client, PROFILE_OUTSIDE)
     checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
+    run_inverted_schedule_scenario(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     timer_entry_id = create_timeout_light(client)
