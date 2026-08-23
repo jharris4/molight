@@ -1110,6 +1110,115 @@ async def test_occupancy_discards_last_on_time_restored_with_off(
     assert state.attributes["last_on_time"] is None
 
 
+def _grace_occupancy_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Boot Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_occupancy_restores_last_on_time_with_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A cycle still running at restart keeps its pre-restart anchor.
+
+    The post-restart clear then measures the full on-duration: a long-running
+    occupancy is a real one, not a false detection timed from the restart.
+    """
+    anchor = (datetime.now(UTC) - timedelta(seconds=100)).isoformat()
+    mock_restore_cache(
+        hass,
+        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": anchor})],
+    )
+    hass.set_state(CoreState.starting)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+
+    entry = _grace_occupancy_entry()
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] == anchor
+
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["latest_occupied_time"] is not None
+
+
+@pytest.mark.asyncio
+async def test_occupancy_classifies_short_cycle_from_restored_anchor(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A brief cycle spanning the restart is still classified as false.
+
+    Without the restored anchor the cycle would be unclassifiable and the
+    clear would pass as genuine.
+    """
+    anchor = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
+    mock_restore_cache(
+        hass,
+        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": anchor})],
+    )
+    hass.set_state(CoreState.starting)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+
+    entry = _grace_occupancy_entry()
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+    assert state.attributes["latest_occupied_time"] is None
+
+
+@pytest.mark.asyncio
+async def test_occupancy_discards_malformed_restored_last_on_time(
+    hass: HomeAssistant,
+) -> None:
+    """A stored anchor that no longer parses is dropped, not a crash."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.boot_occupancy",
+                "on",
+                {"last_on_time": "not-a-timestamp"},
+            )
+        ],
+    )
+    hass.set_state(CoreState.starting)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+
+    entry = _grace_occupancy_entry()
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] is None
+
+
 @pytest.mark.asyncio
 async def test_occupancy_seeds_last_on_time_from_source(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer

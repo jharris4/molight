@@ -635,3 +635,45 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-03-08T03:05:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_discards_malformed_restored_marker(
+    hass: HomeAssistant,
+) -> None:
+    """A stored window marker that no longer parses is dropped, not a crash.
+
+    The live source then supplies a fresh marker from its own last change.
+    """
+    source = "binary_sensor.house_mode"
+    entity_id = "binary_sensor.house_mode_schedule"
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                entity_id,
+                "on",
+                {
+                    "current_window_start": "not-a-timestamp",
+                    "source_entity": source,
+                    "inverted": False,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(source, "on")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: source,
+        },
+    )
+    await _setup(hass, entry)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    marker = hass.states.get(source).last_changed.isoformat()
+    assert state.attributes["current_window_start"] == marker
