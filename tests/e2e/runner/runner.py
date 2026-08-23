@@ -51,6 +51,7 @@ GRACE_LIGHT = "light.e2e_grace"
 HOLD_LIGHT = "light.e2e_hold"
 LATE_OCCUPANCY = "binary_sensor.e2e_late_occupancy"
 LATE_LIGHT = "light.e2e_late"
+EFFECT_LIGHT = "light.e2e_effect"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -4639,6 +4640,138 @@ def run_late_source_verify() -> None:
     print("PASS: a late-loading occupancy source was adopted and cleared normally")
 
 
+def create_effect_light(client: HomeAssistantClient, warning: dict[str, Any]) -> str:
+    """Create a short-timeout light on the RGB member with the given stages."""
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Effect",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 6,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": warning,
+            "advanced": {"entity_id": "e2e_effect"},
+        },
+        "Effect light",
+    )
+
+
+def wait_member_stage(
+    client: HomeAssistantClient,
+    stage: str,
+    brightness: int | None,
+    rgb: list[int] | None,
+    transition: float | None,
+) -> None:
+    """Wait for a stage on the virtual light and its presentation on the member."""
+    wait_machine_state(client, stage, EFFECT_LIGHT)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            (state["state"] == "off")
+            if brightness is None
+            else (
+                state["state"] == "on"
+                and state["attributes"].get("brightness") == brightness
+                and (
+                    rgb is None
+                    or list(state["attributes"].get("rgb_color") or []) == rgb
+                )
+                and command_data(state).get("transition") == transition
+            )
+        ),
+        f"showing the {stage} stage ({brightness}, {rgb}, fade {transition})",
+    )
+
+
+def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
+    """Effect colour and fades, a colourless warn undoing them, a blink-off effect."""
+    entry_id = create_effect_light(
+        client,
+        {
+            "effect_timeout": 3,
+            "effect_brightness": 40,
+            "effect_rgb_color": [0, 255, 0],
+            "effect_transition": 1,
+            "warn_timeout": 3,
+            "warn_transition": 1,
+        },
+    )
+    assert_entry_loaded(client, entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
+        ),
+        "on at the automatic brightness",
+    )
+    # Give the light a known colour before the sequence so the undo is visible.
+    client.call_service(
+        "light", "turn_on", {"entity_id": EFFECT_LIGHT, "hs_color": [240, 100]}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: list(state["attributes"].get("rgb_color") or []) == [0, 0, 255],
+        "blue before the sequence",
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", EFFECT_LIGHT)
+    wait_member_stage(client, "effect", pct(40), [0, 255, 0], 1)
+    client.wait_state(
+        EFFECT_LIGHT,
+        lambda state: (
+            state["attributes"].get("pre_warn_brightness") == pct(60)
+            and (
+                hs := (state["attributes"].get("pre_warn_color") or {}).get("hs_color")
+            )
+            and abs(hs[0] - 240) < 1
+        ),
+        "remembering the pre-warning brightness and blue",
+    )
+    # A warn stage with no brightness or colour of its own falls back to the
+    # pre-warning brightness and undoes the effect recolour.
+    wait_member_stage(client, "warn", pct(60), [0, 0, 255], 1)
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    wait_machine_state(client, "idle", EFFECT_LIGHT)
+    remove_entry_and_entity(client, entry_id, EFFECT_LIGHT)
+
+    entry_id = create_effect_light(
+        client,
+        {
+            "effect_timeout": 2,
+            "effect_brightness": 0,
+            "warn_timeout": 3,
+            "warn_brightness": 20,
+            "warn_rgb_color": [255, 0, 0],
+        },
+    )
+    assert_entry_loaded(client, entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", EFFECT_LIGHT)
+    # Effect brightness 0 blinks the members fully off while the virtual stays on.
+    wait_member_stage(client, "effect", None, None, None)
+    client.wait_state(
+        EFFECT_LIGHT,
+        lambda state: state["state"] == "on",
+        "still on while its members blink off",
+    )
+    wait_member_stage(client, "warn", pct(20), [255, 0, 0], None)
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    wait_machine_state(client, "idle", EFFECT_LIGHT)
+    remove_entry_and_entity(client, entry_id, EFFECT_LIGHT)
+    print("PASS: effect colour and fades, colourless warn undo, and blink-off effect")
+
+
 def run_scenarios() -> None:
     """Self-contained behaviour scenarios on a fresh Home Assistant.
 
@@ -4671,6 +4804,7 @@ def run_scenarios() -> None:
     run_combined_and_maintain_scenarios(client)
     run_hold_entity_scenarios(client)
     run_fast_physical_scenarios(client)
+    run_effect_color_scenarios(client)
     print("PASS: behaviour scenarios completed on a fresh Home Assistant")
 
 
