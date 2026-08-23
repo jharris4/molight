@@ -8,6 +8,7 @@ import re
 import sys
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
@@ -404,6 +405,11 @@ class HomeAssistantClient:
     def remove_entry(self, entry_id: str) -> Any:
         """Remove a temporary config entry through Home Assistant's API."""
         return self.request("DELETE", f"/api/config/config_entries/entry/{entry_id}")
+
+
+def parse_ts(value: str | None) -> datetime | None:
+    """Parse a MoLight timestamp attribute."""
+    return datetime.fromisoformat(value) if value else None
 
 
 def checkpoint(message: str) -> None:
@@ -936,8 +942,9 @@ def trigger_and_assert(
         lambda state: (
             state["attributes"].get("last_turn_on_selection_option") == selection
             and state["attributes"].get("last_turn_on_selection_source") == source
+            and state["attributes"].get("last_on_occupancy") is not None
         ),
-        f"reporting the {selection!r} selection from {source}",
+        f"reporting the {selection!r} selection from {source} and an occupancy turn-on",
     )
 
 
@@ -1477,6 +1484,17 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: state["attributes"].get("molight_state") == "active",
         "timer-driven while the outside-profile door remains open",
     )
+    first_open = client.state(VIRTUAL_LIGHT)["attributes"].get("last_on_door")
+    client.set_state(RAW_DOOR, "off")
+    client.set_state(RAW_DOOR, "on")
+    client.wait_state(
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_on_door") not in (None, first_open)
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "re-triggered by re-opening the momentary door",
+    )
     reset_trigger(client)
 
     # Inside profile: control-mode illuminance forces an occupied light off
@@ -1529,7 +1547,17 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: state["attributes"].get("molight_state") == "occupied",
         "held while the inside-profile door remains open",
     )
+    client.set_state(RAW_MOTION, "on")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
     client.set_state(RAW_DOOR, "off")
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "occupied",
+        "occupied: closing the door defers to active occupancy",
+    )
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "countdown")
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "counting down")
     reset_trigger(client)
@@ -1758,9 +1786,13 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         PHYSICAL_LIGHT,
         lambda state: (
             state["attributes"].get("warning_active") is True
-            and state["attributes"].get("pre_warn_color") is not None
+            and (
+                hs := (state["attributes"].get("pre_warn_color") or {}).get("hs_color")
+            )
+            and abs(hs[0] - 240) < 1
+            and abs(hs[1] - 100) < 1
         ),
-        "in its warning with the pre-warning color saved",
+        "in its warning with the pre-warning blue saved",
     )
     client.wait_state(
         RAW_MULTI_RGB,
@@ -1939,7 +1971,7 @@ def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str
         result,
         {
             "name": "E2E End Action",
-            "lights": [RAW_TIMER_LIGHT],
+            "lights": [RAW_MULTI_RGB],
             "schedule_entity": END_SCHEDULE,
             "schedule_end_action": end_action,
             "advanced": {"entity_id": "e2e_end_action"},
@@ -1961,7 +1993,7 @@ def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str
             **EMPTY_LIGHT_SECTIONS,
             "light_timeout": 30,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
-            "behavior": {"auto_on_brightness": 60},
+            "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
         },
     )
     return finish_creation(result, f"End-action {end_action} light")
@@ -1985,7 +2017,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
         )
         set_timer_motion(client, True)
         client.wait_state(
-            RAW_TIMER_LIGHT,
+            RAW_MULTI_RGB,
             lambda state: (
                 state["state"] == "on"
                 and state["attributes"].get("brightness") == pct(60)
@@ -2007,16 +2039,19 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
         )
         if end_action == "turn_off":
             client.wait_state(
-                RAW_TIMER_LIGHT,
-                lambda state: state["state"] == "off",
-                "off at the window end",
+                RAW_MULTI_RGB,
+                lambda state: (
+                    state["state"] == "off"
+                    and command_data(state).get("transition") == 1
+                ),
+                "off at the window end with the outgoing profile's fade",
             )
             wait_machine_state(client, "idle", END_ACTION_LIGHT)
         elif end_action == "switch":
             # Recalculated against the outside profile: its 4 s timeout, not
             # the inside countdown, now decides when the light goes off.
             client.wait_state(
-                RAW_TIMER_LIGHT,
+                RAW_MULTI_RGB,
                 lambda state: state["state"] == "off",
                 "off after the outside profile's timer",
                 timeout=10,
@@ -2025,7 +2060,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
         else:
             assert_state_stays(
                 client,
-                RAW_TIMER_LIGHT,
+                RAW_MULTI_RGB,
                 lambda state: state["state"] == "on",
                 "on: keep preserves the inside countdown past the outside timeout",
                 duration=6,
@@ -2033,7 +2068,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
             wait_machine_state(client, "countdown", END_ACTION_LIGHT)
 
         client.call_service("light", "turn_off", {"entity_id": END_ACTION_LIGHT})
-        client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+        client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
         client.remove_entry(entry_id)
         wait_entity_absent(client, END_ACTION_LIGHT)
         wait_entry_removed(client, entry_id, f"Temporary end-action {end_action} light")
@@ -2052,7 +2087,7 @@ def create_gate_mode_light(client: HomeAssistantClient, schedule_mode: str) -> s
         "light",
         {
             "name": "E2E Gate Mode",
-            "lights": [RAW_TIMER_LIGHT],
+            "lights": [RAW_MULTI_RGB],
             "light_timeout": 12,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
@@ -2080,7 +2115,7 @@ def run_follow_mode_scenario(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, entry_id)
     set_end_schedule(client, True)
     client.wait_state(
-        RAW_TIMER_LIGHT,
+        RAW_MULTI_RGB,
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
@@ -2095,22 +2130,23 @@ def run_follow_mode_scenario(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "scheduled"
+            and state["attributes"].get("schedule_window_start") is not None
         ),
-        "scheduled while occupancy changes inside the window are ignored",
+        "scheduled with its window marker while occupancy changes are ignored",
     )
     set_end_schedule(client, False)
-    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", GATE_MODE_LIGHT)
 
     set_timer_motion(client, True)
     client.wait_state(
-        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on from motion outside"
+        RAW_MULTI_RGB, lambda state: state["state"] == "on", "on from motion outside"
     )
     wait_machine_state(client, "occupied", GATE_MODE_LIGHT)
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
     client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
-    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     client.remove_entry(entry_id)
     wait_entity_absent(client, GATE_MODE_LIGHT)
     wait_entry_removed(client, entry_id, "Temporary follow-mode light")
@@ -2123,13 +2159,13 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     set_timer_motion(client, True)
     assert_state_stays(
         client,
-        RAW_TIMER_LIGHT,
+        RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
         f"off: {schedule_mode} gates occupancy outside the window",
     )
     set_end_schedule(client, True)
     client.wait_state(
-        RAW_TIMER_LIGHT,
+        RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
         "on: standing presence is adopted at the window start",
     )
@@ -2139,17 +2175,17 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     # Six seconds into the 12 s countdown a manual turn-on restarts the timer,
     # so the old occupancy history and the live timer now disagree.
     assert_state_stays(
-        client, RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on", duration=6
+        client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=6
     )
     client.call_service("light", "turn_on", {"entity_id": GATE_MODE_LIGHT})
     wait_machine_state(client, "active", GATE_MODE_LIGHT)
     assert_state_stays(
-        client, RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on", duration=1
+        client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=1
     )
     set_end_schedule(client, False)
     if schedule_mode == "gate":
         client.wait_state(
-            RAW_TIMER_LIGHT,
+            RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
             "off at the window end",
         )
@@ -2157,7 +2193,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     elif schedule_mode == "gate_keep":
         assert_state_stays(
             client,
-            RAW_TIMER_LIGHT,
+            RAW_MULTI_RGB,
             lambda state: state["state"] == "on",
             "on: gate_keep leaves the restarted timer untouched past the old history",
             duration=6,
@@ -2167,13 +2203,13 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         # gate_switch recomputes the deadline from when occupancy last saw
         # someone, which is already nearly due, not from the manual restart.
         client.wait_state(
-            RAW_TIMER_LIGHT,
+            RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
             "off soon: gate_switch recomputed the deadline from occupancy history",
             timeout=8,
         )
         wait_machine_state(client, "idle", GATE_MODE_LIGHT)
-    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     client.remove_entry(entry_id)
     wait_entity_absent(client, GATE_MODE_LIGHT)
     wait_entry_removed(client, entry_id, f"Temporary {schedule_mode} light")
@@ -2225,7 +2261,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         "light",
         {
             "name": "E2E Maintain",
-            "lights": [RAW_TIMER_LIGHT],
+            "lights": [RAW_MULTI_RGB],
             "light_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
@@ -2250,7 +2286,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
     )
     assert_state_stays(
         client,
-        RAW_TIMER_LIGHT,
+        RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
         "off: a maintain sensor never turns the light on",
     )
@@ -2258,7 +2294,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
     # The trigger starts both; clearing it leaves the maintain sensor holding.
     set_trigger_motion(client, True)
     client.wait_state(COMBINED_OCCUPANCY, lambda state: state["state"] == "on", "on")
-    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
     wait_machine_state(client, "occupied", MAINTAIN_LIGHT)
     set_trigger_motion(client, False)
     assert_state_stays(
@@ -2269,7 +2305,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
     )
     assert_state_stays(
         client,
-        RAW_TIMER_LIGHT,
+        RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
         "on past the timeout while the maintain sensor holds it",
         duration=5,
@@ -2286,9 +2322,19 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         or combined["attributes"].get("last_clear_false_detection") is not False
     ):
         raise AssertionError(f"Combined clear was not a genuine occupancy: {combined}")
+    constituents = [
+        parse_ts(client.state(entity_id)["attributes"].get("latest_occupied_time"))
+        for entity_id in (TRIGGER_OCCUPANCY, VIRTUAL_TIMER_OCCUPANCY)
+    ]
+    if parse_ts(combined["attributes"]["latest_occupied_time"]) != max(
+        ts for ts in constituents if ts is not None
+    ):
+        raise AssertionError(
+            f"Combined latest_occupied_time is not the constituents' max: {combined}"
+        )
     wait_machine_state(client, "countdown", MAINTAIN_LIGHT)
     client.wait_state(
-        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=10
     )
     wait_machine_state(client, "idle", MAINTAIN_LIGHT)
 
@@ -2353,6 +2399,18 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
             "hs_color": [120, 50],
             "transition": 2,
         },
+    )
+    client.wait_state(
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: all(
+            state["attributes"].get(key) is not None
+            for key in (
+                "last_on_virtual",
+                "last_brightness_change_virtual",
+                "last_color_change_virtual",
+            )
+        ),
+        "stamping the virtual turn-on, brightness, and color changes",
     )
     client.wait_state(
         RAW_MULTI_ON_OFF,
@@ -3472,7 +3530,16 @@ def run_upgrade_verification() -> None:
             entity_id, lambda _state: True, "present with its original id"
         )
 
-    client.wait_state(UPGRADE_SCHEDULE, lambda state: state["state"] == "on", "on")
+    client.wait_state(
+        UPGRADE_SCHEDULE,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("next_transition") is not None
+            and state["attributes"].get("current_window_start") is not None
+            and state["attributes"].get("inverted") is False
+        ),
+        "on inside its time window, reporting the window and next transition",
+    )
     reset_upgrade_light(client)
 
     client.set_state(RAW_MOTION, "on")
@@ -3929,7 +3996,32 @@ def run_unavailable_sensors_motion_first() -> None:
     client.set_state(RAW_MOTION, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "on", "on")
+    # A recovery inside the clear-after-unavailable timeout cancels the clear.
     client.set_available(RAW_MOTION, False)
+    client.set_available(RAW_MOTION, True)
+    assert_state_stays(
+        client,
+        VIRTUAL_OCCUPANCY,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("last_clear_unavailable") is False
+        ),
+        "on: a quick source recovery cancelled the pending unavailable clear",
+        duration=2,
+    )
+    # A source that stays unavailable clears after the timeout, flagged as such,
+    # with latest_occupied_time advanced rather than a false-detection verdict.
+    client.set_available(RAW_MOTION, False)
+    client.wait_state(
+        VIRTUAL_OCCUPANCY,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("last_clear_unavailable") is True
+            and state["attributes"].get("last_clear_false_detection") is False
+            and state["attributes"].get("latest_occupied_time") is not None
+        ),
+        "cleared by the unavailable timeout",
+    )
     client.set_available(RAW_SCHEDULE, False)
     client.set_state(RAW_MOTION, "off")
     client.set_state(RAW_SCHEDULE, "off")
@@ -4328,16 +4420,25 @@ def run_false_detection_prepare() -> None:
         "on",
         duration=3.5,
     )
+    cleared_at = datetime.now(UTC)
     set_grace_motion(client, False)
-    client.wait_state(
+    genuine = client.wait_state(
         GRACE_OCCUPANCY,
         lambda state: (
             state["attributes"].get("last_clear_false_detection") is False
             and state["attributes"].get("false_detection_count") == 1
             and state["attributes"].get("latest_occupied_time") is not None
+            and state["attributes"].get("last_on_time") is not None
         ),
         "clearing a genuine stay",
     )
+    # The clear back-dates latest_occupied_time by the 2 s occupancy timeout.
+    latest = parse_ts(genuine["attributes"]["latest_occupied_time"])
+    skew = abs((latest - cleared_at).total_seconds() + 2)
+    if skew > 1.5:
+        raise AssertionError(
+            f"latest_occupied_time not back-dated by the timeout: {genuine}"
+        )
     wait_machine_state(client, "countdown", GRACE_LIGHT)
     assert_state_stays(
         client,
