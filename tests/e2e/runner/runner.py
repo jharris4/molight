@@ -1023,7 +1023,7 @@ def create_physical_light(client: HomeAssistantClient) -> str:
             "lights": [RAW_MULTI_RGB],
             "light_timeout": 10,
             "sensors": {},
-            "behavior": {"auto_on_brightness": 60},
+            "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
             "warning": {
                 "effect_timeout": 0,
                 "warn_timeout": 8,
@@ -1121,7 +1121,12 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         duration=3,
     )
     client.wait_state(
-        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=15
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "off" and command_data(state).get("transition") == 1
+        ),
+        "off with the automatic-off fade",
+        timeout=15,
     )
     wait_machine_state(client, "idle", PHYSICAL_LIGHT)
     # Again outlast HA's context window after MoLight's own turn-off, or the
