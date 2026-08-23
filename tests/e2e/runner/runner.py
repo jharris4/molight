@@ -2333,30 +2333,59 @@ def run_restart_warning_verify() -> None:
     print("PASS: restarted warning restored safely, completed, and did not relight")
 
 
+LOG_RECORD = re.compile(
+    r"^\d{4}-\d{2}-\d{2} \S+ (?P<level>[A-Z]+) \(.*?\) \[(?P<logger>[^\]]+)\] "
+)
+MOLIGHT_LOG = re.compile(r"molight", re.IGNORECASE)
+MOLIGHT_TRACEBACK = re.compile(r"custom_components/molight")
+# Known-benign warnings that mention MoLight; anything else at WARNING fails.
+ALLOWED_WARNINGS = ("We found a custom integration molight",)
+
+
+def log_records(content: str) -> list[tuple[str, str, str]]:
+    """Group a log file into (level, first line, full record) entries."""
+    records: list[tuple[str, str, list[str]]] = []
+    for line in content.splitlines():
+        match = LOG_RECORD.match(line)
+        if match:
+            records.append((match.group("level"), line, [line]))
+        elif records:
+            records[-1][2].append(line)
+    return [(level, first, "\n".join(lines)) for level, first, lines in records]
+
+
+def log_failures(content: str) -> list[str]:
+    """Return the first line of every MoLight error, warning, or traceback."""
+    failures: list[str] = []
+    for level, first, record in log_records(content):
+        if level in ("ERROR", "CRITICAL"):
+            bad = MOLIGHT_LOG.search(first) or MOLIGHT_TRACEBACK.search(record)
+        elif level == "WARNING":
+            bad = MOLIGHT_LOG.search(first) and not any(
+                allowed in first for allowed in ALLOWED_WARNINGS
+            )
+        else:
+            bad = MOLIGHT_TRACEBACK.search(record)
+        if bad:
+            failures.append(first)
+    return failures
+
+
 def check_logs() -> None:
-    """Fail for MoLight errors or tracebacks in all current/rotated HA logs."""
+    """Fail for MoLight errors, warnings, or tracebacks in all HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
     if not paths:
         raise AssertionError("Home Assistant produced no log file")
-    bad_lines: list[str] = []
-    combined = ""
-    for path in paths:
-        content = path.read_text(errors="replace")
-        combined += content
-        for line in content.splitlines():
-            if re.search(r"\b(ERROR|CRITICAL)\b", line) and re.search(
-                r"molight|MoLight", line
-            ):
-                bad_lines.append(f"{path.name}: {line}")
-    if "Traceback (most recent call last)" in combined and re.search(
-        r"custom_components[/.]molight[/.]", combined
-    ):
-        bad_lines.append("A traceback references custom_components/molight")
+    bad_lines = [
+        f"{path.name}: {line}"
+        for path in paths
+        for line in log_failures(path.read_text(errors="replace"))
+    ]
     if bad_lines:
         raise AssertionError(
             "Unexpected MoLight log failures:\n" + "\n".join(bad_lines)
         )
-    print(f"PASS: no MoLight errors in {len(paths)} Home Assistant log file(s)")
+    print(f"PASS: no MoLight errors or warnings in {len(paths)} log file(s)")
 
 
 def main() -> None:
