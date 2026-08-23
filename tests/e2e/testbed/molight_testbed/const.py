@@ -46,6 +46,10 @@ ILLUMINANCE: Final = "illuminance"
 TARGET_SELECT: Final = "target_select"
 SOURCE_SELECT: Final = "source_select"
 EVENT_BUTTON: Final = "event_button"
+EVENT_MATTER: Final = "event_matter"
+EVENT_Z2M: Final = "event_z2m"
+EVENT_CASETA: Final = "event_caseta"
+EVENT_HUE: Final = "event_hue"
 
 DEFAULT_STATES: Final = {
     LIGHT_MAIN: {
@@ -83,4 +87,8 @@ DEFAULT_STATES: Final = {
     TARGET_SELECT: {"state": "Cozy", "available": True, "attributes": {}},
     SOURCE_SELECT: {"state": "Focus", "available": True, "attributes": {}},
     EVENT_BUTTON: {"state": None, "available": True, "attributes": {}},
+    EVENT_MATTER: {"state": None, "available": True, "attributes": {}},
+    EVENT_Z2M: {"state": None, "available": True, "attributes": {}},
+    EVENT_CASETA: {"state": None, "available": True, "attributes": {}},
+    EVENT_HUE: {"state": None, "available": True, "attributes": {}},
 }

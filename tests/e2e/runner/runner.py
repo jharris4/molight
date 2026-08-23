@@ -33,6 +33,10 @@ RAW_DOOR = "binary_sensor.e2e_door"
 RAW_ILLUMINANCE = "sensor.e2e_illuminance"
 RAW_SCHEDULE = "binary_sensor.e2e_schedule_source"
 EVENT_BUTTON = "event.e2e_button"
+EVENT_MATTER = "event.e2e_button_matter"
+EVENT_Z2M = "event.e2e_button_z2m"
+EVENT_CASETA = "event.e2e_button_caseta"
+EVENT_HUE = "event.e2e_button_hue"
 TARGET_SELECT = "select.e2e_target_mode"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
@@ -95,6 +99,8 @@ COMBINED_BOOT_TRIGGER = "binary_sensor.e2e_combined_boot_trigger"
 CT_LIGHT = "light.e2e_ct_virtual"
 CT_MIX_LIGHT = "light.e2e_ct_mix"
 CT_REMOTE_LAST_ACTION = "sensor.e2e_ct_remote_last_action"
+VOCAB_LIGHT = "light.e2e_vocab"
+VOCAB_REMOTE_LAST_ACTION = "sensor.e2e_vocab_remote_last_action"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -7118,6 +7124,120 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: colour temperature auto-on, mirror, preset, and mixed routing")
 
 
+def wait_vocab_action(
+    client: HomeAssistantClient, action: str, click: str, button: str, event_type: str
+) -> None:
+    client.wait_state(
+        VOCAB_REMOTE_LAST_ACTION,
+        lambda state: (
+            state["state"] == action
+            and state["attributes"].get("button") == button
+            and state["attributes"].get("click") == click
+            and state["attributes"].get("event_type") == event_type
+        ),
+        f"recording {action} from a {click} click of {button} ({event_type})",
+    )
+
+
+def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
+    """Click resolution per ecosystem, multi-button bindings, no replay on recovery."""
+    light_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Vocab",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_vocab"},
+        },
+        "Vocab light",
+    )
+    assert_entry_loaded(client, light_id)
+    # A button that never reports double clicks cannot be bound to one.
+    result = submit_create(
+        client,
+        "remote",
+        {
+            "name": "E2E Rejected Remote",
+            "target_lights": [VOCAB_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            "turn_off": {"off_buttons_double": [EVENT_HUE]},
+        },
+    )
+    expect_rejection(client, result, "double_click_unsupported")
+
+    remote_id = create_entry(
+        client,
+        "remote",
+        {
+            "name": "E2E Vocab Remote",
+            "target_lights": [VOCAB_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            "turn_on": {
+                "on_buttons_single": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA, EVENT_HUE]
+            },
+            "turn_off": {"off_buttons_double": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA]},
+        },
+        "Vocab remote",
+    )
+    assert_entry_loaded(client, remote_id)
+
+    # Matter: the constituent presses of a click never fire a binding; only the
+    # multi-press verdict does.
+    client.fire_event(EVENT_MATTER, "initial_press")
+    client.fire_event(EVENT_MATTER, "short_release")
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: Matter initial_press/short_release are not clicks on a multi-press key",
+    )
+    for button, single, double in (
+        (EVENT_MATTER, "multi_press_1", "multi_press_2"),
+        (EVENT_Z2M, "single", "double"),
+        (EVENT_CASETA, "press", "multi_tap"),
+    ):
+        client.fire_event(button, single)
+        wait_vocab_action(client, "turn_on", "single", button, single)
+        client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+        client.fire_event(button, double)
+        wait_vocab_action(client, "turn_off", "double", button, double)
+        client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    # Hue-style: initial_press is the single-click fallback.
+    client.fire_event(EVENT_HUE, "initial_press")
+    wait_vocab_action(client, "turn_on", "single", EVENT_HUE, "initial_press")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+
+    # A button recovering from unavailable carries its last event, which must
+    # not replay: the Caseta button last fired turn_off, the light stays on.
+    client.set_available(EVENT_CASETA, False)
+    client.wait_state(
+        EVENT_CASETA, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.set_available(EVENT_CASETA, True)
+    client.wait_state(
+        EVENT_CASETA, lambda state: state["state"] != "unavailable", "back"
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: a stale event is not replayed when its button recovers",
+    )
+    client.call_service("light", "turn_off", {"entity_id": VOCAB_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.remove_entry(remote_id)
+    wait_entity_absent(client, VOCAB_REMOTE_LAST_ACTION)
+    wait_entry_removed(client, remote_id, "Temporary vocab remote")
+    remove_entry_and_entity(client, light_id, VOCAB_LIGHT)
+    print(
+        "PASS: click vocabularies resolved per button; no constituent/replayed presses"
+    )
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -7163,6 +7283,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_hold_release_scenarios,
         run_door_gate_scenarios,
         run_sensor_options_scenarios,
+        run_remote_vocabulary_scenarios,
     ],
 }
 
