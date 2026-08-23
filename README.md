@@ -526,7 +526,9 @@ The end-to-end suite starts an isolated official Home Assistant container and
 a short-lived API runner on a private Docker network. It does not use the
 stateful manual-development `config/` directory or publish port 8123, so it can
 run alongside the dev container. A test-only `molight_testbed` integration
-provides persistent simulated lights, sensors, a door, a schedule and selects;
+provides persistent simulated lights, sensors, a door, a schedule and selects
+(lights can be switched into slow, piecewise, stepwise, quantised or XY-reporting
+behaviour to emulate real bulbs);
 it is mounted only into the disposable acceptance environment and is never
 part of a MoLight release.
 

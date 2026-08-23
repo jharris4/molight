@@ -312,6 +312,14 @@ class HomeAssistantClient:
             {"entity_id": entity_id, "available": available},
         )
 
+    def set_behavior(self, entity_id: str, **behavior: Any) -> None:
+        """Change how a simulated light reports back after commands."""
+        self.call_service(
+            "molight_testbed",
+            "set_behavior",
+            {"entity_id": entity_id, "behavior": behavior},
+        )
+
     def fire_event(
         self,
         entity_id: str,
@@ -532,7 +540,9 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
     return finish_creation(result, "Scheduled light")
 
 
-def create_timeout_light(client: HomeAssistantClient) -> str:
+def create_timeout_light(
+    client: HomeAssistantClient, light_timeout: int = 4, stage: int = 1
+) -> str:
     """Create one short-lived light for a real timeout/warning sequence."""
     return create_entry(
         client,
@@ -540,16 +550,16 @@ def create_timeout_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Timer",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "light_timeout": light_timeout,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "false_detection_off_delay": 0,
                 "auto_on_brightness": 60,
             },
             "warning": {
-                "effect_timeout": 1,
+                "effect_timeout": stage,
                 "effect_brightness": 10,
-                "warn_timeout": 1,
+                "warn_timeout": stage,
                 "warn_brightness": 20,
             },
             "advanced": {"entity_id": "e2e_timer"},
@@ -935,7 +945,10 @@ def wait_timer_stage(
 
 
 def run_timeout_warning_scenario(
-    client: HomeAssistantClient, timer_entry_id: str
+    client: HomeAssistantClient,
+    timer_entry_id: str,
+    bulb: str = "instant bulb",
+    light_timeout: int = 4,
 ) -> None:
     """Run one real countdown/effect/warn/off sequence and cancel another."""
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
@@ -989,7 +1002,7 @@ def run_timeout_warning_scenario(
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at restored brightness past the cancelled warning deadline",
-        duration=2.5,
+        duration=light_timeout,
     )
 
     set_timer_motion(client, False)
@@ -997,7 +1010,7 @@ def run_timeout_warning_scenario(
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     client.remove_entry(timer_entry_id)
     wait_entry_removed(client, timer_entry_id, "Temporary timer-light")
-    print("PASS: live countdown, warning stages, final off, and retrigger cancellation")
+    print(f"PASS: countdown, warning stages, final off, and retrigger cancel ({bulb})")
 
 
 def create_physical_light(client: HomeAssistantClient) -> str:
@@ -1244,6 +1257,58 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
     )
 
 
+def assert_fuzzy_member_reporting(client: HomeAssistantClient) -> None:
+    """Prove quantised, XY-reported member echoes are not read as human changes."""
+    client.set_behavior(RAW_MULTI_RGB, brightness_levels=100, xy_color=True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: "xy" in state["attributes"].get("supported_color_modes", []),
+        "advertising XY color",
+    )
+    before = client.state(VIRTUAL_MULTI_LIGHT)["attributes"]
+    client.call_service(
+        "light",
+        "turn_on",
+        {"entity_id": VIRTUAL_MULTI_LIGHT, "brightness": 100, "hs_color": [120, 50]},
+    )
+    member = client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and abs(int(state["attributes"].get("brightness") or 0) - 100) <= 2
+            and "xy_color" in command_data(state)
+        ),
+        "on near the requested brightness with the color delivered as XY",
+    )
+    rgb = list(member["attributes"].get("rgb_color") or [])
+    if len(rgb) != 3 or any(
+        abs(a - b) > 6 for a, b in zip(rgb, [128, 255, 128], strict=True)
+    ):
+        raise AssertionError(f"XY member did not report the requested color: {member}")
+    assert_state_stays(
+        client,
+        VIRTUAL_MULTI_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("last_brightness_change_physical")
+            == before.get("last_brightness_change_physical")
+            and state["attributes"].get("last_color_change_physical")
+            == before.get("last_color_change_physical")
+        ),
+        "active without reading the fuzzy echo as a human change",
+        duration=2,
+    )
+    client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
+    wait_multi_members_off(client)
+    client.set_behavior(RAW_MULTI_RGB, brightness_levels=0, xy_color=False)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: "rgb" in state["attributes"].get("supported_color_modes", []),
+        "advertising RGB again",
+    )
+
+
 def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
     """Verify full capabilities, then persist one unavailable RGB member."""
     client.wait_state(
@@ -1255,6 +1320,7 @@ def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
         "advertising the mixed group's color and transition capabilities",
     )
     assert_multi_light_routing(client)
+    assert_fuzzy_member_reporting(client)
 
     client.set_available(RAW_MULTI_RGB, False)
     client.wait_state(
@@ -2112,6 +2178,14 @@ def run_primary() -> None:
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
+    client.set_behavior(RAW_TIMER_LIGHT, latency=0.8, report_steps=True)
+    # Stages must outlast the bulb's 1.1 s reporting delay to be observable.
+    timer_entry_id = create_timeout_light(client, light_timeout=10, stage=3)
+    assert_entry_loaded(client, timer_entry_id)
+    run_timeout_warning_scenario(
+        client, timer_entry_id, "slow two-part bulb", light_timeout=10
+    )
+    client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
     run_physical_change_scenarios(client)
 
     reset_trigger(client)
@@ -2199,6 +2273,30 @@ def run_primary() -> None:
         lambda state: state["state"] == "off",
         "off: promotion left the outside profile without an occupancy input",
     )
+
+    client.set_behavior(RAW_LIGHT, latency=0.5, report_steps=True, transition_steps=3)
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "on")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_profile(client, PROFILE_INSIDE)
+    before = client.state(VIRTUAL_LIGHT)["attributes"]
+    trigger_and_assert(client, pct(80), "Night")
+    assert_state_stays(
+        client,
+        VIRTUAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "occupied"
+            and state["attributes"].get("last_brightness_change_physical")
+            == before.get("last_brightness_change_physical")
+        ),
+        "occupied without reading its own stepwise fade as a human dim",
+        duration=2.5,
+    )
+    client.set_behavior(RAW_LIGHT, latency=0, report_steps=False, transition_steps=0)
+    reset_trigger(client)
+    client.set_state(RAW_SCHEDULE, "off")
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
+    checkpoint("automatic fade on a slow, stepwise-reporting bulb")
 
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")

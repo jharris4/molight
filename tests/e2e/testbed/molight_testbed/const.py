@@ -10,12 +10,24 @@ PLATFORMS: Final = ["binary_sensor", "event", "light", "select", "sensor"]
 SERVICE_SET_STATE: Final = "set_state"
 SERVICE_SET_AVAILABLE: Final = "set_available"
 SERVICE_FIRE_EVENT: Final = "fire_event"
+SERVICE_SET_BEHAVIOR: Final = "set_behavior"
+ATTR_BEHAVIOR: Final = "behavior"
 ATTR_AVAILABLE: Final = "available"
 ATTR_EVENT_TYPE: Final = "event_type"
 
 DATA_CONTROLLER: Final = "controller"
 STORAGE_KEY: Final = f"{DOMAIN}.states"
 STORAGE_VERSION: Final = 1
+
+# How a simulated light reports back after a command; defaults are instant and
+# exact, the knobs emulate slow, piecewise, stepwise, or fuzzy real bulbs.
+DEFAULT_BEHAVIOR: Final = {
+    "latency": 0.0,  # seconds before the first report after a command
+    "report_steps": False,  # report power first, attributes 0.3 s later
+    "transition_steps": 0,  # intermediate brightness reports across a fade
+    "brightness_levels": 0,  # quantise reported brightness to N device levels
+    "xy_color": False,  # advertise and report XY instead of RGB
+}
 
 LIGHT_MAIN: Final = "light_main"
 LIGHT_TIMER: Final = "light_timer"

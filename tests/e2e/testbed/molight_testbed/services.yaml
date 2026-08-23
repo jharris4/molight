@@ -51,3 +51,20 @@ fire_event:
       name: Attributes
       selector:
         object: {}
+
+set_behavior:
+  name: Set simulated reporting behavior
+  description: Change how a testbed light reports back after commands.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: light
+    behavior:
+      name: Behavior
+      description: Any of latency, report_steps, transition_steps, brightness_levels, xy_color.
+      required: true
+      selector:
+        object: {}

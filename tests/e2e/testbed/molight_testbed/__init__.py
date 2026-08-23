@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import Store
 
 from .const import (
     ATTR_AVAILABLE,
+    ATTR_BEHAVIOR,
     ATTR_EVENT_TYPE,
     DATA_CONTROLLER,
     DEFAULT_STATES,
@@ -22,6 +23,7 @@ from .const import (
     PLATFORMS,
     SERVICE_FIRE_EVENT,
     SERVICE_SET_AVAILABLE,
+    SERVICE_SET_BEHAVIOR,
     SERVICE_SET_STATE,
     STORAGE_KEY,
     STORAGE_VERSION,
@@ -42,6 +44,12 @@ SET_AVAILABLE_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required(ATTR_AVAILABLE): cv.boolean,
+    }
+)
+SET_BEHAVIOR_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_BEHAVIOR): dict,
     }
 )
 FIRE_EVENT_SCHEMA = vol.Schema(
@@ -104,6 +112,17 @@ class TestbedController:
         await self.async_save()
         entity.async_write_ha_state()
 
+    async def async_set_behavior(
+        self, entity_id: str, behavior: dict[str, Any]
+    ) -> None:
+        """Change how one simulated light reports back and persist it."""
+        entity = self.entities.get(entity_id)
+        if entity is None or not hasattr(entity, "set_test_behavior"):
+            raise ValueError(f"Unknown testbed light: {entity_id}")
+        entity.set_test_behavior(behavior)
+        await self.async_save()
+        entity.async_write_ha_state()
+
     def fire_event(
         self, entity_id: str, event_type: str, attributes: dict[str, Any]
     ) -> None:
@@ -148,6 +167,11 @@ async def async_setup_entry(
             call.data[ATTR_ENTITY_ID], call.data[ATTR_AVAILABLE]
         )
 
+    async def _set_behavior(call: ServiceCall) -> None:
+        await controller.async_set_behavior(
+            call.data[ATTR_ENTITY_ID], call.data[ATTR_BEHAVIOR]
+        )
+
     @callback
     def _fire_event(call: ServiceCall) -> None:
         controller.fire_event(
@@ -166,6 +190,9 @@ async def async_setup_entry(
         schema=SET_AVAILABLE_SCHEMA,
     )
     hass.services.async_register(
+        DOMAIN, SERVICE_SET_BEHAVIOR, _set_behavior, schema=SET_BEHAVIOR_SCHEMA
+    )
+    hass.services.async_register(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -180,6 +207,7 @@ async def async_unload_entry(
         return False
     hass.services.async_remove(DOMAIN, SERVICE_SET_STATE)
     hass.services.async_remove(DOMAIN, SERVICE_SET_AVAILABLE)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_BEHAVIOR)
     hass.services.async_remove(DOMAIN, SERVICE_FIRE_EVENT)
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
