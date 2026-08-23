@@ -40,6 +40,7 @@ VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
+PHYSICAL_LIGHT = "light.e2e_physical"
 VIRTUAL_AUTO_OFF_LIGHT = "light.e2e_auto_off"
 AUTO_OFF_SWITCH = "switch.e2e_auto_off_auto_off"
 VIRTUAL_RESTART_WARNING_LIGHT = "light.e2e_restart_warning"
@@ -999,6 +1000,165 @@ def run_timeout_warning_scenario(
     print("PASS: live countdown, warning stages, final off, and retrigger cancellation")
 
 
+def create_physical_light(client: HomeAssistantClient) -> str:
+    """Create a light whose RGB member is driven like a wall switch."""
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Physical",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 10,
+            "sensors": {},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {
+                "effect_timeout": 0,
+                "warn_timeout": 8,
+                "warn_brightness": 20,
+                "warn_rgb_color": [255, 0, 0],
+            },
+            "advanced": {"entity_id": "e2e_physical"},
+        },
+        "Physical light",
+    )
+
+
+def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
+    """Prove wall-switch changes to the real light drive the state machine."""
+    entry_id = create_physical_light(client)
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
+
+    client.set_state(
+        RAW_MULTI_RGB, "on", {"brightness": pct(60), "rgb_color": [0, 0, 255]}
+    )
+    started = wait_machine_state(client, "active", PHYSICAL_LIGHT)
+    if (
+        started["attributes"].get("last_on_physical") is None
+        or started["attributes"].get("last_on_virtual") is not None
+    ):
+        raise AssertionError(
+            f"Physical turn-on was not attributed to the wall: {started}"
+        )
+
+    # A physical dim two seconds in restarts the ten-second timer.
+    assert_state_stays(
+        client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=2
+    )
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": 100})
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_brightness_change_physical") is not None
+            and state["attributes"].get("last_brightness_change_virtual") is None
+        ),
+        "recording the physical dim",
+    )
+    # The restarted timer reaches its warning two seconds later; a physical dim
+    # during it cancels the warning and restores the pre-warning color.
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_color") is not None
+        ),
+        "in its warning with the pre-warning color saved",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(20)
+            and list(state["attributes"].get("rgb_color") or []) == [255, 0, 0]
+        ),
+        "showing the warning brightness and color",
+    )
+    # Outlast the original deadline, and the five seconds during which HA keeps
+    # MoLight's command context on the member's state writes (a physical change
+    # inside that window reads as MoLight's own echo).
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "on past the original deadline after the physical dim restarted the timer",
+        duration=6.5,
+    )
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": 120})
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["attributes"].get("warning_active") is False
+            and state["attributes"].get("pre_warn_color") is None
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "out of its warning with the timer running again",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["attributes"].get("brightness") == 120
+            and list(state["attributes"].get("rgb_color") or []) == [0, 0, 255]
+        ),
+        "restored to the pre-warning color at the physically dimmed brightness",
+    )
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "on after the dim restarted the timer",
+        duration=3,
+    )
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off", timeout=15
+    )
+    wait_machine_state(client, "idle", PHYSICAL_LIGHT)
+    # Again outlast HA's context window after MoLight's own turn-off, or the
+    # wall-switch turn-on below would read as MoLight's echo.
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off after the timer ran out",
+        duration=5.5,
+    )
+
+    # A member outage while on is not a state change; recovery is a real event.
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": pct(60)})
+    wait_machine_state(client, "active", PHYSICAL_LIGHT)
+    client.set_available(RAW_MULTI_RGB, False)
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    assert_state_stays(
+        client,
+        PHYSICAL_LIGHT,
+        lambda state: state["attributes"].get("molight_state") == "active",
+        "in active state while its member is unavailable",
+    )
+    client.set_available(RAW_MULTI_RGB, True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"]["testbed_last_command"]["service"] != "turn_off"
+        ),
+        "back on without having been commanded off during the outage",
+    )
+    client.wait_state(
+        PHYSICAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "on and active after its member recovered",
+    )
+
+    client.call_service("light", "turn_off", {"entity_id": PHYSICAL_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    client.remove_entry(entry_id)
+    wait_entry_removed(client, entry_id, "Temporary physical-change light")
+    print("PASS: physical on, dim, dim-during-warning, and member outage handled")
+
+
 def command_data(state: dict[str, Any]) -> dict[str, Any]:
     """Return the payload most recently received by one testbed light."""
     command = state["attributes"].get("testbed_last_command") or {}
@@ -1952,6 +2112,7 @@ def run_primary() -> None:
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
+    run_physical_change_scenarios(client)
 
     reset_trigger(client)
     client.call_service(
