@@ -1624,7 +1624,17 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         "on at the inside-profile brightness after becoming dark",
     )
     wait_machine_state(client, "occupied")
-    client.set_state(RAW_ILLUMINANCE, 50)
+    # The hysteresis band (threshold 10, band 1) keeps the light from flapping:
+    # 10.5 is still dark, 11 is bright (forced off), 9.5 is still bright, 8.9
+    # is dark again and re-lights the occupied room.
+    client.set_state(RAW_ILLUMINANCE, 10.5)
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "on: a reading inside the hysteresis band does not read as bright",
+    )
+    client.set_state(RAW_ILLUMINANCE, 11)
     client.wait_state(
         VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
     )
@@ -1632,6 +1642,29 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         RAW_LIGHT,
         lambda state: state["state"] == "off",
         "forced off by inside-profile control illuminance",
+    )
+    client.set_state(RAW_ILLUMINANCE, 9.5)
+    assert_state_stays(
+        client,
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: a reading inside the hysteresis band does not read as dark",
+    )
+    client.set_state(RAW_ILLUMINANCE, 8.9)
+    client.wait_state(
+        VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark"
+    )
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: state["state"] == "on",
+        "re-lit: going dark while occupancy is active lights the room again",
+    )
+    wait_machine_state(client, "occupied")
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        RAW_LIGHT,
+        lambda state: state["state"] == "off",
+        "forced off again by brightness",
     )
 
     reset_trigger(client)
