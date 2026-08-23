@@ -3227,10 +3227,15 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
 
         HA ignores an options flow's title, so a rename via the Name field
         would otherwise leave the integrations page showing the old title.
+        The options ride along in the same update: create_entry below then
+        stores an identical mapping, which HA treats as no change, so a
+        rename fires the reload listener once instead of twice.
         """
         name = data[CONF_NAME]
         if name != self._entry.title:
-            self.hass.config_entries.async_update_entry(self._entry, title=name)
+            self.hass.config_entries.async_update_entry(
+                self._entry, title=name, options=data
+            )
         return self.async_create_entry(title=name, data=data)
 
     async def async_step_init(

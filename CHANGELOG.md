@@ -141,6 +141,9 @@ longer needs a custom repository.
   `light.`) is now rejected with a form error. Previously it was silently
   dropped in favour of the name-derived ID, or worse, munged into
   `light.unknown`.
+- Renaming an entry through its options flow now reloads it once instead of
+  twice — the title sync and the options were stored as two separate updates,
+  each triggering a reload.
 
 ## [1.5.0] - 2026-07-28
 

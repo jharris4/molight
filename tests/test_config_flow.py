@@ -4773,18 +4773,26 @@ async def test_options_rename_updates_entry_title(
 
     HA ignores an options flow's title argument, so without the explicit
     sync the integrations page would keep showing the old name forever.
+    The title and options land in one update, so a rename reloads the
+    entry once, not twice.
     """
     await setup_entries(hass, occupancy_entry)
 
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_NAME: "Renamed Occupancy", SECTION_ADVANCED: {}}
-    )
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
+    with patch.object(
+        hass.config_entries,
+        "async_reload",
+        wraps=hass.config_entries.async_reload,
+    ) as reload_spy:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {CONF_NAME: "Renamed Occupancy", SECTION_ADVANCED: {}}
+        )
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
 
     assert occupancy_entry.title == "Renamed Occupancy"
     assert molight_config(occupancy_entry)[CONF_NAME] == "Renamed Occupancy"
+    assert reload_spy.call_count == 1
 
 
 @pytest.mark.asyncio
