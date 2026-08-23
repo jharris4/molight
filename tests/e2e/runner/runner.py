@@ -83,6 +83,10 @@ REF_SCHEDULED_LIGHT = "light.e2e_ref_scheduled"
 REF_LIGHT = "light.e2e_ref_light"
 MANUAL_LIGHT = "light.e2e_manual"
 MANUAL_ILLUMINANCE = "binary_sensor.e2e_manual_illuminance"
+OPT_OCCUPANCY = "binary_sensor.e2e_opt_occupancy"
+OPT_COMBINED = "binary_sensor.e2e_opt_combined"
+OPT_ILLUMINANCE = "binary_sensor.e2e_opt_illuminance"
+OPT_SCHEDULE = "binary_sensor.e2e_opt_schedule"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -6628,6 +6632,138 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
     )
 
 
+def finish_options(result: dict[str, Any], description: str) -> None:
+    """Assert an options flow saved."""
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"{description} options did not save: {result}")
+
+
+def wait_renamed(
+    client: HomeAssistantClient, entity_id: str, name: str
+) -> dict[str, Any]:
+    """Wait for an entity to carry its edited name under its original id."""
+    return client.wait_state(
+        entity_id,
+        lambda state: state["attributes"].get("friendly_name") == name,
+        f"renamed to {name!r} without changing its entity id",
+    )
+
+
+def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
+    """Configure flows rename and re-settle every sensor type in place."""
+    occupancy_id = create_virtual_occupancy(
+        client, "E2E Opt Occupancy", RAW_REMOVAL_MOTION, "e2e_opt_occupancy"
+    )
+    combined_id = create_entry(
+        client,
+        "combined_occupancy",
+        {
+            "name": "E2E Opt Combined",
+            "trigger_sensors": [OPT_OCCUPANCY],
+            "advanced": {"entity_id": "e2e_opt_combined"},
+        },
+        "Opt combined occupancy",
+    )
+    illuminance_id = create_virtual_illuminance(
+        client, "E2E Opt Illuminance", "e2e_opt_illuminance"
+    )
+    schedule_id = create_virtual_schedule(
+        client, "E2E Opt Schedule", "e2e_opt_schedule", source=RAW_REMOVAL_MOTION
+    )
+    for entry_id in (occupancy_id, combined_id, illuminance_id, schedule_id):
+        assert_entry_loaded(client, entry_id)
+
+    result = client.start_flow(options_entry_id=occupancy_id)
+    expect_step(result, "occupancy")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Opt Occupancy Edited",
+            "occupancy_sensor": RAW_REMOVAL_MOTION,
+            "occupancy_timeout": 3,
+            "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+        },
+        options=True,
+    )
+    finish_options(result, "Occupancy")
+    renamed = wait_renamed(client, OPT_OCCUPANCY, "E2E Opt Occupancy Edited")
+    if renamed["attributes"].get("occupancy_timeout") != 3:
+        raise AssertionError(f"Edited occupancy timeout not applied: {renamed}")
+
+    result = client.start_flow(options_entry_id=combined_id)
+    expect_step(result, "combined_occupancy")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Opt Combined Edited",
+            "trigger_sensors": [OPT_OCCUPANCY],
+            "maintain_sensors": [VIRTUAL_TIMER_OCCUPANCY],
+        },
+        options=True,
+    )
+    finish_options(result, "Combined occupancy")
+    wait_renamed(client, OPT_COMBINED, "E2E Opt Combined Edited")
+    wait_stored_entry(
+        combined_id,
+        lambda cfg: cfg.get("maintain_sensors") == [VIRTUAL_TIMER_OCCUPANCY],
+        "storing the added maintain sensor",
+    )
+
+    result = client.start_flow(options_entry_id=illuminance_id)
+    expect_step(result, "illuminance")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Opt Illuminance Edited",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 20,
+            "illuminance_hysteresis": 1,
+        },
+        options=True,
+    )
+    finish_options(result, "Illuminance")
+    wait_renamed(client, OPT_ILLUMINANCE, "E2E Opt Illuminance Edited")
+    wait_stored_entry(
+        illuminance_id,
+        lambda cfg: cfg.get("illuminance_threshold") == 20,
+        "storing the edited threshold",
+    )
+
+    # Switch the schedule from mirroring a sensor to a fixed time window.
+    result = client.start_flow(options_entry_id=schedule_id)
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"}, options=True)
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Opt Schedule Edited",
+            "start": {"time": "00:00:00"},
+            "end": {"time": "23:59:59"},
+        },
+        options=True,
+    )
+    finish_options(result, "Schedule")
+    wait_renamed(client, OPT_SCHEDULE, "E2E Opt Schedule Edited")
+    client.wait_state(
+        OPT_SCHEDULE,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("next_transition") is not None
+            and not state["attributes"].get("source_entity")
+        ),
+        "on inside its new all-day window with no source entity",
+    )
+    for entry_id, entity_id in (
+        (combined_id, OPT_COMBINED),
+        (occupancy_id, OPT_OCCUPANCY),
+        (illuminance_id, OPT_ILLUMINANCE),
+        (schedule_id, OPT_SCHEDULE),
+    ):
+        remove_entry_and_entity(client, entry_id, entity_id)
+    print("PASS: sensor options flows rename in place and re-settle their settings")
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6670,6 +6806,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_time_window_scenario,
         run_hold_release_scenarios,
         run_door_gate_scenarios,
+        run_sensor_options_scenarios,
     ],
 }
 
