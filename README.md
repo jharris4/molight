@@ -580,6 +580,11 @@ test dependencies. Override it to exercise another release:
 MOLIGHT_E2E_HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable npm run test:e2e
 ```
 
+Some races only show on slow hardware — a busy CI runner caught two that a fast
+laptop always won. `MOLIGHT_E2E_HA_CPUS=0.5` caps the Home Assistant
+container's CPU to approximate that locally (the suites take about twice as
+long); `npm run test:e2e` also loads the machine by running all lanes at once.
+
 A successful run removes its temporary configuration. On failure the runner
 prints a retained directory under the system temporary directory containing
 the isolated HA configuration and Compose logs. That directory contains the

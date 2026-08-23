@@ -2,6 +2,9 @@ services:
   homeassistant:
     image: ${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.8.0}
     restart: unless-stopped
+    # Optional CPU cap (e.g. 0.5) to approximate slow hardware such as a CI
+    # runner; 0 leaves the container unlimited.
+    cpus: ${MOLIGHT_E2E_HA_CPUS:-0}
     volumes:
       - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/config
       - ${MOLIGHT_E2E_INTEGRATION_DIR:-../../custom_components/molight}:/config/custom_components/molight:ro
