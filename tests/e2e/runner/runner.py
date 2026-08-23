@@ -42,6 +42,9 @@ INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
 END_SCHEDULE = "binary_sensor.e2e_end_schedule"
 END_ACTION_LIGHT = "light.e2e_end_action"
 GATE_MODE_LIGHT = "light.e2e_gate_mode"
+TRIGGER_OCCUPANCY = "binary_sensor.e2e_trigger_occupancy"
+COMBINED_OCCUPANCY = "binary_sensor.e2e_combined"
+MAINTAIN_LIGHT = "light.e2e_maintain"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
 VIRTUAL_MULTI_LIGHT = "light.e2e_multi"
@@ -1186,8 +1189,8 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         ),
         "recording the physical dim",
     )
-    # The restarted timer reaches its warning two seconds later; a physical dim
-    # during it cancels the warning and restores the pre-warning color.
+    # The warning follows the restarted 10 s timer; a physical dim during it
+    # cancels the warning and restores the pre-warning color.
     client.wait_state(
         PHYSICAL_LIGHT,
         lambda state: (
@@ -1245,7 +1248,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "off" and command_data(state).get("transition") == 1
         ),
         "off with the automatic-off fade",
-        timeout=15,
+        timeout=25,  # the restarted 10 s timer plus the 8 s warning
     )
     wait_machine_state(client, "idle", PHYSICAL_LIGHT)
     # Again outlast HA's context window after MoLight's own turn-off, or the
@@ -1630,6 +1633,132 @@ def run_schedule_mode_scenarios(client: HomeAssistantClient) -> None:
     wait_entity_absent(client, END_SCHEDULE)
     wait_entry_removed(client, schedule_entry_id, "Temporary end schedule")
     print("PASS: follow, gate, gate_keep, and gate_switch behaved at both window edges")
+
+
+def set_trigger_motion(client: HomeAssistantClient, on: bool) -> None:
+    """Drive the occupancy source wrapped by the temporary trigger sensor."""
+    state = "on" if on else "off"
+    client.set_state(RAW_REMOVAL_MOTION, state)
+    client.wait_state(
+        TRIGGER_OCCUPANCY, lambda current: current["state"] == state, state
+    )
+
+
+def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
+    """Combined trigger/maintain occupancy, a maintain-held light, and dropout."""
+    trigger_entry_id = create_virtual_occupancy(
+        client, "E2E Trigger Occupancy", RAW_REMOVAL_MOTION, "e2e_trigger_occupancy"
+    )
+    combined_entry_id = create_entry(
+        client,
+        "combined_occupancy",
+        {
+            "name": "E2E Combined",
+            "trigger_sensors": [TRIGGER_OCCUPANCY],
+            "maintain_sensors": [VIRTUAL_TIMER_OCCUPANCY],
+            "advanced": {"entity_id": "e2e_combined"},
+        },
+        "Combined occupancy",
+    )
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Maintain",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": TRIGGER_OCCUPANCY,
+                "maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_maintain"},
+        },
+        "Maintain light",
+    )
+    for entry_id in (trigger_entry_id, combined_entry_id, light_entry_id):
+        assert_entry_loaded(client, entry_id)
+
+    # A maintain sensor alone neither starts occupancy nor turns the light on.
+    set_timer_motion(client, True)
+    assert_state_stays(
+        client,
+        COMBINED_OCCUPANCY,
+        lambda state: state["state"] == "off",
+        "off: a maintain sensor cannot start occupancy",
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: a maintain sensor never turns the light on",
+    )
+
+    # The trigger starts both; clearing it leaves the maintain sensor holding.
+    set_trigger_motion(client, True)
+    client.wait_state(COMBINED_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", MAINTAIN_LIGHT)
+    set_trigger_motion(client, False)
+    assert_state_stays(
+        client,
+        COMBINED_OCCUPANCY,
+        lambda state: state["state"] == "on",
+        "on: the maintain sensor extends occupancy",
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on past the timeout while the maintain sensor holds it",
+        duration=5,
+    )
+    wait_machine_state(client, "occupied", MAINTAIN_LIGHT)
+
+    # Both clear: the combined sensor clears and the light runs its countdown.
+    set_timer_motion(client, False)
+    combined = client.wait_state(
+        COMBINED_OCCUPANCY, lambda state: state["state"] == "off", "off"
+    )
+    if (
+        combined["attributes"].get("latest_occupied_time") is None
+        or combined["attributes"].get("last_clear_false_detection") is not False
+    ):
+        raise AssertionError(f"Combined clear was not a genuine occupancy: {combined}")
+    wait_machine_state(client, "countdown", MAINTAIN_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=10
+    )
+    wait_machine_state(client, "idle", MAINTAIN_LIGHT)
+
+    # Dropout: the only on constituent leaves the state machine.
+    set_trigger_motion(client, True)
+    client.wait_state(COMBINED_OCCUPANCY, lambda state: state["state"] == "on", "on")
+    before = client.state(COMBINED_OCCUPANCY)["attributes"]["latest_occupied_time"]
+    client.remove_entry(trigger_entry_id)
+    wait_entity_absent(client, TRIGGER_OCCUPANCY)
+    cleared = client.wait_state(
+        COMBINED_OCCUPANCY,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("latest_occupied_time") != before
+            and state["attributes"].get("last_clear_false_detection") is False
+        ),
+        "cleared with latest_occupied_time advanced to the dropout",
+    )
+    if cleared["attributes"].get("latest_occupied_time") is None:
+        raise AssertionError(f"Dropout clear lost latest_occupied_time: {cleared}")
+
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    for entry_id, entity_id in (
+        (light_entry_id, MAINTAIN_LIGHT),
+        (combined_entry_id, COMBINED_OCCUPANCY),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: combined trigger/maintain occupancy, maintain hold, and dropout clear")
 
 
 def command_data(state: dict[str, Any]) -> dict[str, Any]:
@@ -2651,6 +2780,7 @@ def run_primary() -> None:
     run_physical_change_scenarios(client)
     run_schedule_end_action_scenarios(client)
     run_schedule_mode_scenarios(client)
+    run_combined_and_maintain_scenarios(client)
 
     reset_trigger(client)
     client.call_service(
