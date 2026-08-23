@@ -81,6 +81,8 @@ REF_SCHEDULE = "binary_sensor.e2e_ref_schedule"
 REF_ILLUMINANCE = "binary_sensor.e2e_ref_illuminance"
 REF_SCHEDULED_LIGHT = "light.e2e_ref_scheduled"
 REF_LIGHT = "light.e2e_ref_light"
+MANUAL_LIGHT = "light.e2e_manual"
+MANUAL_ILLUMINANCE = "binary_sensor.e2e_manual_illuminance"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -6516,6 +6518,116 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     )
 
 
+def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
+    """Manual control is never gated; adoption of occupancy follows the gates."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
+    )
+    illuminance_entry_id = create_entry(
+        client,
+        "illuminance",
+        {
+            "name": "E2E Manual Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 0,
+            "advanced": {"entity_id": "e2e_manual_illuminance"},
+        },
+        "Manual illuminance",
+    )
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Manual",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_entity": MANUAL_ILLUMINANCE,
+                "illuminance_mode": "gate",
+                "schedule_entity": END_SCHEDULE,
+                "schedule_mode": "gate",
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "advanced": {"entity_id": "e2e_manual"},
+        },
+        "Manual light",
+    )
+    for entry_id in (schedule_entry_id, illuminance_entry_id, light_entry_id):
+        assert_entry_loaded(client, entry_id)
+
+    # Outside the window and bright: occupancy is gated, a manual turn-on is not,
+    # and the gated occupancy is not adopted either (active, not occupied).
+    set_end_schedule(client, False)
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(
+        MANUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    set_timer_motion(client, True)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: occupancy is gated outside the window and while bright",
+    )
+    client.call_service("light", "turn_on", {"entity_id": MANUAL_LIGHT})
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on by hand"
+    )
+    assert_state_stays(
+        client,
+        MANUAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+        ),
+        "active: a manual turn-on is never gated, and gated occupancy is not adopted",
+    )
+    client.call_service("light", "turn_off", {"entity_id": MANUAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    set_timer_motion(client, False)
+
+    # Inside the window and dark: a manual off wins over occupancy, and a manual
+    # on while occupancy is still active goes straight to occupied.
+    set_end_schedule(client, True)
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.wait_state(MANUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
+    set_timer_motion(client, True)
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    wait_machine_state(client, "occupied", MANUAL_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": MANUAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", MANUAL_LIGHT)
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: a manual off wins over active occupancy",
+    )
+    client.call_service("light", "turn_on", {"entity_id": MANUAL_LIGHT})
+    client.wait_state(
+        MANUAL_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+        ),
+        "occupied: a manual turn-on while occupancy is active is adopted",
+    )
+    set_timer_motion(client, False)
+    wait_machine_state(client, "countdown", MANUAL_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": MANUAL_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    set_end_schedule(client, False)
+    remove_entry_and_entity(client, light_entry_id, MANUAL_LIGHT)
+    remove_entry_and_entity(client, illuminance_entry_id, MANUAL_ILLUMINANCE)
+    remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
+    print(
+        "PASS: manual control is never gated; adoption of occupancy follows the gates"
+    )
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6543,6 +6655,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_auto_on_color_scenario,
         run_wall_brightness_scenarios,
         run_reference_cleanup_scenarios,
+        run_manual_control_scenarios,
     ],
     "b": [
         run_schedule_end_action_scenarios,
