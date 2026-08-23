@@ -73,6 +73,10 @@ compose run --rm runner python runner.py maintain-restart-verify door-restart-pr
 
 echo "Restarting with a light held by its open door..."
 compose restart homeassistant
-compose run --rm runner python runner.py door-restart-verify logs
+compose run --rm runner python runner.py door-restart-verify combined-restart-prepare
+
+echo "Restarting with a combined sensor held by its maintain sensor..."
+compose restart homeassistant
+compose run --rm runner python runner.py combined-restart-verify logs
 
 echo "MoLight E2E restart scenarios passed."

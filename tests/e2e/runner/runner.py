@@ -87,6 +87,10 @@ OPT_OCCUPANCY = "binary_sensor.e2e_opt_occupancy"
 OPT_COMBINED = "binary_sensor.e2e_opt_combined"
 OPT_ILLUMINANCE = "binary_sensor.e2e_opt_illuminance"
 OPT_SCHEDULE = "binary_sensor.e2e_opt_schedule"
+NEST_INNER = "binary_sensor.e2e_nest_inner"
+NEST_OUTER = "binary_sensor.e2e_nest_outer"
+COMBINED_BOOT = "binary_sensor.e2e_combined_boot"
+COMBINED_BOOT_TRIGGER = "binary_sensor.e2e_combined_boot_trigger"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -123,6 +127,7 @@ RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
 DOOR_RESTART_SNAPSHOT = Path("/ha-config/e2e-door-restart-snapshot.json")
+COMBINED_RESTART_SNAPSHOT = Path("/ha-config/e2e-combined-restart-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -6764,6 +6769,174 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: sensor options flows rename in place and re-settle their settings")
 
 
+def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
+    """Nested combined sensors, their form rejections, and an all-false cycle."""
+    trigger_id = create_grace_occupancy(
+        client, "E2E Grace Trigger", RAW_MOTION, "e2e_grace_trigger"
+    )
+    inner_id = create_entry(
+        client,
+        "combined_occupancy",
+        {
+            "name": "E2E Nest Inner",
+            "trigger_sensors": [GRACE_TRIGGER],
+            "advanced": {"entity_id": "e2e_nest_inner"},
+        },
+        "Nest inner",
+    )
+    outer_id = create_entry(
+        client,
+        "combined_occupancy",
+        {
+            "name": "E2E Nest Outer",
+            "trigger_sensors": [NEST_INNER],
+            "maintain_sensors": [VIRTUAL_TIMER_OCCUPANCY],
+            "advanced": {"entity_id": "e2e_nest_outer"},
+        },
+        "Nest outer",
+    )
+    for entry_id in (trigger_id, inner_id, outer_id):
+        assert_entry_loaded(client, entry_id)
+
+    # Form rejections: no trigger, both roles, and a cycle through the nesting.
+    for payload, code in (
+        ({"trigger_sensors": []}, "trigger_sensors_required"),
+        (
+            {"trigger_sensors": [GRACE_TRIGGER], "maintain_sensors": [GRACE_TRIGGER]},
+            "occupancy_sensor_role_overlap",
+        ),
+    ):
+        result = submit_create(
+            client,
+            "combined_occupancy",
+            {"name": "E2E Rejected Combined", **payload, "advanced": {}},
+        )
+        expect_rejection(client, result, code)
+    # The cycle is refused at the selector: the form's schema excludes the
+    # sensor itself and its descendants, so HA rejects the value outright
+    # (a flow-level combined_occupancy_cycle error is the other valid outcome).
+    result = client.start_flow(options_entry_id=inner_id)
+    expect_step(result, "combined_occupancy")
+    try:
+        result = client.continue_flow(
+            result,
+            {"name": "E2E Nest Inner", "trigger_sensors": [NEST_OUTER]},
+            options=True,
+        )
+    except ApiError as err:
+        if err.status != 400 or "trigger_sensors" not in str(err):
+            raise
+        client.abort_flow(result, options=True)
+    else:
+        expect_rejection(client, result, "combined_occupancy_cycle", options=True)
+
+    # A genuine stay propagates through both levels; an all-false cycle is
+    # flagged on the combined sensors just like on the simple one.
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
+    client.wait_state(NEST_INNER, lambda state: state["state"] == "on", "on")
+    client.wait_state(NEST_OUTER, lambda state: state["state"] == "on", "on")
+    assert_state_stays(
+        client, NEST_OUTER, lambda state: state["state"] == "on", "on", duration=3.5
+    )
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, False)
+    client.wait_state(
+        NEST_OUTER,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("last_clear_false_detection") is False
+            and state["attributes"].get("latest_occupied_time") is not None
+        ),
+        "off after a genuine stay through the nesting",
+    )
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
+    client.wait_state(NEST_OUTER, lambda state: state["state"] == "on", "on")
+    set_source(client, RAW_MOTION, GRACE_TRIGGER, False)
+    for entity_id in (NEST_INNER, NEST_OUTER):
+        client.wait_state(
+            entity_id,
+            lambda state: (
+                state["state"] == "off"
+                and state["attributes"].get("last_clear_false_detection") is True
+                and state["attributes"].get("false_detection_count") == 1
+            ),
+            "flagging the all-false cycle",
+        )
+    for entry_id, entity_id in (
+        (outer_id, NEST_OUTER),
+        (inner_id, NEST_INNER),
+        (trigger_id, GRACE_TRIGGER),
+    ):
+        remove_entry_and_entity(client, entry_id, entity_id)
+    print("PASS: nested combined sensors, their rejections, and all-false flagging")
+
+
+def run_combined_restart_prepare() -> None:
+    """Leave a combined sensor on, held only by its maintain sensor, for a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    trigger_id = create_virtual_occupancy(
+        client,
+        "E2E Combined Boot Trigger",
+        RAW_REMOVAL_MOTION,
+        "e2e_combined_boot_trigger",
+    )
+    combined_id = create_entry(
+        client,
+        "combined_occupancy",
+        {
+            "name": "E2E Combined Boot",
+            "trigger_sensors": [COMBINED_BOOT_TRIGGER],
+            "maintain_sensors": [VIRTUAL_TIMER_OCCUPANCY],
+            "advanced": {"entity_id": "e2e_combined_boot"},
+        },
+        "Combined boot",
+    )
+    wait_entry_loaded(client, trigger_id)
+    wait_entry_loaded(client, combined_id)
+    set_source(client, RAW_REMOVAL_MOTION, COMBINED_BOOT_TRIGGER, True)
+    client.wait_state(COMBINED_BOOT, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, True)
+    set_source(client, RAW_REMOVAL_MOTION, COMBINED_BOOT_TRIGGER, False)
+    assert_state_stays(
+        client, COMBINED_BOOT, lambda state: state["state"] == "on", "held by maintain"
+    )
+    COMBINED_RESTART_SNAPSHOT.write_text(
+        json.dumps({"trigger_id": trigger_id, "combined_id": combined_id})
+    )
+    print("PASS: maintain-held combined sensor prepared for a container restart")
+
+
+def run_combined_restart_verify() -> None:
+    """Restored on with a maintain sensor still showing presence seeds on."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(COMBINED_RESTART_SNAPSHOT.read_text())
+    wait_entry_loaded(client, snapshot["trigger_id"])
+    wait_entry_loaded(client, snapshot["combined_id"])
+    client.wait_state(
+        COMBINED_BOOT,
+        lambda state: state["state"] == "on",
+        "seeded on at boot: restored on and its maintain sensor still shows presence",
+        timeout=WAIT_TIMEOUT,
+    )
+    assert_state_stays(
+        client, COMBINED_BOOT, lambda state: state["state"] == "on", "on", duration=2
+    )
+    set_timer_motion(client, False)
+    client.wait_state(COMBINED_BOOT, lambda state: state["state"] == "off", "off")
+    for entry_id, entity_id in (
+        (snapshot["combined_id"], COMBINED_BOOT),
+        (snapshot["trigger_id"], COMBINED_BOOT_TRIGGER),
+    ):
+        client.remove_entry(entry_id)
+        wait_entity_absent(client, entity_id)
+        wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+    print("PASS: a maintain-held combined sensor was seeded on after the restart")
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6799,6 +6972,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_combined_and_maintain_scenarios,
         run_hold_entity_scenarios,
         run_maintain_scenarios,
+        run_combined_extras_scenarios,
     ],
     "c": [
         run_dark_arrival_scenarios,
@@ -6870,6 +7044,8 @@ def main() -> None:
         "maintain-restart-verify": run_maintain_restart_verify,
         "door-restart-prepare": run_door_restart_prepare,
         "door-restart-verify": run_door_restart_verify,
+        "combined-restart-prepare": run_combined_restart_prepare,
+        "combined-restart-verify": run_combined_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,
