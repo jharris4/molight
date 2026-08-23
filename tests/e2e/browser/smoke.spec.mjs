@@ -25,19 +25,25 @@ function visibleText(page, text) {
 }
 
 async function openAddFlow(page) {
-  // Older frontends sometimes close the confirmation dialog on their own right
-  // after it opens, so retry the whole sequence when the menu does not appear.
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await page.goto("/config/integrations/dashboard/add?domain=molight");
-      await expect(visibleText(page, "Do you want to set up MoLight?")).toBeVisible();
-      await page.getByRole("button", { name: "OK", exact: true }).click({ timeout: 5000 });
-      await expect(visibleText(page, "Add MoLight entities")).toBeVisible({ timeout: 5000 });
-      return;
-    } catch (error) {
-      if (attempt >= 4) throw error;
-    }
-  }
+  // Loading /add?domain= directly makes the integrations page handle the
+  // route twice (firstUpdated and updated) and stack two confirmation
+  // dialogs, which the dialog manager then closes on its own on slower or
+  // older frontends. Navigate in-app instead, as the frontend's navigate() does.
+  await page.goto("/config/integrations/dashboard");
+  await expect(page.getByRole("button", { name: "Add integration" })).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState(null, "", "/config/integrations/dashboard/add?domain=molight");
+    window.dispatchEvent(
+      new CustomEvent("location-changed", {
+        detail: { replace: false },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  });
+  await expect(visibleText(page, "Do you want to set up MoLight?")).toBeVisible();
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+  await expect(visibleText(page, "Add MoLight entities")).toBeVisible();
 }
 
 async function expectFlowTitle(page, title) {
