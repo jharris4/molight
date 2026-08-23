@@ -63,6 +63,13 @@ RESTART_WARNING_SNAPSHOT = Path("/ha-config/e2e-restart-warning-snapshot.json")
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
+
+
+def pct(percent: int) -> int:
+    """Convert a MoLight percent setting to the 0-255 brightness it sends."""
+    return round(percent * 255 / 100)
+
+
 LIGHT_ENTRY_KEYS = (
     "name",
     "lights",
@@ -826,7 +833,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 76
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(30)
         ),
         "on at the outside-profile brightness after becoming dark",
     )
@@ -879,7 +886,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 204
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(80)
         ),
         "on at the inside-profile brightness after becoming dark",
     )
@@ -923,7 +930,7 @@ def wait_timer_stage(
         lambda state: (
             state["attributes"].get("molight_state") == stage
             and state["attributes"].get("warning_active") is True
-            and state["attributes"].get("pre_warn_brightness") == 153
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
         f"in the {stage} stage with its pre-warning snapshot",
     )
@@ -948,14 +955,14 @@ def run_timeout_warning_scenario(
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at the configured automatic brightness",
     )
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", VIRTUAL_TIMER_LIGHT)
-    wait_timer_stage(client, "effect", 26)
-    wait_timer_stage(client, "warn", 51)
+    wait_timer_stage(client, "effect", pct(10))
+    wait_timer_stage(client, "warn", pct(20))
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     final = wait_machine_state(client, "idle", VIRTUAL_TIMER_LIGHT)
     if final["attributes"].get("warning_active") is not False:
@@ -965,12 +972,12 @@ def run_timeout_warning_scenario(
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "retrigger test initially on",
     )
     set_timer_motion(client, False)
-    wait_timer_stage(client, "effect", 26)
+    wait_timer_stage(client, "effect", pct(10))
     set_timer_motion(client, True)
     restored = wait_machine_state(client, "occupied", VIRTUAL_TIMER_LIGHT)
     if (
@@ -981,7 +988,7 @@ def run_timeout_warning_scenario(
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "restored to its pre-warning brightness",
     )
@@ -989,7 +996,7 @@ def run_timeout_warning_scenario(
         client,
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at restored brightness past the cancelled warning deadline",
         duration=2.5,
@@ -1352,7 +1359,7 @@ def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, 
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 128
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(50)
         ),
         "on through the sensor reference",
     )
@@ -1829,7 +1836,7 @@ def assert_upgrade_turn_on(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at the saved 60 percent brightness",
     )
@@ -1986,11 +1993,11 @@ def run_primary() -> None:
         "select_option",
         {"entity_id": SOURCE_SELECT, "option": "Focus"},
     )
-    trigger_and_assert(client, 76, "Focus")
+    trigger_and_assert(client, pct(30), "Focus")
 
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, False)
-    trigger_and_assert(client, 76, "Cozy")
+    trigger_and_assert(client, pct(30), "Cozy")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
     client.call_service(
@@ -2002,7 +2009,7 @@ def run_primary() -> None:
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_profile(client, PROFILE_INSIDE)
-    trigger_and_assert(client, 204, "Night")
+    trigger_and_assert(client, pct(80), "Night")
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_profile(client, PROFILE_OUTSIDE)
@@ -2039,7 +2046,7 @@ def run_primary() -> None:
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    trigger_and_assert(client, 204, "Night")
+    trigger_and_assert(client, pct(80), "Night")
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
@@ -2063,7 +2070,7 @@ def run_primary() -> None:
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_profile(client, PROFILE_INSIDE)
-    trigger_and_assert(client, 204, "Night")
+    trigger_and_assert(client, pct(80), "Night")
 
     removal_snapshot = prepare_removal_reference_cleanup(client)
     fixtures["removal_light"] = removal_snapshot["light_entry_id"]
@@ -2160,9 +2167,9 @@ def run_container_restart_verification() -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 204
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(80)
         ),
-        "persisted on at brightness 204",
+        f"persisted on at brightness {pct(80)}",
     )
     removed = {"multi", "remote", "removal_light"}
     fixtures["entries"] = {
@@ -2477,7 +2484,7 @@ def run_restart_warning_prepare() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "on at the configured automatic brightness",
     )
@@ -2488,16 +2495,16 @@ def run_restart_warning_prepare() -> None:
         lambda state: (
             state["attributes"].get("molight_state") == "warn"
             and state["attributes"].get("warning_active") is True
-            and state["attributes"].get("pre_warn_brightness") == 153
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
         "in warning with its pre-warning snapshot",
     )
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 51
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(20)
         ),
-        "showing warning brightness 51",
+        f"showing warning brightness {pct(20)}",
     )
     if warning["state"] != "on":
         raise AssertionError(f"Warning-stage virtual light was not on: {warning}")
@@ -2528,11 +2535,11 @@ def run_restart_warning_verify() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
-            state["state"] == "on" and state["attributes"].get("brightness") == 153
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
         "restored to its pre-warning brightness",
     )
-    if restored["attributes"].get("brightness") != 153:
+    if restored["attributes"].get("brightness") != pct(60):
         raise AssertionError(f"Virtual brightness was not safely restored: {restored}")
 
     warning = client.wait_state(
@@ -2540,7 +2547,7 @@ def run_restart_warning_verify() -> None:
         lambda state: (
             state["attributes"].get("molight_state") == "warn"
             and state["attributes"].get("warning_active") is True
-            and state["attributes"].get("pre_warn_brightness") == 153
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
         "running a fresh warning after the restored timeout",
         timeout=20,
