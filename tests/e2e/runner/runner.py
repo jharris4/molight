@@ -77,6 +77,10 @@ GRACE_BOTH_LIGHT = "light.e2e_grace_both"
 MAINTAIN_BOOT_LIGHT = "light.e2e_maintain_boot"
 DOOR_GATE_LIGHT = "light.e2e_door_gate"
 DOOR_BOOT_LIGHT = "light.e2e_door_boot"
+REF_SCHEDULE = "binary_sensor.e2e_ref_schedule"
+REF_ILLUMINANCE = "binary_sensor.e2e_ref_illuminance"
+REF_SCHEDULED_LIGHT = "light.e2e_ref_scheduled"
+REF_LIGHT = "light.e2e_ref_light"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -4359,7 +4363,11 @@ LOG_RECORD = re.compile(
 MOLIGHT_LOG = re.compile(r"molight", re.IGNORECASE)
 MOLIGHT_TRACEBACK = re.compile(r"custom_components/molight")
 # Known-benign warnings that mention MoLight; anything else at WARNING fails.
-ALLOWED_WARNINGS = ("We found a custom integration molight",)
+ALLOWED_WARNINGS = (
+    "We found a custom integration molight",
+    # Deliberately provoked by the reference-cleanup scenario.
+    "has no schedule; using outside-schedule settings",
+)
 
 
 def log_records(content: str) -> list[tuple[str, str, str]]:
@@ -6337,6 +6345,129 @@ def run_door_restart_verify() -> None:
     print("PASS: a door-held light restored occupied and released on close")
 
 
+def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
+    """Deleting a referenced schedule or illuminance sensor cleans its users."""
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E Ref Schedule", "e2e_ref_schedule", source=RAW_REMOVAL_MOTION
+    )
+    scheduled_entry_id = create_two_profile_light(
+        client,
+        "E2E Ref Scheduled",
+        "e2e_ref_scheduled",
+        RAW_TIMER_LIGHT,
+        REF_SCHEDULE,
+        "keep",
+        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {
+            "light_timeout": 30,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+        },
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    assert_entry_loaded(client, scheduled_entry_id)
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    client.wait_state(REF_SCHEDULE, lambda state: state["state"] == "on", "on")
+    wait_end_light(client, REF_SCHEDULED_LIGHT, PROFILE_INSIDE)
+
+    # Deleting the schedule: the light falls back to its outside profile, drops
+    # the stored reference, and stays manually usable.
+    client.remove_entry(schedule_entry_id)
+    wait_entity_absent(client, REF_SCHEDULE)
+    wait_entry_loaded(client, scheduled_entry_id)
+    wait_end_light(client, REF_SCHEDULED_LIGHT, PROFILE_OUTSIDE)
+    wait_stored_entry(
+        scheduled_entry_id,
+        lambda cfg: not cfg.get("schedule_entity"),
+        "stored without the deleted schedule",
+    )
+    client.call_service("light", "turn_on", {"entity_id": REF_SCHEDULED_LIGHT})
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on by hand"
+    )
+    client.call_service("light", "turn_off", {"entity_id": REF_SCHEDULED_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    remove_entry_and_entity(client, scheduled_entry_id, REF_SCHEDULED_LIGHT)
+
+    # A regular light referencing an illuminance sensor and a schedule.
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E Ref Schedule", "e2e_ref_schedule", source=RAW_REMOVAL_MOTION
+    )
+    illuminance_entry_id = create_entry(
+        client,
+        "illuminance",
+        {
+            "name": "E2E Ref Illuminance",
+            "illuminance_sensor": RAW_ILLUMINANCE,
+            "illuminance_threshold": 10,
+            "illuminance_hysteresis": 0,
+            "advanced": {"entity_id": "e2e_ref_illuminance"},
+        },
+        "Ref illuminance",
+    )
+    light_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Ref Light",
+            "lights": [RAW_MULTI_DIMMER],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "illuminance_entity": REF_ILLUMINANCE,
+                "illuminance_mode": "control",
+                "schedule_entity": REF_SCHEDULE,
+                "schedule_mode": "gate",
+            },
+            "advanced": {"entity_id": "e2e_ref_light"},
+        },
+        "Ref light",
+    )
+    for entry_id in (schedule_entry_id, illuminance_entry_id, light_entry_id):
+        assert_entry_loaded(client, entry_id)
+    client.set_state(RAW_ILLUMINANCE, 50)
+    client.wait_state(REF_ILLUMINANCE, lambda state: state["state"] == "on", "bright")
+    client.call_service("light", "turn_on", {"entity_id": REF_LIGHT})
+    client.wait_state(
+        RAW_MULTI_DIMMER,
+        lambda state: state["state"] == "off",
+        "forced off while bright",
+    )
+
+    client.remove_entry(illuminance_entry_id)
+    wait_entity_absent(client, REF_ILLUMINANCE)
+    wait_entry_loaded(client, light_entry_id)
+    wait_stored_entry(
+        light_entry_id,
+        lambda cfg: not cfg.get("illuminance_entity"),
+        "stored without the deleted illuminance sensor",
+    )
+    client.call_service("light", "turn_on", {"entity_id": REF_LIGHT})
+    assert_state_stays(
+        client,
+        RAW_MULTI_DIMMER,
+        lambda state: state["state"] == "on",
+        "on while bright: the deleted illuminance sensor no longer forces off",
+        duration=2,
+    )
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.remove_entry(schedule_entry_id)
+    wait_entity_absent(client, REF_SCHEDULE)
+    wait_entry_loaded(client, light_entry_id)
+    wait_stored_entry(
+        light_entry_id,
+        lambda cfg: not cfg.get("schedule_entity"),
+        "stored without the deleted schedule",
+    )
+    client.call_service("light", "turn_off", {"entity_id": REF_LIGHT})
+    client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "off", "off")
+    remove_entry_and_entity(client, light_entry_id, REF_LIGHT)
+    print(
+        "PASS: deleting a referenced schedule or illuminance sensor cleaned its users"
+    )
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6363,6 +6494,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_effect_color_scenarios,
         run_auto_on_color_scenario,
         run_wall_brightness_scenarios,
+        run_reference_cleanup_scenarios,
     ],
     "b": [
         run_schedule_end_action_scenarios,
