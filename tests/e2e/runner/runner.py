@@ -379,6 +379,18 @@ def start_create(client: HomeAssistantClient, entity_type: str) -> dict[str, Any
     return client.continue_flow(result, {"entity_type": entity_type})
 
 
+def create_entry(
+    client: HomeAssistantClient,
+    entity_type: str,
+    payload: dict[str, Any],
+    description: str,
+) -> str:
+    """Create one single-form MoLight entry through the backend config flow."""
+    result = start_create(client, entity_type)
+    expect_step(result, entity_type)
+    return finish_creation(client.continue_flow(result, payload), description)
+
+
 def create_virtual_schedule(client: HomeAssistantClient) -> str:
     """Create a source-backed MoLight Virtual Schedule through its API flow."""
     result = start_create(client, "schedule")
@@ -394,9 +406,7 @@ def create_virtual_schedule(client: HomeAssistantClient) -> str:
             "advanced": {"entity_id": "e2e_schedule"},
         },
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Schedule creation failed: {result}")
-    return result["result"]["entry_id"]
+    return finish_creation(result, "Schedule")
 
 
 def create_virtual_occupancy(
@@ -406,10 +416,9 @@ def create_virtual_occupancy(
     entity_id: str = "e2e_occupancy",
 ) -> str:
     """Create a MoLight occupancy sensor wrapping a simulated motion sensor."""
-    result = start_create(client, "occupancy")
-    expect_step(result, "occupancy")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "occupancy",
         {
             "name": name,
             "occupancy_sensor": source,
@@ -420,18 +429,15 @@ def create_virtual_occupancy(
                 "entity_id": entity_id,
             },
         },
+        name,
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"{name} creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_virtual_illuminance(client: HomeAssistantClient) -> str:
     """Create a MoLight illuminance threshold wrapping the simulated lux sensor."""
-    result = start_create(client, "illuminance")
-    expect_step(result, "illuminance")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "illuminance",
         {
             "name": "E2E Illuminance",
             "illuminance_sensor": RAW_ILLUMINANCE,
@@ -439,10 +445,8 @@ def create_virtual_illuminance(client: HomeAssistantClient) -> str:
             "illuminance_hysteresis": 1,
             "advanced": {"entity_id": "e2e_illuminance"},
         },
+        "Illuminance",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Illuminance creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
@@ -519,17 +523,14 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
     result = submit_selection(
         client, client.continue_flow(result, light_settings(80, inside=True))
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Scheduled light creation failed: {result}")
-    return result["result"]["entry_id"]
+    return finish_creation(result, "Scheduled light")
 
 
 def create_timeout_light(client: HomeAssistantClient) -> str:
     """Create one short-lived light for a real timeout/warning sequence."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "light",
         {
             "name": "E2E Timer",
             "lights": [RAW_TIMER_LIGHT],
@@ -547,18 +548,15 @@ def create_timeout_light(client: HomeAssistantClient) -> str:
             },
             "advanced": {"entity_id": "e2e_timer"},
         },
+        "Timer light",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Timer light creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_auto_off_light(client: HomeAssistantClient) -> str:
     """Create a short-timeout light dedicated to switch persistence."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "light",
         {
             "name": "E2E Auto-off",
             "lights": [RAW_TIMER_LIGHT],
@@ -568,18 +566,15 @@ def create_auto_off_light(client: HomeAssistantClient) -> str:
             "warning": {},
             "advanced": {"entity_id": "e2e_auto_off"},
         },
+        "Auto-off light",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Auto-off light creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_restart_warning_light(client: HomeAssistantClient) -> str:
     """Create a light whose live warning stage spans a container restart."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "light",
         {
             "name": "E2E Restart Warning",
             "lights": [RAW_TIMER_LIGHT],
@@ -593,18 +588,15 @@ def create_restart_warning_light(client: HomeAssistantClient) -> str:
             },
             "advanced": {"entity_id": "e2e_restart_warning"},
         },
+        "Restart-warning light",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Restart-warning light creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_multi_light(client: HomeAssistantClient) -> str:
     """Create an isolated mixed-capability virtual light."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "light",
         {
             "name": "E2E Multi",
             "lights": [RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB],
@@ -612,18 +604,15 @@ def create_multi_light(client: HomeAssistantClient) -> str:
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_multi"},
         },
+        "Multi-light",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Multi-light creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def create_remote(client: HomeAssistantClient) -> str:
     """Create a current-release remote with single and double bindings."""
-    result = start_create(client, "remote")
-    expect_step(result, "remote")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "remote",
         {
             "name": "E2E Remote",
             "target_lights": [VIRTUAL_MULTI_LIGHT],
@@ -632,10 +621,8 @@ def create_remote(client: HomeAssistantClient) -> str:
             "turn_on": {"on_buttons_single": [EVENT_BUTTON]},
             "turn_off": {"off_buttons_double": [EVENT_BUTTON]},
         },
+        "Remote",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Remote creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def edit_remote(client: HomeAssistantClient, entry_id: str) -> None:
@@ -660,10 +647,9 @@ def edit_remote(client: HomeAssistantClient, entry_id: str) -> None:
 
 def create_removal_light(client: HomeAssistantClient) -> str:
     """Create a surviving light that references the removable sensor."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "light",
         {
             "name": "E2E Removal Light",
             "lights": [RAW_TIMER_LIGHT],
@@ -673,10 +659,8 @@ def create_removal_light(client: HomeAssistantClient) -> str:
             "warning": {},
             "advanced": {"entity_id": "e2e_removal_light"},
         },
+        "Removal light",
     )
-    if result.get("type") != "create_entry":
-        raise AssertionError(f"Removal light creation failed: {result}")
-    return result["result"]["entry_id"]
 
 
 def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
@@ -1006,15 +990,7 @@ def run_timeout_warning_scenario(
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_TIMER_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     client.remove_entry(timer_entry_id)
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        if all(
-            entry["entry_id"] != timer_entry_id for entry in client.molight_entries()
-        ):
-            break
-        time.sleep(0.2)
-    else:
-        raise AssertionError("Temporary timer-light config entry was not removed")
+    wait_entry_removed(client, timer_entry_id, "Temporary timer-light")
     print("PASS: live countdown, warning stages, final off, and retrigger cancellation")
 
 
@@ -1171,13 +1147,7 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
     assert_multi_light_routing(client)
 
     client.remove_entry(entry_id)
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        if all(entry["entry_id"] != entry_id for entry in client.molight_entries()):
-            break
-        time.sleep(0.2)
-    else:
-        raise AssertionError("Temporary multi-light config entry was not removed")
+    wait_entry_removed(client, entry_id, "Temporary multi-light")
     print("PASS: mixed light capabilities, routing, restart, and recovery")
 
 
@@ -1331,13 +1301,7 @@ def finish_current_remote_target_cleanup(
 
     client.remove_entry(entry_id)
     wait_entity_absent(client, REMOTE_LAST_ACTION)
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        if all(entry["entry_id"] != entry_id for entry in client.molight_entries()):
-            break
-        time.sleep(0.2)
-    else:
-        raise AssertionError("Temporary current-release remote entry was not removed")
+    wait_entry_removed(client, entry_id, "Temporary current-release remote")
     print("PASS: remote bindings survived restarts and target cleanup was clean")
 
 
@@ -1372,8 +1336,7 @@ def prepare_removal_reference_cleanup(client: HomeAssistantClient) -> dict[str, 
     wait_entity_absent(client, REMOVAL_OCCUPANCY)
     wait_entry_loaded(client, light_entry_id)
     client.wait_state(REMOVAL_LIGHT, lambda state: state["state"] == "off", "reloaded")
-    if any(entry["entry_id"] == sensor_entry_id for entry in client.molight_entries()):
-        raise AssertionError("Removed sensor config entry remained in the live API")
+    wait_entry_removed(client, sensor_entry_id, "Removed sensor")
 
     client.set_state(RAW_REMOVAL_MOTION, "on")
     assert_state_stays(
@@ -1440,16 +1403,9 @@ def finish_removal_reference_cleanup(
 
     client.remove_entry(snapshot["light_entry_id"])
     wait_entity_absent(client, REMOVAL_LIGHT)
-    deadline = time.monotonic() + 20
-    while time.monotonic() < deadline:
-        if all(
-            entry["entry_id"] != snapshot["light_entry_id"]
-            for entry in client.molight_entries()
-        ):
-            break
-        time.sleep(0.2)
-    else:
-        raise AssertionError("Temporary removal-test light entry was not removed")
+    wait_entry_removed(
+        client, snapshot["light_entry_id"], "Temporary removal-test light"
+    )
     print("PASS: removed sensor and reference stayed absent across storage restart")
 
 
@@ -1528,6 +1484,18 @@ def wait_entity_absent(
             raise
         time.sleep(0.2)
     raise AssertionError(f"Removed entity remained in Home Assistant: {last}")
+
+
+def wait_entry_removed(
+    client: HomeAssistantClient, entry_id: str, description: str, timeout: float = 20
+) -> None:
+    """Wait until a removed config entry disappears from the live API."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if all(entry["entry_id"] != entry_id for entry in client.molight_entries()):
+            return
+        time.sleep(0.2)
+    raise AssertionError(f"{description} config entry was not removed")
 
 
 def stored_config_entries() -> list[dict[str, Any]]:
@@ -1681,10 +1649,9 @@ def finish_creation(result: dict[str, Any], description: str) -> str:
 
 def create_upgrade_occupancy(client: HomeAssistantClient) -> str:
     """Create a representative v1.5.0 occupancy entry."""
-    result = start_create(client, "occupancy")
-    expect_step(result, "occupancy")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "occupancy",
         {
             "name": "Upgrade Occupancy",
             "occupancy_sensor": RAW_MOTION,
@@ -1695,31 +1662,29 @@ def create_upgrade_occupancy(client: HomeAssistantClient) -> str:
                 "entity_id": "upgrade_occupancy",
             },
         },
+        "Upgrade occupancy",
     )
-    return finish_creation(result, "Upgrade occupancy")
 
 
 def create_upgrade_combined(client: HomeAssistantClient) -> str:
     """Create a v1.5.0 combined occupancy entry referencing another entry."""
-    result = start_create(client, "combined_occupancy")
-    expect_step(result, "combined_occupancy")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "combined_occupancy",
         {
             "name": "Upgrade Combined",
             "trigger_sensors": [UPGRADE_OCCUPANCY],
             "advanced": {"entity_id": "upgrade_combined"},
         },
+        "Upgrade combined occupancy",
     )
-    return finish_creation(result, "Upgrade combined occupancy")
 
 
 def create_upgrade_illuminance(client: HomeAssistantClient) -> str:
     """Create a v1.5.0 illuminance threshold entry."""
-    result = start_create(client, "illuminance")
-    expect_step(result, "illuminance")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "illuminance",
         {
             "name": "Upgrade Illuminance",
             "illuminance_sensor": RAW_ILLUMINANCE,
@@ -1727,24 +1692,23 @@ def create_upgrade_illuminance(client: HomeAssistantClient) -> str:
             "illuminance_hysteresis": 1,
             "advanced": {"entity_id": "upgrade_illuminance"},
         },
+        "Upgrade illuminance",
     )
-    return finish_creation(result, "Upgrade illuminance")
 
 
 def create_upgrade_schedule(client: HomeAssistantClient) -> str:
     """Create the time-window schedule format supported by v1.5.0."""
-    result = start_create(client, "schedule")
-    expect_step(result, "schedule")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "schedule",
         {
             "name": "Upgrade Schedule",
             "start": {"time": "00:00:00"},
             "end": {"time": "23:59:59"},
             "advanced": {"entity_id": "upgrade_schedule"},
         },
+        "Upgrade schedule",
     )
-    return finish_creation(result, "Upgrade schedule")
 
 
 def upgrade_light_payload(name: str, brightness: int) -> dict[str, Any]:
@@ -1775,13 +1739,9 @@ UPGRADE_LIGHT_SETTINGS = flat_light_settings(upgrade_light_payload("", 60))
 
 def create_and_edit_upgrade_light(client: HomeAssistantClient) -> str:
     """Create a gated v1.5.0 light and store representative options."""
-    result = start_create(client, "light")
-    expect_step(result, "light")
     payload = upgrade_light_payload("Upgrade Gated", 40)
     payload["advanced"] = {"entity_id": "upgrade_gated"}
-    entry_id = finish_creation(
-        client.continue_flow(result, payload), "Upgrade gated light"
-    )
+    entry_id = create_entry(client, "light", payload, "Upgrade gated light")
 
     result = client.start_flow(options_entry_id=entry_id)
     expect_step(result, "light")
@@ -1797,10 +1757,9 @@ def create_and_edit_upgrade_light(client: HomeAssistantClient) -> str:
 
 def create_upgrade_remote(client: HomeAssistantClient) -> str:
     """Create a v1.5.0 remote bound to the simulated event button."""
-    result = start_create(client, "remote")
-    expect_step(result, "remote")
-    result = client.continue_flow(
-        result,
+    return create_entry(
+        client,
+        "remote",
         {
             "name": "Upgrade Remote",
             "target_lights": [UPGRADE_LIGHT],
@@ -1813,8 +1772,8 @@ def create_upgrade_remote(client: HomeAssistantClient) -> str:
             "preset_1": {},
             "preset_2": {},
         },
+        "Upgrade remote",
     )
-    return finish_creation(result, "Upgrade remote")
 
 
 def reset_upgrade_light(client: HomeAssistantClient) -> None:
