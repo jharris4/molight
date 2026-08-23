@@ -1061,6 +1061,225 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
     )
 
 
+def start_menu(client: HomeAssistantClient, *steps: str) -> dict[str, Any]:
+    """Walk the Add-integration menus to a named step."""
+    result = client.start_flow()
+    expect_step(result, "user")
+    for step in steps:
+        result = client.continue_flow(result, {"next_step_id": step})
+    return result
+
+
+def expect_abort(result: dict[str, Any], reason: str) -> dict[str, str]:
+    """Assert a flow finished with one abort reason; return its placeholders."""
+    if result.get("type") != "abort" or result.get("reason") != reason:
+        raise AssertionError(f"Expected the flow to abort with {reason!r}: {result}")
+    return result.get("description_placeholders") or {}
+
+
+def entry_id_by_title(client: HomeAssistantClient, title: str) -> str:
+    matches = [e for e in client.molight_entries() if e.get("title") == title]
+    if len(matches) != 1:
+        raise AssertionError(f"Expected one entry titled {title!r}: {matches}")
+    return matches[0]["entry_id"]
+
+
+def remove_entry_and_entity(
+    client: HomeAssistantClient, entry_id: str, entity_id: str
+) -> None:
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, entity_id)
+    wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
+
+
+def run_discovery_scenarios(client: HomeAssistantClient) -> None:
+    """Discovery offers only unwrapped sources, applies affixes, reports its count."""
+    result = start_menu(client, "discover_occupancy")
+    expect_step(result, "discover_occupancy")
+    result = client.continue_flow(
+        result, {"filter_areas": [], "filter_labels": [], "preselect_all": True}
+    )
+    expect_step(result, "discover_occupancy_select")
+    result = client.continue_flow(
+        result,
+        {
+            "selected_entities": [RAW_REMOVAL_MOTION],
+            "affix_prefix": "v_",
+            "affix_suffix": "",
+            "affix_target": "entity_id",
+        },
+    )
+    expect_step(result, "discover_occupancy_defaults")
+    result = client.continue_flow(
+        result,
+        {
+            "occupancy_timeout": 2,
+            "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+        },
+    )
+    placeholders = expect_abort(result, "discovery_done")
+    if placeholders.get("count") != "1":
+        raise AssertionError(f"Discovery did not report one created entry: {result}")
+    client.wait_state(
+        "binary_sensor.v_e2e_removal_motion",
+        lambda state: state["attributes"].get("friendly_name") == "E2E Removal Motion",
+        "created with the prefixed entity id and the source's name",
+    )
+    # Every candidate is now wrapped, so a second discovery has nothing to offer.
+    expect_abort(start_menu(client, "discover_occupancy"), "no_candidates")
+    remove_entry_and_entity(
+        client,
+        entry_id_by_title(client, "E2E Removal Motion"),
+        "binary_sensor.v_e2e_removal_motion",
+    )
+
+    result = start_menu(client, "discover_light")
+    expect_step(result, "discover_light")
+    result = client.continue_flow(
+        result, {"filter_areas": [], "filter_labels": [], "preselect_all": False}
+    )
+    expect_step(result, "discover_light_select")
+    result = client.continue_flow(
+        result,
+        {
+            "selected_entities": [RAW_MULTI_DIMMER],
+            "affix_prefix": "",
+            "affix_suffix": " V",
+            "affix_target": "name",
+        },
+    )
+    expect_step(result, "discover_light_defaults")
+    result = client.continue_flow(result, {"light_timeout": 30, **EMPTY_LIGHT_SECTIONS})
+    placeholders = expect_abort(result, "discovery_done")
+    if placeholders.get("count") != "1":
+        raise AssertionError(f"Light discovery did not report one entry: {result}")
+    client.wait_state(
+        "light.e2e_multi_dimmer_v",
+        lambda state: state["attributes"].get("friendly_name") == "E2E Multi Dimmer V",
+        "created with the suffixed name and the derived entity id",
+    )
+    remove_entry_and_entity(
+        client,
+        entry_id_by_title(client, "E2E Multi Dimmer V"),
+        "light.e2e_multi_dimmer_v",
+    )
+    checkpoint(
+        "discovery wraps only unwrapped sources, applies affixes, reports its count"
+    )
+
+
+def run_assign_scenarios(client: HomeAssistantClient) -> None:
+    """Bulk assignment wires, unwires, and skips lights per the timeout guard."""
+    light_a = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Assign A",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_assign_a"},
+        },
+        "Assign light A",
+    )
+    light_b = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Assign B",
+            "lights": [RAW_MULTI_ON_OFF],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_assign_b"},
+        },
+        "Assign light B",
+    )
+    slow = create_virtual_occupancy(
+        client, "E2E Slow Occupancy", RAW_REMOVAL_MOTION, "e2e_slow_occupancy", 20
+    )
+    for entry_id in (light_a, light_b, slow):
+        assert_entry_loaded(client, entry_id)
+
+    def assign(step: str, form: dict[str, Any], lights: list[str]) -> dict[str, str]:
+        result = start_menu(client, "assign_sensor", step)
+        expect_step(result, step)
+        result = client.continue_flow(result, form)
+        expect_step(result, "assign_lights")
+        result = client.continue_flow(result, {"assign_lights": lights})
+        reason = (
+            "assign_done_skipped"
+            if result.get("reason") == "assign_done_skipped"
+            else "assign_done"
+        )
+        return expect_abort(result, reason)
+
+    summary = assign(
+        "assign_occupancy",
+        {"assign_sensor": "binary_sensor.e2e_slow_occupancy", "assign_role": "regular"},
+        ["light.e2e_assign_a", "light.e2e_assign_b"],
+    )
+    if summary.get("assigned") != "1" or "E2E Assign B" not in summary.get(
+        "skipped", ""
+    ):
+        raise AssertionError(f"Occupancy assignment summary unexpected: {summary}")
+    wait_stored_entry(
+        light_a,
+        lambda cfg: cfg.get("occupancy_entity") == "binary_sensor.e2e_slow_occupancy",
+        "wired to the slow occupancy sensor",
+    )
+    wait_stored_entry(
+        light_b,
+        lambda cfg: not cfg.get("occupancy_entity"),
+        "left unwired (timeout guard)",
+    )
+    summary = assign(
+        "assign_occupancy",
+        {"assign_sensor": "binary_sensor.e2e_slow_occupancy", "assign_role": "regular"},
+        [],
+    )
+    if summary.get("removed") != "1" or summary.get("assigned") != "0":
+        raise AssertionError(f"Occupancy unassignment summary unexpected: {summary}")
+    wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "unwired")
+
+    summary = assign(
+        "assign_illuminance",
+        {"assign_sensor": VIRTUAL_ILLUMINANCE, "illuminance_mode": "gate"},
+        ["light.e2e_assign_a"],
+    )
+    if summary.get("assigned") != "1":
+        raise AssertionError(f"Illuminance assignment summary unexpected: {summary}")
+    wait_stored_entry(
+        light_a,
+        lambda cfg: (
+            cfg.get("illuminance_entity") == VIRTUAL_ILLUMINANCE
+            and cfg.get("illuminance_mode") == "gate"
+        ),
+        "wired to the illuminance sensor in gate mode",
+    )
+    summary = assign(
+        "assign_schedule",
+        {"assign_sensor": VIRTUAL_SCHEDULE, "schedule_mode": "gate_keep"},
+        ["light.e2e_assign_a"],
+    )
+    if summary.get("assigned") != "1":
+        raise AssertionError(f"Schedule assignment summary unexpected: {summary}")
+    wait_stored_entry(
+        light_a,
+        lambda cfg: (
+            cfg.get("schedule_entity") == VIRTUAL_SCHEDULE
+            and cfg.get("schedule_mode") == "gate_keep"
+        ),
+        "wired to the schedule in gate_keep mode",
+    )
+    for entry_id, entity_id in (
+        (light_a, "light.e2e_assign_a"),
+        (light_b, "light.e2e_assign_b"),
+        (slow, "binary_sensor.e2e_slow_occupancy"),
+    ):
+        remove_entry_and_entity(client, entry_id, entity_id)
+    checkpoint("bulk assignment wires, unwires, skips by the timeout guard, sets modes")
+
+
 def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     """Exercise profile-specific illuminance and door behavior live."""
     reset_trigger(client)
@@ -3100,6 +3319,8 @@ def run_primary() -> None:
     checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
     run_inverted_schedule_scenario(client)
     run_config_flow_rejections(client)
+    run_discovery_scenarios(client)
+    run_assign_scenarios(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     run_sensor_blip_scenarios(client)
