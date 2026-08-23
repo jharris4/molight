@@ -33,6 +33,7 @@ DEFAULT_BEHAVIOR: Final = {
 
 LIGHT_MAIN: Final = "light_main"
 LIGHT_TIMER: Final = "light_timer"
+LIGHT_CT: Final = "light_ct"
 LIGHT_MULTI_ON_OFF: Final = "light_multi_on_off"
 LIGHT_MULTI_DIMMER: Final = "light_multi_dimmer"
 LIGHT_MULTI_RGB: Final = "light_multi_rgb"
@@ -56,6 +57,11 @@ DEFAULT_STATES: Final = {
         "state": "off",
         "available": True,
         "attributes": {"brightness": 0},
+    },
+    LIGHT_CT: {
+        "state": "off",
+        "available": True,
+        "attributes": {"brightness": 0, "color_temp_kelvin": 3000},
     },
     LIGHT_MULTI_ON_OFF: {"state": "off", "available": True, "attributes": {}},
     LIGHT_MULTI_DIMMER: {

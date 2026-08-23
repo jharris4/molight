@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
+    ATTR_COLOR_TEMP_KELVIN,
     ATTR_RGB_COLOR,
     ATTR_TRANSITION,
     ATTR_XY_COLOR,
@@ -24,6 +25,7 @@ from homeassistant.util import color as color_util
 from . import controller_for_entry
 from .const import (
     DEFAULT_BEHAVIOR,
+    LIGHT_CT,
     LIGHT_MAIN,
     LIGHT_MULTI_DIMMER,
     LIGHT_MULTI_ON_OFF,
@@ -52,6 +54,9 @@ class TestbedLight(TestbedEntity, LightEntity):
         super().__init__(*args)
         self._testbed_color_modes = color_modes
         self._testbed_features = features or LightEntityFeature(0)
+        if ColorMode.COLOR_TEMP in color_modes:
+            self._attr_min_color_temp_kelvin = 2000
+            self._attr_max_color_temp_kelvin = 6500
         self._pending: list[CALLBACK_TYPE] = []
         self._reported: dict[str, Any] = {}
         self._sync_reported()
@@ -102,6 +107,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         for mode in (
             ColorMode.XY,
             ColorMode.RGB,
+            ColorMode.COLOR_TEMP,
             ColorMode.BRIGHTNESS,
             ColorMode.ONOFF,
         ):
@@ -112,7 +118,12 @@ class TestbedLight(TestbedEntity, LightEntity):
     @property
     def brightness(self) -> int | None:
         """Return the reported brightness, quantised to the device's levels."""
-        if self.color_mode not in (ColorMode.XY, ColorMode.RGB, ColorMode.BRIGHTNESS):
+        if self.color_mode not in (
+            ColorMode.XY,
+            ColorMode.RGB,
+            ColorMode.COLOR_TEMP,
+            ColorMode.BRIGHTNESS,
+        ):
             return None
         value = int(self._reported["attributes"].get(ATTR_BRIGHTNESS, 0))
         levels = int(self.behavior["brightness_levels"])
@@ -140,6 +151,13 @@ class TestbedLight(TestbedEntity, LightEntity):
         return color_util.color_RGB_to_xy(*self._reported_rgb())
 
     @property
+    def color_temp_kelvin(self) -> int | None:
+        """Return the reported colour temperature when that is the advertised mode."""
+        if self.color_mode is not ColorMode.COLOR_TEMP:
+            return None
+        return int(self._reported["attributes"].get(ATTR_COLOR_TEMP_KELVIN, 3000))
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose the last command for black-box service-routing assertions."""
         return {"testbed_last_command": self._reported.get("last_command")}
@@ -155,6 +173,10 @@ class TestbedLight(TestbedEntity, LightEntity):
             self.record["attributes"].pop(ATTR_XY_COLOR, None)
         if ATTR_XY_COLOR in kwargs:
             self.record["attributes"][ATTR_XY_COLOR] = list(kwargs[ATTR_XY_COLOR])
+        if ATTR_COLOR_TEMP_KELVIN in kwargs:
+            self.record["attributes"][ATTR_COLOR_TEMP_KELVIN] = int(
+                kwargs[ATTR_COLOR_TEMP_KELVIN]
+            )
         self.record["last_command"] = {"service": "turn_on", "data": kwargs}
         await self.controller.async_save()
         self._schedule_reports(previous, kwargs.get(ATTR_TRANSITION))
@@ -280,6 +302,14 @@ async def async_setup_entry(
                 "light.e2e_timer_target",
                 "E2E Timer Target",
                 color_modes={ColorMode.BRIGHTNESS},
+            ),
+            TestbedLight(
+                controller,
+                LIGHT_CT,
+                "light.e2e_ct",
+                "E2E CT Light",
+                color_modes={ColorMode.COLOR_TEMP},
+                features=LightEntityFeature.TRANSITION,
             ),
             TestbedLight(
                 controller,

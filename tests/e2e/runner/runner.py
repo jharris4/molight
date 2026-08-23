@@ -23,6 +23,7 @@ WAIT_TIMEOUT = 90
 
 RAW_LIGHT = "light.e2e_main"
 RAW_TIMER_LIGHT = "light.e2e_timer_target"
+RAW_CT = "light.e2e_ct"
 RAW_MULTI_ON_OFF = "light.e2e_multi_on_off"
 RAW_MULTI_DIMMER = "light.e2e_multi_dimmer"
 RAW_MULTI_RGB = "light.e2e_multi_rgb"
@@ -91,6 +92,9 @@ NEST_INNER = "binary_sensor.e2e_nest_inner"
 NEST_OUTER = "binary_sensor.e2e_nest_outer"
 COMBINED_BOOT = "binary_sensor.e2e_combined_boot"
 COMBINED_BOOT_TRIGGER = "binary_sensor.e2e_combined_boot_trigger"
+CT_LIGHT = "light.e2e_ct_virtual"
+CT_MIX_LIGHT = "light.e2e_ct_mix"
+CT_REMOTE_LAST_ACTION = "sensor.e2e_ct_remote_last_action"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
 VIRTUAL_TIMER_LIGHT = "light.e2e_timer"
@@ -6937,6 +6941,183 @@ def run_combined_restart_verify() -> None:
     print("PASS: a maintain-held combined sensor was seeded on after the restart")
 
 
+def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
+    """Colour temperature: auto-on, mirrored wall changes, presets, mixed routing."""
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E CT Virtual",
+            "lights": [RAW_CT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60, "auto_on_color_temp": 3000},
+            "advanced": {"entity_id": "e2e_ct_virtual"},
+        },
+        "CT light",
+    )
+    assert_entry_loaded(client, entry_id)
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and state["attributes"].get("color_temp_kelvin") == 3000
+            and command_data(state).get("color_temp_kelvin") == 3000
+        ),
+        "on at the auto-on brightness and colour temperature",
+    )
+    client.wait_state(
+        CT_LIGHT,
+        lambda state: (
+            state["attributes"].get("color_mode") == "color_temp"
+            and state["attributes"].get("color_temp_kelvin") == 3000
+        ),
+        "reporting the commanded colour temperature",
+    )
+    set_timer_motion(client, False)
+    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    # A physical turn-on at another temperature is mirrored; a manual turn-on
+    # applies no auto-on colour temperature.
+    client.set_state(RAW_CT, "on", {"brightness": 100, "color_temp_kelvin": 5000})
+    client.wait_state(
+        CT_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("color_temp_kelvin") == 5000
+            and state["attributes"].get("brightness") == 100
+        ),
+        "mirroring the wall-set colour temperature and brightness",
+    )
+    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_on", {"entity_id": CT_LIGHT})
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["state"] == "on"
+            and "color_temp_kelvin" not in command_data(state)
+            and state["attributes"].get("color_temp_kelvin") == 5000
+        ),
+        "on by hand with no auto-on colour temperature applied",
+    )
+    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+
+    # A remote preset delivers its colour temperature natively.
+    remote_id = create_entry(
+        client,
+        "remote",
+        {
+            "name": "E2E CT Remote",
+            "target_lights": [CT_LIGHT],
+            "dim_step": 20,
+            **EMPTY_REMOTE_SECTIONS,
+            "preset_1": {
+                "preset_1_buttons_single": [EVENT_BUTTON],
+                "preset_1_brightness": 50,
+                "preset_1_color_temp": 4000,
+            },
+        },
+        "CT remote",
+    )
+    assert_entry_loaded(client, remote_id)
+    client.fire_event(EVENT_BUTTON, "short_release")
+    wait_remote_action(
+        client, "preset_1", "single", "short_release", CT_REMOTE_LAST_ACTION
+    )
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(50)
+            and command_data(state).get("color_temp_kelvin") == 4000
+        ),
+        "on at the preset brightness with the preset colour temperature",
+    )
+    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.remove_entry(remote_id)
+    wait_entity_absent(client, CT_REMOTE_LAST_ACTION)
+    wait_entry_removed(client, remote_id, "Temporary CT remote")
+    remove_entry_and_entity(client, entry_id, CT_LIGHT)
+
+    # Mixed members: kelvin goes natively to the CT member and converted to the
+    # RGB one; a colour goes natively to the RGB member and converted to the CT.
+    mix_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E CT Mix",
+            "lights": [RAW_CT, RAW_MULTI_RGB],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "advanced": {"entity_id": "e2e_ct_mix"},
+        },
+        "CT mix light",
+    )
+    assert_entry_loaded(client, mix_id)
+    client.wait_state(
+        CT_MIX_LIGHT,
+        lambda state: (
+            {"color_temp", "hs"}
+            <= set(state["attributes"].get("supported_color_modes", []))
+        ),
+        "advertising both colour temperature and colour",
+    )
+    client.call_service(
+        "light",
+        "turn_on",
+        {"entity_id": CT_MIX_LIGHT, "brightness": 128, "color_temp_kelvin": 3500},
+    )
+    client.wait_state(
+        RAW_CT,
+        lambda state: command_data(state).get("color_temp_kelvin") == 3500,
+        "receiving the colour temperature natively",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and has_color_command(command_data(state))
+            and "color_temp_kelvin" not in command_data(state)
+        ),
+        "receiving the colour temperature converted to a colour",
+    )
+    client.call_service(
+        "light", "turn_on", {"entity_id": CT_MIX_LIGHT, "hs_color": [120, 50]}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            list(command_data(state).get("rgb_color") or []) == [128, 255, 128]
+        ),
+        "receiving the colour natively",
+    )
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            "color_temp_kelvin" in command_data(state)
+            and not has_color_command(
+                {
+                    k: v
+                    for k, v in command_data(state).items()
+                    if k != "color_temp_kelvin"
+                }
+            )
+        ),
+        "receiving the colour converted to a colour temperature",
+    )
+    client.call_service("light", "turn_off", {"entity_id": CT_MIX_LIGHT})
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    remove_entry_and_entity(client, mix_id, CT_MIX_LIGHT)
+    print("PASS: colour temperature auto-on, mirror, preset, and mixed routing")
+
+
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
     """The countdown/warning sequence on an instant and on a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
@@ -6965,6 +7146,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_wall_brightness_scenarios,
         run_reference_cleanup_scenarios,
         run_manual_control_scenarios,
+        run_color_temp_scenarios,
     ],
     "b": [
         run_schedule_end_action_scenarios,
