@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cd "$(dirname "$0")/.."
+source tests/e2e/env.sh
+
+COMPOSE_FILE="tests/e2e/compose.yaml"
+RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-scenarios.XXXXXX")"
+export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
+export COMPOSE_PROJECT_NAME="molight-e2e-scenarios-$$"
+mkdir -p "$MOLIGHT_E2E_CONFIG_DIR"
+cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
+
+compose() {
+    docker compose --file "$COMPOSE_FILE" "$@"
+}
+
+cleanup() {
+    status=$?
+    set +e
+    compose logs --no-color > "$RUN_ROOT/docker-compose.log" 2>&1
+    compose down --volumes --remove-orphans >/dev/null 2>&1
+    if [ "$status" -eq 0 ]; then
+        rm -rf "$RUN_ROOT"
+    else
+        echo ""
+        echo "E2E scenarios failure artifacts retained at: $RUN_ROOT"
+        echo "The config contains the isolated test account; delete it after debugging."
+    fi
+    exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+echo "Starting isolated Home Assistant for the behaviour scenarios..."
+compose up --detach homeassistant
+
+echo "Running self-contained behaviour scenarios..."
+compose run --rm runner python runner.py scenarios
+
+echo "Checking Home Assistant logs..."
+compose run --rm runner python runner.py logs
+
+echo "MoLight E2E behaviour scenarios passed."

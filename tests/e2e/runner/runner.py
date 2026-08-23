@@ -1841,7 +1841,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: physical on, dim, dim-during-warning, and member outage handled")
 
 
-def run_fast_physical_scenarios() -> None:
+def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
     """Physical changes inside HA's 5 s command-context window must still count.
 
     Home Assistant stamps MoLight's service-call context on a member for 5 s,
@@ -1849,9 +1849,6 @@ def run_fast_physical_scenarios() -> None:
     MoLight judges such writes against what it asked for, so a contradicting
     one still counts as a real change.
     """
-    client = HomeAssistantClient()
-    client.wait_ready()
-    client.authenticate()
     entry_id = create_physical_light(client)
     assert_entry_loaded(client, entry_id)
     client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
@@ -3425,7 +3422,6 @@ def run_primary() -> None:
     client.wait_ready()
     client.authenticate()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
-    run_cold_illuminance_scenario(client)
 
     fixtures: dict[str, str] = {
         "schedule": create_virtual_schedule(client),
@@ -3444,25 +3440,9 @@ def run_primary() -> None:
     run_config_flow_rejections(client)
     run_discovery_scenarios(client)
     run_assign_scenarios(client)
-    run_hold_entity_scenarios(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
     run_sensor_blip_scenarios(client)
-    timer_entry_id = create_timeout_light(client)
-    assert_entry_loaded(client, timer_entry_id)
-    run_timeout_warning_scenario(client, timer_entry_id)
-    client.set_behavior(RAW_TIMER_LIGHT, latency=0.8, report_steps=True)
-    # Stages must outlast the bulb's 1.1 s reporting delay to be observable.
-    timer_entry_id = create_timeout_light(client, light_timeout=10, stage=3)
-    assert_entry_loaded(client, timer_entry_id)
-    run_timeout_warning_scenario(
-        client, timer_entry_id, "slow two-part bulb", light_timeout=10
-    )
-    client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
-    run_physical_change_scenarios(client)
-    run_schedule_end_action_scenarios(client)
-    run_schedule_mode_scenarios(client)
-    run_combined_and_maintain_scenarios(client)
 
     reset_trigger(client)
     client.call_service(
@@ -4310,6 +4290,41 @@ def run_false_detection_verify() -> None:
     print("PASS: restart while occupied took the countdown, not a false-detection off")
 
 
+def run_scenarios() -> None:
+    """Self-contained behaviour scenarios on a fresh Home Assistant.
+
+    Everything here builds its own fixtures, so it runs alongside the
+    restart-chain suite rather than lengthening it.
+    """
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    run_cold_illuminance_scenario(client)
+    timer_occupancy_id = create_virtual_occupancy(
+        client, "E2E Timer Occupancy", RAW_TIMER_MOTION, "e2e_timer_occupancy"
+    )
+    assert_entry_loaded(client, timer_occupancy_id)
+    timer_entry_id = create_timeout_light(client)
+    assert_entry_loaded(client, timer_entry_id)
+    run_timeout_warning_scenario(client, timer_entry_id)
+    client.set_behavior(RAW_TIMER_LIGHT, latency=0.8, report_steps=True)
+    # Stages must outlast the bulb's 1.1 s reporting delay to be observable.
+    timer_entry_id = create_timeout_light(client, light_timeout=10, stage=3)
+    assert_entry_loaded(client, timer_entry_id)
+    run_timeout_warning_scenario(
+        client, timer_entry_id, "slow two-part bulb", light_timeout=10
+    )
+    client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
+    run_physical_change_scenarios(client)
+    run_schedule_end_action_scenarios(client)
+    run_schedule_mode_scenarios(client)
+    run_combined_and_maintain_scenarios(client)
+    run_hold_entity_scenarios(client)
+    run_fast_physical_scenarios(client)
+    print("PASS: behaviour scenarios completed on a fresh Home Assistant")
+
+
 def check_logs() -> None:
     """Fail for MoLight errors, warnings, or tracebacks in all HA logs."""
     paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
@@ -4332,7 +4347,7 @@ def main() -> None:
     commands = {
         "primary": run_primary,
         "browser-prepare": run_browser_prepare,
-        "fast-physical": run_fast_physical_scenarios,
+        "scenarios": run_scenarios,
         "false-detection-prepare": run_false_detection_prepare,
         "false-detection-verify": run_false_detection_verify,
         "restart": run_container_restart_verification,

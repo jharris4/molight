@@ -21,7 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run the live acceptance suite
-        run: npm run test:e2e
+        run: npm run test:e2e:core
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
+
+  scenarios:
+    name: Behaviour scenarios (HA current)
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run the self-contained behaviour scenarios
+        run: npm run test:e2e:scenarios
         env:
           MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.8.0
 
@@ -52,7 +64,7 @@ jobs:
           retention-days: 7
 
   compatibility:
-    name: Live E2E (${{ matrix.label }})
+    name: Live E2E (${{ matrix.label }}, ${{ matrix.suite }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -60,6 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        suite: [core, scenarios]
         include:
           - label: HA floor
             image: ghcr.io/home-assistant/home-assistant:2026.1.0
@@ -74,8 +87,8 @@ jobs:
             experimental: true
     steps:
       - uses: actions/checkout@v5
-      - name: Run the live acceptance suite
-        run: npm run test:e2e
+      - name: Run the ${{ matrix.suite }} suite
+        run: npm run test:e2e:${{ matrix.suite }}
         env:
           MOLIGHT_E2E_HA_IMAGE: ${{ matrix.image }}
 

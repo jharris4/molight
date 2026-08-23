@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Run the restart-chain suite and the behaviour scenarios concurrently.
+set -Eeuo pipefail
+
+cd "$(dirname "$0")/.."
+
+prefix() {
+    while IFS= read -r line; do printf '[%s] %s\n' "$1" "$line"; done
+}
+
+bash scripts/e2e 2>&1 | prefix core &
+core=$!
+bash scripts/e2e-scenarios 2>&1 | prefix scenarios &
+scenarios=$!
+
+status=0
+wait "$core" || status=1
+wait "$scenarios" || status=1
+if [ "$status" -eq 0 ]; then
+    echo "MoLight E2E suites passed."
+fi
+exit "$status"
