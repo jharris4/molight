@@ -146,6 +146,39 @@ async def test_wall_switch_on_after_our_off_is_physical(
 
 
 @pytest.mark.asyncio
+async def test_wall_switch_off_while_our_on_settles_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An `off` while our turn-on still settles contradicts it: a human did it."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=40)  # partial echo, settling
+
+    await _write(hass, "off", contexts[-1])
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_dim_away_from_target_while_settling_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A brightness moving away from the commanded target is a human dim."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_on", brightness=200)
+
+    await _write(hass, "on", contexts[-1], brightness=100)  # away from 200
+
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+    assert _attrs(hass)["brightness"] == 100
+
+
+@pytest.mark.asyncio
 async def test_dim_after_echo_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
