@@ -36,6 +36,7 @@ VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
 RAW_TIMER_MOTION = "binary_sensor.e2e_raw_occupancy"
 VIRTUAL_TIMER_OCCUPANCY = "binary_sensor.e2e_timer_occupancy"
 VIRTUAL_ILLUMINANCE = "binary_sensor.e2e_illuminance"
+COLD_ILLUMINANCE = "binary_sensor.e2e_cold_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
 VIRTUAL_LIGHT = "light.e2e_scheduled"
@@ -488,19 +489,77 @@ def create_virtual_occupancy(
     )
 
 
-def create_virtual_illuminance(client: HomeAssistantClient) -> str:
+def create_virtual_illuminance(
+    client: HomeAssistantClient,
+    name: str = "E2E Illuminance",
+    entity_id: str = "e2e_illuminance",
+) -> str:
     """Create a MoLight illuminance threshold wrapping the simulated lux sensor."""
     return create_entry(
         client,
         "illuminance",
         {
-            "name": "E2E Illuminance",
+            "name": name,
             "illuminance_sensor": RAW_ILLUMINANCE,
             "illuminance_threshold": 10,
             "illuminance_hysteresis": 1,
-            "advanced": {"entity_id": "e2e_illuminance"},
+            "advanced": {"entity_id": entity_id},
         },
-        "Illuminance",
+        name,
+    )
+
+
+def run_cold_illuminance_scenario(client: HomeAssistantClient) -> None:
+    """A new illuminance sensor stays unavailable until its source reports.
+
+    The first reading is judged against the bare threshold; only later ones
+    use the hysteresis band.
+    """
+    client.set_available(RAW_ILLUMINANCE, False)
+    client.wait_state(
+        RAW_ILLUMINANCE, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    entry_id = create_virtual_illuminance(
+        client, "E2E Cold Illuminance", "e2e_cold_illuminance"
+    )
+    assert_entry_loaded(client, entry_id)
+    assert_state_stays(
+        client,
+        COLD_ILLUMINANCE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable before its source has ever reported",
+    )
+    client.set_state(RAW_ILLUMINANCE, 10)  # inside the band, at the bare threshold
+    client.set_available(RAW_ILLUMINANCE, True)
+    client.wait_state(
+        COLD_ILLUMINANCE,
+        lambda state: state["state"] == "on",
+        "bright: the first reading is judged against the bare threshold",
+    )
+    client.set_state(RAW_ILLUMINANCE, 9.5)
+    assert_state_stays(
+        client,
+        COLD_ILLUMINANCE,
+        lambda state: state["state"] == "on",
+        "bright inside the hysteresis band",
+    )
+    client.set_state(RAW_ILLUMINANCE, 8.9)
+    client.wait_state(COLD_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
+    client.set_state(RAW_ILLUMINANCE, 10.5)
+    assert_state_stays(
+        client,
+        COLD_ILLUMINANCE,
+        lambda state: state["state"] == "off",
+        "dark inside the hysteresis band",
+    )
+    client.set_state(RAW_ILLUMINANCE, 11)
+    client.wait_state(COLD_ILLUMINANCE, lambda state: state["state"] == "on", "bright")
+    client.set_state(RAW_ILLUMINANCE, 5)
+    client.remove_entry(entry_id)
+    wait_entity_absent(client, COLD_ILLUMINANCE)
+    wait_entry_removed(client, entry_id, "Temporary cold illuminance")
+    checkpoint(
+        "illuminance sensor starts unavailable, first reading uses the bare threshold"
     )
 
 
@@ -2292,6 +2351,7 @@ def run_primary() -> None:
     client.wait_ready()
     client.authenticate()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    run_cold_illuminance_scenario(client)
 
     fixtures: dict[str, str] = {
         "schedule": create_virtual_schedule(client),
