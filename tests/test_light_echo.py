@@ -191,6 +191,67 @@ async def test_dim_during_warning_under_our_context_cancels_it(
     assert _attrs(hass)["last_brightness_change_physical"] is not None
 
 
+def _age_expectations(hass: HomeAssistant, seconds: float) -> None:
+    virtual = next(
+        entity
+        for entity in hass.data["entity_components"]["light"].entities
+        if entity.entity_id == VIRTUAL
+    )
+    for expectation in virtual._echo_expectations.values():
+        expectation.issued -= seconds
+
+
+@pytest.mark.asyncio
+async def test_late_matching_reply_under_its_own_context_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A slow bulb's full reply, well past HA's context reuse, is still our echo."""
+    await _setup(hass, light_entry)
+    await _virtual(hass, "turn_on", brightness=153)
+    _age_expectations(hass, 10)
+
+    await _write(hass, "on", Context(), brightness=150)
+
+    assert _attrs(hass)["brightness"] == 153  # ours kept, not mirrored
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_on_physical"] is None
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_late_partial_reply_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Past the settle window only a full match counts: a brightness still short
+    of the target, even toward it and under our context, is a human dim."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_on", brightness=50)
+    _age_expectations(hass, 10)
+
+    await _write(hass, "on", contexts[-1], brightness=100)
+
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+    assert _attrs(hass)["brightness"] == 100
+
+
+@pytest.mark.asyncio
+async def test_foreign_write_while_settling_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """While the command settles, a write under another context is a real change
+    even if it would pass as an echo — HA reuses our context for the reply."""
+    await _setup(hass, light_entry)
+    await _virtual(hass, "turn_on", brightness=153)
+
+    # Within echo tolerance of 153, so only the context tells it apart.
+    await _write(hass, "on", Context(), brightness=150)
+
+    assert _attrs(hass)["brightness"] == 150
+
+
 @pytest.mark.asyncio
 async def test_stale_expectation_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
@@ -199,14 +260,8 @@ async def test_stale_expectation_is_physical(
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
-    # The member never echoes; age the expectation past the settle window.
-    virtual = next(
-        entity
-        for entity in hass.data["entity_components"]["light"].entities
-        if entity.entity_id == VIRTUAL
-    )
-    for expectation in virtual._echo_expectations.values():
-        expectation.issued -= 60
+    # The member never echoes; age the expectation past the late window.
+    _age_expectations(hass, 60)
 
     await _write(hass, "on", contexts[-1], brightness=151)
 

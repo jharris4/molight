@@ -388,11 +388,14 @@ async def async_setup_entry(
         async_add_entities([entity])
 
 
-# Home Assistant keeps our service-call context on a member for 5 s, so a human
-# change in that window arrives under our own context. A member write is only
-# our echo if it is consistent with what we asked for, allowing for bulbs that
-# reply late, in two parts, in fade steps, quantised, or in another color mode.
-ECHO_SETTLE_SECONDS = 3.0
+# A member write is our echo only if it is consistent with what we asked for,
+# allowing for bulbs that reply in two parts, in fade steps, quantised, or in
+# another color mode while the command settles, and for slow bulbs whose full
+# reply arrives much later; a contradiction is human activity at any age.
+# Context alone cannot tell: Home Assistant reuses our service-call context on
+# a member for 5 s, and a slow bulb's genuine reply arrives under its own.
+ECHO_SETTLE_SECONDS = 3.0  # partial replies (power first, fade steps) count
+ECHO_LATE_SECONDS = 30.0  # only a reply matching the command still counts
 ECHO_BRIGHTNESS_TOLERANCE = 5
 ECHO_HUE_TOLERANCE = 10.0
 ECHO_SATURATION_TOLERANCE = 10.0
@@ -463,8 +466,14 @@ class _EchoExpectation:
     transition: float
     issued: float
 
-    def judge(self, old_state: State | None, new_state: State) -> str:
-        """Return "match", "pending" (echo still arriving), or "contradiction"."""
+    def judge(
+        self, old_state: State | None, new_state: State, *, settling: bool
+    ) -> str:
+        """Return "match", "pending" (echo still arriving), or "contradiction".
+
+        While the command is settling a partial reply is "pending"; after that
+        only a full match is still our echo.
+        """
         attrs = new_state.attributes
         powered = new_state.state == "on"
         if not self.on:
@@ -499,7 +508,9 @@ class _EchoExpectation:
             if was_on and new_color != _state_color(old_state):
                 return "contradiction"
             settled = False
-        return "match" if settled else "pending"
+        if settled:
+            return "match"
+        return "pending" if settling else "contradiction"
 
 
 class VirtualLight(LightEntity, RestoreEntity):
@@ -596,8 +607,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False
         self._timer_unsub: CALLBACK_TYPE | None = None
-        # Context ids of our own light service calls, used to tell self-caused
-        # state echoes apart from genuinely external changes.
+        # Context ids of our own light service calls: while a command settles,
+        # only a write under one of them can be its echo.
         self._self_context_ids: deque[str] = deque(maxlen=16)
         # What each member should echo for our latest command (see judge()).
         self._echo_expectations: dict[str, _EchoExpectation] = {}
@@ -1255,8 +1266,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             # re-derive on every member event, before the echo check — our own
             # service calls still surface a member's first real state.
             self._update_capabilities()
-            if event.context.id in self._self_context_ids and self._is_own_echo(
-                entity_id, old_state, new_state
+            if self._is_own_echo(
+                entity_id,
+                old_state,
+                new_state,
+                own_context=event.context.id in self._self_context_ids,
             ):
                 return  # echo of our own service call; call sites manage state
             if same_state:
@@ -1609,22 +1623,33 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._echo_expectations[entity_id] = expectation
 
     def _is_own_echo(
-        self, entity_id: str, old_state: State | None, new_state: State
+        self,
+        entity_id: str,
+        old_state: State | None,
+        new_state: State,
+        *,
+        own_context: bool,
     ) -> bool:
-        """Judge a member write made under our context against our command.
+        """Judge a member write against our latest command to it.
 
-        Only a write consistent with what we asked for is our echo; a stale,
-        missing, or contradicted expectation means a real change arrived under
-        a context Home Assistant was still reusing for that member.
+        While the command settles, only a write under our own context that is
+        consistent with what we asked for is its echo (Home Assistant reuses
+        that context for the member's reply). Later, a slow bulb's reply
+        arrives under its own context, so a write fully matching the command
+        still counts; anything else — stale, missing, contradicted — is a real
+        change.
         """
         expectation = self._echo_expectations.get(entity_id)
         if expectation is None:
             return False
         age = self.hass.loop.time() - expectation.issued
-        if age > ECHO_SETTLE_SECONDS + expectation.transition:
+        if age > ECHO_LATE_SECONDS + expectation.transition:
             self._echo_expectations.pop(entity_id, None)
             return False
-        verdict = expectation.judge(old_state, new_state)
+        settling = age <= ECHO_SETTLE_SECONDS + expectation.transition
+        if settling and not own_context:
+            return False
+        verdict = expectation.judge(old_state, new_state, settling=settling)
         if verdict != "pending":
             self._echo_expectations.pop(entity_id, None)
         return verdict != "contradiction"

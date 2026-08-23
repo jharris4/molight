@@ -601,7 +601,7 @@ artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` pins that directory.
 
 ## Design notes
 
-- MoLight tells its own commands' echoes from physical changes by comparing each real light's report with what it asked for, not by Home Assistant's context alone. HA reuses a command's context on the target light for five seconds, so a wall switch or dimmer used in that window would otherwise look like MoLight's own echo; a report that contradicts the command is treated as human activity, while late, two-part, stepwise, quantised, or colour-converted replies are still recognised as echoes.
+- MoLight tells its own commands' echoes from physical changes by comparing each real light's report with what it asked for, not by Home Assistant's context alone. HA reuses a command's context on the target light for five seconds, so a wall switch or dimmer used in that window would otherwise look like MoLight's own echo; a report that contradicts the command is treated as human activity, while two-part, stepwise, quantised, or colour-converted replies are still recognised as echoes while the command settles, and a slow bulb's full reply is recognised up to 30 s later under any context.
 - Each virtual entity is its own config entry, so they can be created, edited, and removed independently. A Virtual Remote is mostly wiring between button event entities and target lights — its only entity is the diagnostic Last Action sensor.
 - A virtual entity must exist before another can reference it (sensors before the lights that use them).
 - Removing an entry strips references to its entities from the entries that survive it — a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open.

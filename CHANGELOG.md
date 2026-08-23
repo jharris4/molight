@@ -96,7 +96,10 @@ longer needs a custom repository.
   light — turning it back on right after an automatic off, dimming it early in a
   warning — is no longer ignored as the echo of MoLight's own command. Home Assistant
   reuses a command's context on that light for five seconds, so MoLight now compares
-  each report against what it asked for instead of trusting the context alone.
+  each report against what it asked for instead of trusting the context alone. The
+  converse holds for slow bulbs: a report that fully matches the command up to 30 s
+  later is still recognised as its echo rather than read as activity that extends
+  the countdown, whatever context it arrives under.
 - Combined occupancy no longer holds forever when its last `on` constituent
   drops out of the state machine; it clears, advancing `latest_occupied_time` to
   the dropout moment so dependent lights run a normal countdown.
