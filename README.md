@@ -459,6 +459,13 @@ checks that the worktree is clean, `main` contains `develop`, both branches
 match their live `origin` refs, the version moves forward, and the tag does not
 already exist locally or on GitHub.
 
+```bash
+git commit -am 'release 1.x.0'
+git push
+git tag v1.x.0
+git push origin v1.x.0
+```
+
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
 validates that the tag, manifest and changelog versions agree, runs the live
 upgrade suite from the preceding release tag alongside every other live E2E
