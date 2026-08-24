@@ -198,7 +198,7 @@ Source-backed schedules preserve their effective state and window marker across 
 
 Controls N real lights with an occupancy-aware state machine.
 
-The form groups everything but the timeout into collapsible sections — *Sensors & triggers* (expanded), *Turn-on & turn-off behavior*, *Off warning sequence*, and *Advanced* (collapsed):
+The form keeps the name, the lights, and the timeout at the top level and groups everything else into collapsible sections — *Sensors & triggers* (expanded), *Turn-on & turn-off behavior*, *Off warning sequence*, and *Advanced* (collapsed):
 
 | Config | Description |
 |---|---|
@@ -534,11 +534,12 @@ it is mounted only into the disposable acceptance environment and is never
 part of a MoLight release.
 
 ```bash
-npm run test:e2e              # every lane below, concurrently
+npm run test:e2e              # core, restarts, and scenario shards a/b/c, concurrently
 npm run test:e2e:core         # the sequential restart chain
 npm run test:e2e:restarts     # independent restart scenarios on their own fixtures
-npm run test:e2e:scenarios-a  # behaviour scenario shards a, b, c (one fresh HA each)
-npm run test:e2e:upgrade
+npm run test:e2e:scenarios-a  # behaviour scenario shard a (b and c likewise; one fresh HA each)
+npm run test:e2e:browser      # browser smoke tests (not part of test:e2e)
+npm run test:e2e:upgrade      # previous-release upgrade suite (not part of test:e2e)
 ```
 
 The suite performs automated onboarding, creates and edits MoLight entries

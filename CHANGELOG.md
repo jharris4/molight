@@ -165,7 +165,7 @@ longer needs a custom repository.
 - Bulk discovery — create many virtual lights in one pass, with an optional name
   prefix and suffix.
 - Bulk assignment — attach one sensor to several existing virtual lights at once.
-- Entity ID overrides in the config and options flows.
+- Entity ID overrides in the config flow's create steps.
 - Apache-2.0 license, required by HACS.
 
 ### Fixed
@@ -185,11 +185,12 @@ Initial release.
 - **Virtual Combined Occupancy Sensor** — merges several occupancy sensors with
   distinct trigger and maintain roles.
 - **Virtual Illuminance Sensor** — turns a lux reading into a steady bright/dark
-  signal, with hysteresis and a gate-only mode.
+  signal, with hysteresis.
 - **Virtual Schedule Sensor** — a reusable schedule signal from a fixed-time
-  and/or sun-based window, with sun offsets and follow-vs-gate behaviour.
+  and/or sun-based window, with sun offsets.
 - **Virtual Light** — controls N real lights from an occupancy-, illuminance- and
-  schedule-aware state machine, with virtual brightness controls, an optional
+  schedule-aware state machine (including the illuminance control-vs-gate and
+  schedule follow-vs-gate modes), with virtual brightness controls, an optional
   maintain-occupancy sensor, and a companion Auto-off switch for holding
   automatic turn-offs.
 - State restored across Home Assistant restarts throughout, including timestamps,
