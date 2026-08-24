@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.helpers import entity_registry as er
@@ -176,3 +177,20 @@ async def test_auto_off_switch_state_survives_reload(hass: HomeAssistant) -> Non
     assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is False
     light = hass.states.get("light.reload_light")
     assert light.attributes["auto_off_held"] is True
+
+
+@pytest.mark.asyncio
+async def test_failed_platform_unload_keeps_entry_data(hass: HomeAssistant) -> None:
+    """A failed platform unload leaves the entry's shared data in place."""
+    entry = make_light_entry(name="Hall", lights=["light.real_1"])
+    await setup_entries(hass, entry)
+    assert entry.entry_id in hass.data[DOMAIN]
+
+    with patch.object(
+        hass.config_entries,
+        "async_unload_platforms",
+        AsyncMock(return_value=False),
+    ):
+        assert not await hass.config_entries.async_unload(entry.entry_id)
+
+    assert entry.entry_id in hass.data[DOMAIN]

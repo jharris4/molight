@@ -1601,3 +1601,30 @@ async def test_combined_restore_ignores_corrupt_false_count(
     state = hass.states.get("binary_sensor.combined_occupancy")
     assert state is not None
     assert state.attributes["false_detection_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_combined_ignores_attribute_only_constituent_update(
+    hass: HomeAssistant,
+) -> None:
+    """An attribute-only write on a constituent cannot change the combined state."""
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.m1"],
+        },
+    )
+    hass.states.async_set("binary_sensor.m1", "on")
+    combined.add_to_hass(hass)
+    await hass.config_entries.async_setup(combined.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m1", "on", {"battery": 42})
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.combined")
+    assert state.state == "on"
+    assert state.attributes["last_clear_false_detection"] is False

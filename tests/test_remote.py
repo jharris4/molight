@@ -902,3 +902,41 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
     # The original on-binding was cleared by the edit, not merged back in.
     assert CONF_ON_BUTTONS_SINGLE not in cfg
     assert remote.title == "Renamed Remote"
+
+
+@pytest.mark.asyncio
+async def test_unbound_click_is_ignored(hass: HomeAssistant) -> None:
+    """A recognised click with no binding fires nothing — no call, no action."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    await setup_entries(hass, remote)
+    _seed(hass, "event.pico_on", LUTRON_EVENT_TYPES)
+    calls = _record_service_calls(hass)
+
+    # A double click on a button bound only for single clicks.
+    _fire(hass, "event.pico_on", "multi_tap", LUTRON_EVENT_TYPES)
+    await settle(hass)
+
+    assert [c for c in calls if c["domain"] == "light"] == []
+    assert hass.states.get("sensor.test_remote_last_action").state == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_remote_options_reject_missing_targets(hass: HomeAssistant) -> None:
+    """Clearing the target lights re-renders the options form with the error."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    await setup_entries(hass, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: [],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "remote"
+    assert result["errors"] == {CONF_TARGET_LIGHTS: "target_lights_required"}
