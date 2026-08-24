@@ -164,9 +164,9 @@ Attributes: `latest_occupied_time` (max across all constituents), `last_clear_fa
 |---|---|
 | **Source sensor** | Any real `sensor` with `device_class: illuminance` |
 | **Threshold (lx)** | Default `10`. The lux level at which the sensor reports `on` |
-| **Hysteresis (lx)** | `0` disables (the default). Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold |
+| **Hysteresis (lx)** | `0` disables (the default). Becomes bright at `threshold + hysteresis`, dark below `threshold − hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold. Must be smaller than the threshold — the form rejects a band whose dark edge would sit below `0 lx`, which no sensor can ever report, latching the state bright forever |
 
-An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts. Until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness; consumers treat that as "not bright".
+An unavailable or unparsable source holds the last known value — a lux sensor dropping out must not read as "it got dark". The state also survives restarts. Until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness; consumers treat that as "not bright". The first-ever reading is judged against the bare threshold rather than the hysteresis band, since there is no held state yet for the band to preserve.
 
 Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity carries `device_class: light`, so HA's UI shows it as "Light detected" / "No light".
 
@@ -246,6 +246,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | `warning_active` | Whether an effect/warn warning sequence is currently running; a restart mid-warning uses it to undo the interrupted warning and restore the pre-warning brightness and color |
 | `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
+| `active_settings` / `active_settings_schedule` / `schedule_end_off_pending` | Virtual Scheduled Light only: which settings profile is live, the schedule it was derived from, and whether an end-boundary off is waiting on an auto-off hold to release (see [Virtual Scheduled Light](#virtual-scheduled-light)) |
 
 #### State machine
 
@@ -607,6 +608,6 @@ artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` pins that directory.
 - A virtual entity must exist before another can reference it (sensors before the lights that use them).
 - Removing an entry strips references to its entities from the entries that survive it — a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open.
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy entity (including through a combined sensor), and raising an occupancy sensor's timeout checks every light that depends on it.
-- Settings no chosen light could apply are rejected at the form rather than stored and silently ignored: a fade when none of the lights support transitions, a color temperature or a color when none can show one, a brightness when none of them dim. One capable light is enough — mixed groups are the point — and a light that hasn't reported its capabilities yet is never taken as proof, so the check can't block on incomplete information.
+- Settings no chosen light could apply are rejected at the form rather than stored and silently ignored: a fade when none of the lights support transitions, a color temperature or a color when none can show one, a brightness when none of them dim (an effect brightness of `0` is exempt — a blink fully off is sent as a plain turn-off, which every light can do). One capable light is enough — mixed groups are the point — and a light that hasn't reported its capabilities yet is never taken as proof, so the check can't block on incomplete information.
 - Reference graphs stay sane by construction: an occupancy sensor can't wrap another MoLight occupancy entity, a combined sensor can't reference itself or form a cycle through other combined sensors, and a constituent can't be both a trigger and a maintain sensor.
 - Once an entry's options have been edited, the options fully replace the original data (so cleared optional fields stay cleared).
