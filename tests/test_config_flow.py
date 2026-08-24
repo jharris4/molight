@@ -5797,3 +5797,227 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     }
     assert "binary_sensor.hall_motion" in wrapped
     assert "binary_sensor.porch_pir" not in wrapped
+
+
+# ---------------------------------------------------------------------------
+# Validation error paths: re-rendered forms, foreign entities, eligibility
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_schedule_source_explicit_entity_id_conflict_errors(
+    hass: HomeAssistant,
+) -> None:
+    """A taken explicit id re-renders the source-schedule form with the error."""
+    hass.states.async_set("binary_sensor.taken", "off")
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "taken"},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "schedule_source"
+    assert result["errors"] == {"base": "entity_id_conflict"}
+
+
+@pytest.mark.asyncio
+async def test_light_selection_step_reports_entity_id_taken_meanwhile(
+    hass: HomeAssistant,
+) -> None:
+    """An id taken while the selection step was open errors on that step."""
+    hass.states.async_set(
+        "select.wled_preset", "Warm White", {"options": ["Warm White"]}
+    )
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "racer"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+
+    # Another flow claims the id while this form is open.
+    hass.states.async_set("light.racer", "on")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Warm White"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light_selection"
+    assert result["errors"] == {"base": "entity_id_conflict"}
+
+
+@pytest.mark.asyncio
+async def test_light_selection_step_rejects_blank_option(
+    hass: HomeAssistant,
+) -> None:
+    """A whitespace-only option is incomplete, not silently stored."""
+    hass.states.async_set(
+        "select.wled_preset", "Warm White", {"options": ["Warm White"]}
+    )
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "   "}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "turn_on_selection_incomplete"}
+
+
+@pytest.mark.asyncio
+async def test_options_light_selection_invalid_option_errors(
+    hass: HomeAssistant,
+) -> None:
+    """The options flow's selection step re-renders on a rejected option."""
+    hass.states.async_set(
+        "select.wled_preset", "Warm White", {"options": ["Warm White"]}
+    )
+    light = _light_entry("WLED", "wled")
+    await setup_entries(hass, light)
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Missing"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light_selection"
+    assert result["errors"] == {"base": "turn_on_selection_invalid_option"}
+
+
+@pytest.mark.asyncio
+async def test_convert_to_scheduled_requires_a_schedule(
+    hass: HomeAssistant,
+) -> None:
+    """A light with gate modes but no schedule entity is not convertible."""
+    light = _light_entry("Hall", "hall", schedule_mode=SCHEDULE_MODE_GATE)
+    await setup_entries(hass, light)
+
+    result = await _reach_conversion(hass, "convert_to_scheduled")
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_gated_lights"
+
+
+@pytest.mark.asyncio
+async def test_options_light_rejects_foreign_schedule_entity(
+    hass: HomeAssistant,
+) -> None:
+    """A registered binary sensor from another integration is not a schedule."""
+    foreign = MockConfigEntry(domain="test")
+    foreign.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "binary_sensor",
+        "test",
+        "foreign-sched",
+        suggested_object_id="foreign_sched",
+        config_entry=foreign,
+    )
+    light = _light_entry("Hall", "hall")
+    await setup_entries(hass, light)
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_SENSORS: {CONF_SCHEDULE_ENTITY: "binary_sensor.foreign_sched"},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+
+
+@pytest.mark.asyncio
+async def test_combined_options_tolerate_foreign_constituents(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Cycle detection skips constituents it cannot resolve to MoLight entries.
+
+    A stale form can submit a registered foreign sensor or a state-only one;
+    neither can form a cycle, and neither may crash or block the edit.
+    """
+    foreign = MockConfigEntry(domain="test")
+    foreign.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "binary_sensor",
+        "test",
+        "foreign-occ",
+        suggested_object_id="foreign_occ",
+        config_entry=foreign,
+    )
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+        },
+    )
+    await setup_entries(hass, occupancy_entry, combined)
+
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: [
+                "binary_sensor.foreign_occ",
+                "binary_sensor.never_registered",
+            ],
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert combined.options[CONF_MAINTAIN_SENSORS] == [
+        "binary_sensor.foreign_occ",
+        "binary_sensor.never_registered",
+    ]
