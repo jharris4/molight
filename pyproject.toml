@@ -5,6 +5,17 @@ markers = [
     "regular_virtual_light_only: behavior requires a regular Virtual Light's own schedule mode",
 ]
 
+# CI runs `pytest --cov` (plain `pytest` stays fast for local loops); these
+# settings make that one flag measure branch coverage of the integration and
+# fail below the floor, so coverage erosion turns the build red instead of
+# accumulating silently.
+[tool.coverage.run]
+source = ["custom_components/molight"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 98
+
 [tool.ruff]
 # The floor's interpreter (HA 2026.1 needs 3.13), so 3.14-only syntax is caught.
 target-version = "py313"

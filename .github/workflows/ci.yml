@@ -63,4 +63,4 @@ jobs:
             echo "::error::hacs.json declares $declared but this leg installs $installed — update the pin above or hacs.json"
             exit 1
           fi
-      - run: pytest
+      - run: pytest --cov
