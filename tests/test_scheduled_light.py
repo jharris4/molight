@@ -2272,3 +2272,44 @@ async def test_warn_undoes_effect_recolor_across_keep_boundary(
     state = hass.states.get(VIRTUAL)
     assert state.attributes["molight_state"] == STATE_WARN
     assert state.attributes["hs_color"] == (120.0, 50.0)
+
+
+@pytest.mark.asyncio
+async def test_profile_switch_preserves_illuminance_cache_through_outage(
+    hass: HomeAssistant,
+) -> None:
+    """A boundary crossed during an illuminance outage keeps the cached level.
+
+    Recomputing from the unavailable sensor would forget "bright", and its
+    recovery to the same reading would then replay as a fresh bright edge,
+    forcing an on light off in control mode.
+    """
+    illuminance = "binary_sensor.shared_illuminance"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(illuminance, "on")  # bright
+    profile = {
+        CONF_LIGHT_TIMEOUT: 60,
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+    }
+    entry = make_scheduled_light_entry(outside=dict(profile), inside=dict(profile))
+    await setup_entries(hass, entry)
+
+    # Bright never blocks a manual on.
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    hass.states.async_set(illuminance, "unavailable")
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "on")  # cross the boundary mid-outage
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    # Recovery to the same "bright" is a replay, not a fresh bright edge.
+    hass.states.async_set(illuminance, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE

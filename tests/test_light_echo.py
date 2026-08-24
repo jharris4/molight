@@ -545,3 +545,36 @@ async def test_stale_expectation_is_physical(
 
     # Treated as a real change: the member's value is mirrored, not ours kept.
     assert _attrs(hass)["brightness"] == 151
+
+
+@pytest.mark.asyncio
+async def test_desaturation_while_settling_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A saturation far from both the command and the old color is human."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[240, 80],
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[240, 10],  # same hue, drained saturation
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is not None
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 10)
