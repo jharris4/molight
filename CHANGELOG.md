@@ -13,19 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The effect and warn warning stages accept a **white color temperature** as
-  their color, not just an RGB color — so temperature-only bulbs get a
-  pre-off color cue too.
+- The effect and warn stages accept a **white color temperature** as their
+  color, not just an RGB color, so temperature-only bulbs can have a pre-off
+  color cue too.
 
 ### Fixed
 
-- A configured color can now be un-set. Every color pair (auto-on, effect,
-  warn, and the remote presets) gained a **color mode** dropdown whose
-  **None** choice clears a previously set color — the color selectors
-  themselves can't be blanked once they hold a value, which used to trap a
-  form whose lights couldn't show the accidentally chosen color. The dropdown
-  also picks which of the pair applies, replacing the "not both" errors for
-  anyone using it.
+- A configured color can now be un-set: each RGB color / color temperature
+  pair (auto-on, effect, warn, and the remote presets) gained a **color
+  mode** dropdown whose **None** choice clears it. Previously a color that
+  the chosen lights couldn't show could leave the form impossible to save.
+  The dropdown also chooses which of the pair applies, replacing the
+  "not both" errors.
 
 ## [1.6.0] - 2026-08-23
 
