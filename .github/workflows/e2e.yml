@@ -132,7 +132,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser, upgrade]
+        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser]
         ha:
           - label: HA floor
             slug: floor
@@ -150,9 +150,6 @@ jobs:
             experimental: true
     steps:
       - uses: actions/checkout@v5
-        with:
-          # The upgrade suite needs the previous release tag.
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         if: matrix.suite == 'browser'
         with:

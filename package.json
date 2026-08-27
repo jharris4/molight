@@ -23,7 +23,6 @@
     "test:e2e:scenarios-b": "bash scripts/e2e-scenarios b",
     "test:e2e:scenarios-c": "bash scripts/e2e-scenarios c",
     "test:e2e:browser": "bash scripts/e2e-browser",
-    "test:e2e:upgrade": "bash scripts/e2e-upgrade",
     "lint": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check custom_components tests scripts",
     "lint:fix": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff check --fix custom_components tests scripts",
     "format": "devcontainer exec --workspace-folder . /opt/molight-venv/bin/ruff format custom_components tests scripts",

@@ -472,10 +472,9 @@ git push origin v1.x.0
 ```
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
-validates that the tag, manifest and changelog versions agree, runs the live
-upgrade suite from the preceding release tag alongside every other live E2E
-suite, then puts the release notes extracted from the changelog in its job
-summary. It does **not** create the GitHub Release. After the workflow
+validates that the tag, manifest and changelog versions agree, runs every
+live E2E suite, then puts the release notes extracted from the changelog in
+its job summary. It does **not** create the GitHub Release. After the workflow
 succeeds:
 
 1. Open its job summary and copy the generated release notes.
@@ -552,7 +551,6 @@ npm run test:e2e:core         # the sequential restart chain
 npm run test:e2e:restarts     # independent restart scenarios on their own fixtures
 npm run test:e2e:scenarios-a  # behaviour scenario shard a (b and c likewise; one fresh HA each)
 npm run test:e2e:browser      # browser smoke tests (not part of test:e2e)
-npm run test:e2e:upgrade      # previous-release upgrade suite (not part of test:e2e)
 ```
 
 The suite performs automated onboarding, creates and edits MoLight entries
@@ -579,14 +577,6 @@ Virtual Remote scenario exercises single/double event bindings, edits them to
 brightness/toggle actions, checks Last Action diagnostics across restarts, and
 confirms removing its target leaves the surviving remote inert.
 
-The upgrade suite checks out the latest Git tag's integration into a temporary
-directory, creates and edits a representative set of entries with that release,
-then restarts the same Home Assistant configuration with the working-tree
-integration. It verifies that all config-entry IDs and entity IDs survive, the
-stored sensor gating, door, remote, and light behavior still works, and the
-upgraded light can make a scheduled/regular conversion round trip. Set
-`MOLIGHT_E2E_PREVIOUS_TAG` to select another compatible source tag.
-
 The default image is pinned to the Home Assistant release used by the current
 test dependencies. Override it to exercise another release:
 
@@ -606,10 +596,9 @@ disposable test account, so remove it after debugging.
 
 CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
-every suite — API lanes, the browser smoke tests, and the previous-release
-upgrade suite — on a minimum-supported/current matrix plus an advisory
-floating `stable` canary. Release tags run every suite, including the upgrade
-suite from the preceding tag, before the release guard passes. Every CI job
+every suite — API lanes and the browser smoke tests — on a
+minimum-supported/current matrix plus an advisory floating `stable` canary.
+Release tags run every suite before the release guard passes. Every CI job
 uploads the retained run directory (HA config and Compose logs) as a workflow
 artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` pins that directory.
 

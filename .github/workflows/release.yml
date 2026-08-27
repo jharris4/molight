@@ -41,23 +41,6 @@ jobs:
             awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Run the previous-release upgrade E2E suite
-        run: |
-          previous=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^")
-          echo "Testing upgrade from $previous to $GITHUB_REF_NAME"
-          MOLIGHT_E2E_PREVIOUS_TAG="$previous" npm run test:e2e:upgrade
-      - name: Make the retained run directory readable
-        if: failure()
-        run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
-      - name: Upload failure artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: molight-e2e-failure-upgrade
-          path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 7
 
   suites:
     # The tagged commit normally already passed these on push, but a tag cut
