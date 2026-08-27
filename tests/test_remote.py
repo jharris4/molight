@@ -22,6 +22,11 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
+from custom_components.molight.config_flow import (
+    COLOR_MODE_NONE,
+    COLOR_MODE_TEMP,
+    CONF_PRESET_1_COLOR_MODE,
+)
 from custom_components.molight.const import (
     CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE,
     CONF_BRIGHTNESS_UP_BUTTONS_SINGLE,
@@ -55,6 +60,7 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import settle, setup_entries
+from tests.test_config_flow import _suggested_values
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -902,6 +908,80 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
     # The original on-binding was cleared by the edit, not merged back in.
     assert CONF_ON_BUTTONS_SINGLE not in cfg
     assert remote.title == "Renamed Remote"
+
+
+@pytest.mark.asyncio
+async def test_remote_flow_color_mode_picks_one_of_a_pair(
+    hass: HomeAssistant,
+) -> None:
+    """A submitted preset color mode resolves a temp+rgb double submission
+    instead of the preset_color_conflict error."""
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    result = await _start_remote_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Closet Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 15,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_PRESET_1: {
+                CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],
+                CONF_PRESET_1_COLOR_MODE: COLOR_MODE_TEMP,
+                CONF_PRESET_1_COLOR_TEMP: 2700,
+                CONF_PRESET_1_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_PRESET_1_COLOR_TEMP] == 2700
+    assert CONF_PRESET_1_RGB_COLOR not in data
+    assert CONF_PRESET_1_COLOR_MODE not in data
+
+
+@pytest.mark.asyncio
+async def test_remote_options_clears_a_set_preset_color(
+    hass: HomeAssistant,
+) -> None:
+    """The "None" color mode removes a stored preset color, which the bare
+    color selectors can't clear; the dropdown itself prefills from the store."""
+    remote = _remote_entry(
+        **{
+            CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],
+            CONF_PRESET_1_BRIGHTNESS: 60,
+            CONF_PRESET_1_COLOR_TEMP: 2700,
+        }
+    )
+    await setup_entries(hass, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    suggested = _suggested_values(result["data_schema"])
+    assert (
+        suggested[REMOTE_ACTION_PRESET_1][CONF_PRESET_1_COLOR_MODE] == COLOR_MODE_TEMP
+    )
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_PRESET_1: {
+                CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],
+                CONF_PRESET_1_BRIGHTNESS: 60,
+                CONF_PRESET_1_COLOR_MODE: COLOR_MODE_NONE,
+                CONF_PRESET_1_COLOR_TEMP: 2700,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+
+    cfg = molight_config(remote)
+    assert CONF_PRESET_1_COLOR_TEMP not in cfg
+    assert cfg[CONF_PRESET_1_BRIGHTNESS] == 60
 
 
 @pytest.mark.asyncio

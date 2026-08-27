@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The effect and warn warning stages accept a **white color temperature** as
+  their color, not just an RGB color — so temperature-only bulbs get a
+  pre-off color cue too.
+
+### Fixed
+
+- A configured color can now be un-set. Every color pair (auto-on, effect,
+  warn, and the remote presets) gained a **color mode** dropdown whose
+  **None** choice clears a previously set color — the color selectors
+  themselves can't be blanked once they hold a value, which used to trap a
+  form whose lights couldn't show the accidentally chosen color. The dropdown
+  also picks which of the pair applies, replacing the "not both" errors for
+  anyone using it.
+
 ## [1.6.0] - 2026-08-23
 
 A release focused on scheduling: the new **Virtual Scheduled Light** switches

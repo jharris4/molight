@@ -19,6 +19,12 @@ from homeassistant.helpers import (
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.config_flow import (
+    COLOR_MODE_NONE,
+    COLOR_MODE_RGB,
+    COLOR_MODE_TEMP,
+    CONF_AUTO_ON_COLOR_MODE,
+    CONF_EFFECT_COLOR_MODE,
+    CONF_WARN_COLOR_MODE,
     SECTION_ADVANCED,
     SECTION_BEHAVIOR,
     SECTION_SENSORS,
@@ -48,6 +54,7 @@ from custom_components.molight.const import (
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_COLOR_TEMP,
     CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -87,6 +94,7 @@ from custom_components.molight.const import (
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_COLOR_TEMP,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
@@ -2119,7 +2127,7 @@ async def test_light_flow_stores_colors(hass: HomeAssistant) -> None:
             SECTION_WARNING: {
                 CONF_EFFECT_TIMEOUT: 10,
                 CONF_EFFECT_BRIGHTNESS: 50,
-                CONF_EFFECT_RGB_COLOR: [0, 0, 255],
+                CONF_EFFECT_COLOR_TEMP: 2200,
                 CONF_WARN_TIMEOUT: 20,
                 CONF_WARN_RGB_COLOR: [255, 0, 0],
             },
@@ -2128,15 +2136,190 @@ async def test_light_flow_stores_colors(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     data = result["data"]
     assert data[CONF_AUTO_ON_COLOR_TEMP] == 3000
-    assert data[CONF_EFFECT_RGB_COLOR] == [0, 0, 255]
+    assert data[CONF_EFFECT_COLOR_TEMP] == 2200
     assert data[CONF_WARN_RGB_COLOR] == [255, 0, 0]
 
 
+def _colored_light_entry() -> MockConfigEntry:
+    """A Virtual Light entry with a color stored in every color pair."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_AUTO_ON_COLOR_TEMP: 3000,
+            CONF_EFFECT_TIMEOUT: 10,
+            CONF_EFFECT_BRIGHTNESS: 50,
+            CONF_EFFECT_RGB_COLOR: [0, 0, 255],
+            CONF_WARN_TIMEOUT: 20,
+            CONF_WARN_RGB_COLOR: [255, 0, 0],
+        },
+    )
+
+
 @pytest.mark.asyncio
-async def test_light_flow_rejects_auto_on_color_conflict(
+async def test_light_options_clears_set_colors(hass: HomeAssistant) -> None:
+    """The "None" color mode removes colors that were already set — the bare
+    color selectors can't be cleared once they have a value."""
+    entry = _colored_light_entry()
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {CONF_AUTO_ON_COLOR_MODE: COLOR_MODE_NONE},
+            SECTION_WARNING: {
+                CONF_EFFECT_COLOR_MODE: COLOR_MODE_NONE,
+                CONF_WARN_COLOR_MODE: COLOR_MODE_NONE,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    for key in (
+        CONF_AUTO_ON_COLOR_TEMP,
+        CONF_AUTO_ON_RGB_COLOR,
+        CONF_EFFECT_COLOR_TEMP,
+        CONF_EFFECT_RGB_COLOR,
+        CONF_WARN_COLOR_TEMP,
+        CONF_WARN_RGB_COLOR,
+        CONF_AUTO_ON_COLOR_MODE,
+        CONF_EFFECT_COLOR_MODE,
+        CONF_WARN_COLOR_MODE,
+    ):
+        assert key not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_light_options_prefills_the_set_color_modes(
     hass: HomeAssistant,
 ) -> None:
-    """A turn-on can only carry one color: temp and rgb together are rejected."""
+    """Each color-mode dropdown suggests whichever of its pair is stored."""
+    entry = _colored_light_entry()
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    suggested = _suggested_values(result["data_schema"])
+    behavior = suggested[SECTION_BEHAVIOR]
+    assert behavior[CONF_AUTO_ON_COLOR_MODE] == COLOR_MODE_TEMP
+    assert behavior[CONF_AUTO_ON_COLOR_TEMP] == 3000
+    warning = suggested[SECTION_WARNING]
+    assert warning[CONF_EFFECT_COLOR_MODE] == COLOR_MODE_RGB
+    assert warning[CONF_WARN_COLOR_MODE] == COLOR_MODE_RGB
+
+
+@pytest.mark.asyncio
+async def test_light_options_leaves_unset_color_modes_blank(
+    hass: HomeAssistant,
+) -> None:
+    """A pair with no stored color suggests no mode: a prefilled "none" would
+    silently discard a color set beside the untouched dropdown."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    suggested = _suggested_values(result["data_schema"])
+    assert CONF_AUTO_ON_COLOR_MODE not in suggested.get(SECTION_BEHAVIOR, {})
+    assert CONF_EFFECT_COLOR_MODE not in suggested.get(SECTION_WARNING, {})
+    assert CONF_WARN_COLOR_MODE not in suggested.get(SECTION_WARNING, {})
+
+
+@pytest.mark.asyncio
+async def test_light_options_color_mode_picks_one_of_a_pair(
+    hass: HomeAssistant,
+) -> None:
+    """A submitted mode keeps only the color it names — the other half of the
+    pair (a stale prefill, or a fresh but unselected swatch) is dropped."""
+    entry = _colored_light_entry()
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_BEHAVIOR: {
+                CONF_AUTO_ON_COLOR_MODE: COLOR_MODE_RGB,
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                CONF_AUTO_ON_RGB_COLOR: [0, 255, 0],
+            },
+            SECTION_WARNING: {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_BRIGHTNESS: 50,
+                CONF_EFFECT_COLOR_MODE: COLOR_MODE_TEMP,
+                CONF_EFFECT_COLOR_TEMP: 2200,
+                CONF_EFFECT_RGB_COLOR: [0, 0, 255],
+                CONF_WARN_TIMEOUT: 20,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_AUTO_ON_RGB_COLOR] == [0, 255, 0]
+    assert CONF_AUTO_ON_COLOR_TEMP not in data
+    assert data[CONF_EFFECT_COLOR_TEMP] == 2200
+    assert CONF_EFFECT_RGB_COLOR not in data
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("behavior_section", "warning_section", "expected_error"),
+    [
+        (
+            {
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                CONF_AUTO_ON_RGB_COLOR: [255, 0, 0],
+            },
+            {},
+            "auto_on_color_conflict",
+        ),
+        (
+            {},
+            {
+                CONF_EFFECT_TIMEOUT: 10,
+                CONF_EFFECT_BRIGHTNESS: 50,
+                CONF_EFFECT_COLOR_TEMP: 2200,
+                CONF_EFFECT_RGB_COLOR: [255, 0, 0],
+            },
+            "effect_color_conflict",
+        ),
+        (
+            {},
+            {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_COLOR_TEMP: 2200,
+                CONF_WARN_RGB_COLOR: [255, 0, 0],
+            },
+            "warn_color_conflict",
+        ),
+    ],
+    ids=["auto_on", "effect", "warn"],
+)
+async def test_light_flow_rejects_color_conflicts(
+    hass: HomeAssistant,
+    behavior_section: dict,
+    warning_section: dict,
+    expected_error: str,
+) -> None:
+    """A turn-on can only carry one color: with no mode dropdown submitted to
+    arbitrate, a temp and rgb together are rejected."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -2148,14 +2331,12 @@ async def test_light_flow_rejects_auto_on_color_conflict(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {
-                CONF_AUTO_ON_COLOR_TEMP: 3000,
-                CONF_AUTO_ON_RGB_COLOR: [255, 0, 0],
-            },
+            SECTION_BEHAVIOR: behavior_section,
+            SECTION_WARNING: warning_section,
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "auto_on_color_conflict"}
+    assert result["errors"] == {"base": expected_error}
 
 
 @pytest.mark.asyncio
@@ -5376,6 +5557,35 @@ async def test_light_flow_rejects_color_temp_no_light_can_show(
     _modes(hass, WHITE, ["brightness"])
     result = await _submit_light_create_colors(
         hass, [WHITE], {CONF_AUTO_ON_COLOR_TEMP: 2700}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "color_temp_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_light_flow_rejects_stage_color_temp_no_light_can_show(
+    hass: HomeAssistant,
+) -> None:
+    """The stage color temperatures face the same capability check as the
+    auto-on one."""
+    _modes(hass, WHITE, ["brightness"])
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Color Light",
+            CONF_LIGHTS: [WHITE],
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_WARNING: {
+                CONF_WARN_TIMEOUT: 20,
+                CONF_WARN_COLOR_TEMP: 2200,
+            },
+        },
     )
 
     assert result["type"] == FlowResultType.FORM

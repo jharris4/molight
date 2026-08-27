@@ -5039,8 +5039,44 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
     )
     client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    # Clear the colour through the options form's colour-mode dropdown: the
+    # mode wins over the still-prefilled swatch value beside it.
+    result = client.start_flow(options_entry_id=entry_id)
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Auto Color",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {
+                "auto_on_brightness": 60,
+                "auto_on_color_mode": "none",
+                "auto_on_rgb_color": [255, 0, 255],
+            },
+        },
+        options=True,
+    )
+    if result.get("type") != "create_entry":
+        raise AssertionError(f"Clearing the auto-on colour failed: {result}")
+    checkpoint("auto-on colour cleared through the options colour mode")
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and not has_color_command(command_data(state))
+        ),
+        "on at the auto-on brightness with the cleared colour no longer sent",
+    )
+    set_timer_motion(client, False)
+    client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     remove_entry_and_entity(client, entry_id, AUTO_COLOR_LIGHT)
-    print("PASS: auto-on colour applied to automatic turn-ons only")
+    print("PASS: auto-on colour applied to automatic turn-ons only, then cleared")
 
 
 def set_dusk_lux(client: HomeAssistantClient, bright: bool) -> None:

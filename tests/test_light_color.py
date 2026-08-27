@@ -394,6 +394,43 @@ async def test_plain_warn_stage_undoes_effect_recolor(
     assert tuple(_state(hass).attributes["hs_color"]) == (100.0, 100.0)
 
 
+@pytest.mark.asyncio
+async def test_stage_color_temps_sent_as_kelvin(hass: HomeAssistant, freezer) -> None:
+    """The effect and warn stages take a color temperature instead of an rgb
+    color — the temp-only-bulb warning cue."""
+    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            effect_timeout=10,
+            effect_brightness=50,
+            effect_color_temp=2200,
+            warn_timeout=10,
+            warn_color_temp=6500,
+        ),
+    )
+
+    await _turn_on_virtual(hass, brightness=200)
+
+    calls = _record_service_calls(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+    data = _real_on_calls(calls)[-1]["service_data"]
+    assert data["color_temp_kelvin"] == 2200
+
+    calls.clear()
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_WARN
+    data = _real_on_calls(calls)[-1]["service_data"]
+    assert data["color_temp_kelvin"] == 6500
+
+
 # ---------------------------------------------------------------------------
 # Restart restore
 # ---------------------------------------------------------------------------

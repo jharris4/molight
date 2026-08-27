@@ -47,6 +47,7 @@ from .const import (
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_COLOR_TEMP,
     CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -87,6 +88,7 @@ from .const import (
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_COLOR_TEMP,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
@@ -122,6 +124,8 @@ from .const import (
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
+    REMOTE_ACTION_PRESET_1,
+    REMOTE_ACTION_PRESET_2,
     REMOTE_PRESET_VALUE_KEYS,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
@@ -196,6 +200,46 @@ _COLOR_TEMP_SELECTOR = selector.ColorTempSelector(
 )
 _RGB_COLOR_SELECTOR = selector.ColorRGBSelector()
 
+# Every optional color is stored as one of two mutually exclusive keys — a
+# color temperature or an [r, g, b] — set through a pair of swatch selectors.
+# The frontend offers no way to clear a bare color selector once it has a
+# value, so each pair gets a companion "color mode" dropdown: it is form-only
+# (never stored), prefilled from whichever key is set, and on submit keeps
+# only the key it selects — "none" keeps neither, which is the only way to
+# un-set a color. Left blank (new forms, programmatic submissions) it keeps
+# the color fields exactly as submitted.
+COLOR_MODE_NONE = "none"
+COLOR_MODE_TEMP = "color_temp"
+COLOR_MODE_RGB = "rgb_color"
+_COLOR_MODE_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[COLOR_MODE_NONE, COLOR_MODE_TEMP, COLOR_MODE_RGB],
+        mode=selector.SelectSelectorMode.DROPDOWN,
+        translation_key="color_mode",
+    )
+)
+
+CONF_AUTO_ON_COLOR_MODE = "auto_on_color_mode"
+CONF_EFFECT_COLOR_MODE = "effect_color_mode"
+CONF_WARN_COLOR_MODE = "warn_color_mode"
+CONF_PRESET_1_COLOR_MODE = "preset_1_color_mode"
+CONF_PRESET_2_COLOR_MODE = "preset_2_color_mode"
+
+# The (mode, color temp, rgb) key triplets of each form's color pairs.
+_LIGHT_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = (
+    (CONF_AUTO_ON_COLOR_MODE, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR),
+    (CONF_EFFECT_COLOR_MODE, CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR),
+    (CONF_WARN_COLOR_MODE, CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR),
+)
+_PRESET_COLOR_MODE_KEYS: dict[str, tuple[str, ...]] = {
+    REMOTE_ACTION_PRESET_1: (CONF_PRESET_1_COLOR_MODE,),
+    REMOTE_ACTION_PRESET_2: (CONF_PRESET_2_COLOR_MODE,),
+}
+_REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
+    (_PRESET_COLOR_MODE_KEYS[action][0], temp_key, rgb_key)
+    for action, (_, temp_key, rgb_key) in REMOTE_PRESET_VALUE_KEYS.items()
+)
+
 # ---------------------------------------------------------------------------
 # Collapsible form sections
 #
@@ -226,6 +270,7 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_BEHAVIOR: (
         CONF_FALSE_OFF_DELAY,
         CONF_AUTO_ON_BRIGHTNESS,
+        CONF_AUTO_ON_COLOR_MODE,
         CONF_AUTO_ON_COLOR_TEMP,
         CONF_AUTO_ON_RGB_COLOR,
         CONF_TURN_ON_SELECT_ENTITY,
@@ -237,10 +282,14 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_WARNING: (
         CONF_EFFECT_TIMEOUT,
         CONF_EFFECT_BRIGHTNESS,
+        CONF_EFFECT_COLOR_MODE,
+        CONF_EFFECT_COLOR_TEMP,
         CONF_EFFECT_RGB_COLOR,
         CONF_EFFECT_TRANSITION,
         CONF_WARN_TIMEOUT,
         CONF_WARN_BRIGHTNESS,
+        CONF_WARN_COLOR_MODE,
+        CONF_WARN_COLOR_TEMP,
         CONF_WARN_RGB_COLOR,
         CONF_WARN_TRANSITION,
     ),
@@ -276,7 +325,12 @@ _ENTITY_ID_SECTIONS: dict[str, tuple[str, ...]] = {
 # each holding its single-/double-click button pickers; presets add their
 # brightness/color value fields.
 _REMOTE_SECTIONS: dict[str, tuple[str, ...]] = {
-    action: (single_key, double_key, *REMOTE_PRESET_VALUE_KEYS.get(action, ()))
+    action: (
+        single_key,
+        double_key,
+        *REMOTE_PRESET_VALUE_KEYS.get(action, ()),
+        *_PRESET_COLOR_MODE_KEYS.get(action, ()),
+    )
     for single_key, double_key, action in REMOTE_ACTION_FIELDS
 }
 
@@ -301,6 +355,72 @@ def _nest_sections(
         if inner:
             nested[section_key] = inner
     return nested
+
+
+def _apply_color_modes(
+    flat: dict[str, Any], groups: tuple[tuple[str, str, str], ...]
+) -> dict[str, Any]:
+    """Resolve each submitted color-mode dropdown against its color pair.
+
+    A submitted mode keeps only the color key it names — "none" keeps
+    neither, clearing a previously stored color — and is dropped itself, so
+    only the color keys are ever stored. An absent mode (a new form's blank
+    dropdown, or a programmatic submission) leaves the pair as submitted;
+    the conflict validations then catch a double submission.
+    """
+    for mode_key, temp_key, rgb_key in groups:
+        mode = flat.pop(mode_key, None)
+        if mode is None:
+            continue
+        if mode != COLOR_MODE_TEMP:
+            flat.pop(temp_key, None)
+        if mode != COLOR_MODE_RGB:
+            flat.pop(rgb_key, None)
+    return flat
+
+
+def _derive_color_modes(
+    values: dict[str, Any], groups: tuple[tuple[str, str, str], ...]
+) -> dict[str, Any]:
+    """Prefill each color-mode dropdown from whichever of its pair is stored.
+
+    A group with no stored color gets no mode: prefilling "none" would make
+    the untouched dropdown authoritative and silently discard a color set
+    beside it, so the dropdown starts blank until a color exists.
+    """
+    derived = dict(values)
+    for mode_key, temp_key, rgb_key in groups:
+        if values.get(temp_key):
+            derived[mode_key] = COLOR_MODE_TEMP
+        elif values.get(rgb_key):
+            derived[mode_key] = COLOR_MODE_RGB
+    return derived
+
+
+def _flatten_light(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a Virtual Light submission into the stored flat shape."""
+    flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+    return _apply_color_modes(flat, _LIGHT_COLOR_GROUPS)
+
+
+def _nest_light(values: dict[str, Any]) -> dict[str, Any]:
+    """Nest stored Virtual Light values into the form shape for a prefill."""
+    return _nest_sections(
+        _derive_color_modes(values, _LIGHT_COLOR_GROUPS), _LIGHT_SECTIONS
+    )
+
+
+def _flatten_remote(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a Virtual Remote submission into the stored flat shape."""
+    flat = _flatten_sections(user_input, _REMOTE_SECTIONS)
+    return _apply_color_modes(flat, _REMOTE_COLOR_GROUPS)
+
+
+def _nest_remote(values: dict[str, Any]) -> dict[str, Any]:
+    """Nest stored Virtual Remote values into the form shape for a prefill."""
+    return _nest_sections(
+        _derive_color_modes(values, _REMOTE_COLOR_GROUPS), _REMOTE_SECTIONS
+    )
 
 
 def _entity_id_section() -> dict:
@@ -853,25 +973,28 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
 def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     """Check the optional color/brightness stage fields are coherent.
 
-    The auto-on color temp and rgb color are mutually exclusive (a turn-on
-    can only carry one color), an effect color needs a visible effect stage
-    (effect_brightness > 0 — a blink fully off has no color to show), and a
-    stage brightness/color on a disabled stage (timeout 0) is rejected rather
-    than silently ignored, mirroring the stage-fade rule. Reported as base
-    errors: the fields live inside collapsed sections, where the frontend
-    can't anchor a field error.
+    Each color pair is mutually exclusive (a turn-on can only carry one
+    color). A submitted color-mode dropdown enforces that by construction, so
+    the conflict errors only fire when the dropdown was left blank. An effect
+    color needs a visible effect stage (effect_brightness > 0 — a blink fully
+    off has no color to show), and a stage brightness/color on a disabled
+    stage (timeout 0) is rejected rather than silently ignored, mirroring the
+    stage-fade rule. Reported as base errors: the fields live inside
+    collapsed sections, where the frontend can't anchor a field error.
     """
-    if user_input.get(CONF_AUTO_ON_COLOR_TEMP) and user_input.get(
-        CONF_AUTO_ON_RGB_COLOR
+    for temp_key, rgb_key, error in (
+        (CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR, "auto_on_color_conflict"),
+        (CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR, "effect_color_conflict"),
+        (CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR, "warn_color_conflict"),
     ):
-        return {"base": "auto_on_color_conflict"}
-    if user_input.get(CONF_EFFECT_RGB_COLOR) and not int(
-        user_input.get(CONF_EFFECT_BRIGHTNESS) or 0
-    ):
+        if user_input.get(temp_key) and user_input.get(rgb_key):
+            return {"base": error}
+    effect_color = user_input.get(CONF_EFFECT_COLOR_TEMP) or user_input.get(
+        CONF_EFFECT_RGB_COLOR
+    )
+    if effect_color and not int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0):
         return {"base": "effect_color_requires_brightness"}
-    if user_input.get(CONF_EFFECT_RGB_COLOR) and not float(
-        user_input.get(CONF_EFFECT_TIMEOUT) or 0
-    ):
+    if effect_color and not float(user_input.get(CONF_EFFECT_TIMEOUT) or 0):
         return {"base": "effect_color_requires_timeout"}
     # 0 is the default and the blink-fully-off cue, so only a positive value
     # on a disabled stage is a mistake.
@@ -880,7 +1003,9 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     ):
         return {"base": "effect_brightness_requires_timeout"}
     if (
-        user_input.get(CONF_WARN_BRIGHTNESS) or user_input.get(CONF_WARN_RGB_COLOR)
+        user_input.get(CONF_WARN_BRIGHTNESS)
+        or user_input.get(CONF_WARN_COLOR_TEMP)
+        or user_input.get(CONF_WARN_RGB_COLOR)
     ) and not float(user_input.get(CONF_WARN_TIMEOUT) or 0):
         return {"base": "warn_values_require_timeout"}
     return {}
@@ -939,8 +1064,13 @@ def _validate_color_support(
     fade check: only a positive "none of them can" blocks, and a mixed group
     passes on the strength of one capable member, which is the documented case.
     """
+    temp_keys = (
+        CONF_AUTO_ON_COLOR_TEMP,
+        CONF_EFFECT_COLOR_TEMP,
+        CONF_WARN_COLOR_TEMP,
+    )
     if (
-        user_input.get(CONF_AUTO_ON_COLOR_TEMP)
+        any(user_input.get(key) for key in temp_keys)
         and lights_support_color_temp(hass, lights) is False
     ):
         return {"base": "color_temp_unsupported"}
@@ -1161,6 +1291,7 @@ def _light_option_fields(
                         )
                     ),
                     vol.Optional(CONF_AUTO_ON_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_AUTO_ON_COLOR_MODE): _COLOR_MODE_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_AUTO_ON_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_TURN_ON_SELECT_ENTITY): selector.EntitySelector(
@@ -1181,12 +1312,16 @@ def _light_option_fields(
                     vol.Required(
                         CONF_EFFECT_BRIGHTNESS, default=DEFAULT_EFFECT_BRIGHTNESS
                     ): _EFFECT_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_EFFECT_COLOR_MODE): _COLOR_MODE_SELECTOR,
+                    vol.Optional(CONF_EFFECT_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_EFFECT_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Required(
                         CONF_WARN_TIMEOUT, default=DEFAULT_WARN_TIMEOUT
                     ): _STAGE_TIMEOUT_SELECTOR,
                     vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_WARN_COLOR_MODE): _COLOR_MODE_SELECTOR,
+                    vol.Optional(CONF_WARN_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
                     vol.Optional(CONF_WARN_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_WARN_TRANSITION): _TRANSITION_SELECTOR,
                 }
@@ -1258,7 +1393,9 @@ def _remote_option_fields() -> dict:
         }
         if value_keys := REMOTE_PRESET_VALUE_KEYS.get(action):
             brightness_key, color_temp_key, rgb_key = value_keys
+            (mode_key,) = _PRESET_COLOR_MODE_KEYS[action]
             inner[vol.Optional(brightness_key)] = _AUTO_ON_BRIGHTNESS_SELECTOR
+            inner[vol.Optional(mode_key)] = _COLOR_MODE_SELECTOR
             inner[vol.Optional(color_temp_key)] = _COLOR_TEMP_SELECTOR
             inner[vol.Optional(rgb_key)] = _RGB_COLOR_SELECTOR
         fields[vol.Required(action)] = section(
@@ -1520,7 +1657,7 @@ class _ScheduledLightSettingsSteps:
         errors: dict[str, str] = {}
         previous = self._scheduled_light_previous(side)
         if user_input is not None:
-            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            flat = _flatten_light(user_input)
             errors = _validate_light_settings(
                 self.hass,
                 flat,
@@ -1541,7 +1678,7 @@ class _ScheduledLightSettingsSteps:
             step_id=_SCHEDULED_LIGHT_STEP_IDS[side],
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema(_light_option_fields(self.hass, with_schedule=False)),
-                user_input or _nest_sections(previous or {}, _LIGHT_SECTIONS),
+                user_input or _nest_light(previous or {}),
             ),
             errors=errors,
         )
@@ -2115,7 +2252,7 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
         placeholders: dict[str, str] = {}
         if user_input is not None:
-            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            flat = _flatten_light(user_input)
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
@@ -2954,7 +3091,7 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            flat = _flatten_light(user_input)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
@@ -3073,7 +3210,7 @@ class MoLightConfigFlow(
         """Choose the shared identity, targets and schedule."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            flat = _flatten_light(user_input)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             if not _schedule_entity_is_allowed(
@@ -3170,7 +3307,7 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _REMOTE_SECTIONS)
+            flat = _flatten_remote(user_input)
             errors = _validate_remote(self.hass, flat)
             if not errors:
                 # Drop empty pickers/values so unbound slots stay absent from
@@ -3548,7 +3685,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+            flat = _flatten_light(user_input)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
@@ -3600,7 +3737,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         return self.async_show_form(
             step_id="light",
             data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or _nest_sections(cfg, _LIGHT_SECTIONS)
+                schema, user_input or _nest_light(cfg)
             ),
             errors=errors,
         )
@@ -3711,7 +3848,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _REMOTE_SECTIONS)
+            flat = _flatten_remote(user_input)
             errors = _validate_remote(self.hass, flat)
             if not errors:
                 clean = {k: v for k, v in flat.items() if v not in (None, [])}
@@ -3728,7 +3865,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         return self.async_show_form(
             step_id="remote",
             data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or _nest_sections(cfg, _REMOTE_SECTIONS)
+                schema, user_input or _nest_remote(cfg)
             ),
             errors=errors,
         )

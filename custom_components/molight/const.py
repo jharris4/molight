@@ -214,13 +214,18 @@ DEFAULT_EFFECT_BRIGHTNESS = 0
 CONF_WARN_TIMEOUT = "warn_timeout"
 DEFAULT_WARN_TIMEOUT = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
-# Optional [r, g, b] colors for the warning stages — e.g. a red warn stage is
-# a much clearer "lights about to go off" cue than a dim. Color-capable
-# members show the color; brightness-only members just show the stage
-# brightness. effect_rgb_color requires effect_brightness > 0 (a blink fully
-# off has no color to show; enforced by the config/options flows). Any
-# re-trigger restores the pre-warning brightness AND color.
+# Optional colors for the warning stages — e.g. a red warn stage is a much
+# clearer "lights about to go off" cue than a dim. Like the auto-on color,
+# each stage takes a color temperature (Kelvin) OR an [r, g, b] color
+# (mutually exclusive keys, enforced by the config/options flows), so
+# temp-only bulbs get a warning cue too. Color-capable members show the
+# color; brightness-only members just show the stage brightness. An effect
+# color requires effect_brightness > 0 (a blink fully off has no color to
+# show; enforced by the config/options flows). Any re-trigger restores the
+# pre-warning brightness AND color.
+CONF_EFFECT_COLOR_TEMP = "effect_color_temp"
 CONF_EFFECT_RGB_COLOR = "effect_rgb_color"
+CONF_WARN_COLOR_TEMP = "warn_color_temp"
 CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # Optional fade times (seconds) sent as the transition of the service calls
 # the virtual light makes itself. Absent/0 = no transition attribute is sent

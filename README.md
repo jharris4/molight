@@ -206,8 +206,9 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | **Turn-off timeout (s)** | Default `300`. Must be >= the occupancy timeout of any referenced occupancy entity |
 | **False-detection off delay (s)** | Default `5`. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown. Lights turned on manually are never affected |
 | **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* — by occupancy, a door opening, illuminance going dark, or a schedule window. Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness |
-| **Auto-on color temperature (K)** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Mutually exclusive with the auto-on color |
-| **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Mutually exclusive with the auto-on color temperature |
+| **Auto-on color mode** *(optional)* | Whether automatic turn-ons apply the color temperature below, the color below, or (**None**) neither. Only the selected field is used — and choosing **None** is how a previously set color is cleared, since the color fields themselves can't be blanked once set |
+| **Auto-on color temperature (K)** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color |
+| **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Manual and physical turn-ons keep their own color |
 | **Turn-on selection entity** *(optional)* | The target `select` entity to set immediately before MoLight turns the lights on — for example, the preset select exposed by WLED. Choosing it opens a second step where the fixed option is selected from the target's currently offered options |
 | **Option source entity** *(optional)* | An `input_select` or a different `select` whose current state supplies the target option at each off-to-on transition. The target itself is excluded. This lets Home Assistant automations, calendars, seasons, or any other logic decide the selection without duplicating that logic in MoLight |
 | **Fixed/fallback option** *(required when a target is selected)* | The option to apply when no source is configured, or when the source is missing, unavailable, unknown, or does not match an option offered by the target. It can represent a preset, theme, mood, mode, or any integration-specific choice |
@@ -215,10 +216,14 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | **Auto-off fade (s)** *(optional)* | Fade time for automatic turn-offs — timer expiry, bright forcing off, a window ending. A manual off is always immediate |
 | **Effect warning duration (s)** | `0` disables. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
 | **Effect brightness (%)** | Brightness during the effect stage. `0` blinks the real lights fully off — a distinct "about to turn off" flash |
+| **Effect color mode** *(optional)* | Like the auto-on color mode: picks the effect color temperature, the effect color, or **None** (which also clears a previously set effect color) |
+| **Effect color temperature (K)** *(optional)* | White color temperature during the effect stage, for members that support it — a warning cue for temp-only bulbs. Requires an effect brightness above `0` |
 | **Effect color** *(optional)* | RGB color during the effect stage, for members that can show it. Requires an effect brightness above `0` (a blink fully off has no color to show) |
 | **Effect fade (s)** *(optional)* | Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too) |
 | **Warning grace period (s)** | `0` disables. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
 | **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one) |
+| **Warning color mode** *(optional)* | Like the auto-on color mode: picks the warning color temperature, the warning color, or **None** (which also clears a previously set warning color) |
+| **Warning color temperature (K)** *(optional)* | White color temperature during the grace period, for members that support it. Blank keeps the color the lights already had |
 | **Warning color** *(optional)* | RGB color during the grace period — e.g. red as an unmissable "about to turn off" cue. Blank keeps the color the lights already had |
 | **Warning fade (s)** *(optional)* | Fade into the warning brightness. Must fit within the grace period |
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
@@ -287,7 +292,7 @@ By default the light turns off the instant its timer expires. Setting an **effec
 1. **Effect** — a brief cue for *effect warning duration* seconds: the real lights are driven to the *effect brightness* (`0` blinks them fully off). Skipped when its duration is `0`.
 2. **Warn** — a grace period of *warning grace period* seconds at the *warning brightness* (or the brightness the light already had, if blank), then the lights turn off. Skipped when its duration is `0`.
 
-Each stage can also show an optional **color** — a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
+Each stage can also show an optional **color** — a white color temperature *or* an RGB color, so temp-only bulbs get a cue too, and a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
 
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade, brightness, or color on a disabled stage is rejected rather than silently ignored).
 
@@ -400,7 +405,7 @@ Each entry creates one diagnostic **`<name> Last Action` sensor** — its state 
 | **Brightness step (%)** | Percent added/removed per brightness up/down click (default 10, range 1–50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off |
 | **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
-| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness**, and a **color temperature** *or* an **RGB color** (not both). Think of the Pico's favorite button |
+| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness**, and a **color temperature** *or* an **RGB color** — its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Think of the Pico's favorite button |
 
 Each button may appear in several actions, as long as no *(button, click)* pair is bound twice — e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
 

@@ -18,6 +18,7 @@ from custom_components.molight.const import (
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_COLOR_TEMP,
     CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -45,6 +46,7 @@ from custom_components.molight.const import (
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_COLOR_TEMP,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
@@ -135,9 +137,11 @@ def make_light_entry(
     auto_on_rgb_color: list[int] | None = None,
     effect_timeout: int | None = None,
     effect_brightness: int | None = None,
+    effect_color_temp: int | None = None,
     effect_rgb_color: list[int] | None = None,
     warn_timeout: int | None = None,
     warn_brightness: int | None = None,
+    warn_color_temp: int | None = None,
     warn_rgb_color: list[int] | None = None,
     auto_on_transition: float | None = None,
     auto_off_transition: float | None = None,
@@ -189,12 +193,16 @@ def make_light_entry(
         data[CONF_EFFECT_TIMEOUT] = effect_timeout
     if effect_brightness is not None:
         data[CONF_EFFECT_BRIGHTNESS] = effect_brightness
+    if effect_color_temp is not None:
+        data[CONF_EFFECT_COLOR_TEMP] = effect_color_temp
     if effect_rgb_color is not None:
         data[CONF_EFFECT_RGB_COLOR] = effect_rgb_color
     if warn_timeout is not None:
         data[CONF_WARN_TIMEOUT] = warn_timeout
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
+    if warn_color_temp is not None:
+        data[CONF_WARN_COLOR_TEMP] = warn_color_temp
     if warn_rgb_color is not None:
         data[CONF_WARN_RGB_COLOR] = warn_rgb_color
     if auto_on_transition is not None:

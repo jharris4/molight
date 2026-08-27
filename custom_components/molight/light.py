@@ -273,6 +273,7 @@ from .const import (
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_COLOR_TEMP,
     CONF_EFFECT_RGB_COLOR,
     CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
@@ -295,6 +296,7 @@ from .const import (
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_COLOR_TEMP,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
@@ -359,6 +361,17 @@ def _opt_transition(value: float | None) -> float | None:
 def _opt_rgb_color(value: list | None) -> dict | None:
     """Convert a configured [r, g, b] to turn-on service data; absent = None."""
     return {ATTR_RGB_COLOR: tuple(int(c) for c in value)} if value else None
+
+
+def _opt_color(cfg: dict[str, Any], temp_key: str, rgb_key: str) -> dict | None:
+    """Convert a stored color-pair to turn-on service data; absent = None.
+
+    The keys are mutually exclusive (enforced by the config/options flows);
+    the temp wins if both somehow appear, matching the remote presets.
+    """
+    if kelvin := cfg.get(temp_key):
+        return {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
+    return _opt_rgb_color(cfg.get(rgb_key))
 
 
 # Single-entity settings references a light subscribes to. A scheduled light
@@ -660,14 +673,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._auto_on_brightness = (
             round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
         )
-        # Optional color for automatic turn-ons, as turn-on service data
-        # (mutually exclusive keys, enforced by the config/options flows).
+        # Optional color for automatic turn-ons, as turn-on service data.
         # None leaves automatic turn-ons uncolored, like auto_on_brightness.
-        kelvin = cfg.get(CONF_AUTO_ON_COLOR_TEMP)
-        self._auto_on_color = (
-            {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
-            if kelvin
-            else _opt_rgb_color(cfg.get(CONF_AUTO_ON_RGB_COLOR))
+        self._auto_on_color = _opt_color(
+            cfg, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR
         )
         self._turn_on_select_entity = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
         self._turn_on_select_option = cfg.get(CONF_TURN_ON_SELECT_OPTION)
@@ -695,8 +704,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # the effect stage then only changes brightness, and the warn stage
         # keeps (or, after a colored effect stage, restores) the pre-warning
         # color.
-        self._effect_color = _opt_rgb_color(cfg.get(CONF_EFFECT_RGB_COLOR))
-        self._warn_color = _opt_rgb_color(cfg.get(CONF_WARN_RGB_COLOR))
+        self._effect_color = _opt_color(
+            cfg, CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR
+        )
+        self._warn_color = _opt_color(cfg, CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR)
         # Optional fade times (seconds) for the service calls this light makes
         # itself: automatic turn-ons/offs and the effect/warn stage changes.
         # None (absent or 0) sends no transition attribute. Manual/physical

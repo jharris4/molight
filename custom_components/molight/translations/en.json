@@ -276,6 +276,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -285,8 +286,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
@@ -298,20 +300,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -531,6 +541,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -540,8 +551,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
@@ -553,20 +565,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -648,6 +668,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -657,8 +678,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
@@ -670,20 +692,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -728,6 +758,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -737,8 +768,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
@@ -750,20 +782,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -874,6 +914,7 @@
               "preset_1_buttons_single": "Single-click buttons",
               "preset_1_buttons_double": "Double-click buttons",
               "preset_1_brightness": "Brightness",
+              "preset_1_color_mode": "Color mode",
               "preset_1_color_temp": "Color temperature",
               "preset_1_rgb_color": "Color"
             },
@@ -881,8 +922,9 @@
               "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
               "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
-              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
+              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
+              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
           },
           "preset_2": {
@@ -892,6 +934,7 @@
               "preset_2_buttons_single": "Single-click buttons",
               "preset_2_buttons_double": "Double-click buttons",
               "preset_2_brightness": "Brightness",
+              "preset_2_color_mode": "Color mode",
               "preset_2_color_temp": "Color temperature",
               "preset_2_rgb_color": "Color"
             },
@@ -899,8 +942,9 @@
               "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
               "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
-              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
+              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
+              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
           }
         }
@@ -932,18 +976,20 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0 — this sensor could never report dark.",
       "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
-      "color_temp_unsupported": "None of the selected lights support a white color temperature, so the auto-on color temperature would be ignored. Clear it, or include a light that supports color temperature.",
-      "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields, or include a light that supports color.",
+      "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
+      "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
       "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
       "transition_unsupported_pick": "{entity_id} does not support fading, and every discovered light gets its own entry with these settings. Clear the fade fields, or deselect it.",
-      "color_temp_unsupported_pick": "{entity_id} does not support a white color temperature, and every discovered light gets its own entry with these settings. Clear the auto-on color temperature, or deselect it.",
-      "color_unsupported_pick": "{entity_id} cannot show a color, and every discovered light gets its own entry with these settings. Clear the color fields, or deselect it.",
+      "color_temp_unsupported_pick": "{entity_id} does not support a white color temperature, and every discovered light gets its own entry with these settings. Clear the color temperature (set its color mode to None), or deselect it.",
+      "color_unsupported_pick": "{entity_id} cannot show a color, and every discovered light gets its own entry with these settings. Clear the color fields (set their color mode to None), or deselect it.",
       "brightness_unsupported_pick": "{entity_id} is not dimmable, and every discovered light gets its own entry with these settings. Clear the brightness setting, or deselect it. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
       "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here — each of their two settings profiles has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "no_lights_selected": "Select at least one light to convert.",
-      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both — or use the auto-on color mode to choose which applies.",
+      "effect_color_conflict": "Set either the effect color temperature or the effect color, not both — or use the effect color mode to choose which applies.",
+      "warn_color_conflict": "Set either the warning color temperature or the warning color, not both — or use the warning color mode to choose which applies.",
       "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
       "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
       "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
@@ -956,7 +1002,7 @@
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
-      "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
+      "preset_color_conflict": "Set either a preset's color temperature or its color, not both — or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "confirmation_required": "Confirm the conversion to continue."
     },
@@ -977,6 +1023,13 @@
       "options": {
         "regular": "Regular — turns lights on and off with occupancy",
         "maintain": "Maintain — only holds an already-on light on while occupied"
+      }
+    },
+    "color_mode": {
+      "options": {
+        "none": "None",
+        "color_temp": "Color temperature",
+        "rgb_color": "Color"
       }
     },
     "entity_type": {
@@ -1098,6 +1151,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -1107,8 +1161,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
@@ -1120,20 +1175,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -1178,6 +1241,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -1187,8 +1251,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
@@ -1200,20 +1265,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -1397,6 +1470,7 @@
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
+              "auto_on_color_mode": "Auto-on color mode",
               "auto_on_color_temp": "Auto-on color temperature",
               "auto_on_rgb_color": "Auto-on color",
               "turn_on_select_entity": "Turn-on selection entity",
@@ -1406,8 +1480,9 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color, not both.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color. Set either this or the auto-on color temperature, not both.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
@@ -1419,20 +1494,28 @@
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
+              "effect_color_mode": "Effect color mode",
+              "effect_color_temp": "Effect color temperature",
               "effect_rgb_color": "Effect color",
               "effect_transition": "Effect fade",
               "warn_timeout": "Warning grace period",
               "warn_brightness": "Warning brightness",
+              "warn_color_mode": "Warning color mode",
+              "warn_color_temp": "Warning color temperature",
               "warn_rgb_color": "Warning color",
               "warn_transition": "Warning fade"
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
@@ -1531,6 +1614,7 @@
               "preset_1_buttons_single": "Single-click buttons",
               "preset_1_buttons_double": "Double-click buttons",
               "preset_1_brightness": "Brightness",
+              "preset_1_color_mode": "Color mode",
               "preset_1_color_temp": "Color temperature",
               "preset_1_rgb_color": "Color"
             },
@@ -1538,8 +1622,9 @@
               "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
               "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
-              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
+              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
+              "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
           },
           "preset_2": {
@@ -1549,6 +1634,7 @@
               "preset_2_buttons_single": "Single-click buttons",
               "preset_2_buttons_double": "Double-click buttons",
               "preset_2_brightness": "Brightness",
+              "preset_2_color_mode": "Color mode",
               "preset_2_color_temp": "Color temperature",
               "preset_2_rgb_color": "Color"
             },
@@ -1556,8 +1642,9 @@
               "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
               "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it. Set either this or the color, not both.",
-              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it. Set either this or the color temperature, not both."
+              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
+              "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
           }
         }
@@ -1579,10 +1666,12 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0 — this sensor could never report dark.",
       "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
-      "color_temp_unsupported": "None of the selected lights support a white color temperature, so the auto-on color temperature would be ignored. Clear it, or include a light that supports color temperature.",
-      "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields, or include a light that supports color.",
+      "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
+      "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
       "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
-      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both.",
+      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both — or use the auto-on color mode to choose which applies.",
+      "effect_color_conflict": "Set either the effect color temperature or the effect color, not both — or use the effect color mode to choose which applies.",
+      "warn_color_conflict": "Set either the warning color temperature or the warning color, not both — or use the warning color mode to choose which applies.",
       "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
       "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
       "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
@@ -1595,7 +1684,7 @@
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
-      "preset_color_conflict": "Set either a preset's color temperature or its color, not both.",
+      "preset_color_conflict": "Set either a preset's color temperature or its color, not both — or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     }
   }
