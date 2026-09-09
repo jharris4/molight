@@ -11,6 +11,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
+from custom_components.molight.const import SCHEDULE_MODE_FOLLOW
 from tests.conftest import make_light_entry, settle, setup_entries
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
@@ -248,6 +249,42 @@ async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) ->
     await settle(hass)
 
     assert selected == []
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_reboot_reapplies_selection(hass: HomeAssistant) -> None:
+    """A member rebooting lit mid-window gets the selection applied again.
+
+    The strip booted into its own default preset; re-sending the window's
+    settings includes the selection even though the member is already on.
+    """
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("light.ambient", "off")
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched", schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set("light.ambient", "on")
+    await settle(hass)
+    assert selected == ["Cozy"]
+
+    hass.states.async_set("light.ambient", "unavailable")
+    await settle(hass)
+    hass.states.async_set("light.ambient", "on")
+    await settle(hass)
+
+    assert selected == ["Cozy", "Cozy"]
     assert hass.states.get("light.selection_light").state == "on"
 
 

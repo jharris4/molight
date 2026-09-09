@@ -1305,11 +1305,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if new_state.state == "on":
                     self._on_light_attrs_change(old_state, new_state)
                 return
+            member_recovered = old_state is None or old_state.state in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+            )
+            if member_recovered and self._reconcile_recovered_member():
+                return
             if (
-                (
-                    old_state is None
-                    or old_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
-                )
+                member_recovered
                 and new_state.state == "on"
                 and new_state.attributes.get("brightness") != 0
                 and self._machine_state != STATE_IDLE
@@ -1979,6 +1982,39 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
 
+    def _reconcile_recovered_member(self) -> bool:
+        """Make a member back from unavailable match a follow schedule.
+
+        A rebooted (or reloaded) member reports whatever it booted into, which
+        is not human activity: the schedule decides on/off and its settings
+        are re-sent. Returns False when there is no valid follow schedule to
+        follow, or a hold would suppress the off.
+        """
+        if self._schedule_mode != SCHEDULE_MODE_FOLLOW or not self._schedule_entity:
+            return False
+        sched = self.hass.states.get(self._schedule_entity)
+        if sched is None or sched.state not in ("on", "off"):
+            return False
+        if sched.state == "off":
+            if self._held and self._attr_is_on:
+                return False
+            if not self._all_lights_off():
+                self.hass.async_create_task(self._auto_lights_off())
+            if self._machine_state != STATE_IDLE:
+                self._go_idle()
+            return True
+        self._schedule_window_applied = sched.attributes.get("current_window_start")
+        self._machine_state = STATE_SCHEDULED
+        self._cancel_timer()
+        self._warning_active = False
+        self._pre_warn_brightness = None
+        self._pre_warn_color = None
+        # The member may already be on (booted lit): re-send the settings and
+        # the turn-on selection regardless.
+        self.hass.async_create_task(self._auto_lights_on(force_selection=True))
+        self.async_write_ha_state()
+        return True
+
     def _apply_window_start(self, marker: str | None) -> None:
         """Enter the SCHEDULED state and turn the lights on (follow mode)."""
         self._schedule_window_applied = marker
@@ -2571,7 +2607,9 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Real-light control
     # ------------------------------------------------------------------
 
-    def _auto_lights_on(self) -> Coroutine[Any, Any, None]:
+    def _auto_lights_on(
+        self, *, force_selection: bool = False
+    ) -> Coroutine[Any, Any, None]:
         """Turn the real lights on for an automatic trigger.
 
         Applies the configured auto-on brightness, color and transition.
@@ -2582,6 +2620,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             transition=self._auto_on_transition,
             color=self._auto_on_color,
             apply_turn_on_selection=True,
+            force_selection=force_selection,
         )
 
     def _auto_lights_off(self) -> Coroutine[Any, Any, None]:
@@ -2605,13 +2644,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         transition: float | None = None,
         color: dict | None = None,
         apply_turn_on_selection: bool = False,
+        force_selection: bool = False,
     ) -> None:
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
         context = Context()
         self._self_context_ids.append(context.id)
-        if on and was_off and apply_turn_on_selection:
+        if on and apply_turn_on_selection and (was_off or force_selection):
             await self._apply_turn_on_selection(context)
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:

@@ -13,6 +13,8 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -55,6 +57,27 @@ MARKER = "2026-07-02T21:00:00+00:00"
 
 def _state(hass: HomeAssistant):
     return hass.states.get(VIRTUAL)
+
+
+def _record_calls(hass: HomeAssistant) -> list[dict]:
+    calls: list[dict] = []
+
+    @callback
+    def _record(event) -> None:
+        calls.append(event.data)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    return calls
+
+
+def _real_calls(calls: list[dict], service: str) -> list[dict]:
+    return [
+        d["service_data"]
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == service
+        and REAL in d["service_data"].get("entity_id", [])
+    ]
 
 
 @pytest.mark.asyncio
@@ -603,3 +626,288 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
     hass.states.async_set(illum, "on")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
+
+
+# ---------------------------------------------------------------------------
+# Follow mode: a member back from unavailable is reconciled with the schedule
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("booted", ["off", "on"])
+async def test_follow_member_recovery_mid_window_reasserts_window(
+    hass: HomeAssistant, booted: str
+) -> None:
+    """A member rebooting mid-window is re-lit with the scheduled settings.
+
+    Whatever it boots into — dark, or lit at its own defaults — is not human
+    activity: the window still owns the lights, so the auto-on brightness is
+    re-sent and the machine stays SCHEDULED.
+    """
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            auto_on_brightness=40,  # 40% → 102 of 255
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 102})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, booted, {"brightness": 255} if booted == "on" else {})
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["brightness"] == 102
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [102]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_recovers_lit_outside_window_is_turned_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A member booting lit outside the window is turned straight off.
+
+    Regression: unavailable → on used to be read as a physical turn-on and ran
+    a full timer, so a strip that turns its LEDs on at boot lit the room until
+    the timeout (or someone) turned it off.
+    """
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert len(_real_calls(calls, "turn_off")) == 1
+    assert _real_calls(calls, "turn_on") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_recovers_dark_outside_window_sends_nothing(
+    hass: HomeAssistant,
+) -> None:
+    """A member booting dark outside the window already matches: no command."""
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    assert _state(hass).state == "off"
+    assert _real_calls(calls, "turn_on") == []
+    assert _real_calls(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_manual_on_outside_window_is_lost_on_reboot(
+    hass: HomeAssistant,
+) -> None:
+    """A manual turn-on outside the window does not survive a member reboot.
+
+    The reboot edge cannot be told apart from a boot-lit strip, so the
+    schedule wins; a manual turn-on while the member stays connected is an
+    ordinary off → on edge and is untouched.
+    """
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_manual_off_mid_window_is_lost_on_reboot(
+    hass: HomeAssistant,
+) -> None:
+    """A manual off mid-window does not survive a member reboot either.
+
+    Contrast test_schedule_blip_respects_manual_off: there the *schedule*
+    blipped and the member's off was observed directly, so it stands.
+    """
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_one_of_two_members_recovering_dark_relights_all(
+    hass: HomeAssistant,
+) -> None:
+    """One member of a group rebooting dark mid-window gets re-lit.
+
+    Previously nothing happened: the sibling still on meant the virtual light
+    never saw an off, and the dark member stayed dark until the next window.
+    """
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass,
+        make_light_entry(
+            lights=[REAL, REAL2], schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(REAL2, "on")
+    await settle(hass)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+    on_calls = _real_calls(calls, "turn_on")
+    assert len(on_calls) == 1
+    assert set(on_calls[0]["entity_id"]) == {REAL, REAL2}
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_recovery_with_schedule_unavailable_falls_through(
+    hass: HomeAssistant,
+) -> None:
+    """With no valid schedule to follow, a recovery keeps the old rules."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    hass.states.async_set(SCHED, "unavailable")
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_recovery_outside_window_respects_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A held light is not turned off by a member reboot outside the window."""
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            hold_entities=[HOLD],
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    assert _state(hass).state == "on"
+    assert _real_calls(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_gate_mode_member_recovery_is_unchanged(hass: HomeAssistant) -> None:
+    """Gate modes do not own the lights: a boot-lit member is adopted as before."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    )
+    await settle(hass)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE

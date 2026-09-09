@@ -311,7 +311,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 
 A schedule window has two edges: the **start**, when the schedule sensor goes `off → on` (22:00 for a 22:00–06:00 window), and the **end**, when it goes `on → off` (06:00). The **schedule mode** decides what each edge does and whether the window gates the sensors:
 
-- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm.
+- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm. A real light coming back from `unavailable` (a reboot, a power cut, an integration reload) is made to match the schedule: inside the window it is re-lit with the window's settings and turn-on selection, outside it is turned off — whatever it booted into is not treated as a manual change. Only while the light stays connected does a manual on or off stand.
 - **The three Gate modes** behave identically outside the window and at the start, and differ only at the end:
   - *Outside the window*, occupancy and the door cannot turn the light on. Manual control still works.
   - *At the start*, the gate lifts and presence that is already standing is re-evaluated: if the light is off and it is dark, occupancy already being `on` (or an `open_close` door already open) turns it on; if the light is already on, that presence is adopted as `OCCUPIED`. Nothing is turned off at the start. This is why a hallway light can come on at 22:00 with nobody walking in — its motion sensor was already on.
@@ -363,7 +363,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness and color.
-- Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
+- Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events (except a follow-mode real light, which is reconciled with its schedule instead). A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
 
 ### Virtual Scheduled Light
 

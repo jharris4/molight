@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A follow-mode real light coming back from `unavailable` is now made to
+  match its schedule instead of being read as a manual change: inside the
+  window it is re-lit with the window's brightness, color and turn-on
+  selection, outside the window it is turned off. Previously a strip that
+  turns its LEDs on at boot ran a full timer after a daytime power cut, and
+  one that boots dark stayed off for the rest of the night.
+
 ## [1.7.0] - 2026-08-27
 
 ### Added
