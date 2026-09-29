@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A follow-mode light whose schedule is `unavailable` when Home Assistant
+  finishes starting no longer treats that as the window ending. Previously,
+  when the schedule recovered inside the same window, the light turned back
+  on even if it had been turned off manually.
 - A follow-mode real light coming back from `unavailable` is now made to
   match its schedule instead of being read as a manual change: inside the
   window it is re-lit with the window's brightness, color and turn-on

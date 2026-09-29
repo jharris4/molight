@@ -1202,6 +1202,16 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self.async_write_ha_state()
             return True
 
+        if (
+            sched.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            and self._schedule_window_applied is not None
+        ):
+            # Not proof the window ended: keep it until a valid state recovers.
+            if self._attr_is_on:
+                self._machine_state = STATE_SCHEDULED
+            self.async_write_ha_state()
+            return True
+
         if self._schedule_window_applied is not None:
             if self._held and self._attr_is_on:
                 # Auto-off is held — keep the marker so releasing the hold
