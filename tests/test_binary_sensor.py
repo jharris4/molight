@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState, HomeAssistant, State
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
+from homeassistant.core import CoreState, HomeAssistant, State, callback
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -1025,6 +1025,194 @@ async def test_combined_holds_through_dropout_while_maintain_on(
     hass.states.async_set("binary_sensor.m2", "off")
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+def _room_states(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Record every state the entity takes from now on."""
+    seen: list[str] = []
+
+    @callback
+    def _record(event) -> None:
+        if event.data["entity_id"] == entity_id:
+            seen.append(event.data["new_state"].state)
+
+    hass.bus.async_listen(EVENT_STATE_CHANGED, _record)
+    return seen
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("holder", ["trigger", "maintain"])
+async def test_combined_holds_through_constituent_reload(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, holder: str
+) -> None:
+    """Reloading the constituent that holds occupancy leaves the room occupied."""
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    hass.states.async_set("binary_sensor.motion_2", "off")
+    maintain = _occupancy2_entry()
+    for entry in (occupancy_entry, maintain, _combined_entry()):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.motion_2", "on")
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    hass.states.async_set(
+        "binary_sensor.motion_1" if holder == "maintain" else "binary_sensor.motion_2",
+        "off",
+    )
+    await settle(hass)
+    before = hass.states.get("binary_sensor.combined_occupancy")
+    assert before.state == "on"
+
+    seen = _room_states(hass, "binary_sensor.combined_occupancy")
+    reloaded = maintain if holder == "maintain" else occupancy_entry
+    assert await hass.config_entries.async_reload(reloaded.entry_id)
+    await settle(hass)
+
+    after = hass.states.get("binary_sensor.combined_occupancy")
+    assert after.state == "on"
+    assert "off" not in seen
+    assert after.attributes == before.attributes
+
+    # The grace left no timer behind that could clear the room later.
+    async_fire_time_changed(hass, datetime.now(UTC) + timedelta(seconds=11))
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
+
+
+async def _unloaded_constituent(hass: HomeAssistant, entity_id: str) -> None:
+    """Leave the placeholder an unloaded entry writes for its entity."""
+    hass.states.async_set(entity_id, "unavailable", {"restored": True})
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entity_id", ["binary_sensor.m1", "binary_sensor.m2"])
+async def test_combined_clears_when_unloaded_constituent_stays_away(
+    hass: HomeAssistant, freezer, entity_id: str
+) -> None:
+    """An entry that is unloaded for good holds occupancy only for the grace."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m2", "on")
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    other = (
+        "binary_sensor.m2" if entity_id == "binary_sensor.m1" else "binary_sensor.m1"
+    )
+    hass.states.async_set(other, "off")
+    await settle(hass)
+
+    dropout = datetime.now(UTC)
+    await _unloaded_constituent(hass, entity_id)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    freezer.tick(timedelta(seconds=9))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    combined = hass.states.get("binary_sensor.seed_combined")
+    assert combined.state == "off"
+    assert combined.attributes["last_clear_false_detection"] is False
+    assert combined.attributes["latest_occupied_time"] == dropout.isoformat()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("after", ["off", "unavailable", "removed"])
+async def test_combined_reload_grace_ends_when_constituent_reports_gone(
+    hass: HomeAssistant, after: str
+) -> None:
+    """A clear, a real outage or a removal after the unload clears at once."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+
+    await _unloaded_constituent(hass, "binary_sensor.m1")
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    if after == "removed":
+        hass.states.async_remove("binary_sensor.m1")
+    else:
+        hass.states.async_set("binary_sensor.m1", after)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+    # The cancelled grace does not fire later.
+    seen = _room_states(hass, "binary_sensor.seed_combined")
+    async_fire_time_changed(hass, datetime.now(UTC) + timedelta(seconds=11))
+    await settle(hass)
+    assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_combined_reload_grace_survives_another_constituent_clearing(
+    hass: HomeAssistant,
+) -> None:
+    """A reloading maintain sensor still holds when the trigger clears."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m2", "on")
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+
+    await _unloaded_constituent(hass, "binary_sensor.m2")
+    hass.states.async_set("binary_sensor.m1", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_combined_unloaded_idle_constituent_gets_no_grace(
+    hass: HomeAssistant,
+) -> None:
+    """Only a constituent that was on is held: an idle one cannot keep the room."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+
+    await _unloaded_constituent(hass, "binary_sensor.m2")
+    hass.states.async_set("binary_sensor.m1", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_unload_during_reload_grace_drops_the_timer(
+    hass: HomeAssistant,
+) -> None:
+    """Unloading the combined sensor mid-grace leaves no timer to fire."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    await _unloaded_constituent(hass, "binary_sensor.m1")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, datetime.now(UTC) + timedelta(seconds=11))
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "unavailable"
 
 
 @pytest.mark.asyncio

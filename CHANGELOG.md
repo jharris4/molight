@@ -56,6 +56,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when its options are edited — no longer counts as someone entering the
   room. Previously a light turned off manually in an occupied room was
   turned back on.
+- Editing the options of a sensor that is part of a Virtual Combined
+  Occupancy Sensor no longer clears the combined sensor while that sensor is
+  the one holding the room occupied. Previously the reload ended occupancy,
+  so lights started their countdown in an occupied room, and a maintain
+  sensor could not start it again. A sensor that does not come back within
+  10 seconds still clears it.
 
 ## [1.7.0] - 2026-08-27
 

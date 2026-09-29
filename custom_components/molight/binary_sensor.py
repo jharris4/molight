@@ -100,6 +100,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long a constituent of a combined occupancy sensor may take to come back
+# from a reload of its entry before it counts as gone (seconds).
+_RELOAD_GRACE = 10
+
 
 def _real_state_change(event: Event[EventStateChangedData]) -> bool:
     """Return True when the event is an actual state transition.
@@ -414,6 +418,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._startup_done = True
         self._unreported_maintain: set[str] = set()
         self._unsub_started: CALLBACK_TYPE | None = None
+        # Constituents that were on when their entry unloaded, each with the
+        # timer that ends its grace: they count as on until they report again.
+        self._reloading: dict[str, CALLBACK_TYPE] = {}
 
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to all constituent sensors."""
@@ -477,11 +484,14 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._startup_done = True
 
     async def async_will_remove_from_hass(self) -> None:
-        """Drop the startup listener if HA has not finished starting yet."""
+        """Drop the startup listener and any reload grace timers."""
         await super().async_will_remove_from_hass()
         if self._unsub_started is not None:
             self._unsub_started()
             self._unsub_started = None
+        for cancel in self._reloading.values():
+            cancel()
+        self._reloading.clear()
 
     def _unreported(self, entity_id: str) -> bool:
         """Return True while an entity has no state or only a restored placeholder."""
@@ -493,11 +503,14 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     @callback
     def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
+        entity_id = event.data["entity_id"]
+        if cancel := self._reloading.pop(entity_id, None):
+            cancel()
         if not _real_state_change(event):
-            self._reevaluate_on_dropout(event)
+            self._hold_through_reload(event)
+            self._reevaluate_on_dropout(event, datetime.now(UTC))
             return
         new_state = event.data["new_state"]
-        entity_id = event.data["entity_id"]
         # A maintain sensor showing presence while startup is still under
         # way, on its first sighting after that, or with a start it did not
         # witness (a virtual sensor whose source loaded late reports
@@ -554,7 +567,37 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 
         self.async_write_ha_state()
 
-    def _reevaluate_on_dropout(self, event: Event[EventStateChangedData]) -> None:
+    def _hold_through_reload(self, event: Event[EventStateChangedData]) -> None:
+        """Keep counting a constituent as on while its entry reloads.
+
+        An unloaded entry leaves HA's restored placeholder, and a reload
+        brings the entity back moments later. A real outage or a removal
+        gets no grace, and an entry that stays unloaded only a short one.
+        """
+        entity_id = event.data["entity_id"]
+        old_state = event.data.get("old_state")
+        new_state = event.data.get("new_state")
+        if (
+            old_state is None
+            or old_state.state != "on"
+            or new_state is None
+            or not self._unreported(entity_id)
+        ):
+            return
+        dropout = datetime.now(UTC)
+
+        @callback
+        def _expired(_now: datetime) -> None:
+            del self._reloading[entity_id]
+            self._reevaluate_on_dropout(event, dropout)
+
+        self._reloading[entity_id] = async_call_later(
+            self.hass, _RELOAD_GRACE, _expired
+        )
+
+    def _reevaluate_on_dropout(
+        self, event: Event[EventStateChangedData], dropout: datetime
+    ) -> None:
         """Clear occupancy when the last constituent still on drops out.
 
         A constituent leaving the state machine (its entry unloaded, the
@@ -576,15 +619,17 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             return
         if self._any_on(self._trigger_sensors) or self._any_on(self._maintain_sensors):
             return
-        now = datetime.now(UTC)
-        if self._latest_occupied_time is None or now > self._latest_occupied_time:
-            self._latest_occupied_time = now
+        if self._latest_occupied_time is None or dropout > self._latest_occupied_time:
+            self._latest_occupied_time = dropout
         self._attr_is_on = False
         self._last_clear_false = False
         self.async_write_ha_state()
 
     def _any_on(self, sensors: list[str]) -> bool:
-        return any((s := self.hass.states.get(e)) and s.state == "on" for e in sensors)
+        return any(
+            e in self._reloading or ((s := self.hass.states.get(e)) and s.state == "on")
+            for e in sensors
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
