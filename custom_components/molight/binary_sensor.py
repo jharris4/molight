@@ -1,6 +1,6 @@
 """Virtual binary sensor platform for MoLight.
 
-Provides four sensor types, all created via the config flow:
+Provides five sensor types, all created via the config flow:
 
   VirtualOccupancySensor         — wraps one real sensor with a timeout;
                                    exposes latest_occupied_time = last_off - timeout
@@ -9,18 +9,26 @@ Provides four sensor types, all created via the config flow:
                                    is the max across all constituents
   VirtualIlluminanceSensor       — compares a real illuminance sensor to a threshold
   VirtualScheduleSensor          — evaluates time windows or mirrors a binary sensor
+  VirtualCombinedScheduleSensor  — combines schedules with any/all logic
 """
 
 from __future__ import annotations
 
 import contextlib
 import logging
+from bisect import bisect_right
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
     ENTITY_ID_FORMAT,
     BinarySensorEntity,
+)
+from homeassistant.config_entries import (
+    SIGNAL_CONFIG_ENTRY_CHANGED,
+    ConfigEntryChange,
+    ConfigEntryDisabler,
 )
 from homeassistant.const import (
     ATTR_RESTORED,
@@ -29,6 +37,8 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import CALLBACK_TYPE, CoreState, HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_point_in_time,
@@ -51,7 +61,9 @@ from .const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_DEFINITION,
+    CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
+    CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
@@ -60,21 +72,28 @@ from .const import (
     DEFAULT_ILLUMINANCE_HYSTERESIS,
     DEFAULT_ILLUMINANCE_THRESHOLD,
     DEFAULT_OCCUPANCY_TIMEOUT,
+    DEFAULT_SCHEDULE_OPERATOR,
+    DOMAIN,
     EDGE_COMBINE,
     EDGE_OFFSET,
     EDGE_SUN,
     EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
+    SCHEDULE_OPERATOR_ALL,
     SUN_EVENTS,
 )
 from .helpers import molight_config, suggested_entity_id
 
 if TYPE_CHECKING:
+    import asyncio
+    from collections.abc import Iterable
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, EventStateChangedData, State
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -131,6 +150,7 @@ async def async_setup_entry(
         ENTITY_TYPE_COMBINED_OCCUPANCY: VirtualCombinedOccupancySensor,
         ENTITY_TYPE_ILLUMINANCE: VirtualIlluminanceSensor,
         ENTITY_TYPE_SCHEDULE: VirtualScheduleSensor,
+        ENTITY_TYPE_COMBINED_SCHEDULE: VirtualCombinedScheduleSensor,
     }
 
     cls = entity_map.get(entity_type)
@@ -661,6 +681,84 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = True
 
 
+def _resolve_edge(
+    hass: HomeAssistant, edge: str | dict | None, day: date
+) -> datetime | None:
+    """Resolve an edge spec to a concrete datetime on the given day."""
+    if isinstance(edge, str):
+        edge = {EDGE_TIME: edge}
+    if not isinstance(edge, dict):
+        return None
+
+    fixed: datetime | None = None
+    if edge.get(EDGE_TIME):
+        with contextlib.suppress(ValueError):
+            fixed = datetime.combine(
+                day,
+                time.fromisoformat(edge[EDGE_TIME]),
+                tzinfo=dt_util.DEFAULT_TIME_ZONE,
+            )
+
+    sun: datetime | None = None
+    if edge.get(EDGE_SUN) in SUN_EVENTS:
+        # None on polar days when the event doesn't occur — the fixed
+        # time (if any) then stands alone.
+        sun = get_astral_event_date(hass, edge[EDGE_SUN], day)
+        if sun is not None:
+            with contextlib.suppress(ValueError, TypeError):
+                sun += timedelta(minutes=int(edge.get(EDGE_OFFSET, 0)))
+
+    candidates = [d for d in (fixed, sun) if d is not None]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    if edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST:
+        return max(candidates)
+    return min(candidates)
+
+
+def _resolve_window(
+    hass: HomeAssistant, window: dict, day: date
+) -> tuple[datetime, datetime] | None:
+    start = _resolve_edge(hass, window.get("start"), day)
+    if start is None:
+        return None
+    end = _resolve_edge(hass, window.get("end"), day)
+    if end is not None and end <= start:
+        # Overnight window — the end belongs to the next day.
+        end = _resolve_edge(hass, window.get("end"), day + timedelta(days=1))
+    if end is None:
+        return None
+    return (start, end)
+
+
+def _merged_window_intervals(
+    hass: HomeAssistant, windows: list[dict], now: datetime, day_offsets: Iterable[int]
+) -> list[tuple[datetime, datetime]]:
+    """Resolve windows on days around now and merge overlaps, oldest first."""
+    today = dt_util.as_local(now).date()
+    intervals = [
+        interval
+        for offset in day_offsets
+        for window in windows
+        if (interval := _resolve_window(hass, window, today + timedelta(days=offset)))
+        is not None
+    ]
+    merged: list[list[datetime]] = []
+    # Order and compare by real instant — same-tzinfo datetimes sort by
+    # wall clock (PEP 495), which misorders edges around a DST gap.
+    for start, end in sorted(
+        intervals, key=lambda iv: (iv[0].timestamp(), iv[1].timestamp())
+    ):
+        # Touching windows stay separate: a 00:00→00:00 window is one per day.
+        if merged and start.timestamp() < merged[-1][1].timestamp():
+            merged[-1][1] = max(merged[-1][1], end, key=lambda t: t.timestamp())
+        else:
+            merged.append([start, end])
+    return [(start, end) for start, end in merged]
+
+
 # ---------------------------------------------------------------------------
 # Virtual Schedule Binary Sensor
 # ---------------------------------------------------------------------------
@@ -792,107 +890,25 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
         """Return (active window start, next boundary after now).
 
         Windows are resolved for yesterday, today, and tomorrow so overnight
-        windows and day-to-day sun drift are handled correctly.
+        windows and day-to-day sun drift are handled correctly. Overlapping
+        windows merge into one on-period, so Follow mode never sees a new
+        window start partway through it.
         """
-        today = dt_util.as_local(now).date()
-        intervals = []
-        for offset in (-1, 0, 1):
-            day = today + timedelta(days=offset)
-            for window in self._windows:
-                interval = self._resolve_window(window, day)
-                if interval is not None:
-                    intervals.append(interval)
-
-        active = [iv for iv in intervals if iv[0] <= now < iv[1]]
-        # Same-tzinfo aware datetimes sort by wall clock (PEP 495), which
-        # misorders edges around a DST gap — order by real instant instead.
-        future = sorted(
-            (t for iv in intervals for t in iv if t > now),
-            key=lambda t: t.timestamp(),
+        merged = _merged_window_intervals(self.hass, self._windows, now, (-1, 0, 1))
+        active_start = next(
+            (start for start, end in merged if start <= now < end), None
         )
-
-        active_start = (
-            max((iv[0] for iv in active), key=lambda t: t.timestamp())
-            if active
-            else None
-        )
-        return active_start, (future[0] if future else None)
+        future = [t for interval in merged for t in interval if t > now]
+        return active_start, min(future, key=lambda t: t.timestamp(), default=None)
 
     def _inverted_window_start(self, now: datetime) -> datetime | str:
         """Return when the current gap between configured windows began."""
-        today = dt_util.as_local(now).date()
-        intervals = []
-        for offset in (-2, -1, 0, 1):
-            day = today + timedelta(days=offset)
-            intervals.extend(
-                interval
-                for window in self._windows
-                if (interval := self._resolve_window(window, day)) is not None
-            )
-
-        merged: list[list[datetime]] = []
-        # Order and compare by real instant — same-tzinfo datetimes sort by
-        # wall clock (PEP 495), which misorders edges around a DST gap.
-        for start, end in sorted(
-            intervals, key=lambda iv: (iv[0].timestamp(), iv[1].timestamp())
-        ):
-            if merged and start.timestamp() <= merged[-1][1].timestamp():
-                merged[-1][1] = max(merged[-1][1], end, key=lambda t: t.timestamp())
-            else:
-                merged.append([start, end])
+        merged = _merged_window_intervals(self.hass, self._windows, now, (-2, -1, 0, 1))
         ended = [end for _start, end in merged if end <= now]
         # With no resolvable boundaries (for example, a sun-only window during
         # polar day/night), inversion is continuously on. Use a stable marker
         # so Follow mode can apply it once without re-triggering every restart.
         return max(ended, key=lambda t: t.timestamp(), default="inverted")
-
-    def _resolve_window(
-        self, window: dict, day: date
-    ) -> tuple[datetime, datetime] | None:
-        start = self._resolve_edge(window.get("start"), day)
-        if start is None:
-            return None
-        end = self._resolve_edge(window.get("end"), day)
-        if end is not None and end <= start:
-            # Overnight window — the end belongs to the next day.
-            end = self._resolve_edge(window.get("end"), day + timedelta(days=1))
-        if end is None:
-            return None
-        return (start, end)
-
-    def _resolve_edge(self, edge: str | dict | None, day: date) -> datetime | None:
-        """Resolve an edge spec to a concrete datetime on the given day."""
-        if isinstance(edge, str):
-            edge = {EDGE_TIME: edge}
-        if not isinstance(edge, dict):
-            return None
-
-        fixed: datetime | None = None
-        if edge.get(EDGE_TIME):
-            with contextlib.suppress(ValueError):
-                fixed = datetime.combine(
-                    day,
-                    time.fromisoformat(edge[EDGE_TIME]),
-                    tzinfo=dt_util.DEFAULT_TIME_ZONE,
-                )
-
-        sun: datetime | None = None
-        if edge.get(EDGE_SUN) in SUN_EVENTS:
-            # None on polar days when the event doesn't occur — the fixed
-            # time (if any) then stands alone.
-            sun = get_astral_event_date(self.hass, edge[EDGE_SUN], day)
-            if sun is not None:
-                with contextlib.suppress(ValueError, TypeError):
-                    sun += timedelta(minutes=int(edge.get(EDGE_OFFSET, 0)))
-
-        candidates = [d for d in (fixed, sun) if d is not None]
-        if not candidates:
-            return None
-        if len(candidates) == 1:
-            return candidates[0]
-        if edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST:
-            return max(candidates)
-        return min(candidates)
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -906,4 +922,445 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
             "next_transition": _fmt(self._next_transition),
             "source_entity": self._source,
             "inverted": self._invert,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Virtual Combined Schedule Binary Sensor
+# ---------------------------------------------------------------------------
+
+_NEG_INF = float("-inf")
+# Sun offsets move edges up to 12h into a neighbouring day, so extra days are
+# resolved and values trusted only from yesterday to the day after tomorrow.
+_COMBINED_DAY_OFFSETS = range(-3, 4)
+_COMBINED_TRUSTED_DAYS = (-1, 2)
+# current_window_start for an on-period with no known start (for example an
+# always-on combination): stable, so Follow mode applies it only once.
+_ALWAYS_ON_MARKER = "always_on"
+
+
+def _kleene(require_all: bool, values: list[bool | None]) -> bool | None:
+    """Combine on/off/unknown values; unknown only when it could change the answer."""
+    # "Any" is decided by one input that is on, "all" by one that is off.
+    decisive = not require_all
+    if decisive in values:
+        return decisive
+    if None in values:
+        return None
+    return require_all
+
+
+class _Timeline:
+    """A value over time that is on, off or unknown (None).
+
+    segments are (start timestamp, value) pairs in time order; the first
+    starts at -inf and each value holds until the next start.
+    """
+
+    __slots__ = ("segments",)
+
+    def __init__(self, segments: list[tuple[float, bool | None]]) -> None:
+        self.segments = segments
+
+    @classmethod
+    def constant(cls, value: bool | None) -> _Timeline:
+        return cls([(_NEG_INF, value)])
+
+    @classmethod
+    def from_intervals(
+        cls, intervals: list[tuple[float, float]], known_from: float, known_until: float
+    ) -> _Timeline:
+        """Build an on/off timeline from ordered on-intervals; unknown outside."""
+        segments: list[tuple[float, bool | None]] = [
+            (_NEG_INF, None),
+            (known_from, False),
+        ]
+        for raw_start, raw_end in intervals:
+            start, end = max(raw_start, known_from), min(raw_end, known_until)
+            if start < end:
+                segments += [(start, True), (end, False)]
+        segments.append((known_until, None))
+        return cls(segments).normalized()
+
+    @classmethod
+    def combine(cls, require_all: bool, timelines: list[_Timeline]) -> _Timeline:
+        starts = sorted({start for tl in timelines for start, _ in tl.segments})
+        segments = [
+            (start, _kleene(require_all, [tl.value_at(start) for tl in timelines]))
+            for start in starts
+        ]
+        return cls(segments).normalized()
+
+    def normalized(self) -> _Timeline:
+        """Drop empty segments and boundaries where the value doesn't change."""
+        segments: list[tuple[float, bool | None]] = []
+        for start, value in self.segments:
+            if segments and segments[-1][0] == start:
+                segments.pop()
+            if segments and segments[-1][1] == value:
+                continue
+            segments.append((start, value))
+        return _Timeline(segments)
+
+    def inverted(self) -> _Timeline:
+        return _Timeline([(s, None if v is None else not v) for s, v in self.segments])
+
+    def _index(self, ts: float) -> int:
+        return bisect_right([start for start, _ in self.segments], ts) - 1
+
+    def value_at(self, ts: float) -> bool | None:
+        return self.segments[self._index(ts)][1]
+
+    def period_start(self, ts: float) -> float:
+        """Return when the value holding at ts began."""
+        return self.segments[self._index(ts)][0]
+
+    def off_between(self, start: float, end: float) -> bool:
+        """Return whether the value is known to be off at any point in [start, end]."""
+        ends = [s for s, _ in self.segments[1:]] + [float("inf")]
+        return any(
+            value is False and seg_start <= end and seg_end > start
+            for (seg_start, value), seg_end in zip(self.segments, ends, strict=True)
+        )
+
+    def next_change(self, ts: float) -> float | None:
+        index = self._index(ts) + 1
+        return self.segments[index][0] if index < len(self.segments) else None
+
+
+@dataclass
+class _ScheduleNode:
+    """One schedule in an expanded combined schedule."""
+
+    kind: str  # "time", "source", "combined" or "unknown"
+    entity_id: str | None = None
+    windows: list[dict] = field(default_factory=list)
+    invert: bool = False
+    require_all: bool = False
+    children: list[_ScheduleNode] = field(default_factory=list)
+
+
+class _ScheduleTree:
+    """Expands a combined schedule down to its plain MoLight schedules.
+
+    Time-window schedules are read from their config and sensor-mirroring
+    schedules from their state, so the result never depends on another
+    combined schedule's state or on the order entities start up.
+    """
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+        self.configs: dict[str, dict] = {}
+        self.disabled: dict[str, ConfigEntryDisabler | None] = {}
+        self.source_entities: set[str] = set()
+        self.plain_schedules: set[str] = set()
+
+    def combined(
+        self,
+        entry_id: str,
+        cfg: dict,
+        path: frozenset[str] = frozenset(),
+    ) -> _ScheduleNode:
+        path = path | {entry_id}
+        self.configs[entry_id] = cfg
+        return _ScheduleNode(
+            "combined",
+            invert=bool(cfg.get(CONF_SCHEDULE_INVERT, False)),
+            require_all=cfg.get(CONF_SCHEDULE_OPERATOR, DEFAULT_SCHEDULE_OPERATOR)
+            == SCHEDULE_OPERATOR_ALL,
+            children=[
+                self._expand(entity_id, path)
+                for entity_id in cfg.get(CONF_SCHEDULE_INPUTS, [])
+            ],
+        )
+
+    def _expand(self, entity_id: str, path: frozenset[str]) -> _ScheduleNode:
+        reg_entry = er.async_get(self.hass).async_get(entity_id)
+        entry = (
+            self.hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+            if reg_entry is not None and reg_entry.config_entry_id is not None
+            else None
+        )
+        if entry is None or entry.domain != DOMAIN:
+            return _ScheduleNode("unknown")
+        cfg = molight_config(entry)
+        self.configs.setdefault(entry.entry_id, cfg)
+        self.disabled[entry.entry_id] = entry.disabled_by
+        if entry.disabled_by is not None:
+            return _ScheduleNode("unknown")
+        entity_type = cfg[CONF_ENTITY_TYPE]
+        if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE:
+            if entry.entry_id in path:
+                # The config flow rejects loops; this guards hand-edited or
+                # concurrently saved configs against infinite expansion.
+                _LOGGER.warning(
+                    "Combined schedule %s includes itself; treating it as unknown",
+                    entity_id,
+                )
+                return _ScheduleNode("unknown")
+            return self.combined(entry.entry_id, cfg, path)
+        if entity_type != ENTITY_TYPE_SCHEDULE:
+            return _ScheduleNode("unknown")
+        self.plain_schedules.add(entity_id)
+        definition = cfg.get(CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME)
+        if definition == SCHEDULE_DEFINITION_BINARY_SENSOR:
+            # Its state already applies its own invert and outage handling.
+            self.source_entities.add(entity_id)
+            return _ScheduleNode("source", entity_id=entity_id)
+        return _ScheduleNode(
+            "time",
+            windows=cfg.get(CONF_TIME_WINDOWS, []),
+            invert=bool(cfg.get(CONF_SCHEDULE_INVERT, False)),
+        )
+
+
+class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
+    """Binary sensor combining MoLight schedules with any/all logic.
+
+    The result is unknown (unavailable) only when an unavailable input could
+    change it. current_window_start is the start of the combined on-period,
+    so overlapping or back-to-back inputs read as one window to Follow mode.
+    """
+
+    _attr_should_poll = False
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Initialize the virtual combined schedule sensor."""
+        self.hass = hass
+        self._cfg = molight_config(entry)
+        self._entry_id = entry.entry_id
+        self._attr_name = self._cfg[CONF_NAME]
+        self._attr_unique_id = entry.entry_id
+        self._attr_is_on = False
+        self._root = _ScheduleNode("combined")
+        self._plain_schedules: list[str] = []
+        self._input_configs: dict[str, dict] = {}
+        self._input_disabled: dict[str, ConfigEntryDisabler | None] = {}
+        self._reload_scheduled = False
+        self._current_window_start: str | None = None
+        self._next_transition: datetime | None = None
+        self._restored = False
+        self._startup_done = True
+        self._unsub_transition: CALLBACK_TYPE | None = None
+        self._unsub_started: CALLBACK_TYPE | None = None
+        self._refresh_handle: asyncio.Handle | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Expand the inputs, restore state and start tracking."""
+        await super().async_added_to_hass()
+        self.async_on_remove(self._cancel_timers)
+
+        tree = _ScheduleTree(self.hass)
+        self._root = tree.combined(self._entry_id, self._cfg)
+        self._plain_schedules = sorted(tree.plain_schedules)
+        self._input_configs = {
+            entry_id: cfg
+            for entry_id, cfg in tree.configs.items()
+            if entry_id != self._entry_id
+        }
+        self._input_disabled = tree.disabled
+
+        last = await self.async_get_last_state()
+        if last is not None and last.state in ("on", "off"):
+            self._restored = True
+            self._attr_is_on = last.state == "on"
+            marker = last.attributes.get("current_window_start")
+            if self._attr_is_on and isinstance(marker, str):
+                self._current_window_start = marker
+
+        if tree.source_entities:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, sorted(tree.source_entities), self._handle_input_change
+                )
+            )
+        # Inputs are read from config, so an edit anywhere beneath must rebuild this.
+        # Not an update listener on the input: HA can skip it while that entry reloads.
+        if self._input_disabled:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass, SIGNAL_CONFIG_ENTRY_CHANGED, self._handle_entry_change
+                )
+            )
+
+        if self.hass.state is not CoreState.running:
+            self._startup_done = False
+            self._unsub_started = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
+            )
+        self._refresh()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Drop the startup listener if HA has not finished starting yet."""
+        await super().async_will_remove_from_hass()
+        if self._unsub_started is not None:
+            self._unsub_started()
+            self._unsub_started = None
+
+    @callback
+    def _on_startup_done(self, _event: Event) -> None:
+        # A fired one-time listener is already gone; drop our reference so
+        # removal doesn't try to unsubscribe it again.
+        self._unsub_started = None
+        self._startup_done = True
+        self._refresh()
+
+    @callback
+    def _handle_entry_change(
+        self, change: ConfigEntryChange, entry: ConfigEntry
+    ) -> None:
+        # UPDATED also fires as an entry loads and unloads; only a changed
+        # config or disabled flag needs a rebuild.
+        if (
+            change is ConfigEntryChange.UPDATED
+            and not self._reload_scheduled
+            and entry.entry_id in self._input_disabled
+            and (
+                entry.disabled_by != self._input_disabled[entry.entry_id]
+                or molight_config(entry) != self._input_configs[entry.entry_id]
+            )
+        ):
+            self._reload_scheduled = True
+            self.hass.config_entries.async_schedule_reload(self._entry_id)
+
+    @callback
+    def _cancel_timers(self) -> None:
+        if self._unsub_transition is not None:
+            self._unsub_transition()
+            self._unsub_transition = None
+        if self._refresh_handle is not None:
+            self._refresh_handle.cancel()
+            self._refresh_handle = None
+
+    @callback
+    def _handle_input_change(self, _event: Event[EventStateChangedData]) -> None:
+        # Deferred to the next loop pass so inputs changing together (two
+        # schedules mirroring one sensor) are evaluated once, never half-updated.
+        if self._refresh_handle is None:
+            self._refresh_handle = self.hass.loop.call_soon(self._deferred_refresh)
+
+    @callback
+    def _deferred_refresh(self) -> None:
+        self._refresh_handle = None
+        self._refresh()
+
+    def _timeline(
+        self, node: _ScheduleNode, now: datetime, known: tuple[float, float]
+    ) -> _Timeline:
+        if node.kind == "time":
+            merged = _merged_window_intervals(
+                self.hass, node.windows, now, _COMBINED_DAY_OFFSETS
+            )
+            timeline = _Timeline.from_intervals(
+                [(start.timestamp(), end.timestamp()) for start, end in merged], *known
+            )
+        elif node.kind == "source":
+            return self._source_timeline(node.entity_id)
+        elif node.kind == "combined":
+            timeline = (
+                _Timeline.combine(
+                    node.require_all,
+                    [self._timeline(child, now, known) for child in node.children],
+                )
+                if node.children
+                else _Timeline.constant(False)
+            )
+        else:
+            return _Timeline.constant(None)
+        return timeline.inverted() if node.invert else timeline
+
+    def _source_timeline(self, entity_id: str | None) -> _Timeline:
+        """Return a sensor-mirroring schedule's value since its last change."""
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is None or state.state not in ("on", "off"):
+            return _Timeline.constant(None)
+        since = state.last_changed
+        if state.state == "on":
+            # The schedule restores this across restarts, unlike last_changed.
+            since = (
+                _parse_datetime(state.attributes.get("current_window_start")) or since
+            )
+        return _Timeline([(_NEG_INF, None), (since.timestamp(), state.state == "on")])
+
+    @callback
+    def _refresh(self, _now: datetime | None = None) -> None:
+        """Evaluate the expanded schedules and arm the next transition timer."""
+        now = dt_util.utcnow()
+        ts = now.timestamp()
+        today = dt_util.as_local(now).date()
+        known_from, known_until = (
+            dt_util.start_of_local_day(today + timedelta(days=days)).timestamp()
+            for days in _COMBINED_TRUSTED_DAYS
+        )
+        timeline = self._timeline(self._root, now, (known_from, known_until))
+        value = timeline.value_at(ts)
+
+        if value is None:
+            # Keep the last value and marker so a recovery reads as a blip; while HA
+            # starts, hold the restored state as inputs may not have reported yet.
+            self._attr_available = not self._startup_done and self._restored
+        else:
+            self._attr_available = True
+            if value and not self._continues_period(timeline, ts):
+                start = timeline.period_start(ts)
+                self._current_window_start = (
+                    _ALWAYS_ON_MARKER
+                    if start == _NEG_INF
+                    else dt_util.as_local(
+                        datetime.fromtimestamp(start, UTC)
+                    ).isoformat()
+                )
+            elif not value:
+                self._current_window_start = None
+            self._attr_is_on = value
+
+        change = timeline.next_change(ts)
+        self._next_transition = (
+            dt_util.as_local(datetime.fromtimestamp(change, UTC))
+            if change is not None and change < known_until
+            else None
+        )
+
+        if self._unsub_transition is not None:
+            self._unsub_transition()
+        # With no change in sight, re-check tomorrow as sun times drift.
+        wake = self._next_transition or (
+            dt_util.start_of_local_day() + timedelta(days=1)
+        )
+        self._unsub_transition = async_track_point_in_time(
+            self.hass, self._refresh, wake + timedelta(seconds=1)
+        )
+        self.async_write_ha_state()
+
+    def _continues_period(self, timeline: _Timeline, ts: float) -> bool:
+        """Return whether the marked on-period may still be under way.
+
+        Only a known off since the marker ends it. Inputs' history is partly
+        unknown (a mirror's value before its last change, anything before a
+        restart), and a moved marker would re-trigger Follow mode.
+        """
+        marker = self._current_window_start
+        if not (self._attr_is_on and marker):
+            return False
+        if marker == _ALWAYS_ON_MARKER:
+            start = _NEG_INF
+        elif parsed := _parse_datetime(marker):
+            start = parsed.timestamp()
+        else:
+            return False
+        return not timeline.off_between(start, ts)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the combined schedule attributes."""
+        return {
+            "current_window_start": self._current_window_start,
+            "next_transition": (
+                self._next_transition.isoformat() if self._next_transition else None
+            ),
+            "operator": self._cfg.get(
+                CONF_SCHEDULE_OPERATOR, DEFAULT_SCHEDULE_OPERATOR
+            ),
+            "inverted": bool(self._cfg.get(CONF_SCHEDULE_INVERT, False)),
+            "resolved_schedules": self._plain_schedules,
         }

@@ -44,12 +44,14 @@ from custom_components.molight.const import (
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_REMOTE,
@@ -107,6 +109,17 @@ def _schedule_entry() -> MockConfigEntry:
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Rm Schedule",
             CONF_TIME_WINDOWS: [{"start": "07:00", "end": "22:00"}],
+        },
+    )
+
+
+def _combined_schedule_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+            CONF_NAME: "Rm Combined Schedule",
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.rm_schedule"],
         },
     )
 
@@ -177,6 +190,7 @@ async def _remove_and_assert_clean(
         _combined_occupancy_entry,
         _illuminance_entry,
         _schedule_entry,
+        _combined_schedule_entry,
         _light_entry,
         _scheduled_light_entry,
         _remote_entry,
@@ -186,6 +200,7 @@ async def _remove_and_assert_clean(
         "combined_occupancy",
         "illuminance",
         "schedule",
+        "combined_schedule",
         "light",
         "scheduled_light",
         "remote",
@@ -340,6 +355,26 @@ async def test_remove_entry_strips_references_from_dependents(
     await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
     assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+
+
+@pytest.mark.asyncio
+async def test_remove_schedule_strips_it_from_combined_schedules(
+    hass: HomeAssistant,
+) -> None:
+    """A removed input leaves a combined schedule; with none left it is off."""
+    schedule = _schedule_entry()  # registers binary_sensor.rm_schedule, on 07-22
+    combined = _combined_schedule_entry()
+    for entry in (schedule, combined):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(schedule.entry_id)
+    await settle(hass)
+    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == []
+    state = hass.states.get("binary_sensor.rm_combined_schedule")
+    assert state.state == "off"
+    assert state.attributes["resolved_schedules"] == []
 
 
 @pytest.mark.asyncio

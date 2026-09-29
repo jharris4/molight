@@ -84,8 +84,10 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
     CONF_TIME_WINDOWS,
@@ -101,6 +103,7 @@ from custom_components.molight.const import (
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
@@ -116,6 +119,8 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
+    SCHEDULE_OPERATOR_ALL,
+    SCHEDULE_OPERATOR_ANY,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import settle, setup_entries
@@ -6231,3 +6236,175 @@ async def test_combined_options_tolerate_foreign_constituents(
         "binary_sensor.foreign_occ",
         "binary_sensor.never_registered",
     ]
+
+
+def _combined_schedule_entry(name: str, inputs: list[str]) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+            CONF_NAME: name,
+            CONF_SCHEDULE_INPUTS: inputs,
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ANY,
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_flow_combined_schedule(
+    hass: HomeAssistant,
+    schedule_entry: MockConfigEntry,
+    occupancy_entry: MockConfigEntry,
+) -> None:
+    """Inputs are required and must be MoLight schedules."""
+    await setup_entries(hass, schedule_entry)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE}
+    )
+    assert result["step_id"] == "combined_schedule"
+    assert _selector_config(result, CONF_SCHEDULE_INPUTS)["multiple"] is True
+
+    base = {
+        CONF_NAME: "Bedside",
+        CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ALL,
+        CONF_SCHEDULE_INVERT: True,
+        SECTION_ADVANCED: {},
+    }
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**base, CONF_SCHEDULE_INPUTS: []}
+    )
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
+
+    # Created after the form was rendered, so only backend validation stops it.
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_occupancy"]},
+    )
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+    picker = _selector_config(result, CONF_SCHEDULE_INPUTS)
+    assert "binary_sensor.test_occupancy" in picker["exclude_entities"]
+    assert "binary_sensor.test_schedule" not in picker["exclude_entities"]
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_schedule"]},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+        CONF_NAME: "Bedside",
+        CONF_SCHEDULE_INPUTS: ["binary_sensor.test_schedule"],
+        CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ALL,
+        CONF_SCHEDULE_INVERT: True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_combined_schedule_options_reject_cycles(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """A combined schedule can't include itself, directly or through another."""
+    outer = _combined_schedule_entry("Outer", ["binary_sensor.test_schedule"])
+    inner = _combined_schedule_entry("Inner", ["binary_sensor.test_schedule"])
+    await setup_entries(hass, schedule_entry, outer, inner)
+
+    result = await hass.config_entries.options.async_init(outer.entry_id)
+    assert result["step_id"] == "combined_schedule"
+    excluded = _selector_config(result, CONF_SCHEDULE_INPUTS)["exclude_entities"]
+    assert "binary_sensor.outer" in excluded
+    assert "binary_sensor.inner" not in excluded
+
+    # Inner is made to point back at Outer after the form was rendered.
+    hass.config_entries.async_update_entry(
+        inner,
+        options={
+            CONF_NAME: "Inner",
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.outer"],
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ANY,
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+    edit = {
+        CONF_NAME: "Outer",
+        CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ANY,
+        CONF_SCHEDULE_INVERT: False,
+    }
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**edit, CONF_SCHEDULE_INPUTS: ["binary_sensor.inner"]}
+    )
+    assert result["errors"] == {"base": "combined_schedule_cycle"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **edit,
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.test_schedule"],
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ALL,
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert molight_config(outer)[CONF_SCHEDULE_OPERATOR] == SCHEDULE_OPERATOR_ALL
+
+
+@pytest.mark.asyncio
+async def test_combined_schedule_is_a_schedule_everywhere(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Lights can use a combined schedule; a mirroring schedule can't mirror one."""
+    await setup_entries(hass, schedule_entry)
+    mirror = await _start_create(hass)
+    mirror = await hass.config_entries.flow.async_configure(
+        mirror["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    mirror = await hass.config_entries.flow.async_configure(
+        mirror["flow_id"],
+        {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
+    )
+    combined = _combined_schedule_entry("Bedside", ["binary_sensor.test_schedule"])
+    await setup_entries(hass, combined)
+
+    mirror = await hass.config_entries.flow.async_configure(
+        mirror["flow_id"],
+        {
+            CONF_NAME: "Mirror",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.bedside",
+            CONF_SCHEDULE_INVERT: False,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert mirror["errors"] == {
+        CONF_SCHEDULE_SOURCE: "schedule_source_molight_schedule"
+    }
+    assert (
+        "binary_sensor.bedside"
+        in _selector_config(mirror, CONF_SCHEDULE_SOURCE)["exclude_entities"]
+    )
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    assert (
+        "binary_sensor.bedside"
+        not in _section_selector_config(result, SECTION_SENSORS, CONF_SCHEDULE_ENTITY)[
+            "exclude_entities"
+        ]
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Bedside Lamp",
+            CONF_LIGHTS: ["light.bedside"],
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {
+                CONF_SCHEDULE_ENTITY: "binary_sensor.bedside",
+                CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_SCHEDULE_ENTITY] == "binary_sensor.bedside"

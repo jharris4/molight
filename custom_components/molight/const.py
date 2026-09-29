@@ -10,6 +10,7 @@ ENTITY_TYPE_OCCUPANCY = "occupancy"
 ENTITY_TYPE_COMBINED_OCCUPANCY = "combined_occupancy"
 ENTITY_TYPE_ILLUMINANCE = "illuminance"
 ENTITY_TYPE_SCHEDULE = "schedule"
+ENTITY_TYPE_COMBINED_SCHEDULE = "combined_schedule"
 ENTITY_TYPE_LIGHT = "light"
 ENTITY_TYPE_SCHEDULED_LIGHT = "scheduled_light"
 ENTITY_TYPE_REMOTE = "remote"
@@ -19,6 +20,7 @@ ENTITY_TYPES = [
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_SCHEDULE,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ENTITY_TYPE_REMOTE,
@@ -31,6 +33,7 @@ PLATFORMS_BY_ENTITY_TYPE = {
     ENTITY_TYPE_COMBINED_OCCUPANCY: ["binary_sensor"],
     ENTITY_TYPE_ILLUMINANCE: ["binary_sensor"],
     ENTITY_TYPE_SCHEDULE: ["binary_sensor"],
+    ENTITY_TYPE_COMBINED_SCHEDULE: ["binary_sensor"],
     ENTITY_TYPE_LIGHT: ["light", "switch"],
     ENTITY_TYPE_SCHEDULED_LIGHT: ["light", "switch"],
     ENTITY_TYPE_REMOTE: ["sensor"],
@@ -148,6 +151,16 @@ EDGE_COMBINE = "combine"
 COMBINE_LATEST = "latest"
 COMBINE_EARLIEST = "earliest"
 SUN_EVENTS = ["sunset", "sunrise"]
+
+# --- Virtual Combined Schedule Binary Sensor ---
+# Combines MoLight schedules with any/all logic; nested combined schedules are
+# expanded down to plain ones rather than read by state.
+CONF_SCHEDULE_INPUTS = "schedule_inputs"
+CONF_SCHEDULE_OPERATOR = "schedule_operator"
+SCHEDULE_OPERATOR_ANY = "any"
+SCHEDULE_OPERATOR_ALL = "all"
+SCHEDULE_OPERATORS = [SCHEDULE_OPERATOR_ANY, SCHEDULE_OPERATOR_ALL]
+DEFAULT_SCHEDULE_OPERATOR = SCHEDULE_OPERATOR_ANY
 
 # --- Virtual Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids

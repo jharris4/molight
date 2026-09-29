@@ -175,9 +175,9 @@ async def test_polar_day_fixed_time_stands_alone(hass: HomeAssistant, freezer) -
 
 @pytest.mark.asyncio
 async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
-    """With several simultaneously active windows the latest start wins as
-    current_window_start, and the sensor stays on across the seam where one
-    window ends inside another."""
+    """Overlapping windows merge into one on-period: current_window_start is
+    the merged start throughout, so Follow mode never sees a new window where
+    one window ends inside another."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 21:00:00+00:00")
     await _setup(
@@ -192,9 +192,8 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
 
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
-    # Both windows are active; the later start identifies the window.
-    assert state.attributes["current_window_start"] == "2026-07-02T20:00:00+00:00"
-    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
+    assert state.attributes["current_window_start"] == "2026-07-02T18:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-03T02:00:00+00:00"
 
     # The first window ends at 23:00 — still inside the second window.
     t = datetime(2026, 7, 2, 23, 0, 2, tzinfo=UTC)
@@ -203,7 +202,7 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
     await hass.async_block_till_done()
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
-    assert state.attributes["current_window_start"] == "2026-07-02T20:00:00+00:00"
+    assert state.attributes["current_window_start"] == "2026-07-02T18:00:00+00:00"
 
     # The overnight window ends at 02:00 — now everything is over.
     t = datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC)
@@ -211,6 +210,21 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
     async_fire_time_changed(hass, t)
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.night_schedule").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_full_day_window_is_one_window_per_day(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Touching windows aren't merged, so a 00:00 → 00:00 window starts each day."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    await _setup(hass, _schedule_entry([{"start": "00:00", "end": "00:00"}]))
+
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T00:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-03T00:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -236,7 +250,7 @@ async def test_inverted_overlapping_windows_begin_after_merged_interval(
 
     state = hass.states.get("binary_sensor.inverted_overlap")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-03T02:00:00+00:00"
 
     # The first raw window ends, but the overlapping overnight window remains.
     t = datetime(2026, 7, 2, 23, 0, 2, tzinfo=UTC)

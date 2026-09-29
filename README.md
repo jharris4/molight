@@ -12,6 +12,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Combined Occupancy Sensor](#virtual-combined-occupancy-binary-sensor) | Merges several occupancy sensors with trigger/maintain roles |
 | [Virtual Illuminance Sensor](#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
 | [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | Reusable schedule signal from a time/sun window or another binary sensor, optionally inverted |
+| [Virtual Combined Schedule](#virtual-combined-schedule) | Combines schedules with any/all logic — e.g. a morning and an evening window for one lamp |
 | [Virtual Light](#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
 | [Virtual Scheduled Light](#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it |
 | [Virtual Remote](#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, …) to light actions — no automations |
@@ -114,7 +115,7 @@ Follow-mode Virtual Lights are not offered for conversion because their schedule
 
 ## Examples
 
-For worked examples with the exact field values to enter — a plain turn-off timer, a single-sensor room, the full occupancy/illuminance/schedule setup, a porch light, a night-only stairs light, and a day/night hallway light — see [EXAMPLES.md](EXAMPLES.md).
+For worked examples with the exact field values to enter — a plain turn-off timer, a single-sensor room, the full occupancy/illuminance/schedule setup, a porch light, a night-only stairs light, a day/night hallway light, and a bedside lamp on for a morning and an evening window — see [EXAMPLES.md](EXAMPLES.md).
 
 ## Entity reference
 
@@ -174,8 +175,8 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity 
 
 A Virtual Schedule Sensor provides a reusable on/off schedule signal. Choose its definition when creating or configuring it:
 
-- **Time window** — `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry — create additional schedule entries for additional windows.
-- **Binary sensor** — mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. Other Virtual Schedule Sensors are excluded as sources to prevent chains and cycles.
+- **Time window** — `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry — to follow several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule](#virtual-combined-schedule).
+- **Binary sensor** — mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. MoLight's own schedules are excluded as sources to prevent chains and cycles — combine them with a Virtual Combined Schedule instead.
 
 **Invert output** is available for both definitions. A time-window schedule is then `on` outside its configured window; a source-backed schedule is `on` while its source is `off`. An unknown, unavailable, or missing source makes the Virtual Schedule Sensor unavailable and is never inverted to `on`.
 
@@ -190,9 +191,27 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 
 e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone.
 
-Attributes: `current_window_start` (identifies the effective `on` period; used by follow-mode lights for restart catch-up), `next_transition`, `source_entity`, `inverted`.
+Attributes: `current_window_start` (identifies the effective `on` period — overlapping windows count as one; used by follow-mode lights for restart catch-up), `next_transition`, `source_entity`, `inverted`.
 
 Source-backed schedules preserve their effective state and window marker across a temporary source outage. Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state. As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
+
+### Virtual Combined Schedule
+
+Combines MoLight schedules into one schedule that any light can use. Inputs can be Virtual Schedule Sensors of either definition or other Virtual Combined Schedules, so mixed logic nests — e.g. *(Morning **any** Evening) **all** Workday*. The flows reject a combined schedule that would include itself, directly or through another.
+
+| Config | Description |
+|---|---|
+| **Schedules** | The schedules to combine (at least one). To use another binary sensor, such as a workday sensor, wrap it in a source-backed Virtual Schedule Sensor first |
+| **Combine with** | **Any** (the default): `on` while at least one schedule is `on`. **All**: `on` only while every schedule is `on` |
+| **Invert output** | `on` while the combination is `off` — also how to invert a combined schedule, since a source-backed schedule can't mirror a MoLight one |
+
+Nested combined schedules are expanded down to the schedules they're built from: time-window schedules are read from their config and source-backed ones from their state. The result never depends on another combined schedule's state or on the order entities start up, and a sensor reached through two routes (two mirrors of one sensor, or the same schedule in two branches) is never seen half-updated. Editing any schedule underneath rebuilds the combination.
+
+Where one window ends as another begins, or windows overlap, the combination stays `on` without a blip and `current_window_start` is the start of the whole period, so a follow-mode light treats it as one window. Each separate period is a new window, so a light turned off manually in the morning still comes on in the evening.
+
+An input that is `unavailable` makes the combination `unavailable` only when it could change the result: with **Any**, another input that is `on` keeps it `on`; with **All**, another that is `off` keeps it `off`. A disabled input counts as `unavailable` too. As with source-backed schedules, an outage is never a boundary — the window marker is kept unless an input is known to have been `off` since the period began, and while Home Assistant starts the restored state is held until inputs report. That includes restarts: a source-backed input's history while Home Assistant was down is unknown, so if it could have kept the combination `on` through the downtime, a window that started meanwhile keeps the old marker rather than re-triggering follow mode. Time-window inputs alone are always caught up. With no schedules left (every input deleted), it is `off`.
+
+Attributes: `current_window_start`, `next_transition`, `operator`, `inverted`, `resolved_schedules` (the plain schedules it was built from, for tracing why it's `on`).
 
 ### Virtual Light
 
@@ -575,7 +594,11 @@ the surviving light drops that reference, and verifies neither the sensor nor
 its stored reference returns after core and container restarts. A current-flow
 Virtual Remote scenario exercises single/double event bindings, edits them to
 brightness/toggle actions, checks Last Action diagnostics across restarts, and
-confirms removing its target leaves the surviving remote inert.
+confirms removing its target leaves the surviving remote inert. Virtual
+Combined Schedule scenarios check any/all/inverted combinations of mirrored
+schedules, unavailable inputs, rebuilding after a time-window input is edited,
+and input deletion, then restart with a follow light manually off mid-window
+while an input loads late, verifying the window is kept and a new one lights it.
 
 The default image is pinned to the Home Assistant release used by the current
 test dependencies. Override it to exercise another release:

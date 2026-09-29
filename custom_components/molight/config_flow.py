@@ -77,8 +77,10 @@ from .const import (
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
     CONF_TARGET_LIGHTS,
@@ -106,6 +108,7 @@ from .const import (
     DEFAULT_OCCUPANCY_TIMEOUT,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
+    DEFAULT_SCHEDULE_OPERATOR,
     DEFAULT_WARN_TIMEOUT,
     DOMAIN,
     DOOR_MODES,
@@ -114,6 +117,7 @@ from .const import (
     EDGE_SUN,
     EDGE_TIME,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
@@ -138,6 +142,7 @@ from .const import (
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
     SCHEDULE_MODES,
+    SCHEDULE_OPERATORS,
     SUN_EVENTS,
 )
 from .helpers import (
@@ -619,13 +624,17 @@ def _molight_occupancy_entity_ids(hass: HomeAssistant) -> list[str]:
     return sorted(entity_ids)
 
 
+# Both are schedules to everything that references one.
+_SCHEDULE_ENTITY_TYPES = (ENTITY_TYPE_SCHEDULE, ENTITY_TYPE_COMBINED_SCHEDULE)
+
+
 def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
-    """Entity ids created by MoLight schedule entries."""
+    """Entity ids created by MoLight schedule and combined-schedule entries."""
     registry = er.async_get(hass)
     return sorted(
         entity.entity_id
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULE
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) in _SCHEDULE_ENTITY_TYPES
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.domain == "binary_sensor"
     )
@@ -649,17 +658,23 @@ def _molight_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | No
 
 
 def _schedule_entity_selector(
-    hass: HomeAssistant, *, legacy_entity: str | None = None
+    hass: HomeAssistant,
+    *,
+    legacy_entity: str | None = None,
+    multiple: bool = False,
+    exclude: list[str] | None = None,
 ) -> selector.EntitySelector:
     """Build a picker containing schedules plus one configured legacy sensor."""
     registry = er.async_get(hass)
     schedule_ids = set(_molight_schedule_entity_ids(hass))
     excluded_ids = sorted(
-        entity.entity_id
-        for entity in registry.entities.values()
-        if entity.domain == "binary_sensor"
-        and entity.platform == DOMAIN
-        and entity.entity_id not in schedule_ids
+        {
+            entity.entity_id
+            for entity in registry.entities.values()
+            if entity.domain == "binary_sensor"
+            and entity.platform == DOMAIN
+            and entity.entity_id not in schedule_ids
+        }.union(exclude or [])
     )
     if legacy_entity in excluded_ids:
         # Before schedule pickers were type-filtered they offered every MoLight
@@ -671,7 +686,7 @@ def _schedule_entity_selector(
             integration=DOMAIN,
             domain="binary_sensor",
             exclude_entities=excluded_ids,
-            multiple=False,
+            multiple=multiple,
         )
     )
 
@@ -686,7 +701,7 @@ def _schedule_entity_is_allowed(
     if not entity_id:
         return True
     entity_type = _molight_entity_type(hass, entity_id)
-    return entity_type == ENTITY_TYPE_SCHEDULE or (
+    return entity_type in _SCHEDULE_ENTITY_TYPES or (
         entity_id == legacy_entity and entity_type is not None
     )
 
@@ -695,10 +710,46 @@ def _schedule_source_is_molight_schedule(
     hass: HomeAssistant, entity_id: str | None
 ) -> bool:
     """Return whether an entity is backed by a MoLight schedule entry."""
-    return _molight_entity_type(hass, entity_id) == ENTITY_TYPE_SCHEDULE
+    return _molight_entity_type(hass, entity_id) in _SCHEDULE_ENTITY_TYPES
 
 
-def _combined_occupancy_creates_cycle(
+def _combined_schedule_fields(hass: HomeAssistant, exclude: list[str]) -> dict:
+    """Return the inputs, operator and invert fields of a combined schedule form."""
+    return {
+        vol.Required(CONF_SCHEDULE_INPUTS): _schedule_entity_selector(
+            hass, multiple=True, exclude=exclude
+        ),
+        vol.Required(
+            CONF_SCHEDULE_OPERATOR, default=DEFAULT_SCHEDULE_OPERATOR
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=SCHEDULE_OPERATORS, translation_key=CONF_SCHEDULE_OPERATOR
+            )
+        ),
+        vol.Optional(CONF_SCHEDULE_INVERT, default=False): selector.BooleanSelector(),
+    }
+
+
+def _validate_combined_schedule_inputs(
+    hass: HomeAssistant, inputs: list[str]
+) -> dict[str, str]:
+    """Require at least one input, each a MoLight schedule."""
+    if not inputs:
+        return {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
+    if not all(_schedule_entity_is_allowed(hass, e) for e in inputs):
+        return {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+    return {}
+
+
+_COMBINED_INPUTS: dict[str, Callable[[dict[str, Any]], list[str]]] = {
+    ENTITY_TYPE_COMBINED_OCCUPANCY: lambda cfg: (
+        cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(CONF_MAINTAIN_SENSORS, [])
+    ),
+    ENTITY_TYPE_COMBINED_SCHEDULE: lambda cfg: cfg.get(CONF_SCHEDULE_INPUTS, []),
+}
+
+
+def _combined_creates_cycle(
     hass: HomeAssistant,
     edited_entry: config_entries.ConfigEntry,
     proposed_constituents: list[str],
@@ -708,9 +759,12 @@ def _combined_occupancy_creates_cycle(
     Resolve entity ids through the registry so the graph is keyed by stable config
     entry ids. Starting from the edited entry's proposed outgoing edges, a path
     back to that entry is either a direct self-reference or an indirect cycle.
+    Only entries of the edited entry's own combined type are followed.
     """
     registry = er.async_get(hass)
     target_entry_id = edited_entry.entry_id
+    entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
+    inputs = _COMBINED_INPUTS[entity_type]
 
     def _referenced_entries(entity_ids: list[str]) -> list[config_entries.ConfigEntry]:
         entries = []
@@ -734,32 +788,28 @@ def _combined_occupancy_creates_cycle(
         visited.add(entry.entry_id)
 
         cfg = _molight_cfg(entry)
-        if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+        if cfg.get(CONF_ENTITY_TYPE) != entity_type:
             continue
-        constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
-            CONF_MAINTAIN_SENSORS, []
-        )
-        pending.extend(_referenced_entries(constituents))
+        pending.extend(_referenced_entries(inputs(cfg)))
 
     return False
 
 
-def _combined_occupancy_cycle_candidates(
+def _combined_cycle_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
 ) -> list[str]:
     """Entity ids that would create a cycle if selected by the edited entry."""
     registry = er.async_get(hass)
+    entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
     excluded: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != entity_type:
             continue
         excluded.extend(
             entity.entity_id
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
             if entity.domain == "binary_sensor"
-            and _combined_occupancy_creates_cycle(
-                hass, edited_entry, [entity.entity_id]
-            )
+            and _combined_creates_cycle(hass, edited_entry, [entity.entity_id])
         )
     return sorted(excluded)
 
@@ -1786,6 +1836,7 @@ class MoLightConfigFlow(
             ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
+            ENTITY_TYPE_COMBINED_SCHEDULE: self.async_step_combined_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
             ENTITY_TYPE_SCHEDULED_LIGHT: self.async_step_scheduled_light,
             ENTITY_TYPE_REMOTE: self.async_step_remote,
@@ -1932,6 +1983,7 @@ class MoLightConfigFlow(
                                 ENTITY_TYPE_COMBINED_OCCUPANCY,
                                 ENTITY_TYPE_ILLUMINANCE,
                                 ENTITY_TYPE_SCHEDULE,
+                                ENTITY_TYPE_COMBINED_SCHEDULE,
                                 ENTITY_TYPE_LIGHT,
                                 ENTITY_TYPE_SCHEDULED_LIGHT,
                                 ENTITY_TYPE_REMOTE,
@@ -3077,6 +3129,47 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
+    # Combined Schedule
+    # ------------------------------------------------------------------
+
+    async def async_step_combined_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Configure a Virtual Combined Schedule."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            errors = _validate_combined_schedule_inputs(
+                self.hass, flat.get(CONF_SCHEDULE_INPUTS, [])
+            )
+            if not errors:
+                result, errors = await self._resolve_and_create(
+                    entity_type=ENTITY_TYPE_COMBINED_SCHEDULE,
+                    name=flat[CONF_NAME],
+                    data={CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE, **flat},
+                    prefill=user_input,
+                    entity_id_format=BINARY_SENSOR_ENTITY_ID_FORMAT,
+                )
+                if result is not None:
+                    return result
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME): str,
+                **_combined_schedule_fields(self.hass, []),
+                **_entity_id_section(),
+            }
+        )
+        return self.async_show_form(
+            step_id="combined_schedule",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or self._prefill or {}
+            ),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
     # Virtual Light
     # ------------------------------------------------------------------
 
@@ -3384,6 +3477,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
             ENTITY_TYPE_ILLUMINANCE: self.async_step_illuminance,
             ENTITY_TYPE_SCHEDULE: self.async_step_schedule,
+            ENTITY_TYPE_COMBINED_SCHEDULE: self.async_step_combined_schedule,
             ENTITY_TYPE_LIGHT: self.async_step_light,
             ENTITY_TYPE_SCHEDULED_LIGHT: self.async_step_scheduled_light,
             ENTITY_TYPE_REMOTE: self.async_step_remote,
@@ -3463,9 +3557,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 constituents = user_input.get(
                     CONF_TRIGGER_SENSORS, []
                 ) + user_input.get(CONF_MAINTAIN_SENSORS, [])
-                if _combined_occupancy_creates_cycle(
-                    self.hass, self._entry, constituents
-                ):
+                if _combined_creates_cycle(self.hass, self._entry, constituents):
                     errors["base"] = "combined_occupancy_cycle"
                 else:
                     timeouts = [
@@ -3482,7 +3574,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         return self._finish(user_input)
 
         cfg = self._cfg
-        cycle_exclusions = _combined_occupancy_cycle_candidates(self.hass, self._entry)
+        cycle_exclusions = _combined_cycle_candidates(self.hass, self._entry)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
@@ -3671,6 +3763,40 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         return self.async_show_form(
             step_id="schedule_source",
             data_schema=self.add_suggested_values_to_schema(schema, user_input or cfg),
+            errors=errors,
+        )
+
+    # ------------------------------------------------------------------
+    # Combined Schedule
+    # ------------------------------------------------------------------
+
+    async def async_step_combined_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Edit a Virtual Combined Schedule."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            inputs = user_input.get(CONF_SCHEDULE_INPUTS, [])
+            errors = _validate_combined_schedule_inputs(self.hass, inputs)
+            if not errors and _combined_creates_cycle(self.hass, self._entry, inputs):
+                errors["base"] = "combined_schedule_cycle"
+            if not errors:
+                return self._finish(user_input)
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=self._cfg[CONF_NAME]): str,
+                **_combined_schedule_fields(
+                    self.hass, _combined_cycle_candidates(self.hass, self._entry)
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="combined_schedule",
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or self._cfg
+            ),
             errors=errors,
         )
 

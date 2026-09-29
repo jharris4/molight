@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Virtual Combined Schedule**: combines schedules with any/all logic, so
+  one light can follow several windows — e.g. a bedside lamp on in the
+  morning and again in the evening. Combined schedules nest, and an
+  unavailable input only matters when it could change the result.
+
 ### Fixed
 
 - A follow-mode real light coming back from `unavailable` is now made to

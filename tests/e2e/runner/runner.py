@@ -99,6 +99,17 @@ NEST_INNER = "binary_sensor.e2e_nest_inner"
 NEST_OUTER = "binary_sensor.e2e_nest_outer"
 COMBINED_BOOT = "binary_sensor.e2e_combined_boot"
 COMBINED_BOOT_TRIGGER = "binary_sensor.e2e_combined_boot_trigger"
+COMBO_A = "binary_sensor.e2e_combo_a"
+COMBO_B = "binary_sensor.e2e_combo_b"
+COMBO_ANY = "binary_sensor.e2e_combo_any"
+COMBO_ALL = "binary_sensor.e2e_combo_all"
+COMBO_NOT = "binary_sensor.e2e_combo_not"
+COMBO_WINDOW = "binary_sensor.e2e_combo_window"
+COMBO_WINDOW_ANY = "binary_sensor.e2e_combo_window_any"
+COMBO_BOOT_SOURCE = "binary_sensor.e2e_combo_boot_source"
+COMBO_BOOT_WINDOW = "binary_sensor.e2e_combo_boot_window"
+COMBO_BOOT = "binary_sensor.e2e_combo_boot"
+COMBO_BOOT_LIGHT = "light.e2e_combo_boot_light"
 CT_LIGHT = "light.e2e_ct_virtual"
 CT_MIX_LIGHT = "light.e2e_ct_mix"
 CT_REMOTE_LAST_ACTION = "sensor.e2e_ct_remote_last_action"
@@ -132,6 +143,9 @@ HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
 DOOR_RESTART_SNAPSHOT = Path("/ha-config/e2e-door-restart-snapshot.json")
 COMBINED_RESTART_SNAPSHOT = Path("/ha-config/e2e-combined-restart-snapshot.json")
+COMBINED_SCHEDULE_RESTART_SNAPSHOT = Path(
+    "/ha-config/e2e-combined-schedule-restart-snapshot.json"
+)
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
@@ -6893,6 +6907,384 @@ def run_combined_restart_verify() -> None:
     )
 
 
+def create_time_schedule(
+    client: HomeAssistantClient,
+    name: str,
+    entity_id: str,
+    start: datetime,
+    end: datetime,
+) -> str:
+    """Create a fixed time-window schedule through its API flow."""
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": name,
+            "start": {"time": start.strftime("%H:%M:%S")},
+            "end": {"time": end.strftime("%H:%M:%S")},
+            "advanced": {"entity_id": entity_id},
+        },
+    )
+    return finish_creation(result, name)
+
+
+def create_combined_schedule(
+    client: HomeAssistantClient,
+    name: str,
+    entity_id: str,
+    inputs: list[str],
+    *,
+    operator: str = "any",
+    invert: bool = False,
+) -> str:
+    """Create a Virtual Combined Schedule through its API flow."""
+    return create_entry(
+        client,
+        "combined_schedule",
+        {
+            "name": name,
+            "schedule_inputs": inputs,
+            "schedule_operator": operator,
+            "schedule_invert": invert,
+            "advanced": {"entity_id": entity_id},
+        },
+        name,
+    )
+
+
+def wait_on_off(
+    client: HomeAssistantClient, expected: dict[str, str], why: str
+) -> None:
+    """Wait for several entities to reach their expected states."""
+    for entity_id, state in expected.items():
+        client.wait_state(
+            entity_id, lambda current, s=state: current["state"] == s, f"{state}: {why}"
+        )
+
+
+def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
+    """Combined schedules follow any/all of their inputs, nest, and track edits."""
+    client.set_state(RAW_SCHEDULE, "off")
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    a_id = create_virtual_schedule(
+        client, "E2E Combo A", "e2e_combo_a", source=RAW_SCHEDULE
+    )
+    b_id = create_virtual_schedule(
+        client, "E2E Combo B", "e2e_combo_b", source=RAW_REMOVAL_MOTION
+    )
+    expect_rejection(
+        client,
+        submit_create(
+            client,
+            "combined_schedule",
+            {
+                "name": "E2E Combo Empty",
+                "schedule_inputs": [],
+                "schedule_operator": "any",
+                "schedule_invert": False,
+                "advanced": {},
+            },
+        ),
+        "schedule_inputs_required",
+    )
+    any_id = create_combined_schedule(
+        client, "E2E Combo Any", "e2e_combo_any", [COMBO_A, COMBO_B]
+    )
+    all_id = create_combined_schedule(
+        client, "E2E Combo All", "e2e_combo_all", [COMBO_A, COMBO_B], operator="all"
+    )
+    not_id = create_combined_schedule(
+        client, "E2E Combo Not", "e2e_combo_not", [COMBO_ANY], invert=True
+    )
+    for entry_id in (a_id, b_id, any_id, all_id, not_id):
+        assert_entry_loaded(client, entry_id)
+    wait_on_off(
+        client, {COMBO_ANY: "off", COMBO_ALL: "off", COMBO_NOT: "on"}, "both off"
+    )
+    client.wait_state(
+        COMBO_NOT,
+        lambda state: (
+            state["attributes"].get("resolved_schedules") == [COMBO_A, COMBO_B]
+        ),
+        "expanded through the nested Any to its two mirrors",
+    )
+
+    client.set_state(RAW_SCHEDULE, "on")
+    wait_on_off(
+        client, {COMBO_ANY: "on", COMBO_ALL: "off", COMBO_NOT: "off"}, "only A on"
+    )
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    wait_on_off(client, {COMBO_ALL: "on"}, "both on")
+    any_marker = client.state(COMBO_ANY)["attributes"]["current_window_start"]
+    checkpoint("any/all/inverted-nested follow their inputs")
+
+    # An unavailable input only matters when it could change the result, and
+    # an outage is not a new window.
+    client.set_available(RAW_SCHEDULE, False)
+    wait_on_off(
+        client,
+        {COMBO_A: "unavailable", COMBO_ANY: "on", COMBO_ALL: "unavailable"},
+        "A unavailable while B is on",
+    )
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    wait_on_off(
+        client,
+        {COMBO_ANY: "unavailable", COMBO_ALL: "off", COMBO_NOT: "unavailable"},
+        "A unavailable while B is off",
+    )
+    client.set_available(RAW_SCHEDULE, True)
+    client.wait_state(
+        COMBO_ANY,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("current_window_start") == any_marker
+        ),
+        "on again with its window marker unchanged by the outage",
+    )
+    checkpoint("unavailable inputs only decide the result when they could")
+
+    # Time-window inputs are read from config, so editing one rebuilds users.
+    now = datetime.now(UTC).replace(microsecond=0)
+    window_id = create_time_schedule(
+        client,
+        "E2E Combo Window",
+        "e2e_combo_window",
+        now + timedelta(hours=2),
+        now + timedelta(hours=3),
+    )
+    window_any_id = create_combined_schedule(
+        client, "E2E Combo Window Any", "e2e_combo_window_any", [COMBO_WINDOW]
+    )
+    client.wait_state(
+        COMBO_WINDOW_ANY,
+        lambda state: (
+            state["state"] == "off"
+            and near(
+                state["attributes"].get("next_transition"), now + timedelta(hours=2)
+            )
+        ),
+        "off, pointing at its input's window start",
+    )
+    result = client.start_flow(options_entry_id=window_id)
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"}, options=True)
+    expect_step(result, "schedule_time")
+    start_at = now - timedelta(minutes=1)
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Combo Window",
+            "start": {"time": start_at.strftime("%H:%M:%S")},
+            "end": {"time": (now + timedelta(minutes=10)).strftime("%H:%M:%S")},
+        },
+        options=True,
+    )
+    finish_options(result, "Combo window")
+    client.wait_state(
+        COMBO_WINDOW_ANY,
+        lambda state: (
+            state["state"] == "on"
+            and near(state["attributes"].get("current_window_start"), start_at)
+        ),
+        "on in the edited window: the input edit rebuilt it",
+    )
+    checkpoint("editing a time-window input rebuilds the combination")
+
+    # Deleting an input strips it from the combinations that used it.
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    remove_entry_and_entity(client, b_id, COMBO_B)
+    wait_stored_entry(
+        all_id,
+        lambda cfg: cfg.get("schedule_inputs") == [COMBO_A],
+        "stored without the deleted input",
+    )
+    client.wait_state(
+        COMBO_ALL,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("resolved_schedules") == [COMBO_A]
+        ),
+        "rebuilt on A alone",
+    )
+    for entry_id, entity_id in (
+        (not_id, COMBO_NOT),
+        (any_id, COMBO_ANY),
+        (all_id, COMBO_ALL),
+        (window_any_id, COMBO_WINDOW_ANY),
+        (window_id, COMBO_WINDOW),
+        (a_id, COMBO_A),
+    ):
+        remove_entry_and_entity(client, entry_id, entity_id)
+    client.set_state(RAW_SCHEDULE, "off")
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    print(
+        "PASS: combined schedules followed any/all/inverted inputs, outages, "
+        "an input edit, and an input deletion"
+    )
+
+
+def run_combined_schedule_restart_prepare() -> None:
+    """Leave a follow light manually off inside a combined window for a restart."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    expect_fixtures_loaded(client)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    now = datetime.now(UTC).replace(microsecond=0)
+    source_id = create_virtual_schedule(
+        client,
+        "E2E Combo Boot Source",
+        "e2e_combo_boot_source",
+        source=RAW_REMOVAL_MOTION,
+    )
+    window_id = create_time_schedule(
+        client,
+        "E2E Combo Boot Window",
+        "e2e_combo_boot_window",
+        now - timedelta(minutes=1),
+        now + timedelta(minutes=15),
+    )
+    combined_id = create_combined_schedule(
+        client,
+        "E2E Combo Boot",
+        "e2e_combo_boot",
+        [COMBO_BOOT_WINDOW, COMBO_BOOT_SOURCE],
+        operator="all",
+    )
+    light_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Combo Boot Light",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"schedule_entity": COMBO_BOOT, "schedule_mode": "follow"},
+            "advanced": {"entity_id": "e2e_combo_boot_light"},
+        },
+        "Combo boot light",
+    )
+    for entry_id in (source_id, window_id, combined_id, light_id):
+        wait_entry_loaded(client, entry_id)
+    client.wait_state(COMBO_BOOT, lambda state: state["state"] == "off", "off")
+
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    combined = client.wait_state(
+        COMBO_BOOT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("current_window_start") is not None
+        ),
+        "on once both inputs are on",
+    )
+    marker = combined["attributes"]["current_window_start"]
+    client.wait_state(
+        COMBO_BOOT_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "scheduled"
+            and state["attributes"].get("schedule_window_start") == marker
+        ),
+        "scheduled in the combined window",
+    )
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    client.call_service("light", "turn_off", {"entity_id": COMBO_BOOT_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", COMBO_BOOT_LIGHT)
+    # The mirrored source arrives only after boot, so the combination depends
+    # on an input that hasn't reported while it restores.
+    client.set_startup_delay(RAW_REMOVAL_MOTION, 6)
+    COMBINED_SCHEDULE_RESTART_SNAPSHOT.write_text(
+        json.dumps(
+            {
+                "source_id": source_id,
+                "window_id": window_id,
+                "combined_id": combined_id,
+                "light_id": light_id,
+                "marker": marker,
+            }
+        )
+    )
+    print("PASS: combined-schedule follow light prepared, manually off mid-window")
+
+
+def run_combined_schedule_restart_verify() -> None:
+    """The window marker survives a restart with a late input; a new window lights."""
+    client = HomeAssistantClient()
+    client.wait_ready()
+    client.authenticate()
+    snapshot: dict[str, str] = json.loads(
+        COMBINED_SCHEDULE_RESTART_SNAPSHOT.read_text()
+    )
+    for key in ("source_id", "window_id", "combined_id", "light_id"):
+        wait_entry_loaded(client, snapshot[key])
+    client.wait_state(
+        COMBO_BOOT_SOURCE,
+        lambda state: state["state"] == "on",
+        "on once its late source reports",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        COMBO_BOOT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("current_window_start") == snapshot["marker"]
+        ),
+        "on with the same window marker as before the restart",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        COMBO_BOOT_LIGHT, lambda _state: True, "present", timeout=WAIT_TIMEOUT
+    )
+    assert_state_stays(
+        client,
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: the manual off mid-window is respected across the restart",
+        duration=4,
+    )
+    wait_machine_state(client, "idle", COMBO_BOOT_LIGHT)
+
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.wait_state(COMBO_BOOT, lambda state: state["state"] == "off", "off")
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    combined = client.wait_state(
+        COMBO_BOOT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("current_window_start")
+            not in (None, snapshot["marker"])
+        ),
+        "on in a new window",
+    )
+    client.wait_state(
+        COMBO_BOOT_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "scheduled"
+            and state["attributes"].get("schedule_window_start")
+            == combined["attributes"]["current_window_start"]
+        ),
+        "scheduled in the new window",
+    )
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
+    client.call_service("light", "turn_off", {"entity_id": COMBO_BOOT_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    for key, entity_id in (
+        ("light_id", COMBO_BOOT_LIGHT),
+        ("combined_id", COMBO_BOOT),
+        ("window_id", COMBO_BOOT_WINDOW),
+        ("source_id", COMBO_BOOT_SOURCE),
+    ):
+        remove_entry_and_entity(client, snapshot[key], entity_id)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    print(
+        "PASS: a combined schedule kept its window across a restart with a late "
+        "input, and a new window lit its follow light"
+    )
+
+
 def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
     """Colour temperature: auto-on, mirrored wall changes, presets, mixed routing."""
     entry_id = create_entry(
@@ -7222,6 +7614,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_hold_entity_scenarios,
         run_maintain_scenarios,
         run_combined_extras_scenarios,
+        run_combined_schedule_scenarios,
     ],
     "c": [
         run_dark_arrival_scenarios,
@@ -7296,6 +7689,8 @@ def main() -> None:
         "door-restart-verify": run_door_restart_verify,
         "combined-restart-prepare": run_combined_restart_prepare,
         "combined-restart-verify": run_combined_restart_verify,
+        "combined-schedule-restart-prepare": run_combined_schedule_restart_prepare,
+        "combined-schedule-restart-verify": run_combined_schedule_restart_verify,
         "restart": run_container_restart_verification,
         "unavailable-light-prepare": run_unavailable_light_prepare,
         "unavailable-light-recover": run_unavailable_light_recovery,

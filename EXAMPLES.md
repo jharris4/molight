@@ -14,6 +14,7 @@ The examples build on each other:
 8. [Hallway night light](#example-8--hallway-night-light-virtual-scheduled-light) — different settings inside and outside a schedule
 9. [Pico remote](#example-9--pico-remote-for-the-closet-light-virtual-remote) — remote buttons instead of automations
 10. [Bilresa remote](#example-10--bilresa-two-button-remote-single-vs-double-click) — single vs. double clicks
+11. [Bedside lamp](#example-11--bedside-lamp-morning-and-evening-virtual-combined-schedule) — two windows combined into one schedule
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -332,6 +333,49 @@ Brightness down → Single-click buttons:  event.living_room_buttons_button_2
 ```
 
 Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Lutron buttons), so there's nothing to configure — and binding a double click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
+
+---
+
+### Example 11 — Bedside lamp, morning and evening (Virtual Combined Schedule)
+
+On 06:30–08:00 and again from sunset until 23:00. Each window is its own schedule; a combined schedule joins them, and the lamp follows that.
+
+**1. Two Virtual Schedule Sensors**
+
+```text
+Name:          Bedside Morning                 # → binary_sensor.bedside_morning
+Window start:
+  Time:        06:30
+Window end:
+  Time:        08:00
+```
+
+```text
+Name:          Bedside Evening                 # → binary_sensor.bedside_evening
+Window start:
+  Sun event:   sunset
+Window end:
+  Time:        23:00
+```
+
+**2. Virtual Combined Schedule**
+
+```text
+Name:          Bedside Schedule                # → binary_sensor.bedside_schedule
+Schedules:     binary_sensor.bedside_morning, binary_sensor.bedside_evening
+Combine with:  Any                             # on while either window is on
+```
+
+**3. Virtual Light**
+
+```text
+Name:              Bedside                     # → light.bedside
+Lights to control: light.bedside_real
+Schedule sensor:   binary_sensor.bedside_schedule
+Schedule mode:     follow
+```
+
+Each window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a source-backed schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
 
 ---
 
