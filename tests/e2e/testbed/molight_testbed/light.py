@@ -33,7 +33,7 @@ from .const import (
     LIGHT_MULTI_RGB,
     LIGHT_TIMER,
 )
-from .entity import TestbedEntity
+from .entity import TestbedEntity, async_add_with_startup_delays
 
 REPORT_STEP_GAP = 0.3  # seconds between a piecewise power and attribute report
 
@@ -295,7 +295,9 @@ async def async_setup_entry(
 ) -> None:
     """Add representative lights with deterministic entity ids."""
     controller = controller_for_entry(hass, entry)
-    async_add_entities(
+    async_add_with_startup_delays(
+        controller,
+        async_add_entities,
         [
             TestbedLight(
                 controller,
@@ -342,5 +344,5 @@ async def async_setup_entry(
                 color_modes={ColorMode.RGB},
                 features=LightEntityFeature.TRANSITION,
             ),
-        ]
+        ],
     )

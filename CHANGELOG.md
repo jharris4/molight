@@ -29,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   window it is re-lit with the window's brightness, color and turn-on
   selection, outside the window it is turned off. Previously a strip that
   turns its LEDs on at boot ran a full timer after a daytime power cut, and
-  one that boots dark stayed off for the rest of the night.
+  one that boots dark stayed off for the rest of the night. A light that is
+  still loading when Home Assistant starts is not a reboot: its first state
+  is adopted by the startup rules, so a manual off mid-window still stands.
 
 ## [1.7.0] - 2026-08-27
 

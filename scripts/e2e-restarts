@@ -80,7 +80,7 @@ echo "Restarting with a combined sensor held by its maintain sensor..."
 compose restart homeassistant
 compose run --rm runner python runner.py combined-restart-verify combined-schedule-restart-prepare
 
-echo "Restarting with a combined schedule whose mirrored input loads late..."
+echo "Restarting with a combined schedule whose mirrored input and member light load late..."
 compose restart homeassistant
 compose run --rm runner python runner.py combined-schedule-restart-verify logs
 

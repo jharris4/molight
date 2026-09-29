@@ -330,7 +330,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 
 A schedule window has two edges: the **start**, when the schedule sensor goes `off → on` (22:00 for a 22:00–06:00 window), and the **end**, when it goes `on → off` (06:00). The **schedule mode** decides what each edge does and whether the window gates the sensors:
 
-- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm. A real light coming back from `unavailable` (a reboot, a power cut, an integration reload) is made to match the schedule: inside the window it is re-lit with the window's settings and turn-on selection, outside it is turned off — whatever it booted into is not treated as a manual change. Only while the light stays connected does a manual on or off stand.
+- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm. A real light coming back from `unavailable` (a reboot, a power cut, an integration reload) is made to match the schedule: inside the window it is re-lit with the window's settings and turn-on selection, outside it is turned off — whatever it booted into is not treated as a manual change. Only while the light stays connected does a manual on or off stand. A member that is still loading when Home Assistant starts is not a reboot: its first state is handled by the startup rules below.
 - **The three Gate modes** behave identically outside the window and at the start, and differ only at the end:
   - *Outside the window*, occupancy and the door cannot turn the light on. Manual control still works.
   - *At the start*, the gate lifts and presence that is already standing is re-evaluated: if the light is off and it is dark, occupancy already being `on` (or an `open_close` door already open) turns it on; if the light is already on, that presence is adopted as `OCCUPIED`. Nothing is turned off at the start. This is why a hallway light can come on at 22:00 with nobody walking in — its motion sensor was already on.
@@ -598,7 +598,8 @@ confirms removing its target leaves the surviving remote inert. Virtual
 Combined Schedule scenarios check any/all/inverted combinations of mirrored
 schedules, unavailable inputs, rebuilding after a time-window input is edited,
 and input deletion, then restart with a follow light manually off mid-window
-while an input loads late, verifying the window is kept and a new one lights it.
+while an input and the member light load late, verifying the window is kept,
+the late member's first state doesn't re-light it, and a new window does.
 
 The default image is pinned to the Home Assistant release used by the current
 test dependencies. Override it to exercise another release:

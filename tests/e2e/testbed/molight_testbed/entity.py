@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
+from homeassistant.core import callback
 from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 
 from . import TestbedController
 from .const import DOMAIN
@@ -60,3 +64,35 @@ class TestbedEntity(Entity):
     def set_test_available(self, available: bool) -> None:
         """Store availability before the controller publishes a new state."""
         self.record["available"] = available
+
+
+@callback
+def async_add_with_startup_delays(
+    controller: TestbedController,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    entities: list[TestbedEntity],
+) -> None:
+    """Add entities now, holding back any with a pending startup delay.
+
+    A delayed entity is added later, like a source integration that only
+    creates its entities well after Home Assistant is running.
+    """
+    ready: list[TestbedEntity] = []
+    for entity in entities:
+        delay = controller.take_startup_delay(entity.testbed_key)
+        if delay:
+            async_call_later(
+                controller.hass, delay, partial(_add_late, async_add_entities, entity)
+            )
+        else:
+            ready.append(entity)
+    async_add_entities(ready)
+
+
+@callback
+def _add_late(
+    async_add_entities: AddConfigEntryEntitiesCallback,
+    entity: TestbedEntity,
+    _now: Any,
+) -> None:
+    async_add_entities([entity])

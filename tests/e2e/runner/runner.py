@@ -7194,8 +7194,11 @@ def run_combined_schedule_restart_prepare() -> None:
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", COMBO_BOOT_LIGHT)
     # The mirrored source arrives only after boot, so the combination depends
-    # on an input that hasn't reported while it restores.
+    # on an input that hasn't reported while it restores. The member light
+    # arrives later still, once the window is back on: its first state must
+    # read as startup adoption, not as a reboot to reconcile.
     client.set_startup_delay(RAW_REMOVAL_MOTION, 6)
+    client.set_startup_delay(RAW_TIMER_LIGHT, 8)
     COMBINED_SCHEDULE_RESTART_SNAPSHOT.write_text(
         json.dumps(
             {
@@ -7237,6 +7240,12 @@ def run_combined_schedule_restart_verify() -> None:
     )
     client.wait_state(
         COMBO_BOOT_LIGHT, lambda _state: True, "present", timeout=WAIT_TIMEOUT
+    )
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off once its late boot reports",
+        timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
         client,
@@ -7281,7 +7290,7 @@ def run_combined_schedule_restart_verify() -> None:
     client.set_state(RAW_REMOVAL_MOTION, "off")
     print(
         "PASS: a combined schedule kept its window across a restart with a late "
-        "input, and a new window lit its follow light"
+        "input and a late member, and a new window lit its follow light"
     )
 
 

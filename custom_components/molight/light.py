@@ -236,6 +236,7 @@ from homeassistant.components.light import (
 from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import (
     ATTR_OPTION,
+    ATTR_RESTORED,
     EVENT_HOMEASSISTANT_STARTED,
     SERVICE_SELECT_OPTION,
     STATE_UNAVAILABLE,
@@ -1319,7 +1320,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                 STATE_UNAVAILABLE,
                 STATE_UNKNOWN,
             )
-            if member_recovered and self._reconcile_recovered_member():
+            # A first sighting, or the placeholder HA writes for a registered
+            # entity at boot, is startup adoption, not a member reboot.
+            member_rebooted = (
+                member_recovered
+                and old_state is not None
+                and not old_state.attributes.get(ATTR_RESTORED)
+            )
+            if member_rebooted and self._reconcile_recovered_member():
                 return
             if (
                 member_recovered

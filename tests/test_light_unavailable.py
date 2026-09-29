@@ -13,12 +13,17 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import callback
+from homeassistant.const import (
+    ATTR_RESTORED,
+    EVENT_CALL_SERVICE,
+    EVENT_HOMEASSISTANT_STARTED,
+)
+from homeassistant.core import CoreState, State, callback
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache,
 )
 
 from custom_components.molight.const import (
@@ -796,6 +801,69 @@ async def test_follow_manual_off_mid_window_is_lost_on_reboot(
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
+
+
+async def _start_with_member_loading(
+    hass: HomeAssistant, boot: str, restored_light: State | None
+) -> None:
+    """Start HA with the member still loading: absent, or the registry's
+    restored-unavailable placeholder."""
+    if restored_light is not None:
+        mock_restore_cache(hass, [restored_light])
+    if boot == "placeholder":
+        hass.states.async_set(REAL, "unavailable", {ATTR_RESTORED: True})
+    hass.set_state(CoreState.starting)
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("boot", ["placeholder", "absent"])
+async def test_follow_member_loading_after_startup_keeps_manual_off(
+    hass: HomeAssistant, boot: str
+) -> None:
+    """A member still loading at startup is not a reboot: the manual off the
+    seed respected survives the member's first real state."""
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await _start_with_member_loading(
+        hass, boot, State(VIRTUAL, "off", {"schedule_window_start": MARKER})
+    )
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["schedule_window_start"] == MARKER
+    assert _real_calls(calls, "turn_on") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("boot", ["placeholder", "absent"])
+async def test_follow_member_loading_after_startup_is_adopted_outside_window(
+    hass: HomeAssistant, boot: str
+) -> None:
+    """A member that first reports lit outside the window after startup is
+    adopted with a timer, as the startup seed would have done."""
+    calls = _record_calls(hass)
+    hass.states.async_set(SCHED, "off")
+    await _start_with_member_loading(hass, boot, None)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert _real_calls(calls, "turn_off") == []
 
 
 @pytest.mark.asyncio
