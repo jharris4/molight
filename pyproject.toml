@@ -1,6 +1,8 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Fail a hung test instead of hanging CI until the runner's limit.
+timeout = 60
 markers = [
     "regular_virtual_light_only: behavior requires a regular Virtual Light's own schedule mode",
     "allow_error_log: the test logs an error on purpose",
