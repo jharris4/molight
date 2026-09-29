@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   color the real light came on at. Previously the virtual light kept its
   earlier values, so the warn stage could jump to full brightness and a
   re-trigger could leave the room at the warn brightness.
+- A real light's reply to one command that arrives after the next command
+  was sent is no longer read as a manual change. Previously a slow bulb
+  reporting the end of its effect-stage fade just after the warn stage began
+  could restart the full timer at every expiry, so the light never turned
+  off.
 
 ## [1.7.0] - 2026-08-27
 

@@ -411,6 +411,7 @@ async def async_setup_entry(
 # a member for 5 s, and a slow bulb's genuine reply arrives under its own.
 ECHO_SETTLE_SECONDS = 3.0  # partial replies (power first, fade steps) count
 ECHO_LATE_SECONDS = 30.0  # only a reply matching the command still counts
+ECHO_HISTORY = 8  # commands per member whose reply may still be on its way
 ECHO_BRIGHTNESS_TOLERANCE = 5
 ECHO_HUE_TOLERANCE = 10.0
 ECHO_SATURATION_TOLERANCE = 10.0
@@ -641,8 +642,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Context ids of our own light service calls: while a command settles,
         # only a write under one of them can be its echo.
         self._self_context_ids: deque[str] = deque(maxlen=16)
-        # What each member should echo for our latest command (see judge()).
-        self._echo_expectations: dict[str, _EchoExpectation] = {}
+        # What each member should echo for our recent commands, oldest first
+        # (see judge()): a reply to the previous one may trail the latest.
+        self._echo_expectations: dict[str, deque[_EchoExpectation]] = {}
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1672,7 +1674,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.hass.loop.time(),
         )
         for entity_id in self._lights:
-            self._echo_expectations[entity_id] = expectation
+            self._echo_expectations.setdefault(
+                entity_id, deque(maxlen=ECHO_HISTORY)
+            ).append(expectation)
 
     def _is_own_echo(
         self,
@@ -1682,40 +1686,65 @@ class VirtualLight(LightEntity, RestoreEntity):
         *,
         own_context: bool,
     ) -> bool:
-        """Judge a member write against our latest command to it.
+        """Judge a member write against our recent commands to it.
 
-        While the command settles, only a write under our own context that is
+        While a command settles, only a write under our own context that is
         consistent with what we asked for is its echo (Home Assistant reuses
         that context for the member's reply). Later, a slow bulb's reply
         arrives under its own context, so a write fully matching the command
         still counts; anything else — stale, missing, contradicted — is a real
-        change.
+        change. A reply to an earlier command may arrive after a newer one
+        was sent, so each command still awaiting its reply is tried, newest
+        first.
         """
-        expectation = self._echo_expectations.get(entity_id)
-        if expectation is None:
-            return False
-        age = self.hass.loop.time() - expectation.issued
-        if age > ECHO_LATE_SECONDS + expectation.transition:
+        now = self.hass.loop.time()
+        waiting: list[_EchoExpectation] = []
+        contradicted: list[_EchoExpectation] = []
+        matched: _EchoExpectation | None = None
+        pending = False
+        for expectation in reversed(self._echo_expectations.get(entity_id, ())):
+            age = now - expectation.issued
+            if age > ECHO_LATE_SECONDS + expectation.transition:
+                continue
+            settling = age <= ECHO_SETTLE_SECONDS + expectation.transition
+            if settling and not own_context:
+                waiting.append(expectation)
+                continue
+            verdict = expectation.judge(old_state, new_state, settling=settling)
+            if verdict == "match":
+                matched = expectation
+                break  # answered, and with it every older command
+            if verdict == "pending":
+                pending = True
+                waiting.append(expectation)
+            else:
+                contradicted.append(expectation)
+        if matched is not None or pending:
+            # Only the command the reply belongs to is settled by it.
+            waiting += contradicted
+        waiting.sort(key=lambda expectation: expectation.issued)
+        if waiting:
+            self._echo_expectations[entity_id] = deque(waiting, maxlen=ECHO_HISTORY)
+        else:
             self._echo_expectations.pop(entity_id, None)
-            return False
-        settling = age <= ECHO_SETTLE_SECONDS + expectation.transition
-        if settling and not own_context:
-            return False
-        verdict = expectation.judge(old_state, new_state, settling=settling)
-        if verdict != "pending":
-            self._echo_expectations.pop(entity_id, None)
-        if verdict == "match":
-            self._mirror_plain_echo(expectation)
-        return verdict != "contradiction"
+        if matched is not None:
+            self._mirror_plain_echo(matched, waiting)
+        return matched is not None or pending
 
-    def _mirror_plain_echo(self, expectation: _EchoExpectation) -> None:
-        """Adopt what the members came on at when our command named no value."""
+    def _mirror_plain_echo(
+        self, expectation: _EchoExpectation, waiting: list[_EchoExpectation]
+    ) -> None:
+        """Adopt what the members came on at when our command named no value.
+
+        A value named by a command still awaiting its reply is left alone.
+        """
         if not expectation.on:
             return
+        commands = [expectation, *waiting]
         brightness = color = None
-        if expectation.brightness is None:
+        if all(command.brightness is None for command in commands):
             brightness = self._physical_brightness()
-        if expectation.color is None:
+        if all(command.color is None for command in commands):
             color = self._physical_color()
         if brightness is None and color is None:
             return

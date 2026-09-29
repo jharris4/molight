@@ -18,6 +18,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
     STATE_ACTIVE,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_WARN,
@@ -480,8 +481,9 @@ def _age_expectations(hass: HomeAssistant, seconds: float) -> None:
         for entity in hass.data["entity_components"]["light"].entities
         if entity.entity_id == VIRTUAL
     )
-    for expectation in virtual._echo_expectations.values():
-        expectation.issued -= seconds
+    for expectations in virtual._echo_expectations.values():
+        for expectation in expectations:
+            expectation.issued -= seconds
 
 
 @pytest.mark.asyncio
@@ -682,3 +684,204 @@ async def test_turn_off_echo_mirrors_nothing(
 
     assert hass.states.get(VIRTUAL).state == "off"
     assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+async def _into_warn(
+    hass: HomeAssistant, freezer, **entry_kwargs
+) -> tuple[Context, Context]:
+    """Light on at 200, run into EFFECT then WARN with no member reply yet."""
+    entry = make_light_entry(
+        name="Test Light", lights=[MEMBER], timeout=60, **entry_kwargs
+    )
+    await _setup(hass, entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_EFFECT
+    effect_context = contexts[-1]
+
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert contexts[-1] is not effect_context
+    return effect_context, contexts[-1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply_context", ["effect", "warn", "own"])
+async def test_late_effect_dim_reply_does_not_abort_warn(
+    hass: HomeAssistant, freezer, reply_context: str
+) -> None:
+    """The effect dim reported after the warn command is still the effect's echo.
+
+    Home Assistant stamps the newest command's context on a reply, so the late
+    reply is tried under the effect's, the warn's and a context of its own.
+    """
+    effect_context, warn_context = await _into_warn(
+        hass,
+        freezer,
+        effect_timeout=2,
+        effect_brightness=10,
+        warn_timeout=30,
+        warn_brightness=50,
+    )
+    if reply_context == "own":
+        _age_expectations(hass, 10)
+    context = {"effect": effect_context, "warn": warn_context, "own": Context()}[
+        reply_context
+    ]
+
+    await _write(hass, "on", context, brightness=26)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    await _write(hass, "on", warn_context, brightness=128)
+
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert _attrs(hass)["brightness"] == 128
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply_context", ["effect", "warn"])
+async def test_late_effect_blink_off_reply_does_not_abort_warn(
+    hass: HomeAssistant, freezer, reply_context: str
+) -> None:
+    """A blink-off reported after the warn command is not a human turn-off,
+    and the warn reply that follows is not a human turn-on."""
+    effect_context, warn_context = await _into_warn(
+        hass, freezer, effect_timeout=2, warn_timeout=30, warn_brightness=50
+    )
+    context = effect_context if reply_context == "effect" else warn_context
+
+    await _write(hass, "off", context)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    await _write(hass, "on", warn_context, brightness=128)
+
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert _attrs(hass)["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_in_order_stage_replies_keep_the_sequence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Each stage answered before the next begins runs through to the warn."""
+    entry = make_light_entry(
+        name="Test Light",
+        lights=[MEMBER],
+        timeout=60,
+        effect_timeout=2,
+        effect_brightness=10,
+        warn_timeout=30,
+        warn_brightness=50,
+    )
+    await _setup(hass, entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    await _write(hass, "on", contexts[-1], brightness=26)
+    assert _attrs(hass)["molight_state"] == STATE_EFFECT
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    await _write(hass, "on", contexts[-1], brightness=128)
+
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_late_reply_to_restore_after_warn_is_not_physical(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The warn reply trailing the restore command is not a human dim."""
+    entry = make_light_entry(
+        name="Test Light",
+        lights=[MEMBER],
+        timeout=60,
+        warn_timeout=30,
+        warn_brightness=20,
+    )
+    await _setup(hass, entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    await _virtual(hass, "turn_on")  # re-trigger: restores the 200
+
+    await _write(hass, "on", contexts[-1], brightness=51)
+    await _write(hass, "on", contexts[-1], brightness=200)
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_reply_to_newest_command_settles_the_older_ones(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Once the newest command is answered, an older level is a human dim."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=100)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+
+    await _write(hass, "on", contexts[-1], brightness=100)
+
+    assert _attrs(hass)["brightness"] == 100
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_change_contradicting_every_command_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A level matching none of the unanswered commands is a human dim, and
+    it settles them all."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+    await _virtual(hass, "turn_on", brightness=100)
+    await _virtual(hass, "turn_on", brightness=150)
+
+    await _write(hass, "on", contexts[-1], brightness=250)
+    assert _attrs(hass)["brightness"] == 250
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+
+    await _write(hass, "on", contexts[-1], brightness=100)
+    assert _attrs(hass)["brightness"] == 100
+
+
+@pytest.mark.asyncio
+async def test_late_plain_reply_keeps_newer_commanded_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A plain turn-on's late reply does not overwrite a newer commanded level."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on")
+    await _virtual(hass, "turn_on", brightness=200)
+
+    await _write(hass, "on", contexts[-1], brightness=80)
+    assert _attrs(hass)["brightness"] == 200
+    await _write(hass, "on", contexts[-1], brightness=200)
+
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["last_brightness_change_physical"] is None
