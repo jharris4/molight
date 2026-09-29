@@ -474,11 +474,27 @@ async def test_inverted_source_schedule(hass: HomeAssistant) -> None:
     assert hass.states.get("binary_sensor.home").state == "unavailable"
 
 
+def _house_mode_schedule() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        },
+    )
+
+
 @pytest.mark.asyncio
-async def test_source_schedule_restores_marker_through_restart_outage(
+async def test_source_schedule_restores_marker_from_a_save_without_extra_data(
     hass: HomeAssistant,
 ) -> None:
-    """An effective window marker survives restart while its source is down."""
+    """A state saved by an earlier version has its marker in the attributes.
+
+    Such a state was saved while the schedule was on: an unavailable state
+    never carried attributes.
+    """
     source = "binary_sensor.house_mode"
     entity_id = "binary_sensor.house_mode_schedule"
     marker = "2026-07-02T21:00:00+00:00"
@@ -487,7 +503,7 @@ async def test_source_schedule_restores_marker_through_restart_outage(
         [
             State(
                 entity_id,
-                "unavailable",
+                "on",
                 {
                     "current_window_start": marker,
                     "source_entity": source,
@@ -497,16 +513,7 @@ async def test_source_schedule_restores_marker_through_restart_outage(
         ],
     )
     hass.states.async_set(source, "unavailable")
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
-            CONF_NAME: "House Mode Schedule",
-            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
-            CONF_SCHEDULE_SOURCE: source,
-        },
-    )
-    await _setup(hass, entry)
+    await _setup(hass, _house_mode_schedule())
 
     state = hass.states.get(entity_id)
     assert state.state == "unavailable"
@@ -518,16 +525,39 @@ async def test_source_schedule_restores_marker_through_restart_outage(
     assert state.attributes["current_window_start"] == marker
 
 
-def _house_mode_schedule() -> MockConfigEntry:
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+@pytest.mark.asyncio
+async def test_source_schedule_with_a_new_source_drops_the_saved_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Choosing another source during an outage starts a new window on recovery."""
+    entity_id = "binary_sensor.house_mode_schedule"
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    hass.states.async_set("binary_sensor.new_mode", "unavailable")
+    entry = _house_mode_schedule()
+    await _setup(hass, entry)
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+
+    # Saving new options reloads the entry.
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
             CONF_NAME: "House Mode Schedule",
             CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
-            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_SOURCE: "binary_sensor.new_mode",
         },
     )
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"
+
+    freezer.move_to("2026-07-02 09:30:00+00:00")
+    hass.states.async_set("binary_sensor.new_mode", "on")
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["source_entity"] == "binary_sensor.new_mode"
+    assert state.attributes["current_window_start"] == "2026-07-02T09:30:00+00:00"
 
 
 @pytest.mark.asyncio
