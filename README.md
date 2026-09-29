@@ -191,7 +191,7 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 
 e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone.
 
-Attributes: `current_window_start` (identifies the effective `on` period — overlapping windows count as one; used by follow-mode lights for restart catch-up), `next_transition`, `source_entity`, `inverted`.
+Attributes: `current_window_start` (identifies the effective `on` period — overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_transition`, `source_entity`, `inverted`.
 
 Source-backed schedules preserve their effective state and window marker across a temporary source outage. Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state. As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
 
@@ -207,11 +207,11 @@ Combines MoLight schedules into one schedule that any light can use. Inputs can 
 
 Nested combined schedules are expanded down to the schedules they're built from: time-window schedules are read from their config and source-backed ones from their state. The result never depends on another combined schedule's state or on the order entities start up, and a sensor reached through two routes (two mirrors of one sensor, or the same schedule in two branches) is never seen half-updated. Editing any schedule underneath rebuilds the combination.
 
-Where one window ends as another begins, or windows overlap, the combination stays `on` without a blip and `current_window_start` is the start of the whole period, so a follow-mode light treats it as one window. Each separate period is a new window, so a light turned off manually in the morning still comes on in the evening.
+Where one window ends as another begins, or windows overlap, the combination stays `on` without a blip and `current_window_start` is the start of the whole period, so a follow-mode light treats it as one window. Each separate period is a new window, so a light turned off manually in the morning still comes on in the evening. Back-to-back days of one input merge too: an all-day (00:00 → 00:00) schedule is one window per day on its own, but one unbroken window inside a combination.
 
 An input that is `unavailable` makes the combination `unavailable` only when it could change the result: with **Any**, another input that is `on` keeps it `on`; with **All**, another that is `off` keeps it `off`. A disabled input counts as `unavailable` too. As with source-backed schedules, an outage is never a boundary — the window marker is kept unless an input is known to have been `off` since the period began, and while Home Assistant starts the restored state is held until inputs report. That includes restarts: a source-backed input's history while Home Assistant was down is unknown, so if it could have kept the combination `on` through the downtime, a window that started meanwhile keeps the old marker rather than re-triggering follow mode. Time-window inputs alone are always caught up. With no schedules left (every input deleted), it is `off`.
 
-Attributes: `current_window_start`, `next_transition`, `operator`, `inverted`, `resolved_schedules` (the plain schedules it was built from, for tracing why it's `on`).
+Attributes: `current_window_start` (the literal `always_on` for an inverted combination with no inputs), `next_transition`, `operator`, `inverted`, `resolved_schedules` (the plain schedules it was built from, for tracing why it's `on`).
 
 ### Virtual Light
 
@@ -330,7 +330,7 @@ The maintain occupancy sensor holds an already-on light on while it shows presen
 
 A schedule window has two edges: the **start**, when the schedule sensor goes `off → on` (22:00 for a 22:00–06:00 window), and the **end**, when it goes `on → off` (06:00). The **schedule mode** decides what each edge does and whether the window gates the sensors:
 
-- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm. A real light coming back from `unavailable` (a reboot, a power cut, an integration reload) is made to match the schedule: inside the window it is re-lit with the window's settings and turn-on selection, outside it is turned off — whatever it booted into is not treated as a manual change. Only while the light stays connected does a manual on or off stand. A member that is still loading when Home Assistant starts is not a reboot: its first state is handled by the startup rules below.
+- **`follow`** — the window owns the light. The start turns it on, the end turns it off, and while it is on inside the window (`SCHEDULED`) occupancy, maintain, illuminance, and door changes are ignored. Outside the window nothing is gated: the sensors are fully live, so a motion sensor attached to a dusk-to-dawn porch light still lights it at 2pm. A real light coming back from `unavailable` (a reboot, a power cut, an integration reload) is made to match the schedule: inside the window it is re-lit with the window's settings and turn-on selection, outside it is turned off — whatever it booted into is not treated as a manual change, and a manual dim or color change mid-window is replaced along with it. Only while the light stays connected does a manual on or off stand. A member that is still loading when Home Assistant starts is not a reboot: its first state is handled by the startup rules below.
 - **The three Gate modes** behave identically outside the window and at the start, and differ only at the end:
   - *Outside the window*, occupancy and the door cannot turn the light on. Manual control still works.
   - *At the start*, the gate lifts and presence that is already standing is re-evaluated: if the light is off and it is dark, occupancy already being `on` (or an `open_close` door already open) turns it on; if the light is already on, that presence is adopted as `OCCUPIED`. Nothing is turned off at the start. This is why a hallway light can come on at 22:00 with nobody walking in — its motion sensor was already on.
@@ -381,7 +381,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 #### Restarts and unavailability
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
-- Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A restart landing mid effect/warn restores the pre-warning brightness and color.
+- Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; recovery transitions are processed as real events (except a follow-mode real light, which is reconciled with its schedule instead). A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
 
 ### Virtual Scheduled Light

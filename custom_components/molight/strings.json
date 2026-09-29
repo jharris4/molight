@@ -508,7 +508,7 @@
         "data_description": {
           "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedules to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
           "schedule_operator": "Any: on while at least one schedule is on. All: on only while every schedule is on.",
-          "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown is never inverted to on."
+          "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown or unavailable is never inverted to on."
         },
         "sections": {
           "advanced": {
@@ -1473,7 +1473,7 @@
         "data_description": {
           "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedules to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
           "schedule_operator": "Any: on while at least one schedule is on. All: on only while every schedule is on.",
-          "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown is never inverted to on."
+          "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown or unavailable is never inverted to on."
         }
       },
       "light": {

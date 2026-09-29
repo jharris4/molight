@@ -934,8 +934,8 @@ _NEG_INF = float("-inf")
 # resolved and values trusted only from yesterday to the day after tomorrow.
 _COMBINED_DAY_OFFSETS = range(-3, 4)
 _COMBINED_TRUSTED_DAYS = (-1, 2)
-# current_window_start for an on-period with no known start (for example an
-# always-on combination): stable, so Follow mode applies it only once.
+# current_window_start for an on-period with no known start (an inverted empty
+# combination): stable, so Follow mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
 
 
