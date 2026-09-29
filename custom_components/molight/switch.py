@@ -73,9 +73,8 @@ class AutoOffSwitch(SwitchEntity, RestoreEntity):
         """Restore the previous state and publish it to the light."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
-        if last is not None and last.state == STATE_OFF:
-            self._attr_is_on = False
-            self._publish()
+        self._attr_is_on = last is None or last.state != STATE_OFF
+        self._publish()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Re-enable the light's automatic turn-offs."""

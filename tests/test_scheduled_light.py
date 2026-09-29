@@ -967,6 +967,50 @@ async def test_manual_off_discards_deferred_schedule_end_off_across_restart(
 
 
 @pytest.mark.asyncio
+async def test_reload_keeps_deferred_schedule_end_off_held(
+    hass: HomeAssistant,
+) -> None:
+    """A reload with Auto-off switched off does not apply the waiting off."""
+    switch = "switch.scheduled_light_auto_off"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    entry = make_scheduled_light_entry(schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF)
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.states.async_set(REAL, "on")  # no light platform: mirror the turn-on
+    await settle(hass)
+    await hass.services.async_call("switch", "turn_off", {"entity_id": switch})
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    turn_offs: list[ServiceCall] = []
+    hass.bus.async_listen(
+        EVENT_CALL_SERVICE,
+        lambda event: (
+            turn_offs.append(event)
+            if event.data["domain"] == "light" and event.data["service"] == "turn_off"
+            else None
+        ),
+    )
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+
+    assert turn_offs == []
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await hass.services.async_call("switch", "turn_on", {"entity_id": switch})
+    await settle(hass)
+    assert len(turn_offs) == 1
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_schedule_change_rechecks_already_open_door(
     hass: HomeAssistant,
 ) -> None:

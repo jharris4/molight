@@ -23,6 +23,7 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
+    DATA_AUTO_OFF_KEPT,
     DATA_PLATFORMS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -177,6 +178,32 @@ async def test_auto_off_switch_state_survives_reload(hass: HomeAssistant) -> Non
     assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is False
     light = hass.states.get("light.reload_light")
     assert light.attributes["auto_off_held"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_off_flag_is_kept_while_unloaded_and_dropped_on_removal(
+    hass: HomeAssistant,
+) -> None:
+    """The flag outlives an unload so a reload can seed from it, not a removal."""
+    entry = make_light_entry(name="Kept Light")
+    hass.states.async_set("light.real_1", "off")
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.kept_light_auto_off"}, blocking=True
+    )
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    assert hass.data[DATA_AUTO_OFF_KEPT] == {entry.entry_id: False}
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    assert hass.data[DATA_AUTO_OFF_KEPT] == {}
+    assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is False
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await settle(hass)
+    assert hass.data[DATA_AUTO_OFF_KEPT] == {}
 
 
 @pytest.mark.asyncio

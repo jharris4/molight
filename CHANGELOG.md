@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so lights started their countdown in an occupied room, and a maintain
   sensor could not start it again. A sensor that does not come back within
   10 seconds still clears it.
+- Editing the options of a light whose **Auto-off** switch is off no longer
+  applies a turn-off that was waiting for the switch: a follow window that
+  ended, or a scheduled light's *Turn off* at schedule end. Previously the
+  reload turned the light off.
 
 ## [1.7.0] - 2026-08-27
 

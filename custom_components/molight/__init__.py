@@ -25,6 +25,7 @@ from .const import (
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
     DATA_AUTO_OFF_ENABLED,
+    DATA_AUTO_OFF_KEPT,
     DATA_PLATFORMS,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
@@ -72,7 +73,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Seeded before the platforms load so the light can always read the
     # auto-off flag; the companion switch overwrites it when it restores.
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_AUTO_OFF_ENABLED: True,
+        DATA_AUTO_OFF_ENABLED: hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(
+            entry.entry_id, True
+        ),
         DATA_PLATFORMS: platforms,
     }
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE:
@@ -99,7 +102,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+        entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, {})
+        hass.data.setdefault(DATA_AUTO_OFF_KEPT, {})[entry.entry_id] = entry_data.get(
+            DATA_AUTO_OFF_ENABLED, True
+        )
     return unload_ok
 
 
@@ -111,6 +117,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     them is updated (which reloads it), so lights lose their sensor instead of
     keeping a reference to an entity that no longer exists.
     """
+    hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, None)
     registry = er.async_get(hass)
     removed = {
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)

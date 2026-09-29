@@ -278,6 +278,9 @@ CONF_HOLD_ENTITIES = "hold_entities"
 # switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies the
 # light via this dispatcher signal (formatted with the entry_id).
 DATA_AUTO_OFF_ENABLED = "auto_off_enabled"
+# hass.data key of the flags of unloaded entries, by entry_id: a reloaded
+# light seeds before its switch has restored.
+DATA_AUTO_OFF_KEPT = DOMAIN + "_auto_off_kept"
 # The platforms actually forwarded, so unload matches setup even if the
 # entry type changed in between (a light/scheduled-light conversion).
 DATA_PLATFORMS = "platforms"

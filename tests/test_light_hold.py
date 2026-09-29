@@ -557,6 +557,60 @@ async def test_startup_hold_keeps_missed_window_end_marker(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_reload_keeps_held_window_end_suppressed(hass: HomeAssistant) -> None:
+    """Editing the light's options reloads it; the switch's hold still counts."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    await setup_entries(hass, entry)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    await _switch(hass, on=False)
+    hass.states.async_set(SCHED, "off")  # the window ends while held
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    calls = record_service_calls(hass)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == []
+    assert hass.states.get(SWITCH).state == "off"
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["auto_off_held"] is True
+    assert state.attributes["schedule_window_start"] == MARKER
+
+    # Releasing the hold applies the window end, as without a reload.
+    await _switch(hass, on=True)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_reload_with_switch_on_runs_the_normal_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A hold released before the reload is not carried into it."""
+    hass.states.async_set(REAL, "on")
+    entry = make_light_entry()
+    await setup_entries(hass, entry)
+    await _switch(hass, on=False)
+    await _switch(hass, on=True)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    assert hass.states.get(SWITCH).state == "on"
+    assert _state(hass).attributes["auto_off_held"] is False
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None:
     """A hold that lands in the same loop pass the timer fires still wins.
 
