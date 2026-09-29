@@ -44,7 +44,7 @@ from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.restore_state import RestoredExtraData, RestoreEntity
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 
@@ -804,6 +804,23 @@ def _merged_window_intervals(
     return [(start, end) for start, end in merged]
 
 
+async def _restored_schedule_data(entity: RestoreEntity) -> dict:
+    """Return a schedule's saved on/off value, marker and source.
+
+    Read from the extra data, or from the last state where a save predates it.
+    """
+    if (extra := await entity.async_get_last_extra_data()) is not None:
+        return extra.as_dict()
+    last = await entity.async_get_last_state()
+    if last is None:
+        return {}
+    return {
+        "is_on": last.state == "on" if last.state in ("on", "off") else None,
+        "current_window_start": last.attributes.get("current_window_start"),
+        "source_entity": last.attributes.get("source_entity"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Virtual Schedule Binary Sensor
 # ---------------------------------------------------------------------------
@@ -848,11 +865,12 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_transition_timer)
         if self._definition == SCHEDULE_DEFINITION_BINARY_SENSOR:
-            last = await self.async_get_last_state()
+            # An unavailable state is saved without attributes, so the marker
+            # is also kept as extra data; attributes serve older saves.
+            saved = await _restored_schedule_data(self)
             restored_start = (
-                _parse_datetime(last.attributes.get("current_window_start"))
-                if last is not None
-                and last.attributes.get("source_entity") == self._source
+                _parse_datetime(saved.get("current_window_start"))
+                if saved.get("source_entity") == self._source
                 else None
             )
             self._current_window_start = restored_start
@@ -954,6 +972,20 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
         # polar day/night), inversion is continuously on. Use a stable marker
         # so Follow mode can apply it once without re-triggering every restart.
         return max(ended, key=lambda t: t.timestamp(), default="inverted")
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Return what a restore needs even when saved while unavailable."""
+        marker = self._current_window_start
+        return RestoredExtraData(
+            {
+                "is_on": self._attr_is_on,
+                "current_window_start": (
+                    marker.isoformat() if isinstance(marker, datetime) else marker
+                ),
+                "source_entity": self._source,
+            }
+        )
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -1206,11 +1238,13 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
         }
         self._input_disabled = tree.disabled
 
-        last = await self.async_get_last_state()
-        if last is not None and last.state in ("on", "off"):
+        # An unavailable state is saved without attributes or on/off value,
+        # so both are also kept as extra data; the state serves older saves.
+        saved = await _restored_schedule_data(self)
+        if isinstance(saved.get("is_on"), bool):
             self._restored = True
-            self._attr_is_on = last.state == "on"
-            marker = last.attributes.get("current_window_start")
+            self._attr_is_on = saved["is_on"]
+            marker = saved.get("current_window_start")
             if self._attr_is_on and isinstance(marker, str):
                 self._current_window_start = marker
 
@@ -1395,6 +1429,16 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
         else:
             return False
         return not timeline.off_between(start, ts)
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Return what a restore needs even when saved while unavailable."""
+        return RestoredExtraData(
+            {
+                "is_on": self._attr_is_on,
+                "current_window_start": self._current_window_start,
+            }
+        )
 
     @property
     def extra_state_attributes(self) -> dict:

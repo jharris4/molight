@@ -10,7 +10,10 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import callback
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_mock_restore_state_shutdown_restart,
+)
 
 from custom_components.molight.const import (
     CONF_AUTO_OFF_TRANSITION,
@@ -276,6 +279,16 @@ def light_targets(calls: list[dict], service: str) -> list[list[str]]:
 async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     for entry in entries:
         entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def restart_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
+    """Set the entries up again from what Home Assistant saves at shutdown."""
+    await async_mock_restore_state_shutdown_restart(hass)
+    for entry in entries:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    for entry in entries:
         assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 

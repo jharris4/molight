@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.core import State
+from homeassistant.helpers import restore_state
 from homeassistant.helpers.sun import get_astral_event_date
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -25,7 +26,9 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SCHEDULE_MODE_FOLLOW,
 )
+from tests.conftest import make_light_entry, restart_entries, setup_entries
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -513,6 +516,137 @@ async def test_source_schedule_restores_marker_through_restart_outage(
     state = hass.states.get(entity_id)
     assert state.state == "on"
     assert state.attributes["current_window_start"] == marker
+
+
+def _house_mode_schedule() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "House Mode Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_saves_marker_while_unavailable(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The saved state has no attributes during an outage; the extra data does."""
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await _setup(hass, _house_mode_schedule())
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+
+    stored = {
+        s.state.entity_id: s
+        for s in restore_state.async_get(hass).async_get_stored_states()
+    }["binary_sensor.house_mode_schedule"]
+    assert stored.state.state == "unavailable"
+    assert "current_window_start" not in stored.state.attributes
+    assert stored.extra_data.as_dict() == {
+        "is_on": True,
+        "current_window_start": "2026-07-02T07:00:00+00:00",
+        "source_entity": "binary_sensor.house_mode",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["reload", "restart"])
+@pytest.mark.parametrize("back", ["on", "off"])
+async def test_source_schedule_keeps_marker_through_outage_and_restart(
+    hass: HomeAssistant, freezer, how: str, back: str
+) -> None:
+    """A reload or restart during a source outage does not start a new window."""
+    entity_id = "binary_sensor.house_mode_schedule"
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    entry = _house_mode_schedule()
+    await _setup(hass, entry)
+    marker = hass.states.get(entity_id).attributes["current_window_start"]
+    assert marker == "2026-07-02T07:00:00+00:00"
+
+    freezer.move_to("2026-07-02 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+    if how == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    else:
+        await restart_entries(hass, entry)
+    assert hass.states.get(entity_id).state == "unavailable"
+
+    freezer.move_to("2026-07-02 09:30:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", back)
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == back
+    assert state.attributes["current_window_start"] == (
+        marker if back == "on" else None
+    )
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_saved_off_starts_a_window_after_the_outage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An outage that began outside the window leaves no marker to restore."""
+    entity_id = "binary_sensor.house_mode_schedule"
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    entry = _house_mode_schedule()
+    await _setup(hass, entry)
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+    await restart_entries(hass, entry)
+
+    freezer.move_to("2026-07-02 09:30:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T09:30:00+00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["reload", "restart"])
+async def test_follow_light_manual_off_survives_schedule_outage_and_restart(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """A light turned off by hand mid-window stays off when the source returns."""
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    hass.states.async_set("light.real_1", "off")
+    schedule = _house_mode_schedule()
+    light = make_light_entry(
+        name="Desk Lamp",
+        schedule="binary_sensor.house_mode_schedule",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    await setup_entries(hass, schedule, light)
+    assert hass.states.get("light.desk_lamp").state == "on"
+
+    freezer.move_to("2026-07-02 09:00:00+00:00")
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+    if how == "reload":
+        assert await hass.config_entries.async_reload(schedule.entry_id)
+        await hass.async_block_till_done()
+    else:
+        await restart_entries(hass, schedule, light)
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    freezer.move_to("2026-07-02 09:30:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.house_mode_schedule").state == "on"
+    assert hass.states.get("light.desk_lamp").state == "off"
 
 
 @pytest.mark.asyncio

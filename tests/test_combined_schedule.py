@@ -43,6 +43,7 @@ from tests.conftest import (
     light_targets,
     make_light_entry,
     record_service_calls,
+    restart_entries,
     settle,
 )
 
@@ -619,6 +620,81 @@ async def test_restart_catches_up_a_missed_time_window(
     )
     state = hass.states.get("binary_sensor.bedside")
     assert state.attributes["current_window_start"] == "2026-07-02T20:00:00+00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["reload", "restart"])
+async def test_handed_over_marker_survives_outage_and_restart(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """A marker the inputs can't re-derive is restored, not recomputed."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.src_a", "on")
+    hass.states.async_set("binary_sensor.src_b", "off")
+    combined = _combined("Either", ["binary_sensor.mirror_a", "binary_sensor.mirror_b"])
+    await _setup(
+        hass,
+        _mirror_schedule("Mirror A", "binary_sensor.src_a"),
+        _mirror_schedule("Mirror B", "binary_sensor.src_b"),
+        combined,
+    )
+    marker = "2026-07-02T07:00:00+00:00"
+    state = hass.states.get("binary_sensor.either")
+    assert state.attributes["current_window_start"] == marker
+
+    # B takes over from A: still the period that began at 07:00.
+    await _move_to(hass, freezer, "2026-07-02 08:00:00+00:00")
+    hass.states.async_set("binary_sensor.src_b", "on")
+    await settle(hass)
+    await _move_to(hass, freezer, "2026-07-02 08:30:00+00:00")
+    hass.states.async_set("binary_sensor.src_a", "off")
+    await settle(hass)
+
+    await _move_to(hass, freezer, "2026-07-02 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.src_b", "unavailable")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "unavailable"
+    assert "current_window_start" not in state.attributes
+
+    if how == "reload":
+        assert await hass.config_entries.async_reload(combined.entry_id)
+        await settle(hass)
+    else:
+        await restart_entries(hass, combined)
+    hass.states.async_set("binary_sensor.src_b", "on")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
+async def test_startup_holds_state_saved_during_an_outage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The on/off value saved while unavailable is held while HA starts."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    combined = _combined("Bedside", ["binary_sensor.house"])
+    await _setup(hass, _mirror_schedule("House", "binary_sensor.house_mode"), combined)
+    marker = hass.states.get("binary_sensor.bedside").attributes["current_window_start"]
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
+
+    hass.set_state(CoreState.starting)
+    await restart_entries(hass, combined)
+    state = hass.states.get("binary_sensor.bedside")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
 
 
 @pytest.mark.asyncio
