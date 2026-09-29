@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
@@ -256,9 +257,35 @@ async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
+class _ErrorRecords(logging.Handler):
+    """Collect every record at ERROR or above."""
+
+    def __init__(self) -> None:
+        super().__init__(logging.ERROR)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
 @pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
+def fail_on_error_log(request: pytest.FixtureRequest):
+    """Fail a test that logged an error, since HA only logs listener crashes."""
+    handler = _ErrorRecords()
+    root = logging.getLogger()
+    root.addHandler(handler)
+    yield
+    root.removeHandler(handler)
+    if handler.records and not request.node.get_closest_marker("allow_error_log"):
+        pytest.fail(
+            "logged errors:\n" + "\n".join(handler.format(r) for r in handler.records)
+        )
+
+
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(fail_on_error_log, enable_custom_integrations):
     """Enable loading of custom integrations in tests."""
+    # Requesting the guard first puts hass's shutdown inside it.
     return
 
 

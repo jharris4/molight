@@ -5967,6 +5967,7 @@ async def test_light_flow_allows_zero_effect_brightness_on_disabled_stage(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_error_log
 async def test_discovery_count_reflects_entries_that_actually_got_created(
     hass: HomeAssistant,
 ) -> None:

@@ -1053,19 +1053,18 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
     """A window already applied before restart is not re-asserted at startup."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 22:00:00+00:00")
-    await _setup_entries(hass, _night_schedule_entry())
-
-    marker = hass.states.get("binary_sensor.night_schedule").attributes[
-        "current_window_start"
-    ]
-    assert marker == "2026-07-02T21:00:00+00:00"
-
+    marker = "2026-07-02T21:00:00+00:00"
     # The light had already applied this window's start before the restart —
     # so its being off now means the user turned it off manually.
     mock_restore_cache(
         hass,
         [State("light.porch_light", "off", {"schedule_window_start": marker})],
     )
+    await _setup_entries(hass, _night_schedule_entry())
+
+    schedule = hass.states.get("binary_sensor.night_schedule")
+    assert schedule.attributes["current_window_start"] == marker
+
     await _setup_entries(hass, _follow_light_entry())
     await _settle(hass)
 
