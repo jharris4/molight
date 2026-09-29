@@ -595,9 +595,9 @@ its stored reference returns after core and container restarts. A current-flow
 Virtual Remote scenario exercises single/double event bindings, edits them to
 brightness/toggle actions, checks Last Action diagnostics across restarts, and
 confirms removing its target leaves the surviving remote inert. Virtual
-Combined Schedule scenarios check any/all/inverted combinations of mirrored
-schedules, unavailable inputs, rebuilding after a time-window input is edited,
-and input deletion, then restart with a follow light manually off mid-window
+Combined Schedule scenarios check any/all/inverted/nested combinations of
+mirrored schedules, a gate-mode light using one, unavailable inputs,
+rebuilding after a time-window input is edited, and input deletion, then restart with a follow light manually off mid-window
 while an input and the member light load late, verifying the window is kept,
 the late member's first state doesn't re-light it, and a new window does.
 

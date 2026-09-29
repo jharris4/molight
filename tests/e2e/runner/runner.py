@@ -104,6 +104,8 @@ COMBO_B = "binary_sensor.e2e_combo_b"
 COMBO_ANY = "binary_sensor.e2e_combo_any"
 COMBO_ALL = "binary_sensor.e2e_combo_all"
 COMBO_NOT = "binary_sensor.e2e_combo_not"
+COMBO_NESTED = "binary_sensor.e2e_combo_nested"
+COMBO_GATE_LIGHT = "light.e2e_combo_gate"
 COMBO_WINDOW = "binary_sensor.e2e_combo_window"
 COMBO_WINDOW_ANY = "binary_sensor.e2e_combo_window_any"
 COMBO_BOOT_SOURCE = "binary_sensor.e2e_combo_boot_source"
@@ -6969,6 +6971,9 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     """Combined schedules follow any/all of their inputs, nest, and track edits."""
     client.set_state(RAW_SCHEDULE, "off")
     client.set_state(RAW_REMOVAL_MOTION, "off")
+    # An earlier scenario may leave this raw light on; the gate light below
+    # would adopt it at creation instead of waiting for its window.
+    client.set_state(RAW_MULTI_RGB, "off")
     a_id = create_virtual_schedule(
         client, "E2E Combo A", "e2e_combo_a", source=RAW_SCHEDULE
     )
@@ -6999,10 +7004,44 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     not_id = create_combined_schedule(
         client, "E2E Combo Not", "e2e_combo_not", [COMBO_ANY], invert=True
     )
-    for entry_id in (a_id, b_id, any_id, all_id, not_id):
+    # (A any B) all B: on exactly when B is, through the nested Any.
+    nested_id = create_combined_schedule(
+        client,
+        "E2E Combo Nested",
+        "e2e_combo_nested",
+        [COMBO_ANY, COMBO_B],
+        operator="all",
+    )
+    gate_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Combo Gate",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 30,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_entity": COMBO_ANY,
+                "schedule_mode": "gate",
+            },
+            "advanced": {"entity_id": "e2e_combo_gate"},
+        },
+        "Combo gate light",
+    )
+    for entry_id in (a_id, b_id, any_id, all_id, not_id, nested_id, gate_id):
         assert_entry_loaded(client, entry_id)
     wait_on_off(
-        client, {COMBO_ANY: "off", COMBO_ALL: "off", COMBO_NOT: "on"}, "both off"
+        client,
+        {COMBO_ANY: "off", COMBO_ALL: "off", COMBO_NOT: "on", COMBO_NESTED: "off"},
+        "both off",
+    )
+    set_timer_motion(client, True)
+    assert_state_stays(
+        client,
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off: a combined schedule gates occupancy outside its window",
     )
     client.wait_state(
         COMBO_NOT,
@@ -7014,25 +7053,48 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
 
     client.set_state(RAW_SCHEDULE, "on")
     wait_on_off(
-        client, {COMBO_ANY: "on", COMBO_ALL: "off", COMBO_NOT: "off"}, "only A on"
+        client,
+        {COMBO_ANY: "on", COMBO_ALL: "off", COMBO_NOT: "off", COMBO_NESTED: "off"},
+        "only A on",
     )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "on: standing presence is adopted when the combined window starts",
+    )
+    wait_machine_state(client, "occupied", COMBO_GATE_LIGHT)
+    set_timer_motion(client, False)
+    client.call_service("light", "turn_off", {"entity_id": COMBO_GATE_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", COMBO_GATE_LIGHT)
+    remove_entry_and_entity(client, gate_id, COMBO_GATE_LIGHT)
     client.set_state(RAW_REMOVAL_MOTION, "on")
-    wait_on_off(client, {COMBO_ALL: "on"}, "both on")
+    wait_on_off(client, {COMBO_ALL: "on", COMBO_NESTED: "on"}, "both on")
     any_marker = client.state(COMBO_ANY)["attributes"]["current_window_start"]
-    checkpoint("any/all/inverted-nested follow their inputs")
+    checkpoint("any/all/inverted/nested follow their inputs and gate a light")
 
     # An unavailable input only matters when it could change the result, and
     # an outage is not a new window.
     client.set_available(RAW_SCHEDULE, False)
     wait_on_off(
         client,
-        {COMBO_A: "unavailable", COMBO_ANY: "on", COMBO_ALL: "unavailable"},
+        {
+            COMBO_A: "unavailable",
+            COMBO_ANY: "on",
+            COMBO_ALL: "unavailable",
+            COMBO_NESTED: "on",
+        },
         "A unavailable while B is on",
     )
     client.set_state(RAW_REMOVAL_MOTION, "off")
     wait_on_off(
         client,
-        {COMBO_ANY: "unavailable", COMBO_ALL: "off", COMBO_NOT: "unavailable"},
+        {
+            COMBO_ANY: "unavailable",
+            COMBO_ALL: "off",
+            COMBO_NOT: "unavailable",
+            COMBO_NESTED: "off",
+        },
         "A unavailable while B is off",
     )
     client.set_available(RAW_SCHEDULE, True)
@@ -7110,6 +7172,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
         "rebuilt on A alone",
     )
     for entry_id, entity_id in (
+        (nested_id, COMBO_NESTED),
         (not_id, COMBO_NOT),
         (any_id, COMBO_ANY),
         (all_id, COMBO_ALL),
@@ -7121,8 +7184,8 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.set_state(RAW_REMOVAL_MOTION, "off")
     print(
-        "PASS: combined schedules followed any/all/inverted inputs, outages, "
-        "an input edit, and an input deletion"
+        "PASS: combined schedules followed any/all/inverted/nested inputs, gated "
+        "a light, and tracked outages, an input edit, and an input deletion"
     )
 
 
