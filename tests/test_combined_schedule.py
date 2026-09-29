@@ -3,19 +3,22 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
 from homeassistant.core import CoreState, State
+from homeassistant.helpers.sun import get_astral_event_date
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
     mock_restore_cache,
 )
 
+from custom_components.molight.binary_sensor import _NEG_INF, _kleene, _Timeline
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
@@ -42,7 +45,7 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
 
-def _time_schedule(name: str, start: str, end: str) -> MockConfigEntry:
+def _time_schedule(name: str, start: str | dict, end: str | dict) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -111,6 +114,88 @@ def _record_states(hass: HomeAssistant, entity_id: str) -> list[str]:
 
     hass.bus.async_listen(EVENT_STATE_CHANGED, _listener)
     return seen
+
+
+# ---------------------------------------------------------------------------
+# Timeline primitives
+# ---------------------------------------------------------------------------
+
+
+def test_timeline_from_intervals_clamps_and_normalizes() -> None:
+    """Intervals are clipped to the known span; touching ones fuse; unknown
+    lies outside it."""
+    t = _Timeline.from_intervals([(0.0, 10.0), (10.0, 20.0), (25.0, 40.0)], 5.0, 30.0)
+    assert t.segments == [
+        (_NEG_INF, None),
+        (5.0, True),
+        (20.0, False),
+        (25.0, True),
+        (30.0, None),
+    ]
+    assert t.value_at(4.0) is None
+    assert t.value_at(5.0) is True
+    assert t.value_at(22.0) is False
+    assert t.period_start(27.0) == 25.0
+    assert t.next_change(22.0) == 25.0
+    assert t.next_change(30.0) is None
+
+
+def test_timeline_off_between_boundaries() -> None:
+    """A known off anywhere in the closed range counts; unknown never does."""
+    t = _Timeline.from_intervals([(10.0, 20.0)], 0.0, 100.0)
+    assert t.off_between(10.0, 19.0) is False
+    assert t.off_between(20.0, 25.0) is True
+    # The range's end touching the start of an off segment counts.
+    assert t.off_between(10.0, 20.0) is True
+    # An off segment ending exactly where the range starts does not.
+    assert t.off_between(10.0, 15.0) is False
+    assert t.off_between(5.0, 10.0) is True
+    assert t.off_between(200.0, 300.0) is False
+
+
+def test_timeline_combine_and_invert() -> None:
+    """Unknown decides a combination only when a known input can't."""
+    a = _Timeline.from_intervals([(10.0, 20.0)], 0.0, 100.0)
+    unknown = _Timeline.constant(None)
+    assert _Timeline.combine(False, [a, unknown]).segments == [
+        (_NEG_INF, None),
+        (10.0, True),
+        (20.0, None),
+    ]
+    assert _Timeline.combine(True, [a, unknown]).segments == [
+        (_NEG_INF, None),
+        (0.0, False),
+        (10.0, None),
+        (20.0, False),
+        (100.0, None),
+    ]
+    assert a.inverted().segments == [
+        (_NEG_INF, None),
+        (0.0, True),
+        (10.0, False),
+        (20.0, True),
+        (100.0, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("require_all", "values", "expected"),
+    [
+        (False, [False, None], None),
+        (False, [True, None], True),
+        (False, [False, False], False),
+        (True, [True, None], None),
+        (True, [False, None], False),
+        (True, [True, True], True),
+    ],
+)
+def test_kleene(require_all: bool, values: list, expected: bool | None) -> None:
+    assert _kleene(require_all, values) is expected
+
+
+# ---------------------------------------------------------------------------
+# Combined schedule entity
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -657,3 +742,106 @@ async def test_follow_light_turns_on_for_each_window(
     state = hass.states.get("light.bedside_lamp")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_inverted_empty_combination_is_always_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The only always-on timeline has no start; its marker is a stable literal."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    await _setup(hass, _combined("Never Off", [], invert=True))
+    state = hass.states.get("binary_sensor.never_off")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "always_on"
+    assert state.attributes["next_transition"] is None
+
+    await _move_to(hass, freezer, "2026-07-03 00:00:02+00:00")
+    state = hass.states.get("binary_sensor.never_off")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "always_on"
+
+
+@pytest.mark.asyncio
+async def test_sun_anchored_input(hass: HomeAssistant, freezer) -> None:
+    """A sun-based input's window is read from its config, sun event included."""
+    day = date(2026, 7, 2)
+    sunset = get_astral_event_date(hass, "sunset", day)
+    assert sunset is not None
+    freezer.move_to(sunset + timedelta(minutes=5))
+    await _setup(
+        hass,
+        _time_schedule(
+            "Evening",
+            {"time": "23:00", "sun": "sunset", "combine": "earliest"},
+            {"time": "23:30"},
+        ),
+        _combined("Dusk", ["binary_sensor.evening"]),
+    )
+    state = hass.states.get("binary_sensor.dusk")
+    assert state.state == "on"
+    assert datetime.fromisoformat(state.attributes["current_window_start"]) == sunset
+    end = datetime.fromisoformat(state.attributes["next_transition"])
+    assert end > sunset
+    assert dt_util.as_local(end).strftime("%H:%M") == "23:30"
+
+
+@pytest.mark.asyncio
+async def test_dst_gap_edges_order_by_instant_and_marker_is_local(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A window resolved into a DST gap lands on a later instant than a later
+    wall time; the combination orders by instant and reports local markers."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-03-08 06:50:00+00:00")  # 01:50 EST, before both edges
+    await _setup(
+        hass,
+        _time_schedule("Late", "03:05", "06:00"),
+        _time_schedule("Gap", "02:30", "02:45"),
+        _combined("Either", ["binary_sensor.late", "binary_sensor.gap"]),
+    )
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "off"
+    # 02:30 resolves into the gap as EST (07:30 UTC), after 03:05 EDT (07:05 UTC).
+    assert state.attributes["next_transition"] == "2026-03-08T03:05:00-04:00"
+
+    await _move_to(hass, freezer, "2026-03-08 07:06:00+00:00")
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-03-08T03:05:00-04:00"
+    assert state.attributes["next_transition"] == "2026-03-08T06:00:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_editing_a_nested_input_rebuilds_the_outer_combination(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An edit two levels down reaches the outer combination."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 05:00:00+00:00")
+    inner = _combined("Inner", ["binary_sensor.morning"])
+    await _setup(
+        hass,
+        _time_schedule("Morning", "06:00", "08:00"),
+        _time_schedule("Evening", "20:00", "23:00"),
+        inner,
+        _combined("Outer", ["binary_sensor.inner"]),
+    )
+    state = hass.states.get("binary_sensor.outer")
+    assert state.attributes["next_transition"] == "2026-07-02T06:00:00+00:00"
+    assert state.attributes["resolved_schedules"] == ["binary_sensor.morning"]
+
+    hass.config_entries.async_update_entry(
+        inner,
+        options={
+            CONF_NAME: "Inner",
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.evening"],
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ANY,
+            CONF_SCHEDULE_INVERT: False,
+        },
+    )
+    await settle(hass)
+    state = hass.states.get("binary_sensor.outer")
+    assert state.attributes["next_transition"] == "2026-07-02T20:00:00+00:00"
+    assert state.attributes["resolved_schedules"] == ["binary_sensor.evening"]
