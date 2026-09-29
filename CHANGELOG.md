@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reporting the end of its effect-stage fade just after the warn stage began
   could restart the full timer at every expiry, so the light never turned
   off.
+- A dim or recolor of a real light within 30 s of a command that changed
+  nothing on it — such as a remote's "on" press while the light is already
+  on — is now recognised as a manual change. Previously the virtual light
+  kept reporting the old brightness and the timer was not restarted.
 
 ## [1.7.0] - 2026-08-27
 

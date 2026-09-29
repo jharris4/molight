@@ -885,3 +885,110 @@ async def test_late_plain_reply_keeps_newer_commanded_brightness(
 
     assert _attrs(hass)["brightness"] == 200
     assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("context", ["own", "foreign"])
+async def test_dim_after_unanswered_plain_turn_on_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, context: str
+) -> None:
+    """A plain turn-on changes nothing on a lit member, so no reply is awaited
+    and a dim that follows is a human one."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _write(hass, "on", Context(), brightness=200)
+    assert _attrs(hass)["brightness"] == 200
+
+    await _virtual(hass, "turn_on")
+    _age_expectations(hass, 10)
+    await _write(
+        hass, "on", contexts[-1] if context == "own" else Context(), brightness=80
+    )
+
+    assert _attrs(hass)["brightness"] == 80
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_turn_on_after_unanswered_turn_off_of_dark_member_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A turn-off changes nothing on a dark member, so a later off in disguise
+    is not awaited as its reply."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_off")
+    virtual = next(
+        entity
+        for entity in hass.data["entity_components"]["light"].entities
+        if entity.entity_id == VIRTUAL
+    )
+    assert not virtual._echo_expectations
+
+    await _write(hass, "on", contexts[-1], brightness=120)
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("member_state", ["unavailable", "unknown", None])
+async def test_plain_turn_on_of_unreadable_member_awaits_its_reply(
+    hass: HomeAssistant, light_entry: MockConfigEntry, member_state: str | None
+) -> None:
+    """A member whose power is not known may still answer a plain turn-on."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    if member_state is None:
+        hass.states.async_remove(MEMBER)
+    else:
+        hass.states.async_set(MEMBER, member_state)
+    await settle(hass)
+
+    await _virtual(hass, "turn_on")
+    await _write(hass, "on", contexts[-1], brightness=180)
+
+    assert _attrs(hass)["brightness"] == 180
+    assert _attrs(hass)["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_of_member_on_at_zero_awaits_its_reply(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A member on at brightness 0 is dark, so a plain turn-on changes it."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _write(hass, "on", Context(), brightness=0)
+
+    await _virtual(hass, "turn_on")
+    await _write(hass, "on", contexts[-1], brightness=180)
+
+    assert _attrs(hass)["brightness"] == 180
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_awaits_only_the_dark_member(
+    hass: HomeAssistant,
+) -> None:
+    """With one member lit and one dark, only the dark one owes a reply."""
+    other = "light.kitchen"
+    entry = make_light_entry(name="Test Light", lights=[MEMBER, other])
+    await _setup(hass, entry)
+    hass.states.async_set(other, "on", {"brightness": 200})
+    await settle(hass)
+    contexts = _member_contexts(hass)
+    adopted = _attrs(hass)["last_on_physical"]
+
+    await _virtual(hass, "turn_on")
+    _age_expectations(hass, 10)
+    hass.states.async_set(other, "on", {"brightness": 80}, context=contexts[-1])
+    await settle(hass)
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+    assert _attrs(hass)["brightness"] == 80
+
+    changed = _attrs(hass)["last_brightness_change_physical"]
+    await _write(hass, "on", contexts[-1], brightness=150)
+    assert _attrs(hass)["last_on_physical"] == adopted
+    assert _attrs(hass)["last_brightness_change_physical"] == changed

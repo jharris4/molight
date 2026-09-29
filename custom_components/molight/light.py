@@ -1673,10 +1673,22 @@ class VirtualLight(LightEntity, RestoreEntity):
             float(transition or 0),
             self.hass.loop.time(),
         )
+        plain = expectation.brightness is None and expectation.color is None
         for entity_id in self._lights:
+            # A member already there has nothing to report, and the unanswered
+            # expectation would pass a later human change off as its echo.
+            if plain and self._member_is_lit(entity_id) is on:
+                continue
             self._echo_expectations.setdefault(
                 entity_id, deque(maxlen=ECHO_HISTORY)
             ).append(expectation)
+
+    def _member_is_lit(self, entity_id: str) -> bool | None:
+        """Whether a real light is on (brightness 0 is off), None if unknown."""
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state not in ("on", "off"):
+            return None
+        return state.state == "on" and state.attributes.get(ATTR_BRIGHTNESS) != 0
 
     def _is_own_echo(
         self,
