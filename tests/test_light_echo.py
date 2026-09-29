@@ -11,6 +11,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.components.light import ColorMode
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.util import color as color_util
@@ -23,6 +24,7 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
     STATE_WARN,
 )
+from custom_components.molight.light import _colors_close
 
 from .conftest import make_light_entry, settle
 
@@ -283,6 +285,7 @@ async def test_kelvin_echo_within_tolerance_is_not_physical(
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=3000)
+    _age_expectations(hass, 10)  # past settling: only a full match counts
     await _write(
         hass,
         "on",
@@ -305,6 +308,7 @@ async def test_hue_wraparound_echo_is_not_physical(
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, hs_color=[358, 80])
+    _age_expectations(hass, 10)  # past settling: only a full match counts
     await _write(
         hass,
         "on",
@@ -316,6 +320,7 @@ async def test_hue_wraparound_echo_is_not_physical(
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == (358, 80)  # ours kept
 
 
 @pytest.mark.asyncio
@@ -326,6 +331,7 @@ async def test_near_white_echo_ignores_hue(
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, hs_color=[30, 4])
+    _age_expectations(hass, 10)  # past settling: only a full match counts
     await _write(
         hass,
         "on",
@@ -337,6 +343,7 @@ async def test_near_white_echo_ignores_hue(
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == (30, 4)  # ours kept
 
 
 @pytest.mark.asyncio
@@ -348,6 +355,7 @@ async def test_kelvin_command_echoed_as_hs_is_not_physical(
     contexts = _member_contexts(hass)
     hs = color_util.color_RGB_to_hs(*color_util.color_temperature_to_rgb(3000))
     await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=3000)
+    _age_expectations(hass, 10)  # past settling: only a full match counts
     await _write(
         hass,
         "on",
@@ -359,6 +367,7 @@ async def test_kelvin_command_echoed_as_hs_is_not_physical(
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["color_temp_kelvin"] == 3000  # ours kept
 
 
 @pytest.mark.asyncio
@@ -992,3 +1001,84 @@ async def test_plain_turn_on_awaits_only_the_dark_member(
     await _write(hass, "on", contexts[-1], brightness=150)
     assert _attrs(hass)["last_on_physical"] == adopted
     assert _attrs(hass)["last_brightness_change_physical"] == changed
+
+
+def _kelvin(value: int) -> tuple:
+    return (ColorMode.COLOR_TEMP, value)
+
+
+def _hs(hue: float, saturation: float) -> tuple:
+    return (ColorMode.HS, (hue, saturation))
+
+
+@pytest.mark.parametrize(
+    ("commanded", "reported", "close"),
+    [
+        (_kelvin(3000), _kelvin(3150), True),
+        (_kelvin(3000), _kelvin(2850), True),
+        (_kelvin(3000), _kelvin(3151), False),
+        (_kelvin(3000), _kelvin(2849), False),
+        (_hs(100, 80), _hs(110, 80), True),
+        (_hs(100, 80), _hs(90, 80), True),
+        (_hs(100, 80), _hs(111, 80), False),
+        (_hs(100, 80), _hs(89, 80), False),
+        (_hs(358, 80), _hs(8, 80), True),  # 10 degrees across the wrap
+        (_hs(8, 80), _hs(358, 80), True),
+        (_hs(358, 80), _hs(9, 80), False),
+        (_hs(100, 80), _hs(100, 90), True),
+        (_hs(100, 80), _hs(100, 70), True),
+        (_hs(100, 80), _hs(100, 91), False),
+        (_hs(100, 80), _hs(100, 69), False),
+        (_hs(30, 10), _hs(200, 10), True),  # both near white: hue is noise
+        (_hs(30, 4), _hs(200, 11), False),  # only one near white
+        (_hs(30, 11), _hs(200, 4), False),
+        (_hs(30, 0), _hs(200, 11), False),  # too far apart in saturation
+    ],
+)
+def test_colors_close_tolerances(
+    commanded: tuple, reported: tuple, close: bool
+) -> None:
+    """Each tolerance holds at its limit and fails just beyond it."""
+    assert _colors_close(reported, commanded) is close
+
+
+def test_colors_close_across_color_modes() -> None:
+    """A color temperature is compared with an hs color by its hs equivalent."""
+    hs = color_util.color_RGB_to_hs(*color_util.color_temperature_to_rgb(3000))
+
+    assert _colors_close(_hs(*hs), _kelvin(3000))
+    assert _colors_close(_kelvin(3000), _hs(*hs))
+    assert not _colors_close(_hs(hs[0], hs[1] + 11), _kelvin(3000))
+    assert not _colors_close(_kelvin(3000), _hs(hs[0] + 11, hs[1]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("command", "reply"),
+    [
+        (
+            {"color_temp_kelvin": 3000},
+            {"color_mode": "color_temp", "color_temp_kelvin": 2840},
+        ),
+        ({"hs_color": [358, 80]}, {"color_mode": "hs", "hs_color": [9, 80]}),
+        ({"hs_color": [100, 80]}, {"color_mode": "hs", "hs_color": [100, 69]}),
+        ({"hs_color": [30, 4]}, {"color_mode": "hs", "hs_color": [200, 11]}),
+        ({"color_temp_kelvin": 3000}, {"color_mode": "hs", "hs_color": [240, 80]}),
+    ],
+)
+async def test_late_reply_outside_color_tolerance_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, command: dict, reply: dict
+) -> None:
+    """Past the settle window a color just outside the tolerance is a real
+    change: the member's color is mirrored, not ours kept."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, **command)
+    _age_expectations(hass, 10)
+
+    await _write(hass, "on", contexts[-1], brightness=153, **reply, **HS_TEMP_CAPS)
+
+    if "hs_color" in reply:
+        assert tuple(_attrs(hass)["hs_color"]) == tuple(reply["hs_color"])
+    else:
+        assert _attrs(hass)["color_temp_kelvin"] == reply["color_temp_kelvin"]
