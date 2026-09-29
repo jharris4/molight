@@ -16,7 +16,12 @@ from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.util import color as color_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.molight.const import STATE_ACTIVE, STATE_IDLE, STATE_WARN
+from custom_components.molight.const import (
+    STATE_ACTIVE,
+    STATE_IDLE,
+    STATE_OCCUPIED,
+    STATE_WARN,
+)
 
 from .conftest import make_light_entry, settle
 
@@ -578,3 +583,102 @@ async def test_desaturation_while_settling_is_physical(
 
     assert _attrs(hass)["last_color_change_physical"] is not None
     assert tuple(_attrs(hass)["hs_color"]) == (240, 10)
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_echo_mirrors_member_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A turn-on naming no level reports the level the member came on at."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on")
+    await _write(hass, "on", contexts[-1], brightness=180)
+
+    assert _attrs(hass)["brightness"] == 180
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_on_physical"] is None
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_echo_replaces_stale_brightness(
+    hass: HomeAssistant,
+) -> None:
+    """An occupancy turn-on naming no level drops the last commanded one."""
+    hass.states.async_set("binary_sensor.occ", "off")
+    entry = make_light_entry(
+        name="Test Light", lights=[MEMBER], occupancy="binary_sensor.occ"
+    )
+    await _setup(hass, entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=50)
+    await _write(hass, "on", contexts[-1], brightness=50)
+    await _virtual(hass, "turn_off")
+    await _write(hass, "off", contexts[-1])
+
+    hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+    await _write(hass, "on", contexts[-1], brightness=200)
+
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_echo_at_brightness_zero_keeps_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A dimmer echoing `on` with no level yet leaves the reported level alone."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_off")
+    await _write(hass, "off", contexts[-1])
+
+    await _virtual(hass, "turn_on")
+    await _write(hass, "on", contexts[-1], brightness=0)
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == 153
+
+
+@pytest.mark.asyncio
+async def test_plain_turn_on_echo_mirrors_member_color(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A turn-on naming no color reports the color the member came on at."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[240, 80],
+        **HS_TEMP_CAPS,
+    )
+
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
+    assert _attrs(hass)["brightness"] == 153
+    assert _attrs(hass)["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_turn_off_echo_mirrors_nothing(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """An off echo in disguise (on at brightness 0) is not read as a level."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_off")
+    await _write(hass, "on", contexts[-1], brightness=0)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE

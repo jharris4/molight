@@ -634,3 +634,82 @@ async def test_external_dim_mid_effect_restores_pre_warning_color(
         and tuple(d["service_data"].get("hs_color") or ()) == (30.0, 40.0)
     ]
     assert restores, "pre-warning color was not restored"
+
+
+# ---------------------------------------------------------------------------
+# A turn-on naming no brightness — the warning uses the level the real light
+# came on at
+# ---------------------------------------------------------------------------
+
+
+def _record_real_contexts(hass: HomeAssistant) -> list:
+    """Capture the context of every light service call aimed at the real light."""
+    contexts: list = []
+
+    @callback
+    def _record(event) -> None:
+        if event.data["domain"] == "light" and REAL in event.data["service_data"].get(
+            "entity_id", []
+        ):
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    return contexts
+
+
+@pytest.mark.asyncio
+async def test_warn_after_plain_turn_on_keeps_real_brightness(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warn stage with no brightness of its own keeps the level the real
+    light came on at instead of jumping to full brightness."""
+    entry = make_light_entry(warn_timeout=20)
+    await setup_entries(hass, entry)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    contexts = _record_real_contexts(hass)
+    calls = _record_service_calls(hass)
+
+    await _turn_on_virtual(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 180}, context=contexts[-1])
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_WARN
+    assert _real_calls(calls, "turn_on")[-1]["service_data"]["brightness"] == 180
+
+
+@pytest.mark.asyncio
+async def test_retrigger_after_plain_auto_on_restores_real_brightness(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Occupancy returning mid-warn brings back the level the real light came
+    on at instead of leaving the room at the warn brightness."""
+    hass.states.async_set(OCC, "off")
+    entry = make_light_entry(occupancy=OCC, warn_timeout=30, warn_brightness=20)
+    await setup_entries(hass, entry)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    contexts = _record_real_contexts(hass)
+    calls = _record_service_calls(hass)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 200}, context=contexts[-1])
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_WARN
+    assert _real_calls(calls, "turn_on")[-1]["service_data"]["brightness"] == 51
+    hass.states.async_set(REAL, "on", {"brightness": 51}, context=contexts[-1])
+    await settle(hass)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _mstate(hass) == STATE_OCCUPIED
+    assert _real_calls(calls, "turn_on")[-1]["service_data"]["brightness"] == 200

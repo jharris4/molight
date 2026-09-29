@@ -1704,7 +1704,26 @@ class VirtualLight(LightEntity, RestoreEntity):
         verdict = expectation.judge(old_state, new_state, settling=settling)
         if verdict != "pending":
             self._echo_expectations.pop(entity_id, None)
+        if verdict == "match":
+            self._mirror_plain_echo(expectation)
         return verdict != "contradiction"
+
+    def _mirror_plain_echo(self, expectation: _EchoExpectation) -> None:
+        """Adopt what the members came on at when our command named no value."""
+        if not expectation.on:
+            return
+        brightness = color = None
+        if expectation.brightness is None:
+            brightness = self._physical_brightness()
+        if expectation.color is None:
+            color = self._physical_color()
+        if brightness is None and color is None:
+            return
+        if brightness is not None:
+            self._attr_brightness = brightness
+        if color is not None:
+            self._set_color_state(*color)
+        self.async_write_ha_state()
 
     def _physical_color(self) -> tuple[ColorMode, tuple] | None:
         """Color of the first on real light reporting one, else None."""
@@ -2673,7 +2692,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if on and brightness is not None:
             service_data[ATTR_BRIGHTNESS] = brightness
             # Mirror the commanded brightness so the virtual light reports it
-            # (the real-light echo is ignored as a self-caused change).
+            # (the echo is only mirrored for a command that named none).
             self._attr_brightness = brightness
         if on and color:
             # One call carries the color to every member; HA filters/converts
