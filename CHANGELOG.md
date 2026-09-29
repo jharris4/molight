@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing on it — such as a remote's "on" press while the light is already
   on — is now recognised as a manual change. Previously the virtual light
   kept reporting the old brightness and the timer was not restarted.
+- A schedule that goes `unavailable` and comes back with the value it had
+  before — as every MoLight schedule does when its options are edited — is
+  no longer treated as a window starting or ending. Previously a light
+  turned on manually outside the window was turned off, and in the gate
+  modes a light turned off manually in an occupied room was turned back on.
 
 ## [1.7.0] - 2026-08-27
 

@@ -628,6 +628,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known bright/dark, None until first seen — a recovery matching
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
+        # Last known on/off of the schedule, None until first seen — a
+        # recovery matching it crossed no window boundary.
+        self._schedule_last_on: bool | None = None
         # Effective hold: companion switch off OR any keep-on entity on.
         self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
@@ -1085,6 +1088,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._door_open = door is not None and door.state == "on"
 
         self._illuminance_last_bright = self._live_illuminance_bright()
+        self._schedule_last_on = self._live_schedule_on()
 
         # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
@@ -1357,9 +1361,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             return  # attribute-only change (battery, ...)
         # A recovery from unavailable/unknown (or a first sighting) that
         # matches the last known value is a replay, not an observed edge.
-        # Level-based roles are replay-safe, but the door and illuminance
-        # roles act on edges, so they skip such replays: a standing-open
-        # door's sensor blip must not fire a fresh "opening".
+        # Level-based roles are replay-safe, but the door, illuminance and
+        # schedule roles act on edges, so they skip such replays: a
+        # standing-open door's sensor blip must not fire a fresh "opening".
         recovered = old_state is None or old_state.state in (
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
@@ -1388,7 +1392,13 @@ class VirtualLight(LightEntity, RestoreEntity):
             if not recovered or level_changed:
                 self._on_illuminance_change(bright)
         if entity_id == self._schedule_entity and new_state.state in ("on", "off"):
-            self._on_schedule_change(new_state)
+            schedule_on = new_state.state == "on"
+            replay = recovered and schedule_on == self._schedule_last_on
+            self._schedule_last_on = schedule_on
+            self._on_schedule_change(
+                new_state,
+                replay_since=(old_state or new_state).last_changed if replay else None,
+            )
         if entity_id == self._door_entity:
             door_was_open = self._door_open
             self._door_open = new_state.state == "on"
@@ -1982,12 +1992,23 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._start_timer(duration)
             self.async_write_ha_state()
 
-    def _on_schedule_change(self, new_state: State) -> None:
-        """Handle the virtual schedule sensor changing."""
+    def _on_schedule_change(
+        self, new_state: State, *, replay_since: datetime | None = None
+    ) -> None:
+        """Handle the virtual schedule sensor changing.
+
+        replay_since is set when the schedule recovers to the value it had
+        before an outage that began then: no boundary was crossed.
+        """
+        replay = replay_since is not None
         if self._schedule_mode == SCHEDULE_MODE_FOLLOW:
             if new_state.state == "on":
                 marker = new_state.attributes.get("current_window_start")
-                if marker and marker == self._schedule_window_applied:
+                if (
+                    marker == self._schedule_window_applied
+                    if marker
+                    else replay and self._schedule_window_applied is None
+                ):
                     # Same window we already applied — the schedule entity
                     # blipped unavailable and recovered mid-window. A manual
                     # off in between stands, mirroring the restart seed.
@@ -2002,6 +2023,8 @@ class VirtualLight(LightEntity, RestoreEntity):
                         self.async_write_ha_state()
                     return
                 self._apply_window_start(marker)
+            elif replay:
+                pass  # still outside the window: a manual on stands
             elif self._held:
                 # Auto-off held — keep the window marker so releasing the
                 # hold applies this off boundary.
@@ -2019,6 +2042,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # light from current sensor history, and gate_keep leaves its current
         # state/timer alone.
         if new_state.state != "on":
+            if replay:
+                return  # still outside the window: nothing ended
             if (
                 self._schedule_mode == SCHEDULE_MODE_GATE
                 and self._machine_state != STATE_IDLE
@@ -2044,7 +2069,18 @@ class VirtualLight(LightEntity, RestoreEntity):
                 else None
             )
             occ_active = occ_state is not None and occ_state.state == "on"
-            if occ_active or self._door_holds():
+            door_holds = self._door_holds()
+            if replay_since is not None:
+                # Only a start the unreadable gate blocked is applied now; a
+                # light turned off by hand in an occupied room stays off.
+                occ_active = occ_active and occ_state.last_changed >= replay_since
+                door = self.hass.states.get(self._door_entity or "")
+                door_holds = (
+                    door_holds
+                    and door is not None
+                    and door.last_changed >= replay_since
+                )
+            if occ_active or door_holds:
                 now = datetime.now(UTC)
                 if occ_active:
                     self._last_on_occupancy = now
@@ -2224,6 +2260,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             return False
         state = self.hass.states.get(self._maintain_entity)
         return state is not None and state.state == "on"
+
+    def _live_schedule_on(self) -> bool | None:
+        """Live on/off of the schedule entity, None when unknown."""
+        if not self._schedule_entity:
+            return None
+        state = self.hass.states.get(self._schedule_entity)
+        if state is None or state.state not in ("on", "off"):
+            return None
+        return state.state == "on"
 
     def _live_illuminance_bright(self) -> bool | None:
         """Live bright/dark of the illuminance entity, None when unknown."""
