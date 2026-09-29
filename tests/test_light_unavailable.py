@@ -28,11 +28,16 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_LIGHT_TIMEOUT,
+    CONF_MAINTAIN_SENSORS,
     CONF_NAME,
+    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_TRIGGER_SENSORS,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -44,7 +49,12 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    make_light_entry,
+    make_scheduled_light_entry,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -259,6 +269,282 @@ async def test_occupancy_recovers_directly_to_on(hass: HomeAssistant) -> None:
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["unavailable", "unknown"])
+async def test_occupancy_blip_respects_manual_off(
+    hass: HomeAssistant, bad: str
+) -> None:
+    """on → outage → on is no new occupancy: a manual off stands."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    calls = _record_calls(hass)
+    hass.states.async_set(OCC, bad)
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    assert _real_calls(calls, "turn_on") == []
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    # A real clear and return is a new occupancy again.
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_seen_on_at_startup_blip_respects_manual_off(
+    hass: HomeAssistant,
+) -> None:
+    """The value read at startup counts as known, not only observed edges."""
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    await settle(hass)
+    assert _state(hass).state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_outage_spanning_a_clear_is_a_new_occupancy(
+    hass: HomeAssistant,
+) -> None:
+    """off → outage → on differs from the last known value, so it triggers."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_occupancy_recovery_adopts_light_turned_on_during_outage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A light lit by hand during the outage is held once occupancy is back."""
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    last_on_occupancy = _state(hass).attributes["last_on_occupancy"]
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    # Adopted, not lit by occupancy.
+    assert _state(hass).attributes["last_on_occupancy"] == last_on_occupancy
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_blip_keeps_occupied_light_untouched(
+    hass: HomeAssistant,
+) -> None:
+    """An occupied light sees no command and no new attribution on recovery."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    before = _state(hass)
+
+    calls = _record_calls(hass)
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    assert _real_calls(calls, "turn_on") == []
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    assert (
+        _state(hass).attributes["last_on_occupancy"]
+        == before.attributes["last_on_occupancy"]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("manual_off", [False, True])
+async def test_occupancy_sensor_reload_changes_nothing(
+    hass: HomeAssistant, manual_off: bool
+) -> None:
+    """Editing a Virtual Occupancy Sensor's options reloads it; no light reacts."""
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    hass.states.async_set(REAL, "off")
+    occupancy = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Chain Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    light = make_light_entry(occupancy="binary_sensor.chain_occupancy")
+    await setup_entries(hass, occupancy, light)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    if manual_off:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        hass.states.async_set(REAL, "off")
+        await settle(hass)
+    before = (_state(hass).state, _state(hass).attributes["molight_state"])
+
+    calls = _record_calls(hass)
+    assert await hass.config_entries.async_reload(occupancy.entry_id)
+    await settle(hass)
+
+    assert hass.states.get("binary_sensor.chain_occupancy").state == "on"
+    assert (_state(hass).state, _state(hass).attributes["molight_state"]) == before
+    assert _real_calls(calls, "turn_on") == []
+    assert _real_calls(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("holder", ["trigger", "maintain"])
+@pytest.mark.parametrize("manual_off", [False, True])
+async def test_combined_occupancy_sensor_reload_changes_nothing(
+    hass: HomeAssistant, holder: str, manual_off: bool
+) -> None:
+    """Reloading the combined sensor a light uses does not re-light the room."""
+    trigger, maintain = "binary_sensor.trig", "binary_sensor.maint"
+    hass.states.async_set(trigger, "off")
+    hass.states.async_set(maintain, "off")
+    hass.states.async_set(REAL, "off")
+    room = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Room",
+            CONF_TRIGGER_SENSORS: [trigger],
+            CONF_MAINTAIN_SENSORS: [maintain],
+        },
+    )
+    await setup_entries(hass, room, make_light_entry(occupancy="binary_sensor.room"))
+    hass.states.async_set(maintain, "on")
+    hass.states.async_set(trigger, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(trigger if holder == "maintain" else maintain, "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.room").state == "on"
+    if manual_off:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        hass.states.async_set(REAL, "off")
+        await settle(hass)
+    before = (_state(hass).state, _state(hass).attributes["molight_state"])
+
+    calls = _record_calls(hass)
+    assert await hass.config_entries.async_reload(room.entry_id)
+    await settle(hass)
+
+    assert hass.states.get("binary_sensor.room").state == "on"
+    assert (_state(hass).state, _state(hass).attributes["molight_state"]) == before
+    assert _real_calls(calls, "turn_on") == []
+    assert _real_calls(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("same_sensor", [True, False])
+async def test_occupancy_outage_across_a_settings_switch(
+    hass: HomeAssistant, same_sensor: bool
+) -> None:
+    """A scheduled light keeps the last known value of a sensor both sides use."""
+    settings_schedule = "binary_sensor.settings_schedule"
+    scheduled = "light.scheduled_light"
+    other = "binary_sensor.other_occ"
+    hass.states.async_set(settings_schedule, "off")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(other, "unavailable")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            schedule=settings_schedule,
+            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_OCCUPANCY_ENTITY: OCC if same_sensor else other,
+            },
+        ),
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert hass.states.get(scheduled).state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": scheduled}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    hass.states.async_set(settings_schedule, "on")
+    await settle(hass)
+    assert hass.states.get(scheduled).state == "off"
+
+    # The shared sensor's return is a replay; the other side's sensor was
+    # never seen by this light, so its first report is a real occupancy.
+    hass.states.async_set(OCC if same_sensor else other, "on")
+    await settle(hass)
+    assert hass.states.get(scheduled).state == ("off" if same_sensor else "on")
 
 
 @pytest.mark.asyncio

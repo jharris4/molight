@@ -628,6 +628,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known bright/dark, None until first seen — a recovery matching
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
+        # Last known occupied/clear, None until first seen — a recovery
+        # matching it must not re-light a room the user turned off.
+        self._occupancy_last_on: bool | None = None
         # Last known on/off of the schedule, None until first seen — a
         # recovery matching it crossed no window boundary.
         self._schedule_last_on: bool | None = None
@@ -953,6 +956,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         prev_door_entity = self._door_entity
         prev_hold_states = self._hold_states
         prev_illuminance_entity = self._illuminance_entity
+        prev_occupancy_entity = self._occupancy_entity
         self._apply_light_settings(
             self._inside_schedule_settings
             if inside
@@ -989,6 +993,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
             self._illuminance_last_bright = self._live_illuminance_bright()
+        if not (
+            self._occupancy_entity == prev_occupancy_entity
+            and (s := self.hass.states.get(self._occupancy_entity or "")) is not None
+            and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        ):
+            self._occupancy_last_on = self._live_occupancy_on()
         old_held = self._held
         self._held = self._compute_held()
 
@@ -1089,6 +1099,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
+        self._occupancy_last_on = self._live_occupancy_on()
 
         # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
@@ -1361,9 +1372,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             return  # attribute-only change (battery, ...)
         # A recovery from unavailable/unknown (or a first sighting) that
         # matches the last known value is a replay, not an observed edge.
-        # Level-based roles are replay-safe, but the door, illuminance and
-        # schedule roles act on edges, so they skip such replays: a
-        # standing-open door's sensor blip must not fire a fresh "opening".
+        # Every role but maintain and keep-on acts on edges, so they skip
+        # such replays: a standing-open door's sensor blip must not fire a
+        # fresh "opening".
         recovered = old_state is None or old_state.state in (
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
@@ -1379,7 +1390,18 @@ class VirtualLight(LightEntity, RestoreEntity):
         ):
             self._switch_scheduled_settings(new_state.state == "on")
         if entity_id == self._occupancy_entity:
-            self._on_occupancy_change(new_state.state == "on")
+            occupied = new_state.state == "on"
+            replay = recovered and occupied == self._occupancy_last_on
+            self._occupancy_last_on = occupied
+            if not replay:
+                self._on_occupancy_change(occupied)
+            elif (
+                self._attr_is_on
+                and self._machine_state not in (STATE_OCCUPIED, STATE_SCHEDULED)
+                and self._occupancy_holds()
+            ):
+                # Lights turned on during the outage could not be adopted.
+                self._adopt_active_occupancy()
         if entity_id == self._maintain_entity:
             self._on_maintain_change(new_state.state == "on")
         if entity_id == self._illuminance_entity:
@@ -2260,6 +2282,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             return False
         state = self.hass.states.get(self._maintain_entity)
         return state is not None and state.state == "on"
+
+    def _live_occupancy_on(self) -> bool | None:
+        """Live on/off of the occupancy entity, None when unknown."""
+        if not self._occupancy_entity:
+            return None
+        state = self.hass.states.get(self._occupancy_entity)
+        if state is None or state.state not in ("on", "off"):
+            return None
+        return state.state == "on"
 
     def _live_schedule_on(self) -> bool | None:
         """Live on/off of the schedule entity, None when unknown."""

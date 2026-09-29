@@ -51,6 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no longer treated as a window starting or ending. Previously a light
   turned on manually outside the window was turned off, and in the gate
   modes a light turned off manually in an occupied room was turned back on.
+- An occupancy sensor that goes `unavailable` and comes back still occupied
+  — as a Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor does
+  when its options are edited — no longer counts as someone entering the
+  room. Previously a light turned off manually in an occupied room was
+  turned back on.
 
 ## [1.7.0] - 2026-08-27
 
