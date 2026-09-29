@@ -1074,30 +1074,46 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
     assert state.attributes["molight_state"] == STATE_IDLE
 
 
-async def _start_follow_light_with_schedule_unavailable(
-    hass: HomeAssistant, light_state: str, marker: str
+async def _start_follow_light_with_schedule_unreadable(
+    hass: HomeAssistant,
+    light_state: str,
+    marker: str,
+    unreadable: str,
+    *,
+    hold: str | None = None,
 ) -> None:
+    """Start HA with the schedule unavailable, unknown or absent entirely."""
     mock_restore_cache(
         hass,
         [State("light.porch_light", light_state, {"schedule_window_start": marker})],
     )
-    hass.states.async_set("binary_sensor.night_schedule", "unavailable")
+    if unreadable != "absent":
+        hass.states.async_set("binary_sensor.night_schedule", unreadable)
+    entry = _follow_light_entry()
+    if hold:
+        entry = MockConfigEntry(
+            domain=DOMAIN, data={**entry.data, CONF_HOLD_ENTITIES: [hold]}
+        )
     hass.set_state(CoreState.starting)
-    await _setup_entries(hass, _follow_light_entry())
+    await _setup_entries(hass, entry)
     hass.set_state(CoreState.running)
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await _settle(hass)
 
 
+_UNREADABLE = ["unavailable", "unknown", "absent"]
+
+
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_mode_unavailable_schedule_at_startup_keeps_manual_off(
-    hass: HomeAssistant,
+@pytest.mark.parametrize("unreadable", _UNREADABLE)
+async def test_follow_mode_unreadable_schedule_at_startup_keeps_manual_off(
+    hass: HomeAssistant, unreadable: str
 ) -> None:
-    """An unavailable schedule at startup is not a window end, so recovering
+    """An unreadable schedule at startup is not a window end, so recovering
     inside the same window doesn't undo a manual off."""
     marker = "2026-07-02T21:00:00+00:00"
-    await _start_follow_light_with_schedule_unavailable(hass, "off", marker)
+    await _start_follow_light_with_schedule_unreadable(hass, "off", marker, unreadable)
     state = hass.states.get("light.porch_light")
     assert state.state == "off"
     assert state.attributes["schedule_window_start"] == marker
@@ -1113,22 +1129,89 @@ async def test_follow_mode_unavailable_schedule_at_startup_keeps_manual_off(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_mode_unavailable_schedule_at_startup_keeps_window_on(
-    hass: HomeAssistant,
+@pytest.mark.parametrize("unreadable", _UNREADABLE)
+async def test_follow_mode_unreadable_schedule_at_startup_then_new_window(
+    hass: HomeAssistant, unreadable: str
 ) -> None:
-    """A light on in its window stays scheduled until the schedule reads again,
-    then the window's end still turns it off."""
+    """A manual off only stands for its own window: a different window
+    arriving once the schedule reads lights the room."""
+    marker = "2026-07-02T21:00:00+00:00"
+    await _start_follow_light_with_schedule_unreadable(hass, "off", marker, unreadable)
+
+    later = "2026-07-03T21:00:00+00:00"
+    hass.states.async_set(
+        "binary_sensor.night_schedule", "on", {"current_window_start": later}
+    )
+    await _settle(hass)
+    state = hass.states.get("light.porch_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == later
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("unreadable", _UNREADABLE)
+async def test_follow_mode_unreadable_schedule_at_startup_keeps_window_on(
+    hass: HomeAssistant, freezer, unreadable: str
+) -> None:
+    """A light on in its window stays scheduled, with no timer, until the
+    schedule reads again; the window's end then still turns it off."""
+    freezer.move_to("2026-07-02 21:30:00+00:00")
     marker = "2026-07-02T21:00:00+00:00"
     hass.states.async_set("light.porch_real", "on", {"brightness": 200})
-    await _start_follow_light_with_schedule_unavailable(hass, "on", marker)
+    await _start_follow_light_with_schedule_unreadable(hass, "on", marker, unreadable)
     state = hass.states.get("light.porch_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["schedule_window_start"] == marker
 
+    hass.states.async_set(
+        "binary_sensor.night_schedule", "on", {"current_window_start": marker}
+    )
+    await _settle(hass)
+    # Well past the 60 s timeout: the window owns the light, no timer ran.
+    t = datetime(2026, 7, 2, 21, 35, tzinfo=UTC)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await _settle(hass)
+    state = hass.states.get("light.porch_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+
     hass.states.async_set("binary_sensor.night_schedule", "off")
     await _settle(hass)
     state = hass.states.get("light.porch_light")
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["schedule_window_start"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_mode_unreadable_schedule_at_startup_respects_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A held light keeps its window through the outage and the window's end;
+    the missed off boundary applies when the hold releases."""
+    marker = "2026-07-02T21:00:00+00:00"
+    hass.states.async_set("light.porch_real", "on", {"brightness": 200})
+    hass.states.async_set("input_boolean.hold", "on")
+    await _start_follow_light_with_schedule_unreadable(
+        hass, "on", marker, "unavailable", hold="input_boolean.hold"
+    )
+    state = hass.states.get("light.porch_light")
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+
+    hass.states.async_set("binary_sensor.night_schedule", "off")
+    await _settle(hass)
+    state = hass.states.get("light.porch_light")
+    assert state.state == "on"
+    assert state.attributes["schedule_window_start"] == marker
+
+    hass.states.async_set("input_boolean.hold", "off")
+    await _settle(hass)
+    state = hass.states.get("light.porch_light")
+    assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
 

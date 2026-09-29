@@ -1186,8 +1186,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return False
         sched = self.hass.states.get(self._schedule_entity)
-        if sched is None:
-            return False
+        if sched is None or sched.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            if self._schedule_window_applied is None:
+                return False
+            # Not proof the window ended: keep it until a valid state recovers.
+            if self._attr_is_on:
+                self._machine_state = STATE_SCHEDULED
+            self.async_write_ha_state()
+            return True
 
         if sched.state == "on":
             marker = sched.attributes.get("current_window_start")
@@ -1201,16 +1207,6 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 # Already handled, lights off → manual override; respect it.
                 self.async_write_ha_state()
-            return True
-
-        if (
-            sched.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
-            and self._schedule_window_applied is not None
-        ):
-            # Not proof the window ended: keep it until a valid state recovers.
-            if self._attr_is_on:
-                self._machine_state = STATE_SCHEDULED
-            self.async_write_ha_state()
             return True
 
         if self._schedule_window_applied is not None:
