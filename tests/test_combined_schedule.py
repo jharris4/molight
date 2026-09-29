@@ -35,6 +35,7 @@ from custom_components.molight.const import (
     STATE_IDLE,
     STATE_SCHEDULED,
 )
+from custom_components.molight.helpers import molight_config
 from tests.conftest import make_light_entry, settle
 
 if TYPE_CHECKING:
@@ -601,8 +602,14 @@ async def test_loop_is_unknown_instead_of_hanging(
         await _setup(hass, loop_a, loop_b)
         assert await hass.config_entries.async_reload(loop_a.entry_id)
         await settle(hass)
+        # An edit of the root reaches its own entry-change handler too.
+        hass.config_entries.async_update_entry(
+            loop_a, options={**molight_config(loop_a), CONF_NAME: "Loop A2"}
+        )
+        await settle(hass)
 
     assert "includes itself" in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert hass.states.get("binary_sensor.loop_a").state == "unavailable"
     assert hass.states.get("binary_sensor.loop_b").state == "unavailable"
 

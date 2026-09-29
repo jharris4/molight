@@ -1084,20 +1084,21 @@ class _ScheduleTree:
         if entry is None or entry.domain != DOMAIN:
             return _ScheduleNode("unknown")
         cfg = molight_config(entry)
+        entity_type = cfg[CONF_ENTITY_TYPE]
+        if entry.entry_id in path:
+            # The config flow rejects loops; this guards hand-edited or
+            # concurrently saved configs against infinite expansion. Not an
+            # input to track: the root's own updates already reload it.
+            _LOGGER.warning(
+                "Combined schedule %s includes itself; treating it as unknown",
+                entity_id,
+            )
+            return _ScheduleNode("unknown")
         self.configs.setdefault(entry.entry_id, cfg)
         self.disabled[entry.entry_id] = entry.disabled_by
         if entry.disabled_by is not None:
             return _ScheduleNode("unknown")
-        entity_type = cfg[CONF_ENTITY_TYPE]
         if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE:
-            if entry.entry_id in path:
-                # The config flow rejects loops; this guards hand-edited or
-                # concurrently saved configs against infinite expansion.
-                _LOGGER.warning(
-                    "Combined schedule %s includes itself; treating it as unknown",
-                    entity_id,
-                )
-                return _ScheduleNode("unknown")
             return self.combined(entry.entry_id, cfg, path)
         if entity_type != ENTITY_TYPE_SCHEDULE:
             return _ScheduleNode("unknown")
