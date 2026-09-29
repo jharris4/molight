@@ -59,7 +59,13 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
     STATE_WARN,
 )
-from tests.conftest import make_scheduled_light_entry, settle, setup_entries
+from tests.conftest import (
+    light_targets,
+    make_scheduled_light_entry,
+    record_service_calls,
+    settle,
+    setup_entries,
+)
 
 REAL = "light.real_1"
 SCHEDULE = "binary_sensor.settings_schedule"
@@ -630,8 +636,10 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
 
+    calls = record_service_calls(hass)
     hass.states.async_set(SCHEDULE, "off")
     await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
     state = hass.states.get(VIRTUAL)
     assert state.state == "off"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
@@ -1117,9 +1125,12 @@ async def test_schedule_change_applies_selected_illuminance_mode(
     )
     await setup_entries(hass, entry)
 
+    calls = record_service_calls(hass)
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
 
+    forced_off = [[REAL]] if expected_state == "off" else []
+    assert light_targets(calls, "turn_off") == forced_off
     state = hass.states.get(VIRTUAL)
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == expected_state

@@ -39,7 +39,12 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import make_light_entry, settle
+from tests.conftest import (
+    light_targets,
+    make_light_entry,
+    record_service_calls,
+    settle,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
@@ -738,7 +743,9 @@ async def test_follow_light_turns_on_for_each_window(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
+    calls = record_service_calls(hass)
     await _move_to(hass, freezer, "2026-07-02 23:00:02+00:00")
+    assert light_targets(calls, "turn_off") == [["light.real_1"]]
     state = hass.states.get("light.bedside_lamp")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE

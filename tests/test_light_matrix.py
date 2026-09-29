@@ -29,7 +29,13 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    light_targets,
+    make_light_entry,
+    record_service_calls,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -329,9 +335,11 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
             await settle(hass)
             assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
+    calls = record_service_calls(hass)
     hass.states.async_set(SCHED, "off")
     await settle(hass)
 
+    assert light_targets(calls, "turn_off") == [[REAL]]
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE

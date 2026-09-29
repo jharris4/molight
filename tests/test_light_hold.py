@@ -30,13 +30,20 @@ from custom_components.molight.const import (
     STATE_OCCUPIED,
     STATE_SCHEDULED,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    light_targets,
+    make_light_entry,
+    record_service_calls,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
+REAL = "light.real_1"
 HOLD = "input_boolean.guest_mode"
 HOLD2 = "input_boolean.party_mode"
 VIRTUAL = "light.matrix_light"
@@ -395,11 +402,14 @@ async def test_hold_blocks_bright_force_off_release_applies_it(
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     await _switch(hass, on=False)
+    calls = record_service_calls(hass)
     hass.states.async_set(ILLUM, "on")  # bright
     await settle(hass)
     assert _state(hass).state == "on"
+    assert light_targets(calls, "turn_off") == []
 
     await _switch(hass, on=True)
+    assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
@@ -421,11 +431,14 @@ async def test_hold_blocks_follow_window_end_release_applies_it(
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     await _switch(hass, on=False)
+    calls = record_service_calls(hass)
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     assert _state(hass).state == "on"
+    assert light_targets(calls, "turn_off") == []
 
     await _switch(hass, on=True)
+    assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
     assert _state(hass).attributes["schedule_window_start"] is None
@@ -473,11 +486,14 @@ async def test_hold_blocks_gate_window_end_release_applies_it(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     await _switch(hass, on=False)
+    calls = record_service_calls(hass)
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     assert _state(hass).state == "on"
+    assert light_targets(calls, "turn_off") == []
 
     await _switch(hass, on=True)
+    assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 

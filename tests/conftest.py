@@ -8,6 +8,8 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.core import callback
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
@@ -60,7 +62,7 @@ from custom_components.molight.const import (
 )
 
 if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import Event, HomeAssistant
 
 
 _LIGHT_BEHAVIOR_VARIANT: ContextVar[str] = ContextVar(
@@ -248,6 +250,27 @@ def make_scheduled_light_entry(
         domain=DOMAIN,
         data=data,
     )
+
+
+def record_service_calls(hass: HomeAssistant) -> list[dict]:
+    """Record the event data of every service call from now on."""
+    calls: list[dict] = []
+
+    @callback
+    def _record(event: Event) -> None:
+        calls.append(event.data)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    return calls
+
+
+def light_targets(calls: list[dict], service: str) -> list[list[str]]:
+    """The targets of each recorded light.<service> call, in order."""
+    return [
+        call["service_data"]["entity_id"]
+        for call in calls
+        if call["domain"] == "light" and call["service"] == service
+    ]
 
 
 async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:

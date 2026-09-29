@@ -48,7 +48,12 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from tests.conftest import light_behavior_entry, settle
+from tests.conftest import (
+    light_behavior_entry,
+    light_targets,
+    record_service_calls,
+    settle,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -1021,11 +1026,13 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     assert hass.states.get("light.porch_light").state == "on"
 
     # Window ends at 07:00 next morning.
+    calls = record_service_calls(hass)
     t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
     await _settle(hass)
 
+    assert light_targets(calls, "turn_off") == [["light.porch_real"]]
     state = hass.states.get("light.porch_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
