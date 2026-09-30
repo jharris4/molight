@@ -490,6 +490,7 @@ async def test_dark_edge_resume_is_anchored_to_the_occupancy_turn_on(
 # ---------------------------------------------------------------------------
 
 DOOR = "binary_sensor.door"
+MAINT = "binary_sensor.maint"
 LAST_ON_KEYS = (
     "last_on_physical",
     "last_on_virtual",
@@ -1358,6 +1359,53 @@ async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hold", ["occupancy", "maintain"])
+@pytest.mark.parametrize("turn_on", ["virtual", "physical", "door"])
+async def test_false_clear_keeps_the_timeout_of_the_users_turn_on(
+    hass: HomeAssistant, freezer, turn_on: str, hold: str
+) -> None:
+    """A false detection must not time the user's light from an earlier visit."""
+    old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    holder = OCC if hold == "occupancy" else MAINT
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": old})
+    hass.states.async_set(MAINT, "off", {"latest_occupied_time": old})
+    hass.states.async_set(DOOR, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC, maintain=MAINT if hold == "maintain" else None, door=DOOR
+        ),
+    )
+
+    await _turn_on_by(hass, turn_on)  # T0
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    hass.states.async_set(holder, "on", {"latest_occupied_time": old})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    # A single-blip clear leaves the visit-old latest_occupied_time as it is.
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set(
+        holder,
+        "off",
+        {"latest_occupied_time": old, "last_clear_false_detection": True},
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # The user's 60 s timeout from T0 still stands.
+    freezer.tick(timedelta(seconds=28))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"  # T0+59
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"  # T0+61
 
 
 @pytest.mark.asyncio

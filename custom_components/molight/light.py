@@ -2285,7 +2285,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # asked for these lights, so turn them off quickly.
                 self._start_timer(self._false_off_delay)
             else:
-                self._start_timer(self._compute_occupancy_countdown())
+                self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
 
     def _on_maintain_change(self, maintained: bool) -> None:
@@ -2325,7 +2325,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # earns the normal countdown instead.
                 self._start_timer(self._false_off_delay)
             else:
-                self._start_timer(self._compute_occupancy_countdown())
+                self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
 
     def _occupancy_active(self) -> bool:
@@ -2587,6 +2587,25 @@ class VirtualLight(LightEntity, RestoreEntity):
             remaining = (max(lots) - now).total_seconds()
             return max(0, int(base + remaining))
         return base
+
+    def _compute_clear_countdown(self) -> int:
+        """Seconds to wait once the last presence hold clears.
+
+        A false detection leaves latest_occupied_time at an earlier visit,
+        which must not cut short a light the user turned on since then: the
+        countdown never ends before a full timeout after the latest manual,
+        physical or door turn-on.
+        """
+        countdown = self._compute_occupancy_countdown()
+        user_ons = [
+            t
+            for t in (self._last_on_physical, self._last_on_virtual, self._last_on_door)
+            if t is not None
+        ]
+        if user_ons:
+            elapsed = (datetime.now(UTC) - max(user_ons)).total_seconds()
+            countdown = max(countdown, int(self._light_timeout - elapsed))
+        return countdown
 
     def _occupancy_lots(self) -> list[datetime]:
         """latest_occupied_time across the occupancy and maintain entities."""

@@ -136,6 +136,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the light too, is still sent with its own brightness and color.
   Previously it was dropped, so the light finished its warning and turned
   off, or came on with the automatic settings instead.
+- A false detection over a light turned on manually, at the wall, or by the
+  door now leaves that turn-on its full turn-off timeout. Previously the
+  countdown was taken from the sensor's `latest_occupied_time`, which a
+  false detection does not advance, so a light turned on after an earlier
+  visit could turn off the moment the sensor cleared.
 
 ## [1.7.0] - 2026-08-27
 

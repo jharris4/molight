@@ -221,6 +221,8 @@ async def test_maintain_clear_countdown_anchors_to_latest_occupied_time(
     hass.states.async_set(MAINT, "on")
     await settle(hass)
 
+    # Well past the manual turn-on's own timeout, so only the history counts.
+    freezer.tick(timedelta(seconds=90))
     lot = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
     hass.states.async_set(MAINT, "off", {"latest_occupied_time": lot})
     await settle(hass)
