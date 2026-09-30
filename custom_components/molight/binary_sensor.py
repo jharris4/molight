@@ -439,6 +439,10 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
         self._cycle_start_lot: datetime | None = None
+        # The anchor saved with a restored "on": the running cycle keeps it,
+        # so a genuine detection it already contained is not forgotten.
+        self._saved_cycle = False
+        self._saved_cycle_start_lot: datetime | None = None
         self._false_count: int = 0
         self._last_clear_false: bool = False
         # A restored "on" that no constituent confirmed at seed time: a
@@ -462,6 +466,15 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
+        if (
+            last is not None
+            and last.state == "on"
+            and (extra := await self.async_get_last_extra_data()) is not None
+        ):
+            self._saved_cycle = True
+            self._saved_cycle_start_lot = _parse_datetime(
+                extra.as_dict().get("cycle_start_latest_occupied_time")
+            )
         all_sensors = list(
             dict.fromkeys(self._trigger_sensors + self._maintain_sensors)
         )
@@ -504,7 +517,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                     EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
                 )
         if self._attr_is_on:
-            self._cycle_start_lot = self._latest_occupied_time
+            self._cycle_start_lot = (
+                self._saved_cycle_start_lot
+                if self._saved_cycle
+                else self._latest_occupied_time
+            )
         self.async_write_ha_state()
 
     def _absorb_constituent_history(self) -> None:
@@ -604,7 +621,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = False
 
         if not was_on and self._attr_is_on:
-            self._cycle_start_lot = self._latest_occupied_time
+            self._cycle_start_lot = (
+                self._saved_cycle_start_lot
+                if self._restored_carry and self._saved_cycle
+                else self._latest_occupied_time
+            )
             # Occupancy has (re)started since the restart; the restored
             # evidence is spent.
             self._restored_carry = False
@@ -678,6 +699,14 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         return any(
             e in self._reloading or ((s := self.hass.states.get(e)) and s.state == "on")
             for e in sensors
+        )
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Save the running cycle's anchor, which a reload must not reset."""
+        anchor = self._cycle_start_lot
+        return RestoredExtraData(
+            {"cycle_start_latest_occupied_time": anchor.isoformat() if anchor else None}
         )
 
     @property

@@ -31,7 +31,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
 
 
 def _occupancy2_entry() -> MockConfigEntry:
@@ -1245,6 +1245,75 @@ async def test_combined_reload_takes_over_a_new_constituents_history(
     state = hass.states.get("binary_sensor.seed_combined")
     assert state.attributes["last_clear_false_detection"] is True
     assert state.attributes["false_detection_count"] == 1
+
+
+async def _genuine_trigger_then_maintain_hold(hass: HomeAssistant, freezer) -> str:
+    """Start a combined cycle whose trigger clears genuinely; return its lot."""
+    hass.states.async_set("binary_sensor.m1", "on")
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=60))
+    lot = datetime.now(UTC).isoformat()
+    hass.states.async_set("binary_sensor.m1", "off", {"latest_occupied_time": lot})
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+    return lot
+
+
+async def _false_maintain_clear(hass: HomeAssistant, lot: str) -> None:
+    """The maintain sensor's false clear adds no newer detection than lot."""
+    attrs = {"last_clear_false_detection": True}
+    hass.states.async_set("binary_sensor.m2", "off", attrs)
+    await settle(hass)
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.state == "off"
+    assert state.attributes["latest_occupied_time"] == lot
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("via", ["reload", "restart"])
+async def test_genuine_combined_cycle_survives_a_reload(
+    hass: HomeAssistant, freezer, via: str
+) -> None:
+    """A reload mid-cycle keeps the genuine detection the cycle already had."""
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+    lot = await _genuine_trigger_then_maintain_hold(hass, freezer)
+
+    if via == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    else:
+        await restart_entries(hass, entry)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+    await _false_maintain_clear(hass, lot)
+
+
+@pytest.mark.asyncio
+async def test_genuine_combined_cycle_survives_a_reload_with_a_late_maintain(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A cycle a late maintain sensor carries across keeps its detection too."""
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+    lot = await _genuine_trigger_then_maintain_hold(hass, freezer)
+
+    # The maintain sensor's own entry reloads, then the combined one does.
+    hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
+    await settle(hass)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+    await _false_maintain_clear(hass, lot)
 
 
 @pytest.mark.asyncio

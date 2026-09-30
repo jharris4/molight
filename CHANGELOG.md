@@ -160,6 +160,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   earlier visit counted as a detection in the next cycle, so a false
   detection was reported as genuine and `false_detection_count` did not
   increase.
+- A Virtual Combined Occupancy Sensor that is reloaded or restarted while
+  occupied now remembers the genuine detection the running cycle already
+  contained. Previously, when the last sensor then cleared without a newer
+  detection, the cycle was reported as a false detection, so lights it had
+  lit turned off after the false-detection delay.
 
 ## [1.7.0] - 2026-08-27
 
