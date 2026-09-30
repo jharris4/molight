@@ -466,6 +466,53 @@ async def test_false_detection_classification_and_count(
     assert state.attributes["latest_occupied_time"] is not None
 
 
+async def _edit_options(hass: HomeAssistant, entry: MockConfigEntry, **changes) -> None:
+    options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(entry, options={**options, **changes})
+    await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+async def test_occupancy_edit_mid_cycle_keeps_cycle_start_and_applies_new_timeout(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An edit while occupied keeps the cycle start; the clear uses the new timeout."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Edited Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    start = datetime.now(UTC)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=20))
+    await _edit_options(hass, entry, **{CONF_OCCUPANCY_TIMEOUT: 40})
+    state = hass.states.get("binary_sensor.edited_occupancy")
+    assert state.state == "on"
+    assert state.attributes["occupancy_timeout"] == 40
+    assert state.attributes["last_on_time"] == start.isoformat()
+
+    # 45 s on is a real cycle under the new 40 s timeout; 25 s from the edit is not.
+    freezer.tick(timedelta(seconds=25))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.edited_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["latest_occupied_time"] == (
+        (datetime.now(UTC) - timedelta(seconds=40)).isoformat()
+    )
+
+
 @pytest.mark.asyncio
 async def test_recovery_to_on_preserves_false_detection_clock(
     hass: HomeAssistant, freezer
@@ -639,6 +686,38 @@ async def test_illuminance_hysteresis_holds_state_in_band(
     hass.states.async_set("sensor.lux_1", "7.9")
     await hass.async_block_till_done()
     assert sensor().state == "off"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_edit_rejudges_a_held_reading_against_the_new_band(
+    hass: HomeAssistant,
+) -> None:
+    """An edit keeps the held state for a reading still in band, else flips it."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Edited Illuminance",
+            CONF_ILLUMINANCE_SENSOR: "sensor.lux_1",
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 5.0,
+        },
+    )
+    hass.states.async_set("sensor.lux_1", "20")
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.lux_1", "8")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.edited_illuminance").state == "on"
+
+    # 8 is under the new bare threshold of 12 but still inside its 7-17 band.
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_THRESHOLD: 12.0})
+    assert hass.states.get("binary_sensor.edited_illuminance").state == "on"
+
+    # The narrower 11-13 band no longer holds 8.
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_HYSTERESIS: 1.0})
+    assert hass.states.get("binary_sensor.edited_illuminance").state == "off"
 
 
 @pytest.mark.asyncio

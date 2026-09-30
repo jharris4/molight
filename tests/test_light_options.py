@@ -34,7 +34,13 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    light_targets,
+    make_light_entry,
+    record_service_calls,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -167,6 +173,46 @@ async def test_options_reload_removing_occupancy_while_occupied(
 
     # Occupancy is no longer watched; the timer turns the light off.
     freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_options_reload_during_countdown_restarts_with_new_timeout(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A reload mid-COUNTDOWN adopts the lit light as ACTIVE with a full timer
+    at the new timeout; the old countdown no longer fires."""
+    entry = make_light_entry(occupancy=OCC, timeout=60)
+    hass.states.async_set(OCC, "off")
+    await setup_entries(hass, entry)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _mstate(hass) == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 90})
+    calls = record_service_calls(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=89))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert light_targets(calls, "turn_off") == []
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     state = _state(hass)

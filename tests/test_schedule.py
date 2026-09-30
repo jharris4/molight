@@ -218,6 +218,39 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("new_end", "checkpoints"),
+    [
+        ("21:30", [("21:30:02", "off"), ("22:00:02", "off")]),
+        ("23:00", [("22:00:02", "on"), ("23:00:02", "off")]),
+    ],
+)
+async def test_editing_windows_rearms_the_transition_timer(
+    hass: HomeAssistant, freezer, new_end: str, checkpoints: list
+) -> None:
+    """An edit while the 22:00 edge is armed switches to the new edge only."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 21:00:00+00:00")
+    entry = _schedule_entry([{"start": "07:00", "end": "22:00"}])
+    await _setup(hass, entry)
+
+    options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    options[CONF_TIME_WINDOWS] = [{"start": "07:00", "end": new_end}]
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["next_transition"] == f"2026-07-02T{new_end}:00+00:00"
+
+    for moment, expected in checkpoints:
+        t = datetime.fromisoformat(f"2026-07-02T{moment}+00:00")
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await hass.async_block_till_done()
+        assert hass.states.get("binary_sensor.night_schedule").state == expected
+
+
+@pytest.mark.asyncio
 async def test_full_day_window_is_one_window_per_day(
     hass: HomeAssistant, freezer
 ) -> None:
