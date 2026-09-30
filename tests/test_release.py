@@ -86,7 +86,7 @@ def test_release_preview_and_write(release_repo: Path) -> None:
     preview = _release(release_repo, "1.6.0")
 
     assert preview.returncode == 0, preview.stderr
-    assert "Preview only — nothing written" in preview.stdout
+    assert "Preview only, nothing written" in preview.stdout
     assert json.loads(manifest.read_text())["version"] == "1.5.0"
 
     written = _release(release_repo, "1.6.0", "--write")

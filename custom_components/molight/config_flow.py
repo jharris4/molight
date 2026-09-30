@@ -2382,7 +2382,7 @@ class MoLightConfigFlow(
         """Build a labeled conversion choice including its retained schedule."""
         schedule_name = self._entity_label(_molight_cfg(entry)[CONF_SCHEDULE_ENTITY])
         return selector.SelectOptionDict(
-            value=entity_id, label=f"{label} — {schedule_name}"
+            value=entity_id, label=f"{label} ({schedule_name})"
         )
 
     async def _async_conversion_select(

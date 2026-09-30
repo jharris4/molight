@@ -35,7 +35,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           {
-            echo "Release notes for $version — paste into the GitHub release body,"
+            echo "Release notes for $version. Paste them into the GitHub release body,"
             echo "which is what HACS shows users in its update dialog."
             echo '```markdown'
             awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md

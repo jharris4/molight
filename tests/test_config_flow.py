@@ -4577,8 +4577,8 @@ async def test_conversion_picker_labels_and_sorts_lights(hass: HomeAssistant) ->
     result = await _reach_conversion(hass, "convert_to_scheduled")
 
     assert _selector_config(result, CONF_CONVERT_LIGHTS)["options"] == [
-        {"value": "light.alpha", "label": "Alpha — Dusk Schedule"},
-        {"value": "light.zulu", "label": "Zulu — Night Schedule"},
+        {"value": "light.alpha", "label": "Alpha (Dusk Schedule)"},
+        {"value": "light.zulu", "label": "Zulu (Night Schedule)"},
     ]
 
 

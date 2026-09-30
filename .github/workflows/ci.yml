@@ -60,7 +60,7 @@ jobs:
           declared=$(python -c "import json; print(json.load(open('hacs.json'))['homeassistant'])")
           installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
           if [ "$declared" != "$installed" ]; then
-            echo "::error::hacs.json declares $declared but this leg installs $installed — update the pin above or hacs.json"
+            echo "::error::hacs.json declares $declared but this leg installs $installed; update the pin above or hacs.json"
             exit 1
           fi
       - run: pytest --cov

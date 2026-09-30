@@ -7,7 +7,7 @@ Usage: scripts/release 1.6.0            # preview only
 Previewing is the default so a stray invocation can never rewrite files. The
 preview prints the exact command to apply it, so there is nothing to remember.
 
-Edits files only — it never commits, tags, or pushes. Review the diff, then run
+It only edits files and never commits, tags, or pushes. Review the diff, then run
 the git commands it prints.
 """
 
@@ -149,7 +149,7 @@ def main() -> None:
 
     body = text.split("## [Unreleased]", 1)[1].split("\n## [", 1)[0]
     if not body.strip():
-        fail("the [Unreleased] section is empty — nothing to release")
+        fail("the [Unreleased] section is empty, so there is nothing to release")
 
     _preflight(version)
 
@@ -179,7 +179,7 @@ def main() -> None:
     print(f"  manifest.json  {current} -> {version}")
     if not write:
         print(
-            f"\nPreview only — nothing written. To apply, run:\n"
+            f"\nPreview only, nothing written. To apply, run:\n"
             f"  python3 scripts/release {version} --write"
         )
         return
@@ -195,7 +195,7 @@ def main() -> None:
         f"The tag runs .github/workflows/release.yml, which checks the tag, the\n"
         f"manifest and changelog, runs every live E2E suite, and prints the\n"
         f"release notes in its job summary. Paste those into the\n"
-        f"GitHub release body — that is what HACS shows users in its update dialog."
+        f"GitHub release body, which is what HACS shows users in its update dialog."
     )
     subprocess.run(
         ["git", "diff", "--stat"], cwd=ROOT, check=False, stderr=subprocess.DEVNULL
