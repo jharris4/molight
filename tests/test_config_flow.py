@@ -5064,6 +5064,41 @@ async def test_conversion_round_trip_restores_flat_config(
 
 
 @pytest.mark.asyncio
+async def test_conversion_round_trip_keeps_a_derived_entity_id(
+    hass: HomeAssistant,
+) -> None:
+    """A light created without an explicit entity ID keeps its derived one."""
+    source = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Porch Lamp",
+            CONF_LIGHTS: ["light.porch_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        },
+    )
+    hass.states.async_set("binary_sensor.night", "off")
+    await setup_entries(hass, source)
+    registry = er.async_get(hass)
+    entities = {
+        e.entity_id
+        for e in er.async_entries_for_config_entry(registry, source.entry_id)
+    }
+    assert "light.porch_lamp" in entities
+
+    for direction in ("convert_to_scheduled", "convert_to_regular"):
+        await _convert(hass, direction, "light.porch_lamp")
+        assert CONF_ENTITY_ID not in source.data
+        assert {
+            e.entity_id
+            for e in er.async_entries_for_config_entry(registry, source.entry_id)
+        } == entities
+        assert hass.states.get("light.porch_lamp") is not None
+
+
+@pytest.mark.asyncio
 async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> None:
     """Follow schedules cannot be reinterpreted as settings selectors."""
     await setup_entries(

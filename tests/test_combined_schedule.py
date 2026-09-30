@@ -577,6 +577,29 @@ async def test_restart_keeps_marker_when_start_came_from_last_changed(
 
 
 @pytest.mark.asyncio
+async def test_restart_rederives_an_unparsable_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A restored marker that does not parse is replaced by the derived start."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    mock_restore_cache(
+        hass,
+        [State("binary_sensor.out", "on", {"current_window_start": "garbage"})],
+    )
+    await _setup(
+        hass,
+        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _combined("Out", ["binary_sensor.house"], invert=True),
+    )
+    since = hass.states.get("binary_sensor.house").last_changed
+    state = hass.states.get("binary_sensor.out")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == since.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_start_from_last_changed_is_used_without_a_restored_period(
     hass: HomeAssistant, freezer
 ) -> None:
