@@ -574,8 +574,9 @@ def _effective_occupancy_timeout(
     For a simple occupancy sensor this is its configured timeout; for a
     combined sensor it is the max across all constituent sensors (the
     countdown math anchors to the constituent that clears last). Combined
-    sensors can reference each other (the options flow can even create
-    cycles), so entities already being resolved are skipped.
+    sensors can reference each other, and while the flows reject cycles a
+    hand-edited config could still hold one, so entities already being
+    resolved are skipped.
     """
     if _seen is None:
         _seen = set()
