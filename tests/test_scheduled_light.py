@@ -1731,6 +1731,94 @@ async def test_restart_catches_up_missed_schedule_end_off(
 
 
 @pytest.mark.asyncio
+async def test_restart_missed_schedule_end_keep_leaves_light_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Under the default keep action a missed end swaps settings, light on."""
+    occupancy = "binary_sensor.outside_occupancy"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    cleared = datetime.now(UTC) - timedelta(seconds=120)
+    hass.states.async_set(
+        occupancy, "off", {"latest_occupied_time": cleared.isoformat()}
+    )
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    freezer.tick(timedelta(seconds=29))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_restart_inside_window_drops_restored_pending_off(
+    hass: HomeAssistant,
+) -> None:
+    """A pending off from the last window dies once the next window has begun."""
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(hold, "on")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_OUTSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    ATTR_SCHEDULE_END_OFF_PENDING: True,
+                },
+            )
+        ],
+    )
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [hold]},
+    )
+    await setup_entries(hass, entry)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert light_targets(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
 async def test_options_reload_swapping_schedule_does_not_turn_light_off(
     hass: HomeAssistant,
 ) -> None:
