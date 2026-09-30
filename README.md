@@ -249,7 +249,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | Default `control`: dark gates turn-ons AND turning bright forces the lights off. `gate`: dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
-| **Schedule sensor** *(optional)* | A MoLight Virtual Schedule Binary Sensor. The picker offers only MoLight schedule sensors; a legacy non-schedule reference from before this narrowing stays selectable until changed |
+| **Schedule sensor** *(optional)* | A MoLight schedule: a Virtual Schedule Sensor or a Virtual Combined Schedule. The picker offers only MoLight schedules; a legacy non-schedule reference from before this narrowing stays selectable until changed |
 | **Schedule mode** | Default `follow`: the window turns the lights on at its start and off at its end (porch lights). The three **Gate** modes let occupancy and the door turn the lights on inside the window only, and differ in what the window's end does to a light that is still on (see [Schedule modes](#schedule-modes)) |
 | **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
 | **Door mode** | Default `open`: opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close`: the lights stay on while the door is open and start the countdown when it closes |
@@ -389,7 +389,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 ### Virtual Scheduled Light
 
-A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen Virtual Schedule Sensor selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
+A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen MoLight schedule (a Virtual Schedule Sensor or a Virtual Combined Schedule) selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
 
 Creation uses three main forms:
 
