@@ -494,11 +494,11 @@ git push origin v1.x.0
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
 validates that the tag is on `main` and that the tag, manifest and changelog
 versions agree, runs the lint, unit test and validation jobs and every live
-E2E suite, then puts the release notes extracted from the changelog in its
-job summary. It does **not** create the GitHub Release. After the workflow
-succeeds:
+E2E suite, and once all of them pass puts the release notes extracted from
+the changelog in the summary of its **Release notes** job. It does **not**
+create the GitHub Release. After the workflow succeeds:
 
-1. Open its job summary and copy the generated release notes.
+1. Open the **Release notes** job summary and copy the generated notes.
 2. In the repository's **Releases** page, choose **Draft a new release** and
    select the tag you just pushed.
 3. Give the release a descriptive title, paste the generated notes into its
@@ -627,10 +627,10 @@ CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
 minimum-supported/current matrix plus an advisory floating `stable` canary.
-Release tags run every suite before the release guard passes. Every CI job
-uploads the retained run directory (HA config and Compose logs) as a workflow
-artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory
-that each run creates its own run directory in.
+Release tags write their release notes only after every suite passes. Every
+CI job uploads the retained run directory (HA config and Compose logs) as a
+workflow artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` sets the
+directory that each run creates its own run directory in.
 
 ## Design notes
 

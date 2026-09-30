@@ -37,16 +37,6 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_REF_NAME is on main, matches manifest.json and has a CHANGELOG section."
-      - name: Put the release notes in the job summary
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          {
-            echo "Release notes for $version. Paste them into the GitHub release body,"
-            echo "which is what HACS shows users in its update dialog."
-            echo '```markdown'
-            awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
 
   # Branch pushes run these, but their triggers do not cover tags.
   ci:
@@ -93,3 +83,22 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
+
+  notes:
+    # Written only once everything above passed, so a release is never cut
+    # from a tag that failed its checks.
+    name: Release notes
+    needs: [guard, ci, validate, suites]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Put the release notes in the job summary
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "Release notes for $version. Paste them into the GitHub release body,"
+            echo "which is what HACS shows users in its update dialog."
+            echo '```markdown'
+            awk -v v="## [$version]" 'index($0,v)==1 {f=1; next} f && index($0,"## [")==1 {exit} f' CHANGELOG.md
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
