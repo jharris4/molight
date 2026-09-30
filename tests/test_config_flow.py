@@ -6847,3 +6847,177 @@ async def test_scheduled_light_options_reject_own_keep_on_entities(
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
     ] == ["light.night", "switch.night_hold"]
+
+
+# ---------------------------------------------------------------------------
+# Validators shared by every form that edits a Virtual Light's settings
+# ---------------------------------------------------------------------------
+
+SUBJECT_MEMBER = "light.subject_real"
+_ALL_MODES = ["rgb", "color_temp"]
+
+# case: (member color modes, member features, settings submitted, error)
+_SHARED_LIGHT_CASES = {
+    "light_timeout": (
+        _ALL_MODES,
+        LightEntityFeature.TRANSITION,
+        {
+            CONF_LIGHT_TIMEOUT: 20,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        },
+        {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"},
+    ),
+    "stage_transition": (
+        _ALL_MODES,
+        LightEntityFeature.TRANSITION,
+        {SECTION_WARNING: {CONF_EFFECT_TIMEOUT: 10, CONF_EFFECT_TRANSITION: 11}},
+        {"base": "effect_transition_too_long"},
+    ),
+    "color_conflict": (
+        _ALL_MODES,
+        LightEntityFeature.TRANSITION,
+        {
+            SECTION_BEHAVIOR: {
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                CONF_AUTO_ON_RGB_COLOR: [255, 0, 0],
+            }
+        },
+        {"base": "auto_on_color_conflict"},
+    ),
+    "transition_support": (
+        _ALL_MODES,
+        0,
+        {SECTION_BEHAVIOR: {CONF_AUTO_ON_TRANSITION: 2}},
+        {"base": "transition_unsupported"},
+    ),
+    "color_support": (
+        ["brightness"],
+        LightEntityFeature.TRANSITION,
+        {SECTION_BEHAVIOR: {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}},
+        {"base": "color_unsupported"},
+    ),
+    "brightness_support": (
+        ["onoff"],
+        LightEntityFeature.TRANSITION,
+        {SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 60}},
+        {"base": "brightness_unsupported"},
+    ),
+}
+# Discovery gives every pick its own entry, so it names the pick that fails.
+_PICK_CASES = {"transition_support", "color_support", "brightness_support"}
+
+
+async def _reach_light_settings_form(hass: HomeAssistant, form: str) -> dict:
+    """Open one of the forms that edit a Virtual Light's settings."""
+    if form == "create":
+        result = await _start_create(hass)
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+        )
+    if form == "options":
+        entry = _light_entry("Subject", "subject")
+        await setup_entries(hass, entry)
+        return await hass.config_entries.options.async_init(entry.entry_id)
+    if form == "scheduled_create":
+        result = await _start_create(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+        )
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Subject",
+                CONF_LIGHTS: [SUBJECT_MEMBER],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                SECTION_ADVANCED: {},
+            },
+        )
+    if form == "scheduled_options":
+        entry = _scheduled_light_entry("Subject", "subject")
+        await setup_entries(hass, entry)
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Subject",
+                CONF_LIGHTS: [SUBJECT_MEMBER],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        # The inside side, so the two scheduled forms cover both sides.
+        return await hass.config_entries.options.async_configure(
+            result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        )
+    result = await _reach_discovery_select(hass, "discover_light")
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: [SUBJECT_MEMBER]}
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", list(_SHARED_LIGHT_CASES))
+@pytest.mark.parametrize(
+    "form", ["create", "options", "scheduled_create", "scheduled_options", "discovery"]
+)
+async def test_light_settings_forms_share_validators(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str, case: str
+) -> None:
+    """Every form that edits a light's settings rejects the same mistakes."""
+    modes, features, settings, expected = _SHARED_LIGHT_CASES[case]
+    hass.states.async_set(
+        SUBJECT_MEMBER,
+        "off",
+        {"supported_color_modes": modes, "supported_features": features},
+    )
+    await _setup_night_schedule(hass)
+    await setup_entries(hass, occupancy_entry)
+    result = await _reach_light_settings_form(hass, form)
+    step_id = result["step_id"]
+
+    submitted = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300, **settings}
+    if form in ("create", "options"):
+        submitted.update({CONF_NAME: "Subject", CONF_LIGHTS: [SUBJECT_MEMBER]})
+    if form == "create":
+        submitted[SECTION_ADVANCED] = {}
+    configure = (
+        hass.config_entries.options.async_configure
+        if form.endswith("options")
+        else hass.config_entries.flow.async_configure
+    )
+    result = await configure(result["flow_id"], submitted)
+
+    if form == "discovery" and case in _PICK_CASES:
+        expected = {"base": f"{expected['base']}_pick"}
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == step_id
+    assert result["errors"] == expected
+
+
+@pytest.mark.asyncio
+async def test_combined_schedule_options_validate_inputs(
+    hass: HomeAssistant,
+    schedule_entry: MockConfigEntry,
+    occupancy_entry: MockConfigEntry,
+) -> None:
+    """The options form applies the create form's input rules."""
+    combined = _combined_schedule_entry("Bedside", ["binary_sensor.test_schedule"])
+    await setup_entries(hass, schedule_entry, combined)
+    result = await hass.config_entries.options.async_init(combined.entry_id)
+    base = {
+        CONF_NAME: "Bedside",
+        CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ANY,
+        CONF_SCHEDULE_INVERT: False,
+    }
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**base, CONF_SCHEDULE_INPUTS: []}
+    )
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
+
+    # Created after the form was rendered, so only backend validation stops it.
+    await setup_entries(hass, occupancy_entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_occupancy"]},
+    )
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
