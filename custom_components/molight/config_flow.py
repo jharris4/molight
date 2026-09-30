@@ -3562,7 +3562,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         The options ride along in the same update: create_entry below then
         stores an identical mapping, which HA treats as no change, so a
         rename fires the reload listener once instead of twice.
+
+        Another light's options may have been saved while a multi-step form
+        was open, so the member graph is checked again at the final save.
         """
+        if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES and (
+            _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS])
+        ):
+            return self.async_abort(reason="light_member_cycle")
         name = data[CONF_NAME]
         if name != self._entry.title:
             self.hass.config_entries.async_update_entry(

@@ -1740,6 +1740,9 @@
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
+    },
+    "abort": {
+      "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again."
     }
   }
 }

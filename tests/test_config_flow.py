@@ -6776,6 +6776,68 @@ async def test_light_options_reject_cycle_from_stale_form(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A cycle another light's save closed behind a later page is refused."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    outer = _light_entry("Outer", "outer")
+    await setup_entries(hass, hall, outer)
+    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.outer"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        assert result["step_id"] == "scheduled_light_outside"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], side
+        )
+        assert result["step_id"] == "scheduled_light_inside"
+    else:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                **side,
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.outer"],
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            },
+        )
+        assert result["step_id"] == "light_selection"
+
+    # Outer comes to include Hall while Hall's last page is open.
+    other = await hass.config_entries.options.async_init(outer.entry_id)
+    other = await hass.config_entries.options.async_configure(
+        other["flow_id"],
+        {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.hall"]},
+    )
+    assert other["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], side if scheduled else {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "light_member_cycle"
+    assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
+
+
+@pytest.mark.asyncio
 async def test_light_options_reject_itself_renamed_after_form_opened(
     hass: HomeAssistant,
 ) -> None:
