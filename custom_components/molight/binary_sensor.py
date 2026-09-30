@@ -232,17 +232,28 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
+        # A cycle's anchor and its clear's classification describe one
+        # source; an options edit that switches the source leaves them
+        # behind. A save that predates the source record is trusted.
+        extra = await self.async_get_last_extra_data()
+        saved_source = extra.as_dict().get("source") if extra is not None else None
+        same_source = saved_source in (None, self._source_sensor)
         if last is not None:
             with contextlib.suppress(ValueError, TypeError):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
+            attrs = last.attributes
+            if same_source and last.state == "off":
+                # The flags describe this very clear, which still stands.
+                self._last_clear_false = bool(attrs.get("last_clear_false_detection"))
+                self._last_clear_unavailable = bool(attrs.get("last_clear_unavailable"))
             # Only a cycle that was still running owns its anchor: a
             # last_on_time restored alongside an "off" state belongs to a
             # finished pre-restart cycle and would skew the next
             # classification.
-            raw = last.attributes.get("last_on_time")
-            if raw and last.state == "on":
+            raw = attrs.get("last_on_time")
+            if raw and last.state == "on" and same_source:
                 with contextlib.suppress(ValueError, TypeError):
                     self._last_on_time = datetime.fromisoformat(raw)
         self.async_on_remove(
@@ -390,6 +401,11 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             return False
         on_duration = (now - self._last_on_time).total_seconds()
         return on_duration - self._timeout <= self._grace
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Save which source the saved anchor and classification belong to."""
+        return RestoredExtraData({"source": self._source_sensor})
 
     @property
     def extra_state_attributes(self) -> dict:

@@ -2243,3 +2243,128 @@ async def test_combined_ignores_attribute_only_constituent_update(
     state = hass.states.get("binary_sensor.combined")
     assert state.state == "on"
     assert state.attributes["last_clear_false_detection"] is False
+
+
+@pytest.mark.asyncio
+async def test_occupancy_source_swap_drops_the_old_sources_anchor(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Switching the source to a sensor that is already on measures the next
+    clear from that sensor's own start, not the old source's anchor."""
+    hass.set_state(CoreState.running)
+    hass.states.async_set("binary_sensor.presence", "on")
+    presence_on = datetime.now(UTC)
+    freezer.tick(timedelta(seconds=300))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    entry = _grace_occupancy_entry()
+    await setup_entries(hass, entry)
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await _edit_options(
+        hass, entry, **{CONF_OCCUPANCY_SENSOR: "binary_sensor.presence"}
+    )
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "on"
+    assert state.attributes["last_on_time"] == presence_on.isoformat()
+
+    hass.states.async_set("binary_sensor.presence", "off")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is False
+    assert state.attributes["false_detection_count"] == 0
+    assert state.attributes["latest_occupied_time"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("via", ["reload", "restart", "source_swap"])
+async def test_occupancy_false_clear_survives_a_reload(
+    hass: HomeAssistant, freezer, via: str
+) -> None:
+    """A clear's classification stands until the next clear, across a reload
+    or restart of the entry; a source swap leaves the old source's behind."""
+    hass.set_state(CoreState.running)
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    hass.states.async_set("binary_sensor.presence", "off")
+    entry = _grace_occupancy_entry()
+    await setup_entries(hass, entry)
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+
+    if via == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    elif via == "restart":
+        await restart_entries(hass, entry)
+    else:
+        await _edit_options(
+            hass, entry, **{CONF_OCCUPANCY_SENSOR: "binary_sensor.presence"}
+        )
+    await settle(hass)
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is (via != "source_swap")
+    assert state.attributes["false_detection_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_light_false_off_delay_survives_an_occupancy_reload(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A regular sensor's false clear reloaded away while the maintain sensor
+    still held the light would cost the light its quick false-off."""
+    hass.set_state(CoreState.running)
+
+    def occupancy(name: str, source: str) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+                CONF_NAME: name,
+                CONF_OCCUPANCY_SENSOR: source,
+                CONF_OCCUPANCY_TIMEOUT: 30,
+                CONF_FALSE_DETECTION_GRACE: 3,
+            },
+        )
+
+    regular = occupancy("Regular", "binary_sensor.motion_1")
+    maintain = occupancy("Maintain", "binary_sensor.presence")
+    light = make_light_entry(
+        occupancy="binary_sensor.regular",
+        maintain="binary_sensor.maintain",
+        timeout=60,
+        false_off_delay=5,
+    )
+    hass.states.async_set("light.real_1", "off")
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    hass.states.async_set("binary_sensor.presence", "off")
+    await setup_entries(hass, regular, maintain, light)
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    hass.states.async_set("binary_sensor.presence", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.regular").attributes[
+        "last_clear_false_detection"
+    ]
+    assert hass.states.get("light.matrix_light").state == "on"
+
+    assert await hass.config_entries.async_reload(regular.entry_id)
+    await settle(hass)
+    hass.states.async_set("binary_sensor.presence", "off")
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").state == "off"

@@ -192,6 +192,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light did not yet depend on it, let the light save a shorter timeout than
   the sensor's. The same holds for both profiles of a Virtual Scheduled
   Light and for discovered lights.
+- A Virtual Occupancy Sensor whose source is changed in its options to a
+  sensor that is already on now times the new source's cycle from that
+  sensor's own start. Previously it kept the old source's start, so a long
+  visit could be counted as a false detection. A reload or restart also
+  keeps the classification of the sensor's last clear (false detection or
+  cleared after unavailable) until its next clear, so a light still held by
+  its maintain occupancy sensor keeps its quick false-off.
 
 ## [1.7.0] - 2026-08-27
 
