@@ -4,6 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 env:
   # Lane scripts pin their run directory here so failures can be uploaded.
   MOLIGHT_E2E_RUN_ROOT: ${{ github.workspace }}/.e2e-run
