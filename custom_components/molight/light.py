@@ -2975,6 +2975,16 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Apply the configured select option before an off-to-on command."""
         if not self._turn_on_select_entity:
             return
+        target = self.hass.states.get(self._turn_on_select_entity)
+        if target is None or target.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            # HA only logs a call to such a target, so it would otherwise be
+            # recorded as applied.
+            _LOGGER.warning(
+                "Turn-on selection target %s is %s; turning on the lights without it",
+                self._turn_on_select_entity,
+                "missing" if target is None else target.state,
+            )
+            return
         option, source = self._resolve_turn_on_selection()
         if option is None:
             parts = []

@@ -1433,6 +1433,7 @@ async def test_each_schedule_side_applies_its_turn_on_selection(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(outside_occupancy, "off")
     hass.states.async_set(inside_occupancy, "off")
+    hass.states.async_set("select.light_mode", "Day")
     entry = make_scheduled_light_entry(
         outside={
             CONF_LIGHT_TIMEOUT: 60,

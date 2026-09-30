@@ -21,6 +21,12 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant, ServiceCall
 
 
+@pytest.fixture(autouse=True)
+def _ambient_theme(hass: HomeAssistant) -> None:
+    """Give the selection target a state; tests that need options set their own."""
+    hass.states.async_set("select.ambient_theme", "Normal")
+
+
 def _selection_entry(
     *,
     fixed_option: str | None = "Cozy",
@@ -308,6 +314,39 @@ async def test_selection_failure_does_not_prevent_turn_on(
 
     assert hass.states.get("light.selection_light").state == "on"
     assert "Unable to apply turn-on selection" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", ["missing", "unavailable"])
+async def test_selection_skipped_when_target_is_missing_or_unavailable(
+    hass: HomeAssistant, caplog, target: str
+) -> None:
+    """HA only logs a call to such a target, so MoLight skips it with a warning
+    of its own and does not record the selection as applied."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    if target == "missing":
+        hass.states.async_remove("select.ambient_theme")
+    else:
+        hass.states.async_set("select.ambient_theme", "unavailable")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert selected == []
+    assert state.attributes["last_turn_on_selection_option"] is None
+    assert state.attributes["last_turn_on_selection_source"] is None
+    assert f"Turn-on selection target select.ambient_theme is {target}" in caplog.text
 
 
 @pytest.mark.asyncio
