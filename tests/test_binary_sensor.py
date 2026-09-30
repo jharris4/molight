@@ -513,6 +513,36 @@ async def test_occupancy_edit_mid_cycle_keeps_cycle_start_and_applies_new_timeou
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("on_for", "false"), [(33, True), (34, False)])
+async def test_false_detection_grace_edge(
+    hass: HomeAssistant, freezer, on_for: int, false: bool
+) -> None:
+    """A cycle exactly the grace past the timeout is still a false detection."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Edge Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=on_for))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.edge_occupancy")
+    assert state.attributes["last_clear_false_detection"] is false
+
+
+@pytest.mark.asyncio
 async def test_recovery_to_on_preserves_false_detection_clock(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -676,8 +706,11 @@ async def test_illuminance_hysteresis_holds_state_in_band(
     await hass.async_block_till_done()
     assert sensor().state == "on"
 
-    # Below the threshold but inside the band stays bright.
+    # Below the threshold but inside the band stays bright, down to its edge.
     hass.states.async_set("sensor.lux_1", "9")
+    await hass.async_block_till_done()
+    assert sensor().state == "on"
+    hass.states.async_set("sensor.lux_1", "8")
     await hass.async_block_till_done()
     assert sensor().state == "on"
 
@@ -727,6 +760,7 @@ async def test_illuminance_first_reading_in_band_uses_bare_threshold(
     for name, source, reading, expected in (
         ("Band Bright", "sensor.lux_a", "11", "on"),
         ("Band Dark", "sensor.lux_b", "9", "off"),
+        ("Band Edge", "sensor.lux_c", "10", "on"),
     ):
         entry = MockConfigEntry(
             domain=DOMAIN,

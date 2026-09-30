@@ -2802,7 +2802,7 @@ async def test_occupancy_options_reject_timeout_above_light_timeout(
         {
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
-            CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
+            CONF_OCCUPANCY_TIMEOUT: 60,  # equal to the light's 60s fits
             SECTION_ADVANCED: {},
         },
     )
@@ -4426,6 +4426,15 @@ async def test_combined_options_reject_constituent_above_light_timeout(
             CONF_OCCUPANCY_TIMEOUT: 120,
         },
     )
+    even = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Even Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_even",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+        },
+    )
     combined = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -4435,7 +4444,7 @@ async def test_combined_options_reject_constituent_above_light_timeout(
         },
     )
     light = _light_entry("Hall", "hall", occupancy_entity="binary_sensor.combined")
-    await setup_entries(hass, occupancy_entry, big, combined, light)
+    await setup_entries(hass, occupancy_entry, big, even, combined, light)
 
     result = await hass.config_entries.options.async_init(combined.entry_id)
     assert result["step_id"] == "combined_occupancy"
@@ -4464,7 +4473,10 @@ async def test_combined_options_reject_constituent_above_light_timeout(
         result["flow_id"],
         {
             CONF_NAME: "Combined",
-            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_TRIGGER_SENSORS: [
+                "binary_sensor.test_occupancy",
+                "binary_sensor.even_occupancy",  # equal to the light's 60s fits
+            ],
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -4712,7 +4724,7 @@ async def test_occupancy_options_validate_through_nested_combined(
         {
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
-            CONF_OCCUPANCY_TIMEOUT: 45,  # fits under 60s
+            CONF_OCCUPANCY_TIMEOUT: 60,  # equal to the light's 60s fits
             SECTION_ADVANCED: {
                 CONF_FALSE_DETECTION_GRACE: 0,
                 CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,

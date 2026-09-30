@@ -575,6 +575,40 @@ async def test_late_partial_reply_is_physical(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("age", "brightness"), [(3, 50), (4, 100)])
+async def test_partial_reply_counts_up_to_the_settle_edge(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer, age, brightness
+) -> None:
+    """A partial reply is an echo up to exactly the end of the settle window."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_on", brightness=50)
+    _age_expectations(hass, age)
+
+    await _write(hass, "on", contexts[-1], brightness=100)
+
+    assert _attrs(hass)["brightness"] == brightness
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("age", "brightness"), [(30, 153), (31, 151)])
+async def test_matching_reply_counts_up_to_the_late_edge(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer, age, brightness
+) -> None:
+    """A matching reply is an echo up to exactly the end of the late window."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    _age_expectations(hass, age)
+
+    await _write(hass, "on", contexts[-1], brightness=151)
+
+    assert _attrs(hass)["brightness"] == brightness
+
+
+@pytest.mark.asyncio
 async def test_foreign_write_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
