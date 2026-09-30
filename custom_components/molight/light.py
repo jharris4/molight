@@ -67,7 +67,7 @@ Effect/warn warning
        → IDLE
 
 Turn-on attribution
-  Four timestamps record the last time the virtual light was activated and why:
+  Five timestamps record the last time the virtual light was activated and why:
     last_on_physical:    an underlying real light entity changed to ON from an
                          external source (physical switch, another automation, HA
                          UI acting on the real entity) while this virtual light
