@@ -241,7 +241,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -533,7 +533,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -664,7 +664,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -754,7 +754,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -991,7 +991,7 @@
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",
       "lights_required": "At least one light is required.",
-      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy and maintain occupancy sensors.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule.",
@@ -1154,7 +1154,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1244,7 +1244,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1484,7 +1484,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1709,7 +1709,7 @@
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",
       "lights_required": "At least one light is required.",
-      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy sensor.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy and maintain occupancy sensors.",
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
