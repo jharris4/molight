@@ -9,7 +9,7 @@ through the auto-on and effect/warn machinery exactly like brightness.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.components.light import ColorMode
@@ -150,7 +150,7 @@ async def test_mixed_members_get_one_call_with_color(hass: HomeAssistant) -> Non
 
 
 @pytest.mark.asyncio
-async def test_turn_on_forwards_hs_color(hass: HomeAssistant) -> None:
+async def test_turn_on_forwards_hs_color(hass: HomeAssistant, freezer) -> None:
     hass.states.async_set(REAL, "off", HS_CAPS)
     await setup_entries(hass, make_light_entry())
 
@@ -162,7 +162,7 @@ async def test_turn_on_forwards_hs_color(hass: HomeAssistant) -> None:
     attrs = _state(hass).attributes
     assert tuple(attrs["hs_color"]) == (100.0, 50.0)
     assert attrs["color_mode"] == "hs"
-    assert attrs["last_color_change_virtual"] is not None
+    assert attrs["last_color_change_virtual"] == datetime.now(UTC).isoformat()
     assert attrs["last_color_change_physical"] is None
 
 
@@ -242,7 +242,7 @@ async def test_external_recolor_mirrors_and_restarts_timer(
 
     attrs = _state(hass).attributes
     assert tuple(attrs["hs_color"]) == (200.0, 50.0)
-    assert attrs["last_color_change_physical"] is not None
+    assert attrs["last_color_change_physical"] == datetime.now(UTC).isoformat()
 
     # 80s after adoption: past the original expiry, inside the restarted one.
     freezer.tick(timedelta(seconds=40))

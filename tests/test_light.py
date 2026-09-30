@@ -664,7 +664,9 @@ async def test_virtual_brightness_change(
     await hass.async_block_till_done()
 
     state = hass.states.get("light.test_light")
-    assert state.attributes["last_brightness_change_virtual"] is not None
+    assert state.attributes["last_brightness_change_virtual"] == (
+        datetime.now(UTC).isoformat()
+    )
     assert state.attributes["last_brightness_change_physical"] is None
     assert state.attributes["brightness"] == 100
 
