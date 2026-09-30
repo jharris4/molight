@@ -1267,9 +1267,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         return False
 
     async def async_will_remove_from_hass(self) -> None:
-        """Cancel the running countdown timer on removal."""
+        """Cancel the countdown timer and any waiting turn-on on removal."""
         await super().async_will_remove_from_hass()
         self._cancel_timer()
+        # A turn-on still waiting for its selection must not light the room
+        # for an entity that is gone.
+        self._command_generation += 1
 
     # ------------------------------------------------------------------
     # LightEntity API

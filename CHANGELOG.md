@@ -146,6 +146,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an on light: *Turn off* drops it, and *Keep state* or *Switch state* run
   the outside profile's timeout once it is sent. Previously the turn-on was
   sent after the boundary, and the light stayed on with no timer.
+- A light whose entry is unloaded (its options saved, or the entry disabled
+  or removed) while an automatic turn-on is still waiting for a slow
+  turn-on selection no longer sends that turn-on afterwards. Previously the
+  removed entity lit the room once the selection returned.
 
 ## [1.7.0] - 2026-08-27
 

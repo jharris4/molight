@@ -12,7 +12,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.molight.const import SCHEDULE_MODE_FOLLOW
+from custom_components.molight.const import DOMAIN, SCHEDULE_MODE_FOLLOW
 from tests.conftest import make_light_entry, settle, setup_entries
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
@@ -464,6 +464,26 @@ async def test_bright_off_during_slow_selection_stands(hass: HomeAssistant) -> N
     assert calls == [("turn_off", None)]
     assert state.state == "off"
     assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("teardown", ["unload", "reload"])
+async def test_unloading_during_slow_selection_drops_the_waiting_turn_on(
+    hass: HomeAssistant, teardown: str
+) -> None:
+    """An entity that was unloaded no longer lights the room; its successor does."""
+    select = await _park_automatic_turn_on(hass)
+    calls = _light_calls(hass)
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    if teardown == "unload":
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    else:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    select.release.set()
+    await settle(hass)
+
+    assert calls == ([] if teardown == "unload" else [("turn_on", None)])
 
 
 @pytest.mark.asyncio
