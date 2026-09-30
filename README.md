@@ -524,7 +524,7 @@ keeping the release window short ensures both updates remain fast-forwards.
 
 ### Working in the dev container
 
-Every command below runs *inside* the dev container via `devcontainer exec`:
+`dev:up`, `dev:stop`, `dev:down` and `dev:rebuild` manage the dev container from the host, and `lint:sh` runs on the host too. The rest run *inside* the dev container via `devcontainer exec`:
 
 ```bash
 npm run dev:up        # create/start the dev container (fast after first build)
