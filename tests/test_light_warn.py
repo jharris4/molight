@@ -14,7 +14,7 @@ from datetime import timedelta
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Context, HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
@@ -634,6 +634,124 @@ async def test_external_dim_mid_effect_restores_pre_warning_color(
         and tuple(d["service_data"].get("hs_color") or ()) == (30.0, 40.0)
     ]
     assert restores, "pre-warning color was not restored"
+
+
+HS_CAPS = {"supported_color_modes": ["hs"], "color_mode": "hs"}
+
+
+async def _enter_stage_at_200(hass: HomeAssistant, freezer, stage: str) -> list[dict]:
+    """Light at 200 in a stage that dims it to 26; returns later calls."""
+    entry = make_light_entry(
+        effect_timeout=10 if stage == STATE_EFFECT else None,
+        effect_brightness=10,
+        warn_timeout=30,
+        warn_brightness=10,
+    )
+    await setup_entries(hass, entry)
+    calls = _record_service_calls(hass)
+    contexts: list[Context] = []
+    hass.bus.async_listen(
+        EVENT_CALL_SERVICE, callback(lambda event: contexts.append(event.context))
+    )
+    await _turn_on_virtual(hass, brightness=200)
+    hass.states.async_set(
+        REAL,
+        "on",
+        {"brightness": 200, "hs_color": (30.0, 40.0), **HS_CAPS},
+        context=contexts[-1],
+    )
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == stage
+    # The real light's reply to the stage command.
+    hass.states.async_set(
+        REAL,
+        "on",
+        {"brightness": 26, "hs_color": (30.0, 40.0), **HS_CAPS},
+        context=contexts[-1],
+    )
+    await settle(hass)
+    assert _mstate(hass) == stage
+    assert _state(hass).attributes["brightness"] == 26
+    calls.clear()
+    return calls
+
+
+def _member_turn_ons(calls: list[dict]) -> list[dict]:
+    return [
+        d["service_data"]
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and REAL in d["service_data"]["entity_id"]
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", [STATE_EFFECT, STATE_WARN])
+async def test_external_recolor_during_warning_restores_pre_warning_brightness(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """A color-only re-trigger mid-warning undoes the stage dimming."""
+    calls = await _enter_stage_at_200(hass, freezer, stage)
+
+    hass.states.async_set(
+        REAL, "on", {"brightness": 26, "hs_color": (200.0, 90.0), **HS_CAPS}
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["hs_color"] == (200.0, 90.0)
+    assert state.attributes["pre_warn_brightness"] is None
+    # The user's color stands: only the brightness is sent.
+    assert _member_turn_ons(calls) == [{"entity_id": [REAL], "brightness": 200}]
+
+
+@pytest.mark.asyncio
+async def test_external_dim_and_recolor_during_warning_restores_nothing(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A re-trigger bringing both brightness and color keeps both."""
+    calls = await _enter_stage_at_200(hass, freezer, STATE_WARN)
+
+    hass.states.async_set(
+        REAL, "on", {"brightness": 120, "hs_color": (200.0, 90.0), **HS_CAPS}
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 120
+    assert state.attributes["hs_color"] == (200.0, 90.0)
+    assert _member_turn_ons(calls) == []
+
+
+@pytest.mark.asyncio
+async def test_external_recolor_during_warning_without_a_brightness_to_restore(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no pre-warning brightness known, a recolor sends no command."""
+    await setup_entries(hass, make_light_entry(warn_timeout=30))
+    await _turn_on_virtual(hass)
+    hass.states.async_set(REAL, "on", {"hs_color": (30.0, 40.0), **HS_CAPS})
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_WARN
+    assert _state(hass).attributes["pre_warn_brightness"] is None
+
+    calls = _record_service_calls(hass)
+    hass.states.async_set(REAL, "on", {"hs_color": (200.0, 90.0), **HS_CAPS})
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert _member_turn_ons(calls) == []
 
 
 # ---------------------------------------------------------------------------

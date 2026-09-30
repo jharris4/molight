@@ -1532,17 +1532,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             # An external dim or recolor during the warning sequence is a
             # re-trigger like any other: honour the new brightness/color and
             # restart the full timer.
-            if (
-                self._in_warning()
-                and not color_changed
-                and self._pre_warn_color is not None
-            ):
-                # A brightness-only re-trigger brings no color of its own:
-                # restore the pre-warning color so a colored stage leaves no
-                # trace, exactly as a virtual re-trigger does.
-                self.hass.async_create_task(
-                    self._set_lights(True, color=self._pre_warn_color)
-                )
+            if self._in_warning():
+                # The re-trigger brought only one of brightness and color:
+                # restore the other to its pre-warning value so the stage
+                # leaves no trace, exactly as a virtual re-trigger does.
+                brightness = None if brightness_changed else self._pre_warn_brightness
+                color = None if color_changed else self._pre_warn_color
+                if brightness is not None or color is not None:
+                    self.hass.async_create_task(
+                        self._set_lights(True, brightness=brightness, color=color)
+                    )
             self._warning_active = False
             self._pre_warn_brightness = None
             self._pre_warn_color = None

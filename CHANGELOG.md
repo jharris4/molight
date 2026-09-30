@@ -83,6 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A follow-mode light turned off manually after its window ended while
   auto-off was held no longer remembers that window. Previously, when it was
   turned on again later, the next hold release or restart turned it off.
+- Changing only the color of a real light during the effect or warn stage
+  now restores the brightness the light had before the warning. Previously
+  the light stayed at the stage's brightness for the whole new on-period.
 
 ## [1.7.0] - 2026-08-27
 
