@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Run a pinned shellcheck over every bash script, the same way in CI and
+# locally. Bump the version on purpose, like ruff's pin: new releases can add
+# checks. Releases: https://github.com/koalaman/shellcheck/releases
+set -Eeuo pipefail
+cd "$(dirname "$0")/.."
+
+SHELLCHECK_VERSION=v0.11.0
+
+git grep -lz -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' -- ':!*.md' \
+    | xargs -0 docker run --rm --volume "$PWD:/mnt:ro" --workdir /mnt \
+        "koalaman/shellcheck:$SHELLCHECK_VERSION" --external-sources

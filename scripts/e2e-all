@@ -11,16 +11,16 @@ prefix() {
 
 # Lanes run in the background, where SIGINT is ignored, so pass an interrupt
 # on to them as TERM and wait while they clean up.
-# Called from the traps below; SC2317 is what older shellcheck calls SC2329.
-# shellcheck disable=SC2317,SC2329
 interrupt() {
     trap '' INT TERM
     for pid in $(jobs -p); do kill -TERM "$pid" 2>/dev/null || true; done
     wait
     exit "$1"
 }
-trap 'interrupt 130' INT
-trap 'interrupt 143' TERM
+on_int() { interrupt 130; }
+on_term() { interrupt 143; }
+trap on_int INT
+trap on_term TERM
 
 pids=()
 bash scripts/e2e 2>&1 | prefix core &
@@ -36,7 +36,7 @@ status=0
 for pid in "${pids[@]}"; do
     wait "$pid" || status=1
 done
-if [ "$status" -eq 0 ]; then
-    echo "MoLight E2E suites passed."
+if [ "$status" -ne 0 ]; then
+    exit "$status"
 fi
-exit "$status"
+echo "MoLight E2E suites passed."

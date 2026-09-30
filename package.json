@@ -24,6 +24,7 @@
     "test:e2e:scenarios-c": "bash scripts/e2e-scenarios c",
     "test:e2e:browser": "bash scripts/e2e-browser",
     "lint": "devcontainer exec --workspace-folder . bash scripts/ensure-venv /opt/molight-venv/bin/ruff check custom_components tests scripts",
+    "lint:sh": "bash scripts/shellcheck",
     "lint:fix": "devcontainer exec --workspace-folder . bash scripts/ensure-venv /opt/molight-venv/bin/ruff check --fix custom_components tests scripts",
     "format": "devcontainer exec --workspace-folder . bash scripts/ensure-venv /opt/molight-venv/bin/ruff format custom_components tests scripts",
     "format:check": "devcontainer exec --workspace-folder . bash scripts/ensure-venv /opt/molight-venv/bin/ruff format --check custom_components tests scripts",

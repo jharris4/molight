@@ -531,6 +531,7 @@ npm run lint          # ruff check
 npm run lint:fix      # ruff check --fix
 npm run format        # ruff format
 npm run format:check  # ruff format --check (what CI runs)
+npm run lint:sh       # shellcheck at the version CI pins (runs on the host, in Docker)
 npm run dev:shell     # open a bash shell inside the container
 npm run dev:stop      # stop the container, keeping it for a fast dev:up next time
 npm run dev:down      # stop and remove the container (dev:up recreates it)
