@@ -637,6 +637,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known occupied/clear, None until first seen; a recovery
         # matching it must not re-light a room the user turned off.
         self._occupancy_last_on: bool | None = None
+        # Members that have reported on/off since this light was set up: a
+        # placeholder they leave later is a reload, not startup loading.
+        self._members_seen: set[str] = set()
         # Last known on/off of the schedule, None until first seen; a
         # recovery matching it crossed no window boundary.
         self._schedule_last_on: bool | None = None
@@ -1121,6 +1124,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             and s.attributes.get("brightness") != 0
             for e in self._lights
         )
+        self._members_seen = {
+            e
+            for e in self._lights
+            if (s := self.hass.states.get(e)) is not None and s.state in ("on", "off")
+        }
 
         # Match the physical brightness and color at startup too, overriding
         # the values restored from our own last state, so the virtual light
@@ -1327,6 +1335,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         same_state = old_state is not None and old_state.state == new_state.state
 
         if entity_id in self._lights:
+            member_seen = entity_id in self._members_seen
+            if new_state.state in ("on", "off"):
+                self._members_seen.add(entity_id)
             # Capabilities can appear late (members unavailable at startup):
             # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
@@ -1347,11 +1358,13 @@ class VirtualLight(LightEntity, RestoreEntity):
                 STATE_UNKNOWN,
             )
             # A first sighting, or the placeholder HA writes for a registered
-            # entity at boot, is startup adoption, not a member reboot.
+            # entity at boot, is startup adoption, not a member reboot. The
+            # same placeholder written after the member was seen is its
+            # integration reloading, which is one.
             member_rebooted = (
                 member_recovered
                 and old_state is not None
-                and not old_state.attributes.get(ATTR_RESTORED)
+                and (member_seen or not old_state.attributes.get(ATTR_RESTORED))
             )
             if member_rebooted and self._reconcile_recovered_member():
                 return

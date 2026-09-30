@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one that boots dark stayed off for the rest of the night. A light that is
   still loading when Home Assistant starts is not a reboot: its first state
   is adopted by the startup rules, so a manual off mid-window still stands.
+  Its integration reloading later is one.
 - A turn-on that names no brightness or color (occupancy with no auto-on
   brightness, or a plain `light.turn_on`) now reports the brightness and
   color the real light came on at. Previously the virtual light kept its

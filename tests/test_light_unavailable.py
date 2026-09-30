@@ -1634,6 +1634,74 @@ async def test_follow_member_loading_after_startup_is_adopted_outside_window(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("back", ["on", "off"])
+async def test_follow_member_reload_after_startup_is_reconciled(
+    hass: HomeAssistant, back: str
+) -> None:
+    """A member's integration reloading writes the same restored placeholder
+    as startup does, but after the member was seen it is a reboot: the
+    window is re-asserted whatever the member comes back as."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    calls = _record_calls(hass)
+    hass.states.async_set(REAL, "unavailable", {ATTR_RESTORED: True})
+    await settle(hass)
+    hass.states.async_set(REAL, back)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert len(_real_calls(calls, "turn_on")) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> None:
+    """Reloading the config entry of a member that is itself a Virtual Light
+    goes through HA's placeholder and is reconciled to the window."""
+    inner_entry = make_light_entry(name="Inner", lights=[REAL])
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        inner_entry,
+        make_light_entry(
+            lights=["light.inner"], schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    calls = _record_calls(hass)
+    hass.states.async_set(REAL, "off")
+    assert await hass.config_entries.async_reload(inner_entry.entry_id)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert [
+        d["service_data"]["entity_id"]
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and d["service_data"]["entity_id"] == ["light.inner"]
+    ] == [["light.inner"]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_follow_one_of_two_members_recovering_dark_relights_all(
     hass: HomeAssistant,
 ) -> None:
