@@ -25,7 +25,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 - Follow-mode schedules give porch-light behavior (on at window start, off at window end) while respecting manual overrides mid-window.
 - Optional effect/warn warning: blink or dim before an automatic turn-off, then a grace period to re-trigger, instead of sudden darkness.
 - Every virtual light gets a companion **Auto-off switch**, and any on/off entity can act as a **keep-on hold** (guest mode, movie night) that suspends automatic turn-offs.
-- Restarts and `unavailable` sources are handled everywhere: missed schedule boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion sensor can't hold lights on forever.
+- Restarts and `unavailable` sources are handled everywhere: missed follow-mode and Virtual Scheduled Light boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion sensor can't hold lights on forever.
 - Virtual Remotes replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (IKEA Bilresa, Hue dimmer, and others, plus Lutron Picos via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
 
 ## Installation
@@ -382,6 +382,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 #### Restarts and unavailability
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
+- Gate modes keep no window marker, so a gate-mode window that ended while HA was down is not applied at startup, even under **Gate and turn off**: a light still on is adopted like any other, with a fresh timer.
 - Editing a virtual light's options reloads it. If its real lights are on, it adopts them with a fresh timer, so a running countdown restarts in full with the new timeout.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; a recovery to a different value is processed as a real event (except a follow-mode real light, which is reconciled with its schedule instead). A recovery to the value the entity had before the outage is not an event: an occupancy sensor that comes back still occupied does not re-light a room that was turned off manually, and a schedule that comes back still `off` does not turn off a light that was turned on manually. That is also what happens when a MoLight sensor or schedule reloads after its options are edited. A light turned on during the outage is still picked up by the occupancy or window that returns. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
