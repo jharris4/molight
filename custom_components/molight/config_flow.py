@@ -1214,7 +1214,7 @@ def _occupancy_option_fields(*, with_entity_id: bool = False) -> dict:
 
 
 def _validate_illuminance_band(user_input: dict[str, Any]) -> dict[str, str]:
-    """Reject a hysteresis that makes the dark state unreachable.
+    """Reject a threshold or hysteresis that makes the dark state unreachable.
 
     Becoming dark requires a reading below threshold - hysteresis; no lux
     sensor reports below 0, so hysteresis >= threshold latches bright forever.
@@ -1225,7 +1225,9 @@ def _validate_illuminance_band(user_input: dict[str, Any]) -> dict[str, str]:
     hysteresis = float(
         user_input.get(CONF_ILLUMINANCE_HYSTERESIS, DEFAULT_ILLUMINANCE_HYSTERESIS)
     )
-    if hysteresis and hysteresis >= threshold:
+    if threshold <= 0:
+        return {CONF_ILLUMINANCE_THRESHOLD: "threshold_too_low"}
+    if hysteresis >= threshold:
         return {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
     return {}
 

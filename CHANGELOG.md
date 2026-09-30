@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An illuminance threshold of 0 is now rejected on every form. Previously
+  it was accepted, and the sensor could never report dark.
 - Discovering illuminance sensors now rejects a hysteresis at or above the
   threshold, as creating one by hand already did. Previously the sensors
   were created and, after their first bright reading, never reported dark.

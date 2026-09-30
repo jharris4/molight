@@ -4188,6 +4188,82 @@ async def test_illuminance_options_reject_hysteresis_at_threshold(
     assert result["errors"] == {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
 
 
+async def _submit_illuminance_band(
+    hass: HomeAssistant, form: str, band: dict[str, float]
+) -> dict:
+    """Submit a threshold and hysteresis on the create, options or discovery form."""
+    hass.states.async_set("sensor.hall_lux", "42", {"device_class": "illuminance"})
+    if form == "create":
+        result = await _start_create(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE}
+        )
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall Illuminance",
+                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                **band,
+                SECTION_ADVANCED: {},
+            },
+        )
+    if form == "options":
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+                CONF_NAME: "Hall Illuminance",
+                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            },
+        )
+        await setup_entries(hass, entry)
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        return await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall Illuminance",
+                CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+                **band,
+            },
+        )
+    result = await _reach_discovery_select(hass, "discover_illuminance")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["sensor.hall_lux"]}
+    )
+    return await hass.config_entries.flow.async_configure(result["flow_id"], band)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", ["create", "options", "discovery"])
+async def test_illuminance_forms_reject_zero_threshold(
+    hass: HomeAssistant, form: str
+) -> None:
+    """A threshold of 0 would need a reading below 0 to go dark."""
+    result = await _submit_illuminance_band(
+        hass,
+        form,
+        {CONF_ILLUMINANCE_THRESHOLD: 0.0, CONF_ILLUMINANCE_HYSTERESIS: 0.0},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_ILLUMINANCE_THRESHOLD: "threshold_too_low"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", ["create", "options", "discovery"])
+async def test_illuminance_forms_accept_small_threshold(
+    hass: HomeAssistant, form: str
+) -> None:
+    """Any threshold above 0 can go dark at a reading of 0 lx."""
+    result = await _submit_illuminance_band(
+        hass,
+        form,
+        {CONF_ILLUMINANCE_THRESHOLD: 0.1, CONF_ILLUMINANCE_HYSTERESIS: 0.0},
+    )
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    assert "errors" not in result or not result["errors"]
+
+
 @pytest.mark.asyncio
 async def test_combined_options_reject_constituent_above_light_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry

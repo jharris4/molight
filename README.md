@@ -164,7 +164,7 @@ Attributes: `latest_occupied_time` (max across all constituents), `last_clear_fa
 | Config | Description |
 |---|---|
 | **Source sensor** | Any real `sensor` with `device_class: illuminance` |
-| **Threshold (lx)** | Default `10`. The lux level at which the sensor reports `on` |
+| **Threshold (lx)** | Default `10`. The lux level at which the sensor reports `on`. Must be above `0`, since dark means a reading below it |
 | **Hysteresis (lx)** | `0` disables (the default). Becomes bright at `threshold + hysteresis`, dark below `threshold - hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold. Must be smaller than the threshold: the form rejects a band whose dark edge would sit below `0 lx`, which no sensor can ever report, latching the state bright forever |
 
 An unavailable or unparsable source holds the last known value, since a lux sensor dropping out must not read as "it got dark". The state also survives restarts. Until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness; consumers treat that as "not bright". The first-ever reading is judged against the bare threshold rather than the hysteresis band, since there is no held state yet for the band to preserve.
