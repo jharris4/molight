@@ -2189,6 +2189,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
         set_timer_motion(client, False)
         wait_machine_state(client, "countdown", END_ACTION_LIGHT)
 
+        ended = time.monotonic()
         client.set_state(RAW_REMOVAL_MOTION, "off")
         client.wait_state(END_SCHEDULE, lambda state: state["state"] == "off", "off")
         client.wait_state(
@@ -2209,6 +2210,13 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
         elif end_action == "switch":
             # Recalculated against the outside profile: its 4 s timeout, not
             # the inside countdown, now decides when the light goes off.
+            assert_state_stays(
+                client,
+                RAW_MULTI_RGB,
+                lambda state: state["state"] == "on",
+                "on until the outside profile's timeout runs out",
+                duration=max(0, ended + 3 - time.monotonic()),
+            )
             client.wait_state(
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "off",
@@ -2329,6 +2337,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         "on: standing presence is adopted at the window start",
     )
     wait_machine_state(client, "occupied", GATE_MODE_LIGHT)
+    cleared = time.monotonic()
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
     # Six seconds into the 12 s countdown a manual turn-on restarts the timer,
@@ -2336,17 +2345,22 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=6
     )
+    restarted = time.monotonic()
     client.call_service("light", "turn_on", {"entity_id": GATE_MODE_LIGHT})
     wait_machine_state(client, "active", GATE_MODE_LIGHT)
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=1
     )
     set_end_schedule(client, False)
+    # The restarted timer cannot fire before this, so an off by then came
+    # from the window end.
+    restarted_timer = restarted + 11
     if schedule_mode == "gate":
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
             "off at the window end",
+            timeout=max(1, restarted_timer - time.monotonic()),
         )
         wait_machine_state(client, "idle", GATE_MODE_LIGHT)
     elif schedule_mode == "gate_keep":
@@ -2361,11 +2375,18 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     else:
         # gate_switch recomputes the deadline from when occupancy last saw
         # someone, which is already nearly due, not from the manual restart.
+        assert_state_stays(
+            client,
+            RAW_MULTI_RGB,
+            lambda state: state["state"] == "on",
+            "on until the deadline from occupancy history",
+            duration=max(0, cleared + 10 - time.monotonic()),
+        )
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
             "off soon: gate_switch recomputed the deadline from occupancy history",
-            timeout=8,
+            timeout=max(1, restarted_timer - time.monotonic()),
         )
         wait_machine_state(client, "idle", GATE_MODE_LIGHT)
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
