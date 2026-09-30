@@ -83,7 +83,7 @@
           "illuminance_mode": "Illuminance mode"
         },
         "data_description": {
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate."
+          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate."
         }
       },
       "assign_schedule": {
@@ -94,7 +94,7 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window; pick what its end does to a light still on — turn it off, recalculate it from current illuminance, presence, and occupancy history, or leave it alone. Switch/keep also let occupancy and the door hold an on light past the end."
+          "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end."
         }
       },
       "assign_lights": {
@@ -122,7 +122,7 @@
         "data_description": {
           "filter_areas": "Optional. Only offer sensors in these areas (the entity's own area, or its device's).",
           "filter_labels": "Optional. Only offer sensors carrying at least one of these labels (on the entity or its device).",
-          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+          "preselect_all": "On: the next step starts with every match checked, so you deselect the few you don't want. Off: it starts empty, so you check just the ones you want."
         }
       },
       "discover_occupancy_select": {
@@ -135,8 +135,8 @@
           "affix_target": "Apply prefix/suffix to"
         },
         "data_description": {
-          "affix_prefix": "Optional. Added before each name exactly as typed — include your own separator, e.g. \"Auto \".",
-          "affix_suffix": "Optional. Added after each name exactly as typed — include your own separator, e.g. \" (auto)\".",
+          "affix_prefix": "Optional. Added before each name exactly as typed, so include your own separator, e.g. \"Auto \".",
+          "affix_suffix": "Optional. Added after each name exactly as typed, so include your own separator, e.g. \" (auto)\".",
           "affix_target": "Entity ID only keeps each virtual entity's name identical to the real one it wraps; Name changes the name and the entity ID derived from it."
         }
       },
@@ -151,7 +151,7 @@
         "data_description": {
           "filter_areas": "Optional. Only offer sensors in these areas (the entity's own area, or its device's).",
           "filter_labels": "Optional. Only offer sensors carrying at least one of these labels (on the entity or its device).",
-          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+          "preselect_all": "On: the next step starts with every match checked, so you deselect the few you don't want. Off: it starts empty, so you check just the ones you want."
         }
       },
       "discover_illuminance_select": {
@@ -164,8 +164,8 @@
           "affix_target": "Apply prefix/suffix to"
         },
         "data_description": {
-          "affix_prefix": "Optional. Added before each name exactly as typed — include your own separator, e.g. \"Auto \".",
-          "affix_suffix": "Optional. Added after each name exactly as typed — include your own separator, e.g. \" (auto)\".",
+          "affix_prefix": "Optional. Added before each name exactly as typed, so include your own separator, e.g. \"Auto \".",
+          "affix_suffix": "Optional. Added after each name exactly as typed, so include your own separator, e.g. \" (auto)\".",
           "affix_target": "Entity ID only keeps each virtual entity's name identical to the real one it wraps; Name changes the name and the entity ID derived from it."
         }
       },
@@ -180,12 +180,12 @@
         "data_description": {
           "filter_areas": "Optional. Only offer lights in these areas (the entity's own area, or its device's).",
           "filter_labels": "Optional. Only offer lights carrying at least one of these labels (on the entity or its device).",
-          "preselect_all": "On: the next step starts with every match checked — deselect the few you don't want. Off: it starts empty — check just the ones you want."
+          "preselect_all": "On: the next step starts with every match checked, so you deselect the few you don't want. Off: it starts empty, so you check just the ones you want."
         }
       },
       "discover_light_select": {
         "title": "Discover lights",
-        "description": "Select the lights to wrap in virtual lights; the next step lets you adjust the defaults applied to all of them — including occupancy, illuminance, and schedule references.",
+        "description": "Select the lights to wrap in virtual lights; the next step lets you adjust the defaults applied to all of them, including occupancy, illuminance, and schedule references.",
         "data": {
           "selected_entities": "Lights to add",
           "affix_prefix": "Prefix",
@@ -193,30 +193,30 @@
           "affix_target": "Apply prefix/suffix to"
         },
         "data_description": {
-          "affix_prefix": "Optional. Added before each name exactly as typed — include your own separator, e.g. \"Auto \".",
-          "affix_suffix": "Optional. Added after each name exactly as typed — include your own separator, e.g. \" (auto)\".",
+          "affix_prefix": "Optional. Added before each name exactly as typed, so include your own separator, e.g. \"Auto \".",
+          "affix_suffix": "Optional. Added after each name exactly as typed, so include your own separator, e.g. \" (auto)\".",
           "affix_target": "Entity ID only keeps each virtual entity's name identical to the real one it wraps; Name changes the name and the entity ID derived from it."
         }
       },
       "discover_occupancy_defaults": {
         "title": "Occupancy sensor defaults",
-        "description": "These settings are applied to every entity you're adding. Adjust them if you like — each one can also be edited individually later via its Configure button.",
+        "description": "These settings are applied to every entity you're adding. Adjust them if you like; each one can also be edited individually later via its Configure button.",
         "data": {
           "occupancy_timeout": "Occupancy timeout"
         },
         "data_description": {
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
         },
         "sections": {
           "advanced": {
             "name": "Advanced",
-            "description": "Expert tuning — the defaults suit most sensors.",
+            "description": "Expert tuning. The defaults suit most sensors.",
             "data": {
               "false_detection_grace": "False-detection grace",
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
             }
           }
@@ -224,29 +224,29 @@
       },
       "discover_illuminance_defaults": {
         "title": "Illuminance sensor defaults",
-        "description": "These settings are applied to every entity you're adding. Adjust them if you like — each one can also be edited individually later via its Configure button.",
+        "description": "These settings are applied to every entity you're adding. Adjust them if you like; each one can also be edited individually later via its Configure button.",
         "data": {
           "illuminance_threshold": "Threshold",
           "illuminance_hysteresis": "Hysteresis"
         },
         "data_description": {
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold − hysteresis. 0 disables."
+          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         }
       },
       "discover_light_defaults": {
         "title": "Light defaults",
-        "description": "These settings are applied to every entity you're adding. Adjust them if you like — each one can also be edited individually later via its Configure button.",
+        "description": "These settings are applied to every entity you're adding. Adjust them if you like; each one can also be edited individually later via its Configure button.",
         "data": {
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive the lights — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive the lights. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -260,14 +260,14 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window; pick what its end does to a light still on — turn it off, recalculate it from current illuminance, presence, and occupancy history, or leave it alone. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -286,7 +286,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
@@ -296,7 +296,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -313,16 +313,16 @@
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off for a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
-              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period, e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           }
@@ -338,21 +338,21 @@
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
         },
         "sections": {
           "advanced": {
             "name": "Advanced",
-            "description": "Expert tuning and a fixed entity ID — the defaults suit most sensors.",
+            "description": "Expert tuning and a fixed entity ID. The defaults suit most sensors.",
             "data": {
               "false_detection_grace": "False-detection grace",
               "clear_on_unavailable_timeout": "Clear after unavailable",
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value).",
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -366,8 +366,8 @@
           "maintain_sensors": "Maintain sensors"
         },
         "data_description": {
-          "trigger_sensors": "Virtual occupancy sensors that can start occupancy — any one turning on starts it.",
-          "maintain_sensors": "Optional. Keep occupancy alive once started but can never start it — e.g. a sensitive mmWave sensor that would false-trigger on its own."
+          "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
+          "maintain_sensors": "Optional. Sensors that keep occupancy alive once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         },
         "sections": {
           "advanced": {
@@ -377,7 +377,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -394,7 +394,7 @@
         "data_description": {
           "illuminance_sensor": "The real illuminance (lux) sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold − hysteresis. 0 disables."
+          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         },
         "sections": {
           "advanced": {
@@ -404,7 +404,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -425,7 +425,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles — combine them with a Virtual Combined Schedule instead.",
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule instead.",
           "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
         },
         "sections": {
@@ -436,7 +436,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -463,9 +463,9 @@
             },
             "data_description": {
               "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-              "sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
-              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00."
+              "sun": "Anchor the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the later of sunset and 21:00."
             }
           },
           "end": {
@@ -479,9 +479,9 @@
             },
             "data_description": {
               "time": "Fixed local time the window closes.",
-              "sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
-              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00."
+              "sun": "Anchor the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the earlier of sunrise and 07:00."
             }
           },
           "advanced": {
@@ -491,7 +491,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -518,7 +518,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -533,12 +533,12 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -552,14 +552,14 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window; pick what its end does to a light still on — turn it off, recalculate it from current illuminance, presence, and occupancy history, or leave it alone. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -578,7 +578,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
@@ -588,7 +588,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -605,16 +605,16 @@
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off for a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
-              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period, e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           },
@@ -625,7 +625,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
+              "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
           }
         }
@@ -652,7 +652,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "entity_id": "Optional — leave blank to derive it from the name. Fixed once created."
+              "entity_id": "Optional. Leave blank to derive it from the name. Fixed once created."
             }
           }
         }
@@ -664,12 +664,12 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -681,12 +681,12 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -705,7 +705,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
@@ -715,7 +715,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -733,13 +733,13 @@
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
@@ -754,12 +754,12 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -771,12 +771,12 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -795,7 +795,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
@@ -805,7 +805,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -823,13 +823,13 @@
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
@@ -863,14 +863,14 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with the buttons of a remote control — any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...). Lutron Caséta Picos need the lutron-caseta-events integration installed to expose their buttons as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
+        "description": "Drive lights with any remote control whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...). Lutron Caséta Picos need the lutron-caseta-events integration installed to expose their buttons as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
           "dim_step": "Brightness step"
         },
         "data_description": {
-          "target_lights": "The lights every bound button drives — usually a MoLight virtual light, but any light works.",
+          "target_lights": "The lights every bound button drives: usually a MoLight virtual light, but any light works.",
           "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
         },
         "sections": {
@@ -936,7 +936,7 @@
           },
           "preset_1": {
             "name": "Preset 1",
-            "description": "Buttons that turn the lights on at a fixed brightness and/or color — a Pico's favorite button. Set a color temperature or a color, not both.",
+            "description": "Buttons that turn the lights on at a fixed brightness and/or color, like a Pico's favorite button. Set a color temperature or a color, not both.",
             "data": {
               "preset_1_buttons_single": "Single-click buttons",
               "preset_1_buttons_double": "Double-click buttons",
@@ -948,8 +948,8 @@
             "data_description": {
               "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
-              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value: brightness, color temperature, or color.",
+              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
               "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
@@ -968,8 +968,8 @@
             "data_description": {
               "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
-              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value: brightness, color temperature, or color.",
+              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
               "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
@@ -1003,40 +1003,40 @@
       "entity_id_invalid": "That entity ID has no usable characters. Use letters and numbers, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
-      "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0 — this sensor could never report dark.",
+      "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",
       "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
       "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
       "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
-      "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
+      "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
       "transition_unsupported_pick": "{entity_id} does not support fading, and every discovered light gets its own entry with these settings. Clear the fade fields, or deselect it.",
       "color_temp_unsupported_pick": "{entity_id} does not support a white color temperature, and every discovered light gets its own entry with these settings. Clear the color temperature (set its color mode to None), or deselect it.",
       "color_unsupported_pick": "{entity_id} cannot show a color, and every discovered light gets its own entry with these settings. Clear the color fields (set their color mode to None), or deselect it.",
-      "brightness_unsupported_pick": "{entity_id} is not dimmable, and every discovered light gets its own entry with these settings. Clear the brightness setting, or deselect it. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
-      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here — each of their two settings profiles has its own sensors. Configure those through the light's own Configure button instead.",
+      "brightness_unsupported_pick": "{entity_id} is not dimmable, and every discovered light gets its own entry with these settings. Clear the brightness setting, or deselect it. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
+      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two settings profiles has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "no_lights_selected": "Select at least one light to convert.",
-      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both — or use the auto-on color mode to choose which applies.",
-      "effect_color_conflict": "Set either the effect color temperature or the effect color, not both — or use the effect color mode to choose which applies.",
-      "warn_color_conflict": "Set either the warning color temperature or the warning color, not both — or use the warning color mode to choose which applies.",
+      "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the auto-on color mode to choose which applies.",
+      "effect_color_conflict": "Set only one of the effect color temperature and color, or use the effect color mode to choose which applies.",
+      "warn_color_conflict": "Set only one of the warning color temperature and color, or use the warning color mode to choose which applies.",
       "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
       "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
       "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
       "turn_on_selection_source_no_matching_options": "This source and the turn-on selection entity do not currently offer any of the same options. Choose a source with at least one matching option.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
-      "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
-      "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled — set an effect warning duration above 0, or leave the brightness at 0.",
-      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",
+      "effect_color_requires_timeout": "An effect color needs an enabled effect stage. Set an effect warning duration above 0 first.",
+      "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled. Set an effect warning duration above 0, or leave the brightness at 0.",
+      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage. Set a warning grace period above 0 first.",
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
-      "preset_color_conflict": "Set either a preset's color temperature or its color, not both — or use its color mode to choose which applies.",
+      "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "confirmation_required": "Confirm the conversion to continue."
     },
     "abort": {
-      "no_candidates": "No new entities were found — everything eligible is already wrapped by a MoLight entity (or is disabled).",
+      "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
       "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
@@ -1050,8 +1050,8 @@
   "selector": {
     "assign_role": {
       "options": {
-        "regular": "Regular — turns lights on and off with occupancy",
-        "maintain": "Maintain — only holds an already-on light on while occupied"
+        "regular": "Regular: turns lights on and off with occupancy",
+        "maintain": "Maintain: only holds an already-on light on while occupied"
       }
     },
     "color_mode": {
@@ -1075,28 +1075,28 @@
     },
     "schedule_definition": {
       "options": {
-        "time": "Time window — fixed times and/or sun events",
-        "binary_sensor": "Binary sensor — mirror an existing sensor"
+        "time": "Time window: fixed times and/or sun events",
+        "binary_sensor": "Binary sensor: mirror an existing sensor"
       }
     },
     "schedule_operator": {
       "options": {
-        "any": "Any — on while any schedule is on",
-        "all": "All — on only while every schedule is on"
+        "any": "Any: on while any schedule is on",
+        "all": "All: on only while every schedule is on"
       }
     },
     "affix_target": {
       "options": {
-        "entity_id": "Entity ID only — the name stays as the original",
-        "name": "Name — also changes the derived entity ID"
+        "entity_id": "Entity ID only: the name stays as the original",
+        "name": "Name: also changes the derived entity ID"
       }
     },
     "schedule_mode": {
       "options": {
-        "follow": "Follow — turn on at window start, off at window end",
-        "gate": "Gate and turn off — automatic activation only inside the window; off at the end",
-        "gate_switch": "Gate and switch state — automatic activation only inside the window; recalculate at the end",
-        "gate_keep": "Gate and keep state — automatic activation only inside the window; preserve state and timer at the end"
+        "follow": "Follow: turn on at window start, off at window end",
+        "gate": "Gate and turn off: automatic activation only inside the window; off at the end",
+        "gate_switch": "Gate and switch state: automatic activation only inside the window; recalculate at the end",
+        "gate_keep": "Gate and keep state: automatic activation only inside the window; preserve state and timer at the end"
       }
     },
     "schedule_end_action": {
@@ -1121,14 +1121,14 @@
     },
     "illuminance_mode": {
       "options": {
-        "control": "Control — dark gates turn-on, bright turns lights off",
-        "gate": "Gate only — dark gates turn-on, bright never turns lights off"
+        "control": "Control: dark gates turn-on, bright turns lights off",
+        "gate": "Gate only: dark gates turn-on, bright never turns lights off"
       }
     },
     "door_mode": {
       "options": {
-        "open": "On open — turn on when the door opens (normal timeout)",
-        "open_close": "Open & close — on while open, off when closed"
+        "open": "On open: turn on when the door opens (normal timeout)",
+        "open_close": "Open & close: on while open, off when closed"
       }
     }
   },
@@ -1156,12 +1156,12 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -1173,12 +1173,12 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -1197,7 +1197,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
@@ -1207,7 +1207,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1225,13 +1225,13 @@
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
@@ -1246,12 +1246,12 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -1263,12 +1263,12 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -1287,7 +1287,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
@@ -1297,7 +1297,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1315,13 +1315,13 @@
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
               "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
@@ -1351,18 +1351,18 @@
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time − timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
         },
         "sections": {
           "advanced": {
             "name": "Advanced",
-            "description": "Expert tuning — the defaults suit most sensors.",
+            "description": "Expert tuning. The defaults suit most sensors.",
             "data": {
               "false_detection_grace": "False-detection grace",
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection — almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
             }
           }
@@ -1377,8 +1377,8 @@
           "maintain_sensors": "Maintain sensors"
         },
         "data_description": {
-          "trigger_sensors": "Virtual occupancy sensors that can start occupancy — any one turning on starts it.",
-          "maintain_sensors": "Optional. Keep occupancy alive once started but can never start it — e.g. a sensitive mmWave sensor that would false-trigger on its own."
+          "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
+          "maintain_sensors": "Optional. Sensors that keep occupancy alive once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         }
       },
       "illuminance": {
@@ -1393,7 +1393,7 @@
         "data_description": {
           "illuminance_sensor": "The real illuminance (lux) sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold − hysteresis. 0 disables."
+          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         }
       },
       "schedule": {
@@ -1412,7 +1412,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles — combine them with a Virtual Combined Schedule instead.",
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule instead.",
           "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
         }
       },
@@ -1438,9 +1438,9 @@
             },
             "data_description": {
               "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-              "sun": "Anchor the window start to sunset or sunrise instead of — or as well as — a fixed time.",
-              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the later of sunset and 21:00."
+              "sun": "Anchor the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the later of sunset and 21:00."
             }
           },
           "end": {
@@ -1454,9 +1454,9 @@
             },
             "data_description": {
               "time": "Fixed local time the window closes.",
-              "sun": "Anchor the window end to sunset or sunrise instead of — or as well as — a fixed time.",
-              "offset": "Minutes to shift the sun event; negative is before it (−15 = 15 minutes before).",
-              "combine": "When both a time and a sun event are set, whichever this picks wins — e.g. the earlier of sunrise and 07:00."
+              "sun": "Anchor the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
+              "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the earlier of sunrise and 07:00."
             }
           }
         }
@@ -1486,12 +1486,12 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity — or after occupancy clears — before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the referenced occupancy sensor's timeout (if one is specified)."
         },
         "sections": {
           "sensors": {
             "name": "Sensors & triggers",
-            "description": "The virtual sensors and helper entities that drive this light — all optional. Each mode sits next to the sensor it applies to.",
+            "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
@@ -1505,14 +1505,14 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence but never turns it on — however the light was lit.",
+              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons — use when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window; pick what its end does to a light still on — turn it off, recalculate it from current illuminance, presence, and occupancy history, or leave it alone. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on, every automatic turn-off is suspended — guest mode, movie night. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
             }
           },
           "behavior": {
@@ -1531,7 +1531,7 @@
             "data_description": {
               "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
-              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
@@ -1541,7 +1541,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped — leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1558,16 +1558,16 @@
             },
             "data_description": {
               "effect_timeout": "Show a brief warning cue (dip or blink) for this many seconds before an automatic turn-off. 0 skips the cue.",
-              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off — a hard-to-miss flash.",
-              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "effect_brightness": "Brightness during the warning cue. 0 blinks the lights fully off for a hard-to-miss flash.",
+              "effect_color_mode": "Optional. Whether the warning cue uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "effect_color_temp": "Optional. White color temperature (Kelvin) during the warning cue, for lights that support it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_rgb_color": "Optional. Color during the warning cue, for lights that can show it. Needs an effect brightness above 0; any re-trigger restores the previous color.",
               "effect_transition": "Optional. Fade time into the effect brightness; must fit within the effect warning duration.",
               "warn_timeout": "After the cue, keep the lights on this many more seconds so you can re-trigger them before they turn off. 0 skips the grace period.",
               "warn_brightness": "Optional. Brightness during the grace period; blank keeps the brightness the lights already had.",
-              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "warn_color_mode": "Optional. Whether the grace period uses a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
-              "warn_rgb_color": "Optional. Color during the grace period — e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
+              "warn_rgb_color": "Optional. Color during the grace period, e.g. red as an unmissable about-to-turn-off cue. Lights that can't show color just use the warning brightness; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
           }
@@ -1594,7 +1594,7 @@
           "dim_step": "Brightness step"
         },
         "data_description": {
-          "target_lights": "The lights every bound button drives — usually a MoLight virtual light, but any light works.",
+          "target_lights": "The lights every bound button drives: usually a MoLight virtual light, but any light works.",
           "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
         },
         "sections": {
@@ -1660,7 +1660,7 @@
           },
           "preset_1": {
             "name": "Preset 1",
-            "description": "Buttons that turn the lights on at a fixed brightness and/or color — a Pico's favorite button. Set a color temperature or a color, not both.",
+            "description": "Buttons that turn the lights on at a fixed brightness and/or color, like a Pico's favorite button. Set a color temperature or a color, not both.",
             "data": {
               "preset_1_buttons_single": "Single-click buttons",
               "preset_1_buttons_double": "Double-click buttons",
@@ -1672,8 +1672,8 @@
             "data_description": {
               "preset_1_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_1_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
-              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_1_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value: brightness, color temperature, or color.",
+              "preset_1_color_mode": "Optional. Whether this preset applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "preset_1_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
               "preset_1_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
@@ -1692,8 +1692,8 @@
             "data_description": {
               "preset_2_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is resolved per button from its advertised event types.",
               "preset_2_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons that advertise a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once.",
-              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value — brightness, color temperature, or color.",
-              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color — only the selected field is used. Choose None to clear a color that is already set.",
+              "preset_2_brightness": "Optional. The brightness the preset applies. A preset with buttons needs at least one value: brightness, color temperature, or color.",
+              "preset_2_color_mode": "Optional. Whether this preset applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "preset_2_color_temp": "Optional. The white color temperature the preset applies, for lights that support it.",
               "preset_2_rgb_color": "Optional. The color the preset applies, for lights that can show it."
             }
@@ -1717,27 +1717,27 @@
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule created by MoLight.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
-      "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0 — this sensor could never report dark.",
+      "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",
       "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
       "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
       "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
-      "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine — a blink fully off works on any light.)",
-      "auto_on_color_conflict": "Set either the auto-on color temperature or the auto-on color, not both — or use the auto-on color mode to choose which applies.",
-      "effect_color_conflict": "Set either the effect color temperature or the effect color, not both — or use the effect color mode to choose which applies.",
-      "warn_color_conflict": "Set either the warning color temperature or the warning color, not both — or use the warning color mode to choose which applies.",
+      "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
+      "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the auto-on color mode to choose which applies.",
+      "effect_color_conflict": "Set only one of the effect color temperature and color, or use the effect color mode to choose which applies.",
+      "warn_color_conflict": "Set only one of the warning color temperature and color, or use the warning color mode to choose which applies.",
       "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
       "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
       "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
       "turn_on_selection_source_no_matching_options": "This source and the turn-on selection entity do not currently offer any of the same options. Choose a source with at least one matching option.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
-      "effect_color_requires_timeout": "An effect color needs an enabled effect stage — set an effect warning duration above 0 first.",
-      "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled — set an effect warning duration above 0, or leave the brightness at 0.",
-      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage — set a warning grace period above 0 first.",
+      "effect_color_requires_timeout": "An effect color needs an enabled effect stage. Set an effect warning duration above 0 first.",
+      "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled. Set an effect warning duration above 0, or leave the brightness at 0.",
+      "warn_values_require_timeout": "A warning brightness or color needs an enabled warning stage. Set a warning grace period above 0 first.",
       "target_lights_required": "At least one light to control is required.",
       "buttons_required": "Bind at least one button to an action.",
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
-      "preset_color_conflict": "Set either a preset's color temperature or its color, not both — or use its color mode to choose which applies.",
+      "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     }
   }
