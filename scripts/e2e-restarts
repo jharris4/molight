@@ -40,7 +40,10 @@ cleanup() {
     fi
     exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Exit on a signal so the EXIT trap cleans up once, and never reports a pass.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "Starting isolated Home Assistant for the restart scenarios..."
 compose up --detach homeassistant

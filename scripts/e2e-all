@@ -16,6 +16,17 @@ lane_root() {
     fi
 }
 
+# Lanes run in the background, where SIGINT is ignored, so pass an interrupt
+# on to them as TERM and wait while they clean up.
+interrupt() {
+    trap '' INT TERM
+    for pid in $(jobs -p); do kill -TERM "$pid" 2>/dev/null || true; done
+    wait
+    exit "$1"
+}
+trap 'interrupt 130' INT
+trap 'interrupt 143' TERM
+
 pids=()
 MOLIGHT_E2E_RUN_ROOT="$(lane_root core)" bash scripts/e2e 2>&1 | prefix core &
 pids+=($!)

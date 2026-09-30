@@ -31,7 +31,10 @@ cleanup() {
     fi
     exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# Exit on a signal so the EXIT trap cleans up once, and never reports a pass.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "Starting isolated Home Assistant for behaviour scenario shard $SHARD..."
 compose up --detach homeassistant
