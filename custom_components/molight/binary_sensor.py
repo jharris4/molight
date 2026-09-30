@@ -844,9 +844,13 @@ def _resolve_window(
     if start is None:
         return None
     end = _resolve_edge(hass, window.get("end"), day)
-    if end is not None and end <= start:
-        # Overnight window: the end belongs to the next day.
-        end = _resolve_edge(hass, window.get("end"), day + timedelta(days=1))
+    # Overnight window: the end belongs to a later day. Opposing sun offsets
+    # can put the start a day late and the end a day early, so advance up to
+    # three times.
+    for days in range(1, 4):
+        if end is None or end > start:
+            break
+        end = _resolve_edge(hass, window.get("end"), day + timedelta(days=days))
     if end is None or end.timestamp() <= start.timestamp():
         # A start in the spring-forward gap lands an hour later on the clock,
         # which can put it after the end: no window that day.

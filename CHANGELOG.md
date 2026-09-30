@@ -171,6 +171,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   converted through **Convert virtual lights** can no longer be saved.
   Previously the stale form replaced the converted profiles with its own
   settings, so the light ran default settings on both sides of its schedule.
+- A schedule window whose start is a sun event shifted late (a positive
+  offset) and whose end is a sun event shifted early (a negative offset) now
+  resolves. Previously the end was moved forward by one day only, which
+  could still leave it before the start, so the window was dropped and the
+  schedule never turned on.
 
 ## [1.7.0] - 2026-08-27
 

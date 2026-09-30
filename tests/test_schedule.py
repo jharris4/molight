@@ -1231,3 +1231,29 @@ async def test_source_schedule_discards_malformed_restored_marker(
     assert state.state == "on"
     marker = hass.states.get(source).last_changed.isoformat()
     assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
+async def test_opposite_sun_offsets_resolve_an_overnight_window(
+    hass: HomeAssistant,
+) -> None:
+    """A late start offset and an early end offset put the end two nominal
+    days behind the start. The end is the first one after the start."""
+    await hass.config.async_set_time_zone("UTC")
+
+    def sun_event(_hass, event, day):
+        hour = 18 if event == "sunset" else 6
+        return datetime(day.year, day.month, day.day, hour, tzinfo=UTC)
+
+    window = {
+        "start": {"sun": "sunset", "offset": 720},
+        "end": {"sun": "sunrise", "offset": -720},
+    }
+    with patch(
+        "custom_components.molight.binary_sensor.get_astral_event_date",
+        side_effect=sun_event,
+    ):
+        assert _resolve_window(hass, window, date(2026, 7, 1)) == (
+            datetime(2026, 7, 2, 6, tzinfo=UTC),
+            datetime(2026, 7, 2, 18, tzinfo=UTC),
+        )
