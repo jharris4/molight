@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
-HA_URL = os.environ.get("MOLIGHT_E2E_HA_URL", "http://homeassistant:8123").rstrip("/")
+HA_URL = os.environ.get(
+    "MOLIGHT_E2E_HA_URL", "http://homeassistant.e2e.invalid:8123"
+).rstrip("/")
 CLIENT_ID = "http://homeassistant:8123/"
 USERNAME = "molight-e2e"
 PASSWORD = "molight-e2e-only"
@@ -140,6 +142,7 @@ FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
+OUTAGE_SNAPSHOT = Path("/ha-config/e2e-outage-snapshot.json")
 RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
@@ -255,6 +258,16 @@ class HomeAssistantClient:
                 last_error = err
                 time.sleep(0.5)
         raise TimeoutError(f"Home Assistant did not become ready: {last_error}")
+
+    def answer(self) -> str | None:
+        """How the HTTP API answered, or None when nothing is listening."""
+        try:
+            payload = self.request("GET", "/api/onboarding")
+        except ApiError as err:
+            return str(err)[:300]
+        except (error.URLError, TimeoutError):
+            return None
+        return f"200 {payload!r}"[:300]
 
     def boot_marker(self) -> str:
         """Return a value that changes whenever Home Assistant core boots."""
@@ -4853,15 +4866,83 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: going dark re-lights only a room with countdown left, stamped as such")
 
 
+# Schedule edges that must fall while Home Assistant is down are placed this
+# far ahead: the prepare phase finishes, the host script stops the container
+# and the outage phase starts polling well inside that time.
+OUTAGE_EDGE_LEAD = timedelta(seconds=20)
+
+
+def schedule_outage(first_edge: datetime, last_edge: datetime) -> None:
+    """Record the schedule edges the host must hold Home Assistant down across."""
+    OUTAGE_SNAPSHOT.write_text(
+        json.dumps(
+            {"first_edge": first_edge.isoformat(), "last_edge": last_edge.isoformat()}
+        )
+    )
+
+
+def run_outage() -> None:
+    """Hold while Home Assistant is stopped until every recorded edge has passed.
+
+    The host script runs this between `compose stop` and `compose start`. It
+    proves the edges were missed: Home Assistant is already down before the
+    first edge and stays down until after the last one.
+    """
+    client = HomeAssistantClient()
+    outage: dict[str, str] = json.loads(OUTAGE_SNAPSHOT.read_text())
+    first_edge = datetime.fromisoformat(outage["first_edge"])
+    last_edge = datetime.fromisoformat(outage["last_edge"])
+    until = last_edge + timedelta(seconds=1)
+    checked = datetime.now(UTC)
+    if checked >= first_edge:
+        raise AssertionError(
+            f"The outage began late: checked at {checked.isoformat()}, after the "
+            f"first schedule edge at {first_edge.isoformat()}"
+        )
+    outage["down_from"] = checked.isoformat()
+    while True:
+        answer = client.answer()
+        if answer is not None:
+            raise AssertionError(
+                f"Something answered at {datetime.now(UTC).isoformat()} while "
+                f"Home Assistant had to stay down until {until.isoformat()}: "
+                f"{answer}"
+            )
+        checked = datetime.now(UTC)
+        if checked >= until:
+            break
+        time.sleep(0.5)
+    outage["down_until"] = checked.isoformat()
+    OUTAGE_SNAPSHOT.write_text(json.dumps(outage))
+    print(
+        f"PASS: Home Assistant stayed down from {outage['down_from']} to "
+        f"{outage['down_until']}, across the edges at {outage['first_edge']} "
+        f"and {outage['last_edge']}"
+    )
+
+
+def expect_outage_held() -> None:
+    """Assert the outage phase held Home Assistant down across the edges."""
+    outage: dict[str, str] = json.loads(OUTAGE_SNAPSHOT.read_text())
+    if "down_until" not in outage:
+        raise AssertionError(
+            "The outage phase did not run, so the schedule edges at "
+            f"{outage['first_edge']} and {outage['last_edge']} were not missed "
+            "while Home Assistant was down"
+        )
+
+
 def run_follow_restart_prepare() -> None:
-    """Create a follow-mode light whose time window opens while HA restarts."""
+    """Create a follow-mode light whose time window opens while HA is down."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
     expect_fixtures_loaded(client)
-    now = datetime.now(UTC)  # the isolated HA runs in UTC (configuration.yaml)
-    start = (now + timedelta(seconds=7)).strftime("%H:%M:%S")
-    end = (now + timedelta(seconds=150)).strftime("%H:%M:%S")
+    # The isolated HA runs in UTC (configuration.yaml).
+    now = datetime.now(UTC).replace(microsecond=0)
+    window_start = now + OUTAGE_EDGE_LEAD
+    start = window_start.strftime("%H:%M:%S")
+    end = (now + timedelta(seconds=240)).strftime("%H:%M:%S")
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
     result = client.continue_flow(result, {"schedule_definition": "time"})
@@ -4901,7 +4982,7 @@ def run_follow_restart_prepare() -> None:
 
     # A second follow light whose whole window elapses while HA is down: a
     # start and end both missed must not be caught up at boot.
-    now = datetime.now(UTC)
+    cycle_end = window_start + timedelta(seconds=4)
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
     result = client.continue_flow(result, {"schedule_definition": "time"})
@@ -4910,8 +4991,8 @@ def run_follow_restart_prepare() -> None:
         result,
         {
             "name": "E2E Cycle Schedule",
-            "start": {"time": (now + timedelta(seconds=6)).strftime("%H:%M:%S")},
-            "end": {"time": (now + timedelta(seconds=10)).strftime("%H:%M:%S")},
+            "start": {"time": start},
+            "end": {"time": cycle_end.strftime("%H:%M:%S")},
             "advanced": {"entity_id": "e2e_cycle_schedule"},
         },
     )
@@ -4937,6 +5018,7 @@ def run_follow_restart_prepare() -> None:
     wait_entry_loaded(client, cycle_light_entry_id)
     client.wait_state(CYCLE_SCHEDULE, lambda state: state["state"] == "off", "off")
     client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    schedule_outage(window_start, cycle_end)
     FOLLOW_RESTART_SNAPSHOT.write_text(
         json.dumps(
             {
@@ -4948,12 +5030,13 @@ def run_follow_restart_prepare() -> None:
         )
     )
     print(
-        "PASS: follow lights prepared; one window opens, one elapses during the restart"
+        "PASS: follow lights prepared; one window opens, one elapses during the outage"
     )
 
 
 def run_follow_restart_verify() -> None:
     """The start missed while HA was down is applied once; a manual off sticks."""
+    expect_outage_held()
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4966,7 +5049,7 @@ def run_follow_restart_verify() -> None:
             state["state"] == "on"
             and state["attributes"].get("current_window_start") is not None
         ),
-        "inside the window that opened during the restart",
+        "inside the window that opened during the outage",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -4991,7 +5074,7 @@ def run_follow_restart_verify() -> None:
             state["state"] == "off"
             and state["attributes"].get("current_window_start") is None
         ),
-        "off: the whole window elapsed during the restart",
+        "off: the whole window elapsed during the outage",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -5282,14 +5365,15 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_end_restart_prepare() -> None:
-    """Leave an occupied scheduled light whose turn_off window ends mid-restart."""
+    """Leave an occupied scheduled light whose turn_off window ends while HA is down."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
     expect_fixtures_loaded(client)
-    now = datetime.now(UTC)
+    now = datetime.now(UTC).replace(microsecond=0)
+    window_end = now + OUTAGE_EDGE_LEAD
     start = (now - timedelta(seconds=60)).strftime("%H:%M:%S")
-    end = (now + timedelta(seconds=7)).strftime("%H:%M:%S")
+    end = window_end.strftime("%H:%M:%S")
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
     result = client.continue_flow(result, {"schedule_definition": "time"})
@@ -5325,16 +5409,18 @@ def run_end_restart_prepare() -> None:
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     wait_machine_state(client, "occupied", END_RESTART_LIGHT)
+    schedule_outage(window_end, window_end)
     END_RESTART_SNAPSHOT.write_text(
         json.dumps(
             {"schedule_entry_id": schedule_entry_id, "light_entry_id": light_entry_id}
         )
     )
-    print("PASS: occupied scheduled light prepared; its window ends during the restart")
+    print("PASS: occupied scheduled light prepared; its window ends during the outage")
 
 
 def run_end_restart_verify() -> None:
-    """A turn_off boundary missed during the restart is caught up exactly once."""
+    """A turn_off boundary missed during the outage is caught up exactly once."""
+    expect_outage_held()
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -5375,7 +5461,7 @@ def run_end_restart_verify() -> None:
         client.remove_entry(entry_id)
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
-    print("PASS: a turn_off boundary missed during a restart was caught up once")
+    print("PASS: a turn_off boundary missed during an outage was caught up once")
 
 
 def near(value: str | None, expected: datetime, tolerance: float = 2.0) -> bool:
@@ -7746,6 +7832,7 @@ def main() -> None:
         "false-detection-verify": run_false_detection_verify,
         "late-source-prepare": run_late_source_prepare,
         "late-source-verify": run_late_source_verify,
+        "outage": run_outage,
         "follow-restart-prepare": run_follow_restart_prepare,
         "follow-restart-verify": run_follow_restart_verify,
         "follow-restart-verify-off": run_follow_restart_verify_off,

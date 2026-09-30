@@ -5,6 +5,13 @@ services:
     # Optional CPU cap (e.g. 0.5) to approximate slow hardware such as a CI
     # runner; 0 leaves the container unlimited.
     cpus: ${MOLIGHT_E2E_HA_CPUS:-0}
+    networks:
+      default:
+        aliases:
+          # The runner and browser use this name. A bare "homeassistant" leaks
+          # to the host's LAN resolvers once the container is stopped, and a
+          # real Home Assistant there would answer in its place.
+          - homeassistant.e2e.invalid
     volumes:
       - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/config
       - ${MOLIGHT_E2E_INTEGRATION_DIR:-../../custom_components/molight}:/config/custom_components/molight:ro
@@ -14,7 +21,7 @@ services:
     image: python:3.14-slim
     working_dir: /e2e
     environment:
-      MOLIGHT_E2E_HA_URL: http://homeassistant:8123
+      MOLIGHT_E2E_HA_URL: http://homeassistant.e2e.invalid:8123
     volumes:
       - ./runner:/e2e:ro
       - ${MOLIGHT_E2E_CONFIG_DIR:?set by scripts/e2e}:/ha-config
@@ -28,7 +35,7 @@ services:
     working_dir: /workspace
     environment:
       CI: "true"
-      MOLIGHT_BROWSER_HA_URL: http://homeassistant:8123
+      MOLIGHT_BROWSER_HA_URL: http://homeassistant.e2e.invalid:8123
       MOLIGHT_BROWSER_ARTIFACT_DIR: /artifacts
     volumes:
       - ../..:/workspace:ro

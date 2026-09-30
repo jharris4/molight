@@ -9,7 +9,7 @@ export default defineConfig({
   use: {
     actionTimeout: 20_000,
     baseURL:
-      process.env.MOLIGHT_BROWSER_HA_URL ?? "http://homeassistant:8123",
+      process.env.MOLIGHT_BROWSER_HA_URL ?? "http://homeassistant.e2e.invalid:8123",
     navigationTimeout: 30_000,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

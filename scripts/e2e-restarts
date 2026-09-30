@@ -18,6 +18,14 @@ compose() {
     docker compose --file "$COMPOSE_FILE" "$@"
 }
 
+# Hold Home Assistant down until the schedule edges the last prepare phase
+# recorded have passed, so the verify phase sees them missed, not fired live.
+outage() {
+    compose stop homeassistant
+    compose run --rm --no-deps runner python runner.py outage
+    compose start homeassistant
+}
+
 cleanup() {
     status=$?
     set +e
@@ -56,16 +64,16 @@ echo "Restarting with an occupancy source that loads late..."
 compose restart homeassistant
 compose run --rm runner python runner.py late-source-verify follow-restart-prepare
 
-echo "Restarting across a follow-mode window start..."
-compose restart homeassistant
+echo "Stopping across a follow-mode window start and a whole window..."
+outage
 compose run --rm runner python runner.py follow-restart-verify
 
 echo "Restarting again inside the follow window..."
 compose restart homeassistant
 compose run --rm runner python runner.py follow-restart-verify-off end-restart-prepare
 
-echo "Restarting across a scheduled light's turn_off window end..."
-compose restart homeassistant
+echo "Stopping across a scheduled light's turn_off window end..."
+outage
 compose run --rm runner python runner.py end-restart-verify maintain-restart-prepare
 
 echo "Restarting with a light held by its maintain sensor..."
