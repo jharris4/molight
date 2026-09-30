@@ -663,9 +663,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         # What each member should echo for our recent commands, oldest first
         # (see judge()): a reply to the previous one may trail the latest.
         self._echo_expectations: dict[str, deque[_EchoExpectation]] = {}
-        # Counts commands and offs, so a turn-on that waited for its turn-on
-        # selection can tell that it was overtaken.
+        # Counts offs and manual turn-ons, so a turn-on that waited for its
+        # turn-on selection can tell that it was overtaken; an automatic
+        # turn-on defers to a manual one still waiting instead.
         self._command_generation = 0
+        self._manual_on_pending = 0
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1309,6 +1311,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             transition=kwargs.get(ATTR_TRANSITION),
             color=color,
             apply_turn_on_selection=True,
+            manual=True,
         ):
             self._transition_on()
 
@@ -2836,7 +2839,6 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         context = Context()
         self._self_context_ids.append(context.id)
-        self._command_generation += 1
         self._expect_echo(bool(brightness), brightness or None, color, transition)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
@@ -2911,8 +2913,15 @@ class VirtualLight(LightEntity, RestoreEntity):
         color: dict | None = None,
         apply_turn_on_selection: bool = False,
         force_selection: bool = False,
+        manual: bool = False,
     ) -> bool:
-        """Command the real lights; False when a newer command overtook it."""
+        """Command the real lights; False when a newer command overtook it.
+
+        Only an off or a newer manual turn-on overtakes a turn-on waiting for
+        its selection: a stage the timer reaches meanwhile is simply replaced,
+        and an automatic turn-on issued while a manual one waits is dropped,
+        as the user's command lights the room with the user's settings.
+        """
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
@@ -2920,13 +2929,21 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._bright_forced_off = False
         context = Context()
         self._self_context_ids.append(context.id)
-        self._command_generation += 1
+        if not on or manual:
+            self._command_generation += 1
         generation = self._command_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
-            await self._apply_turn_on_selection(context)
+            if not manual and self._manual_on_pending:
+                self._occupancy_lit_lights = False  # the user's on-period
+                return False
+            self._manual_on_pending += manual
+            try:
+                await self._apply_turn_on_selection(context)
+            finally:
+                self._manual_on_pending -= manual
             if generation != self._command_generation:
-                # An off or a newer command landed while the select call
-                # was awaited; it stands.
+                # An off or a newer manual command landed while the select
+                # call was awaited; it stands.
                 return False
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:

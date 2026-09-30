@@ -484,6 +484,130 @@ async def test_newer_turn_on_during_slow_selection_replaces_the_waiting_one(
 
 
 @pytest.mark.asyncio
+async def test_manual_on_during_blink_off_survives_the_stage_ending(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The effect timer reaching the warn stage while a turn-on waits for its
+    selection does not drop the turn-on: the user's command is sent after the
+    stage's and the light ends up ACTIVE at the user's brightness."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(effect_timeout=10, effect_brightness=0, warn_timeout=30),
+    )
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+    select.release.clear()
+    select.started.clear()
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    hass.states.async_set("light.ambient", "off")
+    await settle(hass)
+    assert hass.states.get("light.selection_light").attributes["molight_state"] == (
+        "effect"
+    )
+    calls = _light_calls(hass)
+
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    assert hass.states.get("light.selection_light").attributes["molight_state"] == (
+        "warn"
+    )
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 255), ("turn_on", 200)]
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["brightness"] == 200
+
+    # The stage's timer is gone: nothing turns the light off before the new
+    # timeout runs out.
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    assert calls == [("turn_on", 255), ("turn_on", 200)]
+
+
+@pytest.mark.asyncio
+async def test_occupancy_on_during_a_waiting_manual_on_defers_to_it(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An automatic turn-on arriving while a manual one waits is dropped: the
+    user's brightness is kept and the on-period is not counted as lit by
+    occupancy."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            occupancy="binary_sensor.occ", auto_on_brightness=40, false_off_delay=5
+        ),
+    )
+    calls = _light_calls(hass)
+
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    hass.states.async_set("binary_sensor.occ", "on")
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 200)]
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "occupied"
+    assert state.attributes["brightness"] == 200
+
+    # A quick clear flagged false gets the normal countdown, not the quick
+    # off reserved for lights that occupancy lit.
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set(
+        "binary_sensor.occ", "off", {"last_clear_false_detection": True}
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    assert calls == [("turn_on", 200)]
+
+
+@pytest.mark.asyncio
 async def test_uninterrupted_slow_selection_still_turns_on(
     hass: HomeAssistant,
 ) -> None:

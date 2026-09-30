@@ -116,7 +116,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the light stayed at the stage's brightness for the whole new on-period.
 - A light turned off while its turn-on was still waiting for a slow turn-on
   selection now stays off. Previously the waiting turn-on was sent
-  afterwards, leaving the light on with no timer to turn it off.
+  afterwards, leaving the light on with no timer to turn it off. A manual
+  turn-on that waits while a warning stage ends, or while occupancy asks for
+  the light too, is still sent with its own brightness and color.
+  Previously it was dropped, so the light finished its warning and turned
+  off, or came on with the automatic settings instead.
 
 ## [1.7.0] - 2026-08-27
 
