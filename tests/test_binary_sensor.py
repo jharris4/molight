@@ -1176,6 +1176,77 @@ async def test_combined_midrun_reload_does_not_seed_from_maintain(
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
 
 
+def _combined_lot(hass: HomeAssistant) -> str | None:
+    return hass.states.get("binary_sensor.seed_combined").attributes[
+        "latest_occupied_time"
+    ]
+
+
+async def _false_cycle(hass: HomeAssistant, freezer, entity_id: str, attrs: dict):
+    """Run one single-blip cycle of a constituent, which leaves its attributes."""
+    hass.states.async_set(entity_id, "on", attrs)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set(entity_id, "off", attrs)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("seeded_on", [False, True])
+async def test_new_combined_sensor_measures_its_first_cycle_against_history(
+    hass: HomeAssistant, freezer, seeded_on: bool
+) -> None:
+    """A visit a constituent saw before the sensor existed is not a detection."""
+    old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    attrs = {"latest_occupied_time": old, "last_clear_false_detection": True}
+    hass.states.async_set("binary_sensor.m1", "on" if seeded_on else "off", attrs)
+    hass.states.async_set("binary_sensor.m2", "off")
+    await setup_entries(hass, _raw_combined_entry())
+    assert _combined_lot(hass) == old
+
+    if seeded_on:
+        freezer.tick(timedelta(seconds=31))
+        hass.states.async_set("binary_sensor.m1", "off", attrs)
+        await settle(hass)
+    else:
+        await _false_cycle(hass, freezer, "binary_sensor.m1", attrs)
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_combined_reload_takes_over_a_new_constituents_history(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A constituent added by an options edit brings its history along."""
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+
+    recent = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+    attrs = {"latest_occupied_time": recent, "last_clear_false_detection": True}
+    hass.states.async_set("binary_sensor.m3", "off", attrs)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            CONF_NAME: "Seed Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.m1", "binary_sensor.m3"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.m2"],
+        },
+    )
+    await settle(hass)
+    assert _combined_lot(hass) == recent
+
+    await _false_cycle(hass, freezer, "binary_sensor.m3", attrs)
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+
+
 @pytest.mark.asyncio
 async def test_combined_clears_when_last_constituent_drops_out(
     hass: HomeAssistant, freezer

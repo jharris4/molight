@@ -473,6 +473,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._seed_state(restored_on=last is not None and last.state == "on")
 
     def _seed_state(self, *, restored_on: bool) -> None:
+        self._absorb_constituent_history()
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
         elif restored_on and self._any_on(self._maintain_sensors):
@@ -505,6 +506,23 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         if self._attr_is_on:
             self._cycle_start_lot = self._latest_occupied_time
         self.async_write_ha_state()
+
+    def _absorb_constituent_history(self) -> None:
+        """Take over the latest_occupied_time the constituents already carry.
+
+        A visit they saw before this sensor existed, or while it was not
+        loaded, is history to measure the next cycle against, not a
+        detection made during it.
+        """
+        for entity_id in self._trigger_sensors + self._maintain_sensors:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            lot = _parse_datetime(state.attributes.get("latest_occupied_time"))
+            if lot is not None and (
+                self._latest_occupied_time is None or lot > self._latest_occupied_time
+            ):
+                self._latest_occupied_time = lot
 
     @callback
     def _on_startup_done(self, _event: Event) -> None:

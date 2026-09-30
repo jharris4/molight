@@ -154,6 +154,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or removed) while an automatic turn-on is still waiting for a slow
   turn-on selection no longer sends that turn-on afterwards. Previously the
   removed entity lit the room once the selection returned.
+- A Virtual Combined Occupancy Sensor now takes over the
+  `latest_occupied_time` its sensors already carry when it is created, and
+  when an options edit adds a sensor with newer history. Previously that
+  earlier visit counted as a detection in the next cycle, so a false
+  detection was reported as genuine and `false_detection_count` did not
+  increase.
 
 ## [1.7.0] - 2026-08-27
 

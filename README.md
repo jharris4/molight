@@ -148,7 +148,7 @@ Combines multiple MoLight occupancy sensors into one. Constituents are usually s
 | **Trigger sensors** | Any one going `on` starts occupancy |
 | **Maintain sensors** *(optional)* | Keep occupancy alive once started, but cannot start it alone |
 
-`latest_occupied_time` is the max across all constituents, so each sub-sensor's individual timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor.
+`latest_occupied_time` is the max across all constituents, so each sub-sensor's individual timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor. History the constituents already carry when the combined sensor is created, or when a reload picks up a newly added constituent, is the visit the next cycle is measured against.
 
 After a restart, if the sensor's restored state was `on` and a *maintain* sensor still shows presence, occupancy is seeded `on` (the one exception to "maintain sensors never start occupancy", because the restored state is direct evidence it was already triggered before HA went down).
 
