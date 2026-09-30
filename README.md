@@ -553,11 +553,10 @@ npm run hass:up      # run stock HA (stable image) with the integration mounted 
 npm run hass:down    # stop it and free port 8123
 npm run hass:pull    # update the HA stable image
 
-npm run dev:hass     # run HA from source inside the dev container; code is live-editable,
-                     # and debugpy is available for breakpoints
+npm run dev:hass     # run the pip-installed HA inside the dev container against your working tree
 ```
 
-Use `hass:up` to confirm behavior against a real, released HA build; use `dev:hass` for active development, where HA runs against your working tree and can be restarted and debugged in place. Remember to `hass:down` before starting the dev container (or vice versa) so port 8123 is free.
+Use `hass:up` to confirm behavior against a real, released HA build; use `dev:hass` for active development, where HA loads the integration from your working tree and can be restarted in place. Remember to `hass:down` before starting the dev container (or vice versa) so port 8123 is free.
 
 ### Running the live acceptance tests
 
