@@ -1960,6 +1960,41 @@ async def test_light_options_prefill_and_update_turn_on_selection(
 
 
 @pytest.mark.asyncio
+async def test_light_options_selection_not_prefilled_after_target_change(
+    hass: HomeAssistant,
+) -> None:
+    """A new target starts blank rather than inheriting the old one's values."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled_real"],
+            CONF_LIGHT_TIMEOUT: 300,
+            CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
+            CONF_TURN_ON_SELECT_OPTION: "Christmas",
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.seasonal_theme",
+        },
+    )
+    await setup_entries(hass, light)
+
+    result = await hass.config_entries.options.async_init(light.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled_real"],
+            CONF_LIGHT_TIMEOUT: 300,
+            # Unavailable, so any fallback would be accepted as is.
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.other"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+    assert _suggested_values(result["data_schema"]) == {}
+
+
+@pytest.mark.asyncio
 async def test_light_flow_stores_effect_warn_options(hass: HomeAssistant) -> None:
     """Effect/warn warning fields round-trip through the create flow."""
     result = await _start_create(hass)

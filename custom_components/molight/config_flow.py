@@ -3341,6 +3341,7 @@ class MoLightConfigFlow(
                 self._light_selection_values = {
                     key: flat[key]
                     for key in (
+                        CONF_TURN_ON_SELECT_ENTITY,
                         CONF_TURN_ON_SELECT_OPTION,
                         CONF_TURN_ON_SELECT_SOURCE_ENTITY,
                     )
@@ -3359,16 +3360,13 @@ class MoLightConfigFlow(
                     return result
 
         target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {CONF_TURN_ON_SELECT_ENTITY: target}
+        _carry_turn_on_selection(suggested, self._light_selection_values)
         schema = vol.Schema(_turn_on_selection_fields(target))
         return self.async_show_form(
             step_id="light_selection",
             data_schema=self.add_suggested_values_to_schema(
-                schema,
-                (
-                    user_input
-                    if user_input is not None
-                    else self._light_selection_values
-                ),
+                schema, user_input if user_input is not None else suggested
             ),
             errors=errors,
             description_placeholders={"entity_id": target},
@@ -3522,6 +3520,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         self._light_selection_values = {
             key: self._cfg[key]
             for key in (
+                CONF_TURN_ON_SELECT_ENTITY,
                 CONF_TURN_ON_SELECT_OPTION,
                 CONF_TURN_ON_SELECT_SOURCE_ENTITY,
             )
@@ -3981,16 +3980,13 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 return self._finish(clean)
 
         target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {CONF_TURN_ON_SELECT_ENTITY: target}
+        _carry_turn_on_selection(suggested, self._light_selection_values)
         schema = vol.Schema(_turn_on_selection_fields(target))
         return self.async_show_form(
             step_id="light_selection",
             data_schema=self.add_suggested_values_to_schema(
-                schema,
-                (
-                    user_input
-                    if user_input is not None
-                    else self._light_selection_values
-                ),
+                schema, user_input if user_input is not None else suggested
             ),
             errors=errors,
             description_placeholders={"entity_id": target},

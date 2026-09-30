@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Changing a Virtual Light's turn-on selection entity in its options no
+  longer fills the selection page with the previous entity's fallback and
+  source. Previously, if the new entity was unavailable, the old fallback
+  could be saved for it.
 - A Virtual Light's options no longer accept the light itself, or a
   Virtual Light that already includes it, as a member, and no longer accept
   its own light or Auto-off switch as a keep-on entity. Previously each
