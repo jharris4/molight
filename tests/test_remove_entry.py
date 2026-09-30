@@ -111,7 +111,7 @@ def _schedule_entry() -> MockConfigEntry:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Rm Schedule",
-            CONF_TIME_WINDOWS: [{"start": "07:00", "end": "22:00"}],
+            CONF_TIME_WINDOWS: [{"start": {"time": "07:00"}, "end": {"time": "22:00"}}],
         },
     )
 

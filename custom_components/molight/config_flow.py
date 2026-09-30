@@ -476,14 +476,9 @@ def _window_input_provided(user_input: dict[str, Any]) -> bool:
 
 
 def _window_suggested(window: dict | None) -> dict:
-    """Suggested start/end section values from a stored window.
+    """Suggested start/end section values from a stored window."""
 
-    Legacy plain-string edges ("HH:MM") are upgraded to time-only edge dicts.
-    """
-
-    def _edge(edge: str | dict | None) -> dict:
-        if isinstance(edge, str):
-            return {EDGE_TIME: edge}
+    def _edge(edge: dict | None) -> dict:
         return edge if isinstance(edge, dict) else {}
 
     window = window or {}

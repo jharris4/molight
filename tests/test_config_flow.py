@@ -173,7 +173,7 @@ async def _setup_night_schedule(hass: HomeAssistant) -> None:
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Night Schedule",
-            CONF_TIME_WINDOWS: [{"start": "21:00", "end": "07:00"}],
+            CONF_TIME_WINDOWS: [{"start": {"time": "21:00"}, "end": {"time": "07:00"}}],
         },
     )
     await setup_entries(hass, entry)
@@ -3042,7 +3042,7 @@ async def test_light_options_can_clear_occupancy_reference(
 async def test_schedule_options_round_trip(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
-    """Editing a legacy string-edge schedule upgrades it to edge dicts."""
+    """Editing a time-only schedule stores the submitted edge dicts."""
     schedule_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(schedule_entry.entry_id)
     await hass.async_block_till_done()
@@ -3072,7 +3072,7 @@ async def test_schedule_options_round_trip(
 
 @pytest.mark.asyncio
 async def test_schedule_options_prefill_dict_edges(hass: HomeAssistant) -> None:
-    """The options form prefills a stored modern dict-edge window as-is."""
+    """The options form prefills a stored dict-edge window as-is."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={

@@ -51,13 +51,17 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
 
+def _edge(edge: str | dict) -> dict:
+    return {"time": edge} if isinstance(edge, str) else edge
+
+
 def _time_schedule(name: str, start: str | dict, end: str | dict) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: name,
-            CONF_TIME_WINDOWS: [{"start": start, "end": end}],
+            CONF_TIME_WINDOWS: [{"start": _edge(start), "end": _edge(end)}],
         },
     )
 
@@ -768,7 +772,7 @@ async def test_editing_an_input_rebuilds_the_combination(
         morning,
         options={
             CONF_NAME: "Morning",
-            CONF_TIME_WINDOWS: [{"start": "06:30", "end": "08:00"}],
+            CONF_TIME_WINDOWS: [{"start": {"time": "06:30"}, "end": {"time": "08:00"}}],
         },
     )
     await settle(hass)

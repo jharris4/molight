@@ -36,6 +36,10 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 
+def _window(start: str, end: str) -> dict:
+    return {"start": {"time": start}, "end": {"time": end}}
+
+
 def _schedule_entry(windows: list) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
@@ -55,10 +59,10 @@ async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
 
 @pytest.mark.asyncio
 async def test_fixed_overnight_window(hass: HomeAssistant, freezer) -> None:
-    """Legacy fixed-time overnight window flips at the exact boundaries."""
+    """A fixed-time overnight window flips at the exact boundaries."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")
-    await _setup(hass, _schedule_entry([{"start": "21:00", "end": "07:00"}]))
+    await _setup(hass, _schedule_entry([_window("21:00", "07:00")]))
 
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "off"
@@ -166,7 +170,7 @@ async def test_polar_day_fixed_time_stands_alone(hass: HomeAssistant, freezer) -
                             "sun": "sunset",
                             "combine": "latest",
                         },
-                        "end": "23:00",
+                        "end": {"time": "23:00"},
                     }
                 ]
             ),
@@ -189,8 +193,8 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
         hass,
         _schedule_entry(
             [
-                {"start": "18:00", "end": "23:00"},
-                {"start": "20:00", "end": "02:00"},
+                _window("18:00", "23:00"),
+                _window("20:00", "02:00"),
             ]
         ),
     )
@@ -231,11 +235,11 @@ async def test_editing_windows_rearms_the_transition_timer(
     """An edit while the 22:00 edge is armed switches to the new edge only."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 21:00:00+00:00")
-    entry = _schedule_entry([{"start": "07:00", "end": "22:00"}])
+    entry = _schedule_entry([_window("07:00", "22:00")])
     await _setup(hass, entry)
 
     options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
-    options[CONF_TIME_WINDOWS] = [{"start": "07:00", "end": new_end}]
+    options[CONF_TIME_WINDOWS] = [_window("07:00", new_end)]
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     state = hass.states.get("binary_sensor.night_schedule")
@@ -257,7 +261,7 @@ async def test_full_day_window_is_one_window_per_day(
     """Touching windows aren't merged, so a 00:00 → 00:00 window starts each day."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
-    await _setup(hass, _schedule_entry([{"start": "00:00", "end": "00:00"}]))
+    await _setup(hass, _schedule_entry([_window("00:00", "00:00")]))
 
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
@@ -277,7 +281,7 @@ async def test_follow_light_takes_each_day_of_a_full_day_window(
         schedule="binary_sensor.night_schedule",
         schedule_mode=SCHEDULE_MODE_FOLLOW,
     )
-    schedule = _schedule_entry([{"start": "00:00", "end": "00:00"}])
+    schedule = _schedule_entry([_window("00:00", "00:00")])
     await setup_entries(hass, schedule, light)
     state = hass.states.get("light.desk_lamp")
     assert state.state == "on"
@@ -304,7 +308,7 @@ async def test_follow_light_takes_each_day_of_a_full_day_window(
     assert hass.states.get("light.desk_lamp").state == "off"
 
 
-_CHAINED = [{"start": "00:00", "end": "23:00"}, {"start": "22:00", "end": "01:00"}]
+_CHAINED = [_window("00:00", "23:00"), _window("22:00", "01:00")]
 
 
 @pytest.mark.asyncio
@@ -375,7 +379,7 @@ async def test_restart_after_the_window_ended_starts_a_new_window(
     whether that off is within the resolved days or before them."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 22:00:00+00:00")
-    entry = _schedule_entry([{"start": "21:00", "end": "07:00"}])
+    entry = _schedule_entry([_window("21:00", "07:00")])
     await _setup(hass, entry)
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
@@ -408,7 +412,7 @@ async def test_time_window_schedule_ignores_a_marker_saved_by_a_source_definitio
             )
         ],
     )
-    await _setup(hass, _schedule_entry([{"start": "21:00", "end": "07:00"}]))
+    await _setup(hass, _schedule_entry([_window("21:00", "07:00")]))
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
@@ -427,8 +431,8 @@ async def test_inverted_overlapping_windows_begin_after_merged_interval(
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Inverted Overlap",
             CONF_TIME_WINDOWS: [
-                {"start": "18:00", "end": "23:00"},
-                {"start": "20:00", "end": "02:00"},
+                _window("18:00", "23:00"),
+                _window("20:00", "02:00"),
             ],
             CONF_SCHEDULE_INVERT: True,
         },
@@ -528,9 +532,9 @@ async def test_invalid_window_edges_never_activate(
         hass,
         _schedule_entry(
             [
-                {"start": "25:99", "end": "23:00"},  # unparsable start time
-                {"start": 42, "end": "23:00"},  # wrong edge type
-                {"start": "19:00"},  # missing end
+                _window("25:99", "23:00"),  # unparsable start time
+                {"start": 42, "end": {"time": "23:00"}},  # wrong edge type
+                {"start": {"time": "19:00"}},  # missing end
             ]
         ),
     )
@@ -553,7 +557,7 @@ async def test_inverted_time_window_uses_effective_on_period(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Night Schedule",
-            CONF_TIME_WINDOWS: [{"start": "21:00", "end": "07:00"}],
+            CONF_TIME_WINDOWS: [_window("21:00", "07:00")],
             CONF_SCHEDULE_INVERT: True,
         },
     )
@@ -985,7 +989,7 @@ async def test_sun_edge_ignores_unparsable_offset(hass: HomeAssistant, freezer) 
     await _setup(
         hass,
         _schedule_entry(
-            [{"start": {"sun": "sunset", "offset": "soon"}, "end": "23:00"}]
+            [{"start": {"sun": "sunset", "offset": "soon"}, "end": {"time": "23:00"}}]
         ),
     )
 
@@ -1012,8 +1016,8 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
         hass,
         _schedule_entry(
             [
-                {"start": "03:05", "end": "06:00"},
-                {"start": "02:30", "end": "02:45"},
+                _window("03:05", "06:00"),
+                _window("02:30", "02:45"),
             ]
         ),
     )
@@ -1037,7 +1041,7 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
     ("window", "on_at", "marker", "next_while_on", "off_at", "next_after"),
     [
         (
-            {"start": "01:30", "end": "01:45"},
+            _window("01:30", "01:45"),
             "2026-11-01 05:30:02+00:00",
             "2026-11-01T01:30:00-04:00",
             "2026-11-01T01:45:00-04:00",
@@ -1045,7 +1049,7 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
             "2026-11-02T01:30:00-05:00",
         ),
         (
-            {"start": "22:00", "end": "01:30"},
+            _window("22:00", "01:30"),
             "2026-11-01 02:00:02+00:00",
             "2026-10-31T22:00:00-04:00",
             "2026-11-01T01:30:00-04:00",
@@ -1113,12 +1117,10 @@ async def test_window_collapsed_by_the_spring_forward_gap_is_skipped(
     it began."""
     await hass.config.async_set_time_zone("America/New_York")
     freezer.move_to("2026-03-08 12:00:00+00:00")
-    window = {"start": "02:30", "end": "03:15"}
+    window = _window("02:30", "03:15")
     assert _resolve_window(hass, window, date(2026, 3, 8)) is None
 
-    start, end = _resolve_window(
-        hass, {"start": "02:30", "end": "03:45"}, date(2026, 3, 8)
-    )
+    start, end = _resolve_window(hass, _window("02:30", "03:45"), date(2026, 3, 8))
     assert start.isoformat() == "2026-03-08T02:30:00-05:00"  # 03:30 EDT
     assert end.isoformat() == "2026-03-08T03:45:00-04:00"
 
@@ -1138,7 +1140,7 @@ async def test_inverted_schedule_keeps_its_marker_over_a_skipped_window(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Inverted Gap",
-            CONF_TIME_WINDOWS: [{"start": "02:30", "end": "03:15"}],
+            CONF_TIME_WINDOWS: [_window("02:30", "03:15")],
             CONF_SCHEDULE_INVERT: True,
         },
     )

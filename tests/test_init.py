@@ -67,7 +67,7 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
     ENTITY_TYPE_SCHEDULE: (
         {
             CONF_NAME: "Init Schedule",
-            CONF_TIME_WINDOWS: [{"start": "07:00", "end": "22:00"}],
+            CONF_TIME_WINDOWS: [{"start": {"time": "07:00"}, "end": {"time": "22:00"}}],
         },
         {"binary_sensor": 1},
     ),

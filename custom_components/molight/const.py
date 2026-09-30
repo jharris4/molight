@@ -136,8 +136,7 @@ SCHEDULE_DEFINITIONS = [
 ]
 CONF_SCHEDULE_SOURCE = "schedule_source"
 CONF_SCHEDULE_INVERT = "schedule_invert"
-# List of {"start": <edge>, "end": <edge>} dicts. An edge is either a plain
-# "HH:MM" string (legacy) or a dict:
+# List of {"start": <edge>, "end": <edge>} dicts. An edge is a dict:
 #   {"time": "HH:MM", "sun": "sunset"|"sunrise", "offset": <minutes>,
 #    "combine": "latest"|"earliest"}
 # with at least one of time/sun present. offset shifts the sun event

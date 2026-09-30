@@ -82,13 +82,13 @@ async def _setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None
 
 
 def _night_schedule_entry() -> MockConfigEntry:
-    """A 21:00 → 07:00 overnight schedule (legacy string edges)."""
+    """A 21:00 → 07:00 overnight schedule."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Night Schedule",
-            CONF_TIME_WINDOWS: [{"start": "21:00", "end": "07:00"}],
+            CONF_TIME_WINDOWS: [{"start": {"time": "21:00"}, "end": {"time": "07:00"}}],
         },
     )
 

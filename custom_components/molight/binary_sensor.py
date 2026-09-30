@@ -757,12 +757,8 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = True
 
 
-def _resolve_edge(
-    hass: HomeAssistant, edge: str | dict | None, day: date
-) -> datetime | None:
+def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime | None:
     """Resolve an edge spec to a concrete datetime on the given day."""
-    if isinstance(edge, str):
-        edge = {EDGE_TIME: edge}
     if not isinstance(edge, dict):
         return None
 
