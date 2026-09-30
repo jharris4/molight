@@ -765,6 +765,7 @@ async def test_source_schedule_saves_marker_while_unavailable(
         "is_on": True,
         "current_window_start": "2026-07-02T07:00:00+00:00",
         "source_entity": "binary_sensor.house_mode",
+        "invert": False,
     }
 
 
@@ -801,6 +802,38 @@ async def test_source_schedule_keeps_marker_through_outage_and_restart(
     assert state.attributes["current_window_start"] == (
         marker if back == "on" else None
     )
+
+
+@pytest.mark.asyncio
+async def test_source_schedule_invert_edit_during_outage_starts_a_new_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A marker saved for the plain window is not reused by the inverted one."""
+    entity_id = "binary_sensor.house_mode_schedule"
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    entry = _house_mode_schedule()
+    await _setup(hass, entry)
+    marker = hass.states.get(entity_id).attributes["current_window_start"]
+    assert marker == "2026-07-02T07:00:00+00:00"
+
+    freezer.move_to("2026-07-02 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "unavailable")
+    await hass.async_block_till_done()
+    options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(
+        entry, options={**options, CONF_SCHEDULE_INVERT: True}
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"
+
+    freezer.move_to("2026-07-02 09:30:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["inverted"] is True
+    assert state.attributes["current_window_start"] == "2026-07-02T09:30:00+00:00"
 
 
 @pytest.mark.asyncio

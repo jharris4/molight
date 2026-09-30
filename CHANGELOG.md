@@ -99,7 +99,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   options are edited, keeps its window marker. Previously a source-backed
   schedule started a new window when its source returned, and a combined
   schedule could lose a marker it cannot work out again from its inputs, so
-  a follow-mode light turned off manually mid-window turned back on.
+  a follow-mode light turned off manually mid-window turned back on. Turning
+  *invert* on or off while the source is unavailable starts a new window
+  when it returns instead of reusing the old marker.
 - Illuminance going dark now resumes only an on-period that brightness cut
   short. Previously a light turned off manually, by its timer or by a
   schedule was turned back on when the room went from bright to dark within

@@ -852,6 +852,7 @@ async def _restored_schedule_data(entity: RestoreEntity) -> dict:
         "is_on": last.state == "on" if last.state in ("on", "off") else None,
         "current_window_start": last.attributes.get("current_window_start"),
         "source_entity": last.attributes.get("source_entity"),
+        "invert": last.attributes.get("inverted"),
     }
 
 
@@ -905,6 +906,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
             restored_start = (
                 _parse_datetime(saved.get("current_window_start"))
                 if saved.get("source_entity") == self._source
+                and self._saved_invert_matches(saved)
                 else None
             )
             self._current_window_start = restored_start
@@ -925,12 +927,18 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
             saved = await _restored_schedule_data(self)
             restored_start = (
                 _parse_datetime(saved.get("current_window_start"))
-                if saved.get("is_on") is True and saved.get("source_entity") is None
+                if saved.get("is_on") is True
+                and saved.get("source_entity") is None
+                and self._saved_invert_matches(saved)
                 else None
             )
             self._attr_is_on = restored_start is not None
             self._current_window_start = restored_start
             self._refresh()
+
+    def _saved_invert_matches(self, saved: dict) -> bool:
+        """Return whether the saved marker was made under the current invert setting."""
+        return bool(saved.get("invert", self._invert)) == self._invert
 
     @callback
     def _cancel_transition_timer(self) -> None:
@@ -1051,6 +1059,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
                     marker.isoformat() if isinstance(marker, datetime) else marker
                 ),
                 "source_entity": self._source,
+                "invert": self._invert,
             }
         )
 
