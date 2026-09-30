@@ -4,7 +4,7 @@ Removing an entry unloads its entities, firing every async_on_remove cleanup.
 These tests pin that teardown down for each device type: the entry unloads,
 its entities disappear, and nothing is logged at ERROR level.
 
-The light additionally defers its subscriptions behind a one-time
+Lights, remotes and the combined sensors can defer work behind a one-time
 EVENT_HOMEASSISTANT_STARTED listener when added before HA has started. That
 listener's remove callback is not idempotent, so a naive teardown removed it a
 second time and logged "Unable to remove unknown job listener"; the deferred
@@ -17,9 +17,12 @@ import logging
 
 import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant, State
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    mock_restore_cache,
+)
 
 from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
@@ -246,59 +249,48 @@ async def test_remove_source_entry_clears_source_backed_schedule_reference(
     assert hass.states.get("binary_sensor.source_schedule").state == "unavailable"
 
 
-@pytest.mark.asyncio
-async def test_remove_light_added_before_startup_is_clean(
-    hass: HomeAssistant, caplog
-) -> None:
-    """Regression: a light added while HA is not yet running defers its
-    subscriptions behind a one-time EVENT_HOMEASSISTANT_STARTED listener. After
-    that listener fires, removing the entry must not try to remove it again
-    (which logged "Unable to remove unknown job listener")."""
-    hass.set_state(CoreState.not_running)
-
-    entry = _light_entry()
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-
-    # Fire startup so the deferred once-listener runs (and self-removes).
-    hass.set_state(CoreState.running)
-    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
-    await settle(hass)
-
-    await _remove_and_assert_clean(hass, entry, caplog)
-
-
-@pytest.mark.asyncio
-async def test_remove_light_added_before_startup_never_started_is_clean(
-    hass: HomeAssistant, caplog
-) -> None:
-    """The other branch: the entry is removed while still not-running, so the
-    once-listener never fired and teardown must remove it exactly once."""
-    hass.set_state(CoreState.not_running)
-
-    entry = _light_entry()
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-
-    await _remove_and_assert_clean(hass, entry, caplog)
+def _startup_listeners(hass: HomeAssistant) -> int:
+    return hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_STARTED, 0)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("started", [True, False], ids=["started", "never_started"])
-async def test_remove_remote_added_before_startup_is_clean(
-    hass: HomeAssistant, caplog, started: bool
+@pytest.mark.parametrize(
+    ("make_entry", "restored"),
+    [
+        (_light_entry, []),
+        (_scheduled_light_entry, []),
+        (_remote_entry, []),
+        # Only a restored "on" without a maintain sensor showing presence defers.
+        (_combined_occupancy_entry, [State("binary_sensor.rm_combined", "on")]),
+        (_combined_schedule_entry, []),
+    ],
+    ids=[
+        "light",
+        "scheduled_light",
+        "remote",
+        "combined_occupancy",
+        "combined_schedule",
+    ],
+)
+async def test_remove_entry_added_before_startup_is_clean(
+    hass: HomeAssistant, caplog, make_entry, restored, started: bool
 ) -> None:
-    """The remote defers its button subscription behind the same one-time
-    EVENT_HOMEASSISTANT_STARTED listener as the light; both the fired and
-    the never-fired variants must tear down exactly once."""
+    """Regression: an entity added while HA is not yet running defers work
+    behind a one-time EVENT_HOMEASSISTANT_STARTED listener. Once it has fired,
+    removal must not remove it again (which logged "Unable to remove unknown
+    job listener"); if it never fired, removal must drop it, so a later
+    startup does not reach the removed entity."""
     hass.set_state(CoreState.not_running)
+    mock_restore_cache(hass, restored)
+    baseline = _startup_listeners(hass)
 
-    entry = _remote_entry()
+    entry = make_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    assert _startup_listeners(hass) > baseline
+    entities = _entities_for(hass, entry)
 
     if started:
         hass.set_state(CoreState.running)
@@ -306,6 +298,14 @@ async def test_remove_remote_added_before_startup_is_clean(
         await settle(hass)
 
     await _remove_and_assert_clean(hass, entry, caplog)
+
+    if not started:
+        assert _startup_listeners(hass) == baseline
+        hass.set_state(CoreState.running)
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await settle(hass)
+        for entity_id in entities:
+            assert hass.states.get(entity_id) is None
 
 
 @pytest.mark.asyncio
