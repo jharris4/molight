@@ -6896,6 +6896,113 @@ async def test_scheduled_light_options_reject_own_keep_on_entities(
     ] == ["light.night", "switch.night_hold"]
 
 
+@pytest.mark.asyncio
+async def test_light_options_stored_own_keep_on_entity_gets_friendly_error(
+    hass: HomeAssistant,
+) -> None:
+    """A keep-on entity stored before the check stays selectable, so the
+    submit check can name it instead of the schema rejecting the form."""
+    hall = _light_entry(
+        "Hall", "hall", **{CONF_HOLD_ENTITIES: ["switch.hall_auto_off"]}
+    )
+    await setup_entries(hass, hall)
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.hall"]
+    result = await _submit_light_options(
+        hass,
+        result,
+        ["light.hall_real"],
+        {CONF_HOLD_ENTITIES: ["switch.hall_auto_off"]},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "hold_entity_own"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_stored_member_cycle_gets_friendly_error(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A member cycle stored before the check is reported, not a schema error."""
+    await _setup_night_schedule(hass)
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    outer = _light_entry("Outer", "outer")
+    hall.data[CONF_LIGHTS][:] = ["light.outer"]
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    await setup_entries(hass, hall, outer)
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == ["light.hall"]
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.outer"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+    else:
+        result = await _submit_light_options(hass, result, ["light.outer"])
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_error(
+    hass: HomeAssistant,
+) -> None:
+    """Each profile form keeps a stored own keep-on entity selectable."""
+    await _setup_night_schedule(hass)
+    night = _scheduled_light_entry("Night", "night")
+    night.data[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_HOLD_ENTITIES] = [
+        "switch.night_auto_off"
+    ]
+    await setup_entries(hass, night)
+
+    result = await hass.config_entries.options.async_init(night.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Night",
+            CONF_LIGHTS: ["light.night_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.night"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["switch.night_auto_off"]},
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert result["errors"] == {"base": "hold_entity_own"}
+
+    # The inside profile stores none, so the switch is excluded there.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.night", "switch.night_auto_off"]
+
+
 # ---------------------------------------------------------------------------
 # Validators shared by every form that edits a Virtual Light's settings
 # ---------------------------------------------------------------------------

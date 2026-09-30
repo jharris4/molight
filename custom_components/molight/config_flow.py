@@ -1668,6 +1668,18 @@ def _own_entity_ids(
     )
 
 
+def _picker_exclusions(
+    exclusions: Sequence[str], stored: Sequence[str] | None
+) -> list[str]:
+    """Exclusions for a picker, less the values already stored.
+
+    An excluded value the selector still receives fails schema validation
+    before the submit check can name the problem, so a stored one stays
+    selectable and the check reports it in a friendly error.
+    """
+    return [entity_id for entity_id in exclusions if entity_id not in (stored or ())]
+
+
 def _validate_hold_entities(
     settings: dict[str, Any], own_entities: Sequence[str]
 ) -> dict[str, str]:
@@ -1799,7 +1811,10 @@ class _ScheduledLightSettingsSteps:
                     _light_option_fields(
                         self.hass,
                         with_schedule=False,
-                        hold_exclusions=self._hold_exclusions(),
+                        hold_exclusions=_picker_exclusions(
+                            self._hold_exclusions(),
+                            (previous or {}).get(CONF_HOLD_ENTITIES),
+                        ),
                     )
                 ),
                 user_input or _nest_light(previous or {}),
@@ -3952,8 +3967,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="light",
-                        exclude_entities=_light_member_cycle_candidates(
-                            self.hass, self._entry
+                        exclude_entities=_picker_exclusions(
+                            _light_member_cycle_candidates(self.hass, self._entry),
+                            cfg.get(CONF_LIGHTS),
                         ),
                         multiple=True,
                     )
@@ -3961,7 +3977,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 **_light_option_fields(
                     self.hass,
                     legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY),
-                    hold_exclusions=self._hold_exclusions(),
+                    hold_exclusions=_picker_exclusions(
+                        self._hold_exclusions(), cfg.get(CONF_HOLD_ENTITIES)
+                    ),
                 ),
             }
         )
@@ -4035,8 +4053,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="light",
-                        exclude_entities=_light_member_cycle_candidates(
-                            self.hass, self._entry
+                        exclude_entities=_picker_exclusions(
+                            _light_member_cycle_candidates(self.hass, self._entry),
+                            cfg.get(CONF_LIGHTS),
                         ),
                         multiple=True,
                     )
