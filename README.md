@@ -270,6 +270,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | `warning_active` | Whether an effect/warn warning sequence is currently running; a restart mid-warning uses it to undo the interrupted warning and restore the pre-warning brightness and color |
 | `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
+| `bright_forced_off` | Whether the light is off because brightness forced it off; only then can going dark resume the on-period |
 | `active_settings` / `active_settings_schedule` / `schedule_end_off_pending` | Virtual Scheduled Light only: which settings profile is live, the schedule it was derived from, and whether an end-boundary off is waiting on an auto-off hold to release (see [Virtual Scheduled Light](#virtual-scheduled-light)) |
 
 #### State machine
@@ -302,7 +303,7 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 4. **Forced offs** — bright in illuminance `control` mode and a **Gate and turn off** window ending both turn the light off even while occupancy or a held-open door is active.
 5. **Occupancy and door opening** — turn the light on only when it's dark (illuminance off) *and* inside a gate-mode window; otherwise lowest priority. An `open_close` door then holds the light like occupancy until it closes.
 
-**Going dark can re-light the room.** Illuminance is mostly a gate, but its `on → off` (bright → dark) edge is also a trigger while the lights are off: if occupancy is active (or an `open_close` door is open), the lights come on and are held; otherwise, if the previous on-period's countdown still has time left, the lights come back on for just that remainder (with an occupancy sensor configured, the remainder is anchored to `latest_occupied_time` as usual; without one, it is the turn-off timeout minus the time since the last manual/physical/occupancy/door turn-on). This covers the "lights forced off by morning brightness, then a dark storm rolls in" case without re-lighting long-empty rooms. Such turn-ons are stamped in `last_on_illuminance`.
+**Going dark can re-light the room.** Illuminance is mostly a gate, but its `on → off` (bright → dark) edge is also a trigger while the lights are off: if occupancy is active (or an `open_close` door is open), the lights come on and are held; otherwise, if brightness forced the lights off and that on-period's countdown still has time left, the lights come back on for just that remainder (with an occupancy sensor configured, the remainder is anchored to `latest_occupied_time` as usual; without one, it is the turn-off timeout minus the time since the last manual/physical/occupancy/door turn-on). This covers the "lights forced off by morning brightness, then a dark storm rolls in" case without re-lighting long-empty rooms. An on-period that ended any other way — a manual off, the timer, a schedule window ending — is never resumed. Such turn-ons are stamped in `last_on_illuminance`.
 
 #### Effect / warn warning
 

@@ -138,8 +138,9 @@ Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
   • Occupancy only turns lights ON when illuminance is OFF (dark) — both modes.
   • Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
-    else if recent occupancy (countdown > 0), enter COUNTDOWN with adjusted
-    timer — both modes.
+    else if brightness forced the lights off and that on-period has time left
+    (countdown > 0), enter COUNTDOWN with adjusted timer. An on-period ended
+    any other way (manual off, timer, schedule) is never resumed.
   • Illuminance OFF→ON (dark→bright):
       control — go IDLE, turn lights off.
       gate    — no effect; bright never turns lights off. Use when the lux
@@ -634,6 +635,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known on/off of the schedule, None until first seen — a
         # recovery matching it crossed no window boundary.
         self._schedule_last_on: bool | None = None
+        # True while the light is off because brightness forced it off: only
+        # such an on-period is resumed when it turns dark again.
+        self._bright_forced_off: bool = False
         # Effective hold: companion switch off OR any keep-on entity on.
         self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
@@ -786,6 +790,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                     with contextlib.suppress(ValueError, TypeError):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
             self._schedule_window_applied = last.attributes.get("schedule_window_start")
+            self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
             for attr, field in (
                 # Fall back to the pre-rename attribute name for restores
                 # from before the physical/virtual split.
@@ -1066,7 +1071,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._held
         ):
             self.hass.async_create_task(self._auto_lights_off())
-            self._go_idle()
+            self._go_idle(bright_forced=True)
             return
 
         if self._occupancy_holds() or self._maintain_active() or self._door_holds():
@@ -1938,12 +1943,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._go_idle()
             return
 
-        if self._hard_gate_schedule_inactive() or (
+        if self._hard_gate_schedule_inactive():
+            self.hass.async_create_task(self._auto_lights_off())
+            self._go_idle()
+            return
+        if (
             self._is_illuminance_bright()
             and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
         ):
             self.hass.async_create_task(self._auto_lights_off())
-            self._go_idle()
+            self._go_idle(bright_forced=True)
             return
 
         # Occupancy adoption is gated exactly like every other adoption path
@@ -1987,7 +1996,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._held
         ):
             self.hass.async_create_task(self._auto_lights_off())
-            self._go_idle()
+            self._go_idle(bright_forced=True)
             return
 
         if self._occupancy_holds() or self._maintain_active() or self._door_holds():
@@ -2399,8 +2408,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         is_bright=True  (illuminance ON  = bright): natural light is sufficient
                         → turn off artificial lights if they were on.
         is_bright=False (illuminance OFF = dark):   need artificial light
-                        → turn on if currently occupied, or if the occupancy
-                          countdown still has time remaining.
+                        → turn on if currently occupied, or resume an
+                          on-period that brightness cut short.
         """
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
@@ -2415,7 +2424,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
             if self._machine_state != STATE_IDLE:
                 self.hass.async_create_task(self._auto_lights_off())
-                self._go_idle()
+                self._go_idle(bright_forced=True)
         else:
             if self._machine_state != STATE_IDLE:
                 # Lights already on: going dark lifts the gate that kept
@@ -2442,7 +2451,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = occ_active
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
-            else:
+            elif self._bright_forced_off:
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
                     self._last_on_illuminance = datetime.now(UTC)
@@ -2534,6 +2543,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
+        self._bright_forced_off = False
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
         # Set before the hold checks: activation-only gate modes only gate turning
@@ -2573,9 +2583,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.hass.async_create_task(self._scheduled_end_lights_off())
         self._go_idle()
 
-    def _go_idle(self) -> None:
+    def _go_idle(self, *, bright_forced: bool = False) -> None:
         """Cancel any timer and move to IDLE."""
         self._cancel_timer()
+        if self._machine_state != STATE_IDLE:
+            # Why the on-period ended; an off while idle ends none.
+            self._bright_forced_off = bright_forced
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
         self._occupancy_lit_lights = False
@@ -2799,6 +2812,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
+        if on:
+            self._bright_forced_off = False
         context = Context()
         self._self_context_ids.append(context.id)
         if on and apply_turn_on_selection and (was_off or force_selection):
@@ -2939,6 +2954,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             "pre_warn_brightness": self._pre_warn_brightness,
             "pre_warn_color": self._pre_warn_color,
             "schedule_window_start": self._schedule_window_applied,
+            "bright_forced_off": self._bright_forced_off,
         }
         if self._is_scheduled_light:
             attributes[ATTR_ACTIVE_SETTINGS] = (
