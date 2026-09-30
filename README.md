@@ -445,6 +445,18 @@ Two things worth knowing:
 
 Deleting a virtual light strips it from every remote's target list, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
 
+## Troubleshooting
+
+MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, or a combined schedule that includes itself. To see why a light did what it did, read these attributes in **Developer tools → States**:
+
+- `molight_state` on the virtual light: its [state-machine](#state-machine) state.
+- `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.
+- `auto_off_held` on the virtual light: whether the Auto-off switch or a keep-on entity is holding automatic turn-offs.
+- `schedule_window_start`, `bright_forced_off` and, on a Virtual Scheduled Light, `active_settings`: the follow-mode window marker, whether brightness forced the light off, and which settings profile is live.
+- `latest_occupied_time`, `last_clear_false_detection` and `last_clear_unavailable` on an occupancy sensor: when the person was last seen, and whether the last clear was a false detection or an unavailable source.
+- `resolved_schedules` on a Virtual Combined Schedule: the plain schedules it was built from.
+- A Virtual Remote's **Last Action** sensor: the last binding it ran, and the button and click that fired it. Its logbook history answers "why did that light turn on?".
+
 ## Development
 
 Local development uses **two independent containers**, each with a distinct job. They are unrelated (no shared network or startup dependency), but both bind port `8123`, so only one can run at a time.
