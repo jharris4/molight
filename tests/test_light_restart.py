@@ -429,7 +429,18 @@ async def test_restart_during_effect_blink_off_seeds_idle(
     pre-warn snapshot must not re-light the room."""
     mock_restore_cache(
         hass,
-        [State(VIRTUAL, "on", {"brightness": 200, "pre_warn_brightness": 200})],
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    "brightness": 200,
+                    "warning_active": True,
+                    "pre_warn_brightness": 200,
+                    "pre_warn_color": {"color_temp_kelvin": 3000},
+                },
+            )
+        ],
     )
     hass.states.async_set(REAL, "off")  # blinked off by the effect stage
     await setup_entries(
@@ -441,7 +452,9 @@ async def test_restart_during_effect_blink_off_seeds_idle(
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["warning_active"] is False
     assert state.attributes["pre_warn_brightness"] is None
+    assert state.attributes["pre_warn_color"] is None
 
 
 @pytest.mark.asyncio
