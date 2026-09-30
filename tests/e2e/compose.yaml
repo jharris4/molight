@@ -1,6 +1,6 @@
 services:
   homeassistant:
-    image: ${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.8.0}
+    image: ${MOLIGHT_E2E_HA_IMAGE:?set by tests/e2e/env.sh}
     restart: unless-stopped
     # Restart scenarios need the state written at shutdown; Docker's default
     # 10 s would kill a slow shutdown before it is saved.

@@ -602,8 +602,9 @@ rebuilding after a time-window input is edited, and input deletion, then restart
 while an input and the member light load late, verifying the window is kept,
 the late member's first state doesn't re-light it, and a new window does.
 
-The default image is pinned to the Home Assistant release used by the current
-test dependencies. Override it to exercise another release:
+The default image is pinned, in `tests/e2e/env.sh`, to the Home Assistant
+release used by the current test dependencies; CI fails if the two drift
+apart. Override it to exercise another release:
 
 ```bash
 MOLIGHT_E2E_HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable npm run test:e2e

@@ -40,7 +40,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Phases that no restart separates share one runner container.
-echo "Starting isolated Home Assistant (${MOLIGHT_E2E_HA_IMAGE:-2026.8.0})..."
+echo "Starting isolated Home Assistant ($MOLIGHT_E2E_HA_IMAGE)..."
 compose up --detach homeassistant
 
 echo "Running live API acceptance scenarios..."

@@ -39,7 +39,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-echo "Starting isolated Home Assistant (${MOLIGHT_E2E_HA_IMAGE:-2026.8.0})..."
+echo "Starting isolated Home Assistant ($MOLIGHT_E2E_HA_IMAGE)..."
 compose up --detach homeassistant
 
 echo "Preparing the browser fixture through Home Assistant's API..."

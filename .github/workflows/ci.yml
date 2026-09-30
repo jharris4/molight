@@ -63,4 +63,13 @@ jobs:
             echo "::error::hacs.json declares $declared but this leg installs $installed; update the pin above or hacs.json"
             exit 1
           fi
+      - name: Check the e2e image is on the same Home Assistant
+        if: matrix.label == 'pinned'
+        run: |
+          e2e=$(sed -n 's/^MOLIGHT_E2E_HA_VERSION=//p' tests/e2e/env.sh)
+          installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
+          if [ "$e2e" != "$installed" ]; then
+            echo "::error::tests/e2e/env.sh pins the e2e image to $e2e but requirements_test.txt installs $installed; update one of them"
+            exit 1
+          fi
       - run: pytest --cov

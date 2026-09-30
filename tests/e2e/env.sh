@@ -4,6 +4,11 @@ MOLIGHT_E2E_PLAYWRIGHT_VERSION="$(sed -n 's/.*"@playwright\/test": *"\([^"]*\)".
 : "${MOLIGHT_E2E_PLAYWRIGHT_VERSION:?could not read @playwright/test from package.json}"
 export MOLIGHT_E2E_PLAYWRIGHT_VERSION
 
+# The Home Assistant release of the e2e image. CI checks it is the one the
+# pinned test dependencies install, so both layers test the same release.
+MOLIGHT_E2E_HA_VERSION=2026.8.2
+export MOLIGHT_E2E_HA_IMAGE="${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:$MOLIGHT_E2E_HA_VERSION}"
+
 # Check every boot's logs. The runner cannot reach the container's output,
 # which unlike home-assistant.log keeps them all, so save it where it can.
 check_ha_logs() {
