@@ -5376,10 +5376,43 @@ async def test_discover_candidates_from_registry(hass: HomeAssistant) -> None:
     )
     # A matching state must not re-offer what the registry already excludes.
     hass.states.async_set(own.entity_id, "off", {"device_class": "occupancy"})
-    # Registered with a non-matching class: hidden.
+    # Another domain: hidden.
     registry.async_get_or_create(
         "sensor", "test", "uid_lux", suggested_object_id="reg_lux"
     )
+    # Registered with a non-matching class, or overridden to one: hidden.
+    registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_door",
+        suggested_object_id="reg_door",
+        original_device_class="door",
+    )
+    demoted = registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_demoted",
+        suggested_object_id="reg_demoted",
+        original_device_class="motion",
+    )
+    registry.async_update_entity(demoted.entity_id, device_class="door")
+    # Already wrapped by a MoLight entry: hidden.
+    wrapped = registry.async_get_or_create(
+        "binary_sensor",
+        "test",
+        "uid_wrapped",
+        suggested_object_id="reg_wrapped",
+        original_device_class="motion",
+    )
+    MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Wrapped",
+            CONF_OCCUPANCY_SENSOR: wrapped.entity_id,
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    ).add_to_hass(hass)
 
     result = await _reach_discovery_select(hass, "discover_occupancy")
     assert result["type"] == FlowResultType.FORM
