@@ -624,7 +624,10 @@ long); `npm run test:e2e` also loads the machine by running all lanes at once.
 A successful run removes its temporary configuration. On failure the runner
 prints a retained directory under the system temporary directory containing
 the isolated HA configuration and Compose logs. That directory contains the
-disposable test account, so remove it after debugging.
+disposable test account, so remove it after debugging. The browser lane
+instead keeps its failure artifacts (Playwright output, HA configuration and
+Compose logs) in `tests/e2e/artifacts/browser` in the repository, and clears
+that directory at the start of each run.
 
 CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
@@ -634,8 +637,8 @@ the nightly run covers both `main` and `develop`. Release tags run every
 suite on the current and minimum-supported images, and write their release
 notes only after all of them pass. Every CI job uploads the retained run
 directory (HA config and Compose logs) as a workflow artifact when it fails;
-locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory that each run creates its
-own run directory in.
+locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory that each API lane run
+creates its own run directory in (the browser lane ignores it).
 
 ## Design notes
 
