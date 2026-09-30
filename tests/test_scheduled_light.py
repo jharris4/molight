@@ -528,7 +528,7 @@ async def test_schedule_end_switch_adopts_active_outside_presence_source(
 
 @pytest.mark.asyncio
 async def test_schedule_end_switch_uses_outside_warning_settings(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer
 ) -> None:
     """An already-due switched deadline enters the incoming warning policy."""
     occupancy = "binary_sensor.outside_occupancy"
@@ -709,7 +709,7 @@ async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
 
 @pytest.mark.asyncio
 async def test_restart_catches_up_missed_schedule_end_switch(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer
 ) -> None:
     """A restored inside side proves an offline switch-state boundary occurred."""
     occupancy = "binary_sensor.outside_occupancy"

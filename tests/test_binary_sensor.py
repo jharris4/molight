@@ -90,7 +90,7 @@ async def test_occupancy_mirrors_source_on(
 
 @pytest.mark.asyncio
 async def test_occupancy_clear_records_latest_occupied_time(
-    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
     """Clearing mirrors the source immediately and back-dates latest_occupied_time.
 
@@ -112,9 +112,8 @@ async def test_occupancy_clear_records_latest_occupied_time(
     state = hass.states.get("binary_sensor.test_occupancy")
     assert state.state == "off"
 
-    lot = datetime.fromisoformat(state.attributes["latest_occupied_time"])
     expected = datetime.now(UTC) - timedelta(seconds=30)
-    assert abs((lot - expected).total_seconds()) < 2
+    assert state.attributes["latest_occupied_time"] == expected.isoformat()
     assert state.attributes["occupancy_timeout"] == 30
 
 
@@ -1003,7 +1002,7 @@ async def test_combined_midrun_reload_does_not_seed_from_maintain(
 
 @pytest.mark.asyncio
 async def test_combined_clears_when_last_constituent_drops_out(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer
 ) -> None:
     """A constituent going unavailable must not hold the combined sensor on."""
     entry = _raw_combined_entry()
@@ -1023,8 +1022,7 @@ async def test_combined_clears_when_last_constituent_drops_out(
     assert combined.attributes["false_detection_count"] == 0
     # The person is assumed present up to the dropout: the lot advances so
     # dependent lights run their normal countdown instead of snapping off.
-    lot = datetime.fromisoformat(combined.attributes["latest_occupied_time"])
-    assert (datetime.now(UTC) - lot).total_seconds() < 5
+    assert combined.attributes["latest_occupied_time"] == datetime.now(UTC).isoformat()
 
 
 @pytest.mark.asyncio
@@ -1277,7 +1275,7 @@ async def test_combined_unloaded_idle_constituent_gets_no_grace(
 
 @pytest.mark.asyncio
 async def test_combined_clears_at_once_when_holding_constituent_is_removed(
-    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
     """Removing the constituent's entry is a dropout, not a reload to wait for.
 
@@ -1303,8 +1301,7 @@ async def test_combined_clears_at_once_when_holding_constituent_is_removed(
     after = hass.states.get("binary_sensor.combined_occupancy")
     assert after.state == "off"
     assert after.attributes["last_clear_false_detection"] is False
-    lot = datetime.fromisoformat(after.attributes["latest_occupied_time"])
-    assert lot >= dropout
+    assert after.attributes["latest_occupied_time"] == dropout.isoformat()
     assert molight_config(combined)[CONF_TRIGGER_SENSORS] == []
 
 
@@ -1330,7 +1327,7 @@ async def test_combined_unload_during_reload_grace_drops_the_timer(
 
 @pytest.mark.asyncio
 async def test_combined_keeps_newest_lot_over_older_clear(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer
 ) -> None:
     """A constituent clearing with an older latest_occupied_time must not
     regress the combined sensor's own, and a cycle that advanced nothing is
@@ -1387,7 +1384,7 @@ async def test_combined_retriggers_on_constituent_recovery(
 
 @pytest.mark.asyncio
 async def test_occupancy_discards_last_on_time_restored_with_off(
-    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
     """An anchor restored alongside 'off' belongs to a finished cycle.
 
