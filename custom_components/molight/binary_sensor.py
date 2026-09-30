@@ -256,13 +256,18 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     def _seed_state(self, *, restored_on: bool) -> None:
         state = self.hass.states.get(self._source_sensor)
         if (
-            state
-            and restored_on
-            and state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            restored_on
+            and (state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN))
             and self.hass.state is CoreState.running
         ):
             # Not at startup, where the source may just not have loaded yet.
-            self._resume_dropout(state.last_changed)
+            # A source with no state at all was removed; that dropout
+            # advanced latest_occupied_time to the moment it happened.
+            self._resume_dropout(
+                state.last_changed
+                if state is not None
+                else self._latest_occupied_time or datetime.now(UTC)
+            )
         elif state:
             self._attr_is_on = state.state == "on"
             if (

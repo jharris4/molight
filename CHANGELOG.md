@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Editing a Virtual Occupancy Sensor's options while its source is
-  unavailable no longer clears occupancy at once. It stays occupied until
-  the *clear after unavailable* timeout runs out, counted from the dropout.
-  Previously a light whose timeout was shorter than that could turn off
-  early.
+  unavailable, or has been removed, no longer clears occupancy at once. It
+  stays occupied until the *clear after unavailable* timeout runs out,
+  counted from the dropout. Previously a light whose timeout was shorter
+  than that could turn off early.
 - Changing a Virtual Light's turn-on selection entity in its options no
   longer fills the selection page with the previous entity's fallback and
   source. Previously, if the new entity was unavailable, the old fallback
