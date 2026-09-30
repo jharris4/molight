@@ -890,6 +890,26 @@ def _validate_light_timeout(
     return {}
 
 
+def _stale_light_timeout(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> tuple[str | None, dict[str, str]]:
+    """Recheck a light payload's timeouts against the sensors as saved now.
+
+    A sensor's timeout can be raised while a later page of the light's form
+    is open, since the unsaved light is not yet its dependent. Returns the
+    failing scheduled-light side (None for a regular light) and the errors.
+    """
+    entity_type = data.get(CONF_ENTITY_TYPE)
+    if entity_type == ENTITY_TYPE_SCHEDULED_LIGHT:
+        for side in _SCHEDULED_LIGHT_SIDES:
+            if errors := _validate_light_timeout(hass, data.get(side) or {}):
+                return side, errors
+        return None, {}
+    if entity_type == ENTITY_TYPE_LIGHT:
+        return None, _validate_light_timeout(hass, data)
+    return None, {}
+
+
 def _validate_turn_on_selection(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
@@ -1798,7 +1818,13 @@ class _ScheduledLightSettingsSteps:
                 _validate_turn_on_selection(self.hass, flat)
                 self._scheduled_light_settings[side] = _clean_optional_values(flat)
                 return await self._scheduled_light_next(side)
+        return self._show_scheduled_light_side_form(side, user_input, errors)
 
+    def _show_scheduled_light_side_form(
+        self, side: str, user_input: dict[str, Any] | None, errors: dict[str, str]
+    ) -> config_entries.FlowResult:
+        """Render one side's settings form: the input, else its settings so far."""
+        previous = self._scheduled_light_previous(side)
         return self.async_show_form(
             step_id=_SCHEDULED_LIGHT_STEP_IDS[side],
             data_schema=self.add_suggested_values_to_schema(
@@ -2022,6 +2048,12 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Create with the name-derived id (Home Assistant appends _2)."""
         pending = self._pending
+        side, errors = _stale_light_timeout(self.hass, pending["data"])
+        if errors:
+            # A sensor's timeout was raised while the menu was open.
+            if side is not None:
+                return self._show_scheduled_light_side_form(side, None, errors)
+            return self._show_light_form(pending["user_input"], errors)
         return self.async_create_entry(title=pending["name"], data=pending["data"])
 
     async def async_step_entity_id_change(
@@ -2425,13 +2457,22 @@ class MoLightConfigFlow(
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
                 return await self._finish_discovery(_light_payload, flat)
+        return self._show_discover_light_defaults(user_input, errors, placeholders)
+
+    def _show_discover_light_defaults(
+        self,
+        values: dict[str, Any] | None,
+        errors: dict[str, str],
+        placeholders: dict[str, str] | None = None,
+    ) -> config_entries.FlowResult:
+        """Render the discovered lights' shared settings form."""
         return self.async_show_form(
             step_id="discover_light_defaults",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_light_option_fields(self.hass)), user_input or {}
+                vol.Schema(_light_option_fields(self.hass)), values or {}
             ),
             errors=errors,
-            description_placeholders=placeholders,
+            description_placeholders=placeholders or {},
         )
 
     async def async_step_import(
@@ -3352,6 +3393,11 @@ class MoLightConfigFlow(
         if user_input is not None:
             flat.update(user_input)
             errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors and (errors := _validate_light_timeout(self.hass, flat)):
+                # A sensor's timeout was raised while this page was open.
+                if pending["kind"] == "discovery":
+                    return self._show_discover_light_defaults(_nest_light(flat), errors)
+                return self._show_light_form(pending["prefill"], errors)
             if not errors:
                 self._light_selection_values = {
                     key: flat[key]
@@ -3465,6 +3511,10 @@ class MoLightConfigFlow(
             **shared,
             **self._scheduled_light_settings,
         }
+        side, errors = _stale_light_timeout(self.hass, data)
+        if errors:
+            # A sensor's timeout was raised while a later page was open.
+            return self._show_scheduled_light_side_form(side, None, errors)
         result, errors = await self._resolve_and_create(
             entity_type=ENTITY_TYPE_SCHEDULED_LIGHT,
             name=shared[CONF_NAME],
@@ -3959,7 +4009,12 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 # missing from entry.options rather than stored as None.
                 clean = {k: v for k, v in flat.items() if v is not None}
                 return self._finish(clean)
+        return self._show_light_form(user_input, errors)
 
+    def _show_light_form(
+        self, values: dict[str, Any] | None, errors: dict[str, str]
+    ) -> config_entries.FlowResult:
+        """Render the light's options form: the input, else the stored values."""
         cfg = self._cfg
         # Current values are applied as suggested values (not defaults) so the
         # optional fields (sensor references, brightness/fade overrides) can
@@ -3991,7 +4046,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         return self.async_show_form(
             step_id="light",
             data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or _nest_light(cfg)
+                schema, values or _nest_light(cfg)
             ),
             errors=errors,
         )
@@ -4006,6 +4061,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if user_input is not None:
             flat.update(user_input)
             errors = _validate_turn_on_selection(self.hass, flat)
+            if not errors and (errors := _validate_light_timeout(self.hass, flat)):
+                # A sensor's timeout was raised while this page was open.
+                return self._show_light_form(_nest_light(flat), errors)
             if not errors:
                 clean = {k: v for k, v in flat.items() if v is not None}
                 return self._finish(clean)
@@ -4095,9 +4153,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
 
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
         """Store both settings mappings as one complete options payload."""
-        return self._finish(
-            {**self._scheduled_light_shared, **self._scheduled_light_settings}
+        data = {**self._scheduled_light_shared, **self._scheduled_light_settings}
+        side, errors = _stale_light_timeout(
+            self.hass, {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT, **data}
         )
+        if errors:
+            # A sensor's timeout was raised while a later page was open.
+            return self._show_scheduled_light_side_form(side, None, errors)
+        return self._finish(data)
 
     # ------------------------------------------------------------------
     # Virtual Remote

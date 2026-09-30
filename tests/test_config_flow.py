@@ -7288,3 +7288,253 @@ async def test_combined_schedule_options_validate_inputs(
         {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_occupancy"]},
     )
     assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+
+
+async def _raise_occupancy_timeout(
+    hass: HomeAssistant, entry: MockConfigEntry, seconds: int
+) -> None:
+    """Edit the occupancy fixture's timeout; no saved light depends on it yet."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: seconds,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+
+_TOO_SHORT = {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+
+
+@pytest.mark.asyncio
+async def test_light_selection_page_rejects_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A sensor timeout raised behind the create flow's selection page sends
+    the user back to the light form with the timeout error."""
+    await setup_entries(hass, occupancy_entry)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    form = {
+        **EMPTY_LIGHT_CREATE_SECTIONS,
+        CONF_NAME: "Hall",
+        CONF_LIGHTS: ["light.hall_real"],
+        CONF_LIGHT_TIMEOUT: 60,
+        SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+    }
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], form)
+    assert result["step_id"] == "light_selection"
+
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light"
+    assert result["errors"] == _TOO_SHORT
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**form, CONF_LIGHT_TIMEOUT: 120}
+    )
+    assert result["step_id"] == "light_selection"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_LIGHT_TIMEOUT] == 120
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_inside_page_rejects_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A sensor timeout raised while the inside form is open sends the user
+    back to the outside form that references the sensor."""
+    await _setup_night_schedule(hass)
+    await setup_entries(hass, occupancy_entry)
+    outside = {
+        **EMPTY_LIGHT_SECTIONS,
+        CONF_LIGHT_TIMEOUT: 60,
+        SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+    }
+    inside = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], outside)
+    assert result["step_id"] == "scheduled_light_inside"
+
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], inside)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "scheduled_light_outside"
+    assert result["errors"] == _TOO_SHORT
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**outside, CONF_LIGHT_TIMEOUT: 120}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], inside)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 120
+
+
+@pytest.mark.asyncio
+async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A sensor timeout raised while the entity-id collision menu is open
+    sends the user back to the light form."""
+    await setup_entries(hass, occupancy_entry)
+    hass.states.async_set("light.hall", "off")  # the name-derived id collides
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        },
+    )
+    assert result["type"] == FlowResultType.MENU
+    assert result["step_id"] == "confirm_entity_id"
+
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_proceed"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light"
+    assert result["errors"] == _TOO_SHORT
+
+
+@pytest.mark.asyncio
+async def test_discovery_selection_page_rejects_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A sensor timeout raised behind the discovery selection page sends the
+    user back to the shared defaults form."""
+    await setup_entries(hass, occupancy_entry)
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+    hass.states.async_set("select.desk_preset", "Relax", {"options": ["Relax"]})
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.desk_preset"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Relax"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_light_defaults"
+    assert result["errors"] == _TOO_SHORT
+    assert not [
+        entry
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(entry).get(CONF_LIGHTS) == ["light.desk"]
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, scheduled: bool
+) -> None:
+    """A light newly referencing a sensor is not yet its dependent, so the
+    sensor's timeout can be raised behind the light's last page: the save is
+    refused with the timeout error on the referencing form."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    await setup_entries(hass, occupancy_entry, hall)
+    referencing = {
+        **EMPTY_LIGHT_SECTIONS,
+        CONF_LIGHT_TIMEOUT: 60,
+        SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+    }
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.hall_real"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], referencing
+        )
+        assert result["step_id"] == "scheduled_light_inside"
+    else:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                **referencing,
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.hall_real"],
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            },
+        )
+        assert result["step_id"] == "light_selection"
+
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        if scheduled
+        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "scheduled_light_outside" if scheduled else "light"
+    assert result["errors"] == _TOO_SHORT
+    settings = molight_config(hall)
+    if scheduled:
+        settings = settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_OCCUPANCY_ENTITY not in settings

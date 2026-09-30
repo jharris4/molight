@@ -185,6 +185,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   because its own range is narrower than the Virtual Light's, is no longer
   read as a recolor. Previously such a reply cancelled the warning sequence
   and restarted the turn-off timeout.
+- A Virtual Light's turn-off timeout is checked against its occupancy and
+  maintain occupancy sensors again when the last page of a multi-page form
+  is saved, or the entity ID menu is confirmed. Previously a sensor's
+  timeout raised while a later page was open, allowed because the unsaved
+  light did not yet depend on it, let the light save a shorter timeout than
+  the sensor's. The same holds for both profiles of a Virtual Scheduled
+  Light and for discovered lights.
 
 ## [1.7.0] - 2026-08-27
 
