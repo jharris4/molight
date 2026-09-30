@@ -93,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Editing the options of a light whose **Auto-off** switch is off no longer
   applies a turn-off that was waiting for the switch: a follow window that
   ended, or a scheduled light's *Turn off* at schedule end. Previously the
-  reload turned the light off.
+  reload turned the light off. Disabling the switch while it is off releases
+  the hold, as a restart does, since a disabled switch cannot be turned on.
 - A schedule that is `unavailable` when Home Assistant restarts, or when its
   options are edited, keeps its window marker. Previously a source-backed
   schedule started a new window when its source returned, and a combined

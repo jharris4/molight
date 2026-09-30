@@ -72,11 +72,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a MoLight virtual entity from a config entry."""
     platforms = PLATFORMS_BY_ENTITY_TYPE.get(entry.data[CONF_ENTITY_TYPE], PLATFORMS)
     # Seeded before the platforms load so the light can always read the
-    # auto-off flag; the companion switch overwrites it when it restores.
+    # auto-off flag; the companion switch overwrites it when it restores. A
+    # switch disabled in the registry is not added and could never release
+    # the hold, so its kept state is dropped, as a restart would drop it.
+    auto_off_kept = hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, True)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_AUTO_OFF_ENABLED: hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(
-            entry.entry_id, True
-        ),
+        DATA_AUTO_OFF_ENABLED: auto_off_kept or _auto_off_switch_disabled(hass, entry),
         DATA_PLATFORMS: platforms,
     }
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE:
@@ -89,6 +90,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Reload the entry whenever options are updated so entities pick up new values.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
+
+
+def _auto_off_switch_disabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Return True when the entry's Auto-off switch is disabled in the registry."""
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "switch", DOMAIN, f"{entry.entry_id}_auto_off"
+    )
+    reg_entry = registry.async_get(entity_id) if entity_id else None
+    return reg_entry is not None and reg_entry.disabled
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
