@@ -30,6 +30,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
 )
+from custom_components.molight.helpers import molight_config
 from tests.conftest import settle
 
 
@@ -1193,6 +1194,39 @@ async def test_combined_unloaded_idle_constituent_gets_no_grace(
     hass.states.async_set("binary_sensor.m1", "off")
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_clears_at_once_when_holding_constituent_is_removed(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Removing the constituent's entry is a dropout, not a reload to wait for.
+
+    The removal also strips the constituent from the combined entry, which
+    reloads it before any grace could end, so the clear must land first.
+    """
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    hass.states.async_set("binary_sensor.motion_2", "off")
+    combined = _combined_entry()
+    for entry in (occupancy_entry, _occupancy2_entry(), combined):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    before = hass.states.get("binary_sensor.combined_occupancy")
+    assert before.state == "on"
+
+    dropout = datetime.now(UTC)
+    await hass.config_entries.async_remove(occupancy_entry.entry_id)
+    await settle(hass)
+
+    after = hass.states.get("binary_sensor.combined_occupancy")
+    assert after.state == "off"
+    assert after.attributes["last_clear_false_detection"] is False
+    lot = datetime.fromisoformat(after.attributes["latest_occupied_time"])
+    assert lot >= dropout
+    assert molight_config(combined)[CONF_TRIGGER_SENSORS] == []
 
 
 @pytest.mark.asyncio

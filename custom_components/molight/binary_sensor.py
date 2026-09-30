@@ -571,8 +571,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         """Keep counting a constituent as on while its entry reloads.
 
         An unloaded entry leaves HA's restored placeholder, and a reload
-        brings the entity back moments later. A real outage or a removal
-        gets no grace, and an entry that stays unloaded only a short one.
+        brings the entity back moments later. A real outage gets no grace,
+        an entry that stays unloaded only a short one, and a removed entry's
+        placeholder is dropped by async_remove_entry before it can matter.
         """
         entity_id = event.data["entity_id"]
         old_state = event.data.get("old_state")

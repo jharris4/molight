@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from homeassistant.const import ATTR_RESTORED
 from homeassistant.helpers import entity_registry as er
 
 from .const import (
@@ -124,6 +125,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
     if not removed:
         return
+    # The unload left restored placeholders that read as a reload in
+    # progress; drop them now, as HA's registry cleanup would after the
+    # reloads below, so the watchers see the removal for what it is.
+    for entity_id in removed:
+        state = hass.states.get(entity_id)
+        if state is not None and state.attributes.get(ATTR_RESTORED):
+            hass.states.async_remove(entity_id)
     # Some HA versions dispatch tracked state changes one loop iteration
     # later; yield once so the removed entities' dropout reaches the entries
     # that watched them before the reloads below unsubscribe those listeners.
