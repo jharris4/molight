@@ -141,6 +141,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   countdown was taken from the sensor's `latest_occupied_time`, which a
   false detection does not advance, so a light turned on after an earlier
   visit could turn off the moment the sensor cleared.
+- A Virtual Scheduled Light whose schedule ends while an automatic turn-on
+  is still waiting for a slow turn-on selection now treats that turn-on as
+  an on light: *Turn off* drops it, and *Keep state* or *Switch state* run
+  the outside profile's timeout once it is sent. Previously the turn-on was
+  sent after the boundary, and the light stayed on with no timer.
 
 ## [1.7.0] - 2026-08-27
 

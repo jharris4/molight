@@ -1016,11 +1016,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._occupancy_last_on = self._live_occupancy_on()
         old_held = self._held
         self._held = self._compute_held()
+        # A turn-on still waiting for its selection is judged as on: the off
+        # below overtakes it, and the new profile's rules take it over.
+        lit = self._attr_is_on or self._machine_state != STATE_IDLE
 
         if (
             leaving_inside
             and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
-            and self._attr_is_on
+            and lit
         ):
             # An already-off light has nothing to turn off: it takes the
             # normal off-light path below so the outside profile's active
@@ -1048,7 +1051,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._switch_running_state()
             return
 
-        if not self._attr_is_on:
+        if not lit:
             if self._is_illuminance_bright():
                 self.async_write_ha_state()
                 return

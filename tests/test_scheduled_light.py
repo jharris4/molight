@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -56,6 +57,7 @@ from custom_components.molight.const import (
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_EFFECT,
+    STATE_IDLE,
     STATE_OCCUPIED,
     STATE_WARN,
 )
@@ -66,6 +68,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.test_light_selection import _SlowSelect
 
 REAL = "light.real_1"
 SCHEDULE = "binary_sensor.settings_schedule"
@@ -1460,6 +1463,58 @@ async def test_each_schedule_side_applies_its_turn_on_selection(
     await settle(hass)
 
     assert selected == ["Day", "Night"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "end_action",
+    [
+        SCHEDULE_END_ACTION_TURN_OFF,
+        SCHEDULE_END_ACTION_SWITCH,
+        SCHEDULE_END_ACTION_KEEP,
+    ],
+)
+async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
+    hass: HomeAssistant, freezer, end_action: str
+) -> None:
+    """A turn-on the inside profile has not sent yet is judged as an on light."""
+    select = _SlowSelect(hass)
+    inside_occupancy = "binary_sensor.inside_occupancy"
+    hass.states.async_set("select.light_mode", "Night", {"options": ["Night"]})
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(inside_occupancy, "off")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=end_action,
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={
+            CONF_LIGHT_TIMEOUT: 600,
+            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECT_OPTION: "Night",
+        },
+    )
+    await setup_entries(hass, entry)
+
+    hass.states.async_set(inside_occupancy, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    hass.states.async_set(SCHEDULE, "off")
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    if end_action == SCHEDULE_END_ACTION_TURN_OFF:
+        assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
+        return
+    # The outside profile has no presence sensor, so its own timeout runs.
+    assert (state.state, state.attributes["molight_state"]) == ("on", STATE_COUNTDOWN)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
 
 
 @pytest.mark.asyncio
