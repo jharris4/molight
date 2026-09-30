@@ -251,11 +251,19 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             )
         )
         self.async_on_remove(self._cancel_unavailable_timer)
-        self._seed_state()
+        self._seed_state(restored_on=last is not None and last.state == "on")
 
-    def _seed_state(self) -> None:
+    def _seed_state(self, *, restored_on: bool) -> None:
         state = self.hass.states.get(self._source_sensor)
-        if state:
+        if (
+            state
+            and restored_on
+            and state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+            and self.hass.state is CoreState.running
+        ):
+            # Not at startup, where the source may just not have loaded yet.
+            self._resume_dropout(state.last_changed)
+        elif state:
             self._attr_is_on = state.state == "on"
             if (
                 self._attr_is_on
@@ -321,6 +329,23 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
                     self._latest_occupied_time = candidate
             self._attr_is_on = False
         self.async_write_ha_state()
+
+    def _resume_dropout(self, dropout: datetime) -> None:
+        """Carry an occupied dropout across a reload, keeping its clear deadline."""
+        self._attr_is_on = True
+        if self._unavailable_timeout <= 0:
+            return
+        if self._latest_occupied_time is None or dropout > self._latest_occupied_time:
+            self._latest_occupied_time = dropout
+        elapsed = (datetime.now(UTC) - dropout).total_seconds()
+        if elapsed >= self._unavailable_timeout:
+            self._attr_is_on = False
+            self._last_clear_false = False
+            self._last_clear_unavailable = True
+            return
+        self._unavailable_unsub = async_call_later(
+            self.hass, self._unavailable_timeout - elapsed, self._unavailable_expired
+        )
 
     @callback
     def _on_source_unavailable(self) -> None:
