@@ -80,7 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (as a Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor does
   when its options are edited) no longer counts as someone entering the
   room. Previously a light turned off manually in an occupied room was
-  turned back on.
+  turned back on. A gate that lifted during the outage (the room going
+  dark, a gate window starting, or a scheduled light changing profile) read
+  the sensor as clear, so it is applied when the sensor returns.
 - Editing the options of a sensor that is part of a Virtual Combined
   Occupancy Sensor no longer clears the combined sensor while that sensor is
   the one holding the room occupied. Previously the reload ended occupancy,

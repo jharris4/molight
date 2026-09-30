@@ -1419,6 +1419,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             ):
                 # Lights turned on during the outage could not be adopted.
                 self._adopt_active_occupancy()
+            elif (
+                occupied
+                and self._machine_state == STATE_IDLE
+                and old_state is not None
+                and self._gate_lifted_since(old_state.last_changed)
+            ):
+                # A gate that lifted during the outage read the sensor as
+                # clear, so nothing lit the room: apply that start now.
+                self._on_occupancy_change(True)
         if entity_id == self._maintain_entity:
             self._on_maintain_change(new_state.state == "on")
         if entity_id == self._illuminance_entity:
@@ -2322,6 +2331,31 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._is_illuminance_bright()
             and not self._gate_schedule_inactive()
         )
+
+    def _gate_lifted_since(self, since: datetime) -> bool:
+        """Return True when a turn-on gate opened at or after `since`.
+
+        Illuminance going dark, a gate-mode window starting, or a scheduled
+        light switching profiles each re-read occupancy live, and an
+        unreadable sensor counted as clear then.
+        """
+        checks = [(self._illuminance_entity, ("off",))]
+        if self._schedule_mode in (
+            SCHEDULE_MODE_GATE,
+            SCHEDULE_MODE_GATE_SWITCH,
+            SCHEDULE_MODE_GATE_KEEP,
+        ):
+            checks.append((self._schedule_entity, ("on",)))
+        checks.append((self._settings_schedule_entity, ("on", "off")))
+        for entity_id, lifted_states in checks:
+            state = self.hass.states.get(entity_id) if entity_id else None
+            if (
+                state is not None
+                and state.state in lifted_states
+                and state.last_changed >= since
+            ):
+                return True
+        return False
 
     def _adopt_active_occupancy(self) -> None:
         """Move an on light to OCCUPIED when a gate lifts mid-on-period.

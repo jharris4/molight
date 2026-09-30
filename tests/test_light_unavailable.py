@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_ILLUMINANCE_ENTITY,
     CONF_LIGHT_TIMEOUT,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
@@ -386,6 +387,130 @@ async def test_occupancy_recovery_adopts_light_turned_on_during_outage(
 
 
 @pytest.mark.asyncio
+async def test_occupancy_recovery_applies_dark_that_fell_during_outage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Illuminance going dark during the outage read the sensor as clear; the
+    recovery to still-occupied applies that start instead of passing as a replay."""
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+async def test_occupancy_recovery_applies_a_window_started_during_outage(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """A gate window starting during the outage read the sensor as clear."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=mode)
+    )
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_occupancy_recovery_applies_a_profile_switch_during_outage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A scheduled light switching to a profile without the bright gate while
+    occupancy is unavailable lights the room once the sensor is back."""
+    hass.states.async_set("binary_sensor.settings_schedule", "off")
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            outside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_OCCUPANCY_ENTITY: OCC,
+                CONF_ILLUMINANCE_ENTITY: ILLUM,
+            },
+            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
+        ),
+    )
+    await settle(hass)
+    assert hass.states.get("light.scheduled_light").state == "off"
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    await settle(hass)
+    assert hass.states.get("light.scheduled_light").state == "off"
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    state = hass.states.get("light.scheduled_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_occupancy_blip_after_a_gate_lifted_earlier_keeps_manual_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A gate that lifted before the outage is not applied on recovery."""
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_occupancy_blip_keeps_occupied_light_untouched(
     hass: HomeAssistant,
 ) -> None:
@@ -573,7 +698,10 @@ async def test_combined_occupancy_constituent_reload_changes_nothing(
 async def test_occupancy_outage_across_a_settings_switch(
     hass: HomeAssistant, same_sensor: bool
 ) -> None:
-    """A scheduled light keeps the last known value of a sensor both sides use."""
+    """A profile switch re-evaluates standing occupancy, so a sensor unreadable
+    at the switch lights the room on its return: a shared sensor's return is a
+    replay that applies the switch it missed, and the other side's sensor is
+    seen for the first time."""
     settings_schedule = "binary_sensor.settings_schedule"
     scheduled = "light.scheduled_light"
     other = "binary_sensor.other_occ"
@@ -607,11 +735,9 @@ async def test_occupancy_outage_across_a_settings_switch(
     await settle(hass)
     assert hass.states.get(scheduled).state == "off"
 
-    # The shared sensor's return is a replay; the other side's sensor was
-    # never seen by this light, so its first report is a real occupancy.
     hass.states.async_set(OCC if same_sensor else other, "on")
     await settle(hass)
-    assert hass.states.get(scheduled).state == ("off" if same_sensor else "on")
+    assert hass.states.get(scheduled).state == "on"
 
 
 @pytest.mark.asyncio
