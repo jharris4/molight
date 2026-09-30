@@ -27,6 +27,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 from custom_components.molight.const import (
     DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -728,3 +729,50 @@ async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
     hass.states.async_set(DOOR, "on")
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("gate", ["bright", "schedule"])
+async def test_open_close_close_ignores_gated_occupancy(
+    hass: HomeAssistant, freezer, gate: str
+) -> None:
+    """Occupancy that a gate keeps from holding the light cannot hold it
+    after the door closes: the countdown starts."""
+    if gate == "bright":
+        entry = make_light_entry(
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            occupancy=OCC,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            timeout=10,
+        )
+        hass.states.async_set(ILLUM, "on")  # bright
+    else:
+        entry = make_light_entry(
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            occupancy=OCC,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+            timeout=10,
+        )
+        hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(DOOR, "on")  # standing open
+    await setup_entries(hass, entry)
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE

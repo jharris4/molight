@@ -2324,7 +2324,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._machine_state != STATE_OCCUPIED:
                 return
-            if self._occupancy_active() or self._door_holds():
+            if self._occupancy_holds() or self._door_holds():
                 return  # regular occupancy / open door still holds the light on
             self._machine_state = STATE_COUNTDOWN
             if (
@@ -2506,7 +2506,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return  # open mode: closing is ignored
             if self._machine_state == STATE_IDLE:
                 return
-            if self._occupancy_active() or self._maintain_active():
+            if self._occupancy_holds() or self._maintain_active():
                 return  # presence still holds the lights on
             if self._in_warning():
                 return  # already winding down toward off; let it finish

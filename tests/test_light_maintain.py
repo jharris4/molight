@@ -16,6 +16,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_COUNTDOWN,
@@ -542,5 +543,48 @@ async def test_maintain_only_false_clear_gets_normal_countdown(
     await _tick(hass, freezer, 10)
     assert _state(hass).state == "on"
     await _tick(hass, freezer, 51)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("gate", ["bright", "schedule"])
+async def test_maintain_clear_ignores_gated_occupancy(
+    hass: HomeAssistant, freezer, gate: str
+) -> None:
+    """Occupancy that a gate keeps from holding the light cannot hold it
+    after the maintain entity clears: the countdown starts."""
+    if gate == "bright":
+        entry = make_light_entry(
+            occupancy=OCC,
+            maintain=MAINT,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            timeout=10,
+        )
+        hass.states.async_set(ILLUM, "on")  # bright
+    else:
+        entry = make_light_entry(
+            occupancy=OCC,
+            maintain=MAINT,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+            timeout=10,
+        )
+        hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(MAINT, "on")
+    await setup_entries(hass, entry)
+
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(MAINT, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _tick(hass, freezer, 11)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE

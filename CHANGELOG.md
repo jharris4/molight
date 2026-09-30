@@ -176,6 +176,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolves. Previously the end was moved forward by one day only, which
   could still leave it before the start, so the window was dropped and the
   schedule never turned on.
+- When a maintain occupancy sensor clears, or an `open_close` door closes,
+  occupancy that brightness or a gate-mode window keeps from holding the
+  light no longer holds it: the countdown starts. Previously the light
+  stayed on with no timer until that occupancy sensor next changed.
 
 ## [1.7.0] - 2026-08-27
 
