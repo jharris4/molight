@@ -52,7 +52,8 @@ Effect/warn warning
   dim brings its own brightness, which is honoured instead of the snapshot.
   Bright-forces-off (control mode) and a hard-gate/follow window ending still turn
   the lights off during the sequence, as they would mid-countdown.
-  Each stage can also show an optional color (effect_rgb_color /
+  Each stage can also show an optional color, either a color temperature
+  (effect_color_temp / warn_color_temp) or an RGB color (effect_rgb_color /
   warn_rgb_color, e.g. a red warn stage as an unmissable cue); color-capable
   members show it, brightness-only members just show the stage brightness. A
   warn stage without a color of its own undoes an effect-stage recolor, and
