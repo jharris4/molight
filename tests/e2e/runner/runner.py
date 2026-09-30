@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
@@ -195,10 +196,15 @@ class ApiError(RuntimeError):
         self.status = status
 
 
+# What a request can raise: an HTTP error status, or a connection refused,
+# dropped or timed out while Home Assistant restarts.
+REQUEST_ERRORS = (ApiError, OSError, HTTPException)
+
+
 def poll_tolerates(err: Exception, *, missing_ok: bool) -> bool:
     """Whether a polling loop should ride out this request error."""
     if not isinstance(err, ApiError):
-        return True  # connection refused or timed out while HA restarts
+        return True  # connection refused, dropped or timed out while HA restarts
     if err.status is not None and err.status >= 500:
         return True
     return missing_ok and err.status == 404
@@ -254,7 +260,7 @@ class HomeAssistantClient:
             try:
                 self.request("GET", "/api/onboarding")
                 return
-            except (ApiError, error.URLError, TimeoutError) as err:
+            except REQUEST_ERRORS as err:
                 last_error = err
                 time.sleep(0.5)
         raise TimeoutError(f"Home Assistant did not become ready: {last_error}")
@@ -265,7 +271,7 @@ class HomeAssistantClient:
             payload = self.request("GET", "/api/onboarding")
         except ApiError as err:
             return str(err)[:300]
-        except (error.URLError, TimeoutError):
+        except (OSError, HTTPException):
             return None
         return f"200 {payload!r}"[:300]
 
@@ -373,7 +379,7 @@ class HomeAssistantClient:
                 last = self.state(entity_id)
                 if predicate(last):
                     return last
-            except (ApiError, error.URLError, TimeoutError) as err:
+            except REQUEST_ERRORS as err:
                 if not poll_tolerates(err, missing_ok=True):
                     raise
                 last_error = err
@@ -3365,7 +3371,7 @@ def assert_state_stays(
     while time.monotonic() < deadline:
         try:
             last = client.state(entity_id)
-        except (ApiError, error.URLError, TimeoutError) as err:
+        except REQUEST_ERRORS as err:
             if not poll_tolerates(err, missing_ok=False):
                 raise
             time.sleep(0.2)
