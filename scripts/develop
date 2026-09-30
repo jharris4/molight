@@ -8,7 +8,9 @@ PYTHON="$VENV/bin/python"
 bash scripts/ensure-venv
 
 # Kill any existing HA instance before starting
-pkill -f "python.*-m homeassistant" 2>/dev/null && sleep 1 || true
+if pkill -f "python.*-m homeassistant" 2>/dev/null; then
+    sleep 1
+fi
 
 # Init config dir if needed
 mkdir -p config
