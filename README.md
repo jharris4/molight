@@ -233,13 +233,13 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | **Fixed/fallback option** *(required when a target is selected)* | The option to apply when no source is configured, or when the source is missing, unavailable, unknown, or does not match an option offered by the target. It can represent a preset, theme, mood, mode, or any integration-specific choice |
 | **Auto-on fade (s)** *(optional)* | Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons never get one. Range 0 to 300, in 0.1 s steps |
 | **Auto-off fade (s)** *(optional)* | Fade time for automatic turn-offs (timer expiry, bright forcing off, a window ending). A manual off is always immediate. Range 0 to 300, in 0.1 s steps |
-| **Effect warning duration (s)** | `0` disables, range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
-| **Effect brightness (%)** | Brightness during the effect stage, range 0 to 100. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
+| **Effect warning duration (s)** | Default `0` (disabled), range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
+| **Effect brightness (%)** | Brightness during the effect stage. Default `0`, range 0 to 100. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
 | **Effect color mode** *(optional)* | Like the auto-on color mode: picks the effect color temperature, the effect color, or **None** (which also clears a previously set effect color) |
 | **Effect color temperature (K)** *(optional)* | White color temperature during the effect stage, for members that support it, giving temp-only bulbs a warning cue too. Requires an effect brightness above `0`. Range 2000 to 6500 K |
 | **Effect color** *(optional)* | RGB color during the effect stage, for members that can show it. Requires an effect brightness above `0` (a blink fully off has no color to show) |
 | **Effect fade (s)** *(optional)* | Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too). Range 0 to 300, in 0.1 s steps |
-| **Warning grace period (s)** | `0` disables, range 0 to 3600. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
+| **Warning grace period (s)** | Default `0` (disabled), range 0 to 3600. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
 | **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one). Range 1 to 100 |
 | **Warning color mode** *(optional)* | Like the auto-on color mode: picks the warning color temperature, the warning color, or **None** (which also clears a previously set warning color) |
 | **Warning color temperature (K)** *(optional)* | White color temperature during the grace period, for members that support it. Blank keeps the color the lights already had. Range 2000 to 6500 K |
