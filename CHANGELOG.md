@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Virtual Light's options no longer accept the light itself, or a
+  Virtual Light that already includes it, as a member, and no longer accept
+  its own light or Auto-off switch as a keep-on entity. Previously each
+  command to such a light set off a burst of nested calls that ended in an
+  error in the log.
 - An illuminance threshold of 0 is now rejected on every form. Previously
   it was accepted, and the sensor could never report dark.
 - Discovering illuminance sensors now rejects a hysteresis at or above the

@@ -1706,6 +1706,8 @@
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly or through another combined sensor.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly or through another combined schedule.",
+      "light_member_cycle": "A light cannot include itself, directly or through another Virtual Light that includes it.",
+      "hold_entity_own": "A light cannot be kept on by itself or by its own Auto-off switch. Remove them from the keep-on entities.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",

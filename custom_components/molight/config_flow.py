@@ -1257,6 +1257,7 @@ def _light_option_fields(
     with_entity_id: bool = False,
     with_schedule: bool = True,
     legacy_schedule: str | None = None,
+    hold_exclusions: Sequence[str] = (),
 ) -> dict:
     """Sectioned settings of a virtual light.
 
@@ -1313,7 +1314,10 @@ def _light_option_fields(
                 )
             ),
             vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
-                _LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES]
+                {
+                    **_LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES],
+                    "exclude_entities": list(hold_exclusions),
+                }
             ),
         }
     )
@@ -1616,6 +1620,62 @@ def _molight_light_entries(
     return result
 
 
+_MEMBER_LIGHT_TYPES = (ENTITY_TYPE_LIGHT, ENTITY_TYPE_SCHEDULED_LIGHT)
+
+
+def _light_members_create_cycle(
+    hass: HomeAssistant,
+    edited_entry: config_entries.ConfigEntry,
+    members: list[str],
+) -> bool:
+    """Return True when the proposed members lead back to the edited light."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    pending = [lights[m] for m in members if m in lights]
+    visited: set[str] = set()
+    while pending:
+        entry = pending.pop()
+        if entry.entry_id == edited_entry.entry_id:
+            return True
+        if entry.entry_id in visited:
+            continue
+        visited.add(entry.entry_id)
+        pending.extend(
+            lights[m] for m in _molight_cfg(entry).get(CONF_LIGHTS, []) if m in lights
+        )
+    return False
+
+
+def _light_member_cycle_candidates(
+    hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
+) -> list[str]:
+    """Light entity ids that would make the edited light a member of itself."""
+    return sorted(
+        entity_id
+        for entity_id in _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+        if _light_members_create_cycle(hass, edited_entry, [entity_id])
+    )
+
+
+def _own_entity_ids(
+    hass: HomeAssistant, entry: config_entries.ConfigEntry
+) -> list[str]:
+    """Entity ids registered by an entry, such as a light and its Auto-off switch."""
+    registry = er.async_get(hass)
+    return sorted(
+        ent.entity_id
+        for ent in er.async_entries_for_config_entry(registry, entry.entry_id)
+    )
+
+
+def _validate_hold_entities(
+    settings: dict[str, Any], own_entities: Sequence[str]
+) -> dict[str, str]:
+    """Reject keep-on entities that the light itself provides."""
+    if set(settings.get(CONF_HOLD_ENTITIES) or ()) & set(own_entities):
+        return {"base": "hold_entity_own"}
+    return {}
+
+
 def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     """Return True when a light config may be converted in the given direction.
 
@@ -1686,6 +1746,10 @@ class _ScheduledLightSettingsSteps:
         """Return what a side's form starts from before anything was entered."""
         raise NotImplementedError
 
+    def _hold_exclusions(self) -> list[str]:
+        """Entities the light itself provides, which can't keep it on."""
+        return []
+
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
         """Complete the flow once both sides are stored."""
         raise NotImplementedError
@@ -1715,6 +1779,7 @@ class _ScheduledLightSettingsSteps:
                 flat,
                 (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
             )
+            errors.update(_validate_hold_entities(flat, self._hold_exclusions()))
             if not errors:
                 _carry_turn_on_selection(flat, previous)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
@@ -1729,7 +1794,13 @@ class _ScheduledLightSettingsSteps:
         return self.async_show_form(
             step_id=_SCHEDULED_LIGHT_STEP_IDS[side],
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_light_option_fields(self.hass, with_schedule=False)),
+                vol.Schema(
+                    _light_option_fields(
+                        self.hass,
+                        with_schedule=False,
+                        hold_exclusions=self._hold_exclusions(),
+                    )
+                ),
                 user_input or _nest_light(previous or {}),
             ),
             errors=errors,
@@ -3460,6 +3531,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME
         )
 
+    def _hold_exclusions(self) -> list[str]:
+        """Entities the light itself provides, which can't keep it on."""
+        return _own_entity_ids(self.hass, self._entry)
+
     def _finish(self, data: dict[str, Any]) -> config_entries.FlowResult:
         """Store the edited options, syncing the entry title to the new name.
 
@@ -3824,6 +3899,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors[CONF_LIGHTS] = "lights_required"
             else:
                 errors = _validate_light_timeout(self.hass, flat)
+                if _light_members_create_cycle(
+                    self.hass, self._entry, flat[CONF_LIGHTS]
+                ):
+                    errors[CONF_LIGHTS] = "light_member_cycle"
+            errors.update(_validate_hold_entities(flat, self._hold_exclusions()))
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
             errors.update(
@@ -3861,10 +3941,18 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 vol.Required(
                     CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                    selector.EntitySelectorConfig(
+                        domain="light",
+                        exclude_entities=_light_member_cycle_candidates(
+                            self.hass, self._entry
+                        ),
+                        multiple=True,
+                    )
                 ),
                 **_light_option_fields(
-                    self.hass, legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY)
+                    self.hass,
+                    legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY),
+                    hold_exclusions=self._hold_exclusions(),
                 ),
             }
         )
@@ -3918,6 +4006,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if user_input is not None:
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
+            elif _light_members_create_cycle(
+                self.hass, self._entry, user_input[CONF_LIGHTS]
+            ):
+                errors[CONF_LIGHTS] = "light_member_cycle"
             if not _schedule_entity_is_allowed(
                 self.hass,
                 user_input.get(CONF_SCHEDULE_ENTITY),
@@ -3935,7 +4027,13 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 vol.Required(
                     CONF_LIGHTS, default=cfg.get(CONF_LIGHTS, [])
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                    selector.EntitySelectorConfig(
+                        domain="light",
+                        exclude_entities=_light_member_cycle_candidates(
+                            self.hass, self._entry
+                        ),
+                        multiple=True,
+                    )
                 ),
                 vol.Required(
                     CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)

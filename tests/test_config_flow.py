@@ -1060,7 +1060,7 @@ async def test_scheduled_light_options_edit_both_settings(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
             CONF_INSIDE_SCHEDULE_SETTINGS: {
@@ -1080,7 +1080,7 @@ async def test_scheduled_light_options_edit_both_settings(
         result["flow_id"],
         {
             CONF_NAME: "Hallway Updated",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_TURN_OFF,
         },
@@ -1124,7 +1124,7 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.deleted_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
             CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
@@ -1144,7 +1144,7 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
         result["flow_id"],
         {
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.deleted_schedule",
         },
     )
@@ -1379,7 +1379,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {
                 CONF_LIGHT_TIMEOUT: 300,
@@ -1401,7 +1401,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         result["flow_id"],
         {
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
         },
     )
@@ -1469,7 +1469,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         result["flow_id"],
         {
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
         },
     )
@@ -1508,7 +1508,7 @@ async def test_scheduled_light_options_inside_selection_page(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
             CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
@@ -1521,7 +1521,7 @@ async def test_scheduled_light_options_inside_selection_page(
         result["flow_id"],
         {
             CONF_NAME: "Hallway",
-            CONF_LIGHTS: ["light.hallway"],
+            CONF_LIGHTS: ["light.hallway_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
         },
     )
@@ -1867,7 +1867,7 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
             CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
             CONF_TURN_ON_SELECT_OPTION: "Christmas",
@@ -1883,7 +1883,7 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
         },
     )
@@ -1911,7 +1911,7 @@ async def test_light_options_prefill_and_update_turn_on_selection(
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
             CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset",
             CONF_TURN_ON_SELECT_OPTION: "Christmas",
@@ -1928,7 +1928,7 @@ async def test_light_options_prefill_and_update_turn_on_selection(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
             SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
@@ -6229,7 +6229,7 @@ async def test_options_light_selection_invalid_option_errors(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
             SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
         },
@@ -6280,7 +6280,7 @@ async def test_options_light_rejects_foreign_schedule_entity(
         {
             **EMPTY_LIGHT_SECTIONS,
             CONF_NAME: "Hall",
-            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHTS: ["light.hall_real"],
             CONF_LIGHT_TIMEOUT: 300,
             SECTION_SENSORS: {CONF_SCHEDULE_ENTITY: "binary_sensor.foreign_sched"},
         },
@@ -6506,3 +6506,198 @@ async def test_combined_schedule_is_a_schedule_everywhere(
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SCHEDULE_ENTITY] == "binary_sensor.bedside"
+
+
+# ---------------------------------------------------------------------------
+# Member lights and keep-on entities that lead back to the light itself
+# ---------------------------------------------------------------------------
+
+
+async def _submit_light_options(
+    hass: HomeAssistant,
+    result: dict,
+    lights: list[str],
+    sensors: dict | None = None,
+) -> dict:
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_SENSORS: sensors or {},
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: lights,
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_light_options_picker_excludes_member_cycles(
+    hass: HomeAssistant,
+) -> None:
+    """The member picker hides the light itself and every light that includes it."""
+    await _setup_night_schedule(hass)
+    hall = _light_entry("Hall", "hall")
+    outer = _light_entry("Outer", "outer")
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    outermost = _scheduled_light_entry("Outermost", "outermost")
+    outermost.data[CONF_LIGHTS][:] = ["light.outer"]
+    shared = _light_entry("Shared", "shared")
+    other = _light_entry("Other", "other")
+    other.data[CONF_LIGHTS][:] = ["light.shared"]
+    await setup_entries(hass, hall, outer, outermost, shared, other)
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
+        "light.hall",
+        "light.outer",
+        "light.outermost",
+    ]
+    # Virtual lights outside the cycle are still valid members, even when two
+    # of them reach the same light.
+    result = await _submit_light_options(hass, result, ["light.other", "light.shared"])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_reject_cycle_from_stale_form(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A light that came to include this one after the form opened is refused."""
+    await _setup_night_schedule(hass)
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+
+    outer = (
+        _scheduled_light_entry("Outer", "outer")
+        if scheduled
+        else _light_entry("Outer", "outer")
+    )
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    await setup_entries(hass, outer)
+    result = await _submit_light_options(hass, result, ["light.outer"])
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_reject_itself_renamed_after_form_opened(
+    hass: HomeAssistant,
+) -> None:
+    """The submit check resolves the light by entry, not by the id the form knew."""
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    er.async_get(hass).async_update_entity("light.hall", new_entity_id="light.hall_2")
+    await hass.async_block_till_done()
+
+    result = await _submit_light_options(hass, result, ["light.hall_2"])
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_reject_member_cycle(
+    hass: HomeAssistant,
+) -> None:
+    """The scheduled light's member picker and submit apply the same rule."""
+    await _setup_night_schedule(hass)
+    night = _scheduled_light_entry("Night", "night")
+    outer = _light_entry("Outer", "outer")
+    outer.data[CONF_LIGHTS][:] = ["light.night"]
+    await setup_entries(hass, night, outer)
+
+    result = await hass.config_entries.options.async_init(night.entry_id)
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
+        "light.night",
+        "light.outer",
+    ]
+    wrapper = _light_entry("Wrapper", "wrapper")
+    wrapper.data[CONF_LIGHTS][:] = ["light.night"]
+    await setup_entries(hass, wrapper)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Night",
+            CONF_LIGHTS: ["light.wrapper"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    assert result["step_id"] == "scheduled_light"
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_reject_own_keep_on_entities(
+    hass: HomeAssistant,
+) -> None:
+    """A light can't be kept on by its own light or Auto-off switch."""
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.hall", "switch.hall_auto_off"]
+    # A stale form still knows the switch by its old id.
+    er.async_get(hass).async_update_entity(
+        "switch.hall_auto_off", new_entity_id="switch.hall_hold"
+    )
+    await hass.async_block_till_done()
+    result = await _submit_light_options(
+        hass,
+        result,
+        ["light.hall_real"],
+        {CONF_HOLD_ENTITIES: ["input_boolean.guest_mode", "switch.hall_hold"]},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "hold_entity_own"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_reject_own_keep_on_entities(
+    hass: HomeAssistant,
+) -> None:
+    """Each scheduled-light profile applies the same keep-on rule."""
+    await _setup_night_schedule(hass)
+    night = _scheduled_light_entry("Night", "night")
+    await setup_entries(hass, night)
+
+    result = await hass.config_entries.options.async_init(night.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Night",
+            CONF_LIGHTS: ["light.night_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.night", "switch.night_auto_off"]
+    er.async_get(hass).async_update_entity(
+        "switch.night_auto_off", new_entity_id="switch.night_hold"
+    )
+    await hass.async_block_till_done()
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["switch.night_hold"]},
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert result["errors"] == {"base": "hold_entity_own"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ] == ["light.night", "switch.night_hold"]
