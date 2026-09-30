@@ -3436,12 +3436,14 @@ def assert_state_stays(
     """Assert an entity continuously avoids an unwanted delayed transition."""
     deadline = time.monotonic() + duration
     last: dict[str, Any] | None = None
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
             last = client.state(entity_id)
         except REQUEST_ERRORS as err:
             if not poll_tolerates(err, missing_ok=False):
                 raise
+            last_error = err
             time.sleep(0.2)
             continue
         if not predicate(last):
@@ -3449,6 +3451,11 @@ def assert_state_stays(
                 f"Expected {entity_id} to stay {description}; observed {last}"
             )
         time.sleep(0.2)
+    if last is None:
+        raise AssertionError(
+            f"Never observed {entity_id} while checking it stays {description}"
+            f"; last error: {last_error}"
+        )
 
 
 def finish_creation(result: dict[str, Any], description: str) -> str:
