@@ -3309,6 +3309,12 @@ class MoLightConfigFlow(
                 if result is not None:
                     return result
 
+        return self._show_light_form(user_input or self._prefill or {}, errors)
+
+    def _show_light_form(
+        self, prefill: dict[str, Any], errors: dict[str, str]
+    ) -> config_entries.FlowResult:
+        """Render the Virtual Light form, prefilled with `prefill`."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
@@ -3320,9 +3326,7 @@ class MoLightConfigFlow(
         )
         return self.async_show_form(
             step_id="light",
-            data_schema=self.add_suggested_values_to_schema(
-                schema, user_input or self._prefill or {}
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, prefill),
             errors=errors,
         )
 
@@ -3358,6 +3362,9 @@ class MoLightConfigFlow(
                 )
                 if result is not None:
                     return result
+                # The entity_id was free on the light form but has been taken
+                # since (a race with another flow); only that form can change it.
+                return self._show_light_form(pending["prefill"], errors)
 
         target = flat[CONF_TURN_ON_SELECT_ENTITY]
         suggested = {CONF_TURN_ON_SELECT_ENTITY: target}

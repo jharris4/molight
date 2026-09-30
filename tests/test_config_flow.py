@@ -1714,6 +1714,71 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
+    hass: HomeAssistant,
+) -> None:
+    """An id taken while the selection page is open sends the user back to fix it."""
+    hass.states.async_set(
+        "select.wled_preset", "Christmas", {"options": ["Christmas", "Warm White"]}
+    )
+    hass.states.async_set("select.other", "A", {"options": ["A", "B"]})
+    light_form = {
+        **EMPTY_LIGHT_CREATE_SECTIONS,
+        CONF_NAME: "WLED",
+        CONF_LIGHTS: ["light.wled"],
+        CONF_LIGHT_TIMEOUT: 300,
+        SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
+        SECTION_ADVANCED: {CONF_ENTITY_ID: "racy"},
+    }
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], light_form
+    )
+    assert result["step_id"] == "light_selection"
+    hass.states.async_set("light.racy", "off")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Christmas"}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "light"
+    assert result["errors"] == {"base": "entity_id_conflict"}
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[CONF_NAME] == "WLED"
+    assert suggested[SECTION_ADVANCED][CONF_ENTITY_ID] == "racy"
+
+    # The same target keeps the chosen fallback; a new one starts blank.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**light_form, SECTION_ADVANCED: {CONF_ENTITY_ID: "free"}}
+    )
+    assert _suggested_values(result["data_schema"]) == {
+        CONF_TURN_ON_SELECT_OPTION: "Christmas"
+    }
+    hass.states.async_set("light.free", "off")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Christmas"}
+    )
+    assert result["step_id"] == "light"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **light_form,
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.other"},
+            SECTION_ADVANCED: {CONF_ENTITY_ID: "wled"},
+        },
+    )
+    assert _suggested_values(result["data_schema"]) == {}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "B"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_ENTITY_ID] == "wled"
+    assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "B"
+
+
+@pytest.mark.asyncio
 async def test_light_flow_rejects_invalid_turn_on_fallback(
     hass: HomeAssistant,
 ) -> None:
@@ -6226,41 +6291,6 @@ async def test_schedule_source_explicit_entity_id_conflict_errors(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "schedule_source"
-    assert result["errors"] == {"base": "entity_id_conflict"}
-
-
-@pytest.mark.asyncio
-async def test_light_selection_step_reports_entity_id_taken_meanwhile(
-    hass: HomeAssistant,
-) -> None:
-    """An id taken while the selection step was open errors on that step."""
-    hass.states.async_set(
-        "select.wled_preset", "Warm White", {"options": ["Warm White"]}
-    )
-    result = await _start_create(hass)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            **EMPTY_LIGHT_CREATE_SECTIONS,
-            CONF_NAME: "WLED",
-            CONF_LIGHTS: ["light.wled"],
-            CONF_LIGHT_TIMEOUT: 300,
-            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.wled_preset"},
-            SECTION_ADVANCED: {CONF_ENTITY_ID: "racer"},
-        },
-    )
-    assert result["step_id"] == "light_selection"
-
-    # Another flow claims the id while this form is open.
-    hass.states.async_set("light.racer", "on")
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Warm White"}
-    )
-    assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "light_selection"
     assert result["errors"] == {"base": "entity_id_conflict"}
 
 
