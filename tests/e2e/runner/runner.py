@@ -1189,11 +1189,11 @@ def remove_entry_and_entity(
     wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
 
 
-def form_default(result: dict[str, Any], field: str) -> Any:
-    """Return a form field's default (what the checklist pre-selects)."""
+def form_suggested(result: dict[str, Any], field: str) -> Any:
+    """Return a form field's suggested value (what the checklist pre-selects)."""
     for item in result.get("data_schema") or []:
         if item.get("name") == field:
-            return item.get("default")
+            return (item.get("description") or {}).get("suggested_value")
     raise AssertionError(f"Form has no field {field!r}: {result}")
 
 
@@ -1258,7 +1258,7 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
     ):
         result = discover_lights_filtered(client, *filters)
         expect_step(result, "discover_light_select")
-        offered = sorted(form_default(result, "selected_entities") or [])
+        offered = sorted(form_suggested(result, "selected_entities") or [])
         if offered != expected:
             raise AssertionError(f"Filter {filters} offered {offered}, not {expected}")
         client.abort_flow(result)

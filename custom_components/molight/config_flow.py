@@ -2184,9 +2184,9 @@ class MoLightConfigFlow(
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema(
                     {
-                        vol.Required(
-                            CONF_SELECTED_ENTITIES, default=preselected
-                        ): selector.SelectSelector(
+                        # Suggested, not a default, so a full deselection that
+                        # omits the field is not refilled with every candidate.
+                        vol.Optional(CONF_SELECTED_ENTITIES): selector.SelectSelector(
                             selector.SelectSelectorConfig(
                                 options=options,
                                 multiple=True,
@@ -2209,7 +2209,7 @@ class MoLightConfigFlow(
                         ),
                     }
                 ),
-                user_input or {},
+                user_input or {CONF_SELECTED_ENTITIES: preselected},
             ),
             errors=errors,
         )
@@ -2878,11 +2878,11 @@ class MoLightConfigFlow(
         if not lights:
             return self.async_abort(reason="no_lights")
 
+        # Suggested value, not a default: a default would refill a submission
+        # that omits the emptied field, so the last light could not be removed.
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_ASSIGN_LIGHTS, default=sorted(already)
-                ): selector.EntitySelector(
+                vol.Optional(CONF_ASSIGN_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         integration=DOMAIN,
                         domain="light",
@@ -2894,7 +2894,9 @@ class MoLightConfigFlow(
         )
         return self.async_show_form(
             step_id="assign_lights",
-            data_schema=self.add_suggested_values_to_schema(schema, user_input or {}),
+            data_schema=self.add_suggested_values_to_schema(
+                schema, user_input or {CONF_ASSIGN_LIGHTS: sorted(already)}
+            ),
             errors=errors,
         )
 
@@ -3672,9 +3674,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         multiple=True,
                     )
                 ),
-                # Suggested value, not a default: the frontend omits an emptied
-                # optional field, and a default would refill the old list,
-                # making the last maintain sensor impossible to clear.
+                # Suggested value, not a default: a default would refill a
+                # submission that omits the emptied field, making the last
+                # maintain sensor impossible to clear.
                 vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         integration=DOMAIN,

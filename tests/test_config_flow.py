@@ -208,8 +208,8 @@ async def _reach_discovery_select(hass: HomeAssistant, step: str) -> dict:
 
 
 def _offered_candidates(result: dict) -> set[str]:
-    """Entity ids the discovery form pre-selects (its default is all candidates)."""
-    return set(result["data_schema"]({})[CONF_SELECTED_ENTITIES])
+    """Entity ids the discovery form pre-selects (by default all candidates)."""
+    return set(_suggested_values(result["data_schema"])[CONF_SELECTED_ENTITIES])
 
 
 def _suggested_values(schema) -> dict:
@@ -3911,7 +3911,9 @@ async def test_assign_occupancy_adds_and_removes(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "assign_lights"
     # The light already wired to this sensor is pre-selected.
-    assert result["data_schema"]({})[CONF_ASSIGN_LIGHTS] == ["light.hall"]
+    assert _suggested_values(result["data_schema"]) == {
+        CONF_ASSIGN_LIGHTS: ["light.hall"]
+    }
 
     # Swap: add the kitchen light, drop the hall light.
     result = await hass.config_entries.flow.async_configure(
@@ -3927,6 +3929,52 @@ async def test_assign_occupancy_adds_and_removes(
         == "binary_sensor.test_occupancy"
     )
     assert CONF_OCCUPANCY_ENTITY not in molight_config(already_light)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "submitted", [{CONF_ASSIGN_LIGHTS: []}, {}], ids=["empty", "omitted"]
+)
+async def test_assign_occupancy_deselect_all_removes(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, submitted: dict
+) -> None:
+    """Deselecting every light removes the reference, however the field is sent."""
+    hall = _light_entry("Hall", "hall", occupancy_entity="binary_sensor.test_occupancy")
+    await setup_entries(hass, occupancy_entry, hall)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], submitted
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["description_placeholders"] == {"assigned": "0", "removed": "1"}
+    await hass.async_block_till_done()
+    assert CONF_OCCUPANCY_ENTITY not in molight_config(hall)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "submitted", [{CONF_SELECTED_ENTITIES: []}, {}], ids=["empty", "omitted"]
+)
+async def test_discovery_deselect_all_is_rejected(
+    hass: HomeAssistant, submitted: dict
+) -> None:
+    """A discovery checklist with nothing picked is refused, not refilled."""
+    hass.states.async_set("sensor.office_lux", "42", {"device_class": "illuminance"})
+    result = await _reach_discovery_select(hass, "discover_illuminance")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], submitted
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_illuminance_select"
+    assert result["errors"] == {"base": "no_entities_selected"}
 
 
 @pytest.mark.asyncio
