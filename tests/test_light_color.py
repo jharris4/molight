@@ -244,7 +244,7 @@ async def test_external_recolor_mirrors_and_restarts_timer(
     assert tuple(attrs["hs_color"]) == (200.0, 50.0)
     assert attrs["last_color_change_physical"] is not None
 
-    # 80s after adoption — past the original expiry, inside the restarted one.
+    # 80s after adoption: past the original expiry, inside the restarted one.
     freezer.tick(timedelta(seconds=40))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -397,7 +397,7 @@ async def test_plain_warn_stage_undoes_effect_recolor(
 @pytest.mark.asyncio
 async def test_stage_color_temps_sent_as_kelvin(hass: HomeAssistant, freezer) -> None:
     """The effect and warn stages take a color temperature instead of an rgb
-    color — the temp-only-bulb warning cue."""
+    color: the temp-only-bulb warning cue."""
     hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
     await setup_entries(
         hass,
@@ -453,7 +453,7 @@ async def test_color_restored_after_restart(hass: HomeAssistant) -> None:
     hass.states.async_set(REAL, "off", HS_CAPS)
     await setup_entries(hass, make_light_entry())
 
-    # Turn on without specifying a color — the restored value must show.
+    # Turn on without specifying a color: the restored value must show.
     await _turn_on_virtual(hass)
     attrs = _state(hass).attributes
     assert tuple(attrs["hs_color"]) == (120.0, 40.0)
@@ -561,8 +561,8 @@ async def test_restart_mid_warning_restores_pre_warn_color(
 
 @pytest.mark.asyncio
 async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
-    """A member in color_temp mode hands the virtual light its kelvin — at
-    startup and on an external recolor — even though it also carries a
+    """A member in color_temp mode hands the virtual light its kelvin (at
+    startup and on an external recolor) even though it also carries a
     derived hs_color."""
     member = {
         **HS_TEMP_CAPS,
@@ -637,7 +637,7 @@ async def test_capability_shift_to_color_temp_only_member(
     attrs = _state(hass).attributes
     assert attrs["supported_color_modes"] == ["color_temp"]
 
-    # HA only reports color_mode while on — turn on to observe the new mode.
+    # HA only reports color_mode while on; turn on to observe the new mode.
     # (HA derives a display hs_color from the kelvin, so only the mode and
     # kelvin are asserted.)
     await _turn_on_virtual(hass, color_temp_kelvin=3500)
@@ -651,7 +651,7 @@ async def test_inconsistent_member_color_ignored_when_brightness_only(
     hass: HomeAssistant,
 ) -> None:
     """A member reporting a color it doesn't advertise support for is not
-    mirrored — the brightness-only virtual light reports no color."""
+    mirrored: the brightness-only virtual light reports no color."""
     hass.states.async_set(
         REAL,
         "on",

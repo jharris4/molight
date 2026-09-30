@@ -202,7 +202,7 @@ async def test_light_restores_brightness(
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
-    # Turn on without specifying brightness — the restored value must show.
+    # Turn on without specifying brightness: the restored value must show.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.test_light"}
     )
@@ -269,7 +269,7 @@ async def test_occupancy_turns_light_on_when_dark(
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
     # Countdown anchors to latest_occupied_time: light_timeout (60s) minus the
-    # occupancy timeout (30s) ≈ 30s after the sensor cleared.
+    # occupancy timeout (30s), i.e. 30s after the sensor cleared.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -334,7 +334,7 @@ async def test_auto_on_brightness_not_applied_on_manual_on(hass: HomeAssistant) 
     state = hass.states.get("light.bright_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    # No brightness was requested and none is forced — the auto-on value is
+    # No brightness was requested and none is forced; the auto-on value is
     # reserved for automatic turn-ons.
     assert state.attributes.get("brightness") is None
 
@@ -393,20 +393,20 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
     )
     await _setup_entries(hass, illuminance_entry, light)
 
-    # Manual turn-on at T0 (dark) — no brightness requested, so none is forced.
+    # Manual turn-on at T0 (dark): no brightness requested, so none is forced.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.kitchen_light"}
     )
     await hass.async_block_till_done()
     assert hass.states.get("light.kitchen_light").attributes.get("brightness") is None
 
-    # T0+20: it gets bright — lights forced off.
+    # T0+20: it gets bright; lights forced off.
     freezer.tick(timedelta(seconds=20))
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
     assert hass.states.get("light.kitchen_light").state == "off"
 
-    # T0+30: dark again — re-lit automatically, now at the auto-on brightness.
+    # T0+30: dark again; re-lit automatically, now at the auto-on brightness.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
@@ -439,7 +439,7 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
     state = hass.states.get("light.gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
-    # The restored brightness is preserved — no auto-on value overrode it.
+    # The restored brightness is preserved; no auto-on value overrode it.
     assert state.attributes["brightness"] == 143
 
 
@@ -486,20 +486,20 @@ async def test_illuminance_dark_resumes_remaining_time(
     )
     await _setup_entries(hass, illuminance_entry, light)
 
-    # Manual turn-on at T0 (dark by default) — ACTIVE with a 60s timer.
+    # Manual turn-on at T0 (dark by default): ACTIVE with a 60s timer.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.kitchen_light"}
     )
     await hass.async_block_till_done()
     assert hass.states.get("light.kitchen_light").state == "on"
 
-    # T0+20: it gets bright — lights forced off.
+    # T0+20: it gets bright; lights forced off.
     freezer.tick(timedelta(seconds=20))
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
     assert hass.states.get("light.kitchen_light").state == "off"
 
-    # T0+30: dark again — resume with the remaining 30s of the on-period.
+    # T0+30: dark again; resume with the remaining 30s of the on-period.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
@@ -548,7 +548,7 @@ async def test_brightness_change_resets_countdown(
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
     # 55s after the dim (105s after turn-on): the original timer would have
-    # fired at 60s — the reset one has 5s left.
+    # fired at 60s; the reset one has 5s left.
     freezer.tick(timedelta(seconds=55))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -566,7 +566,7 @@ async def test_brightness_change_while_occupied_records_without_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """An external dim while OCCUPIED is recorded and mirrored, but occupancy
-    still owns the light — the dim must not arm a timer."""
+    still owns the light; the dim must not arm a timer."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -596,7 +596,7 @@ async def test_brightness_change_while_occupied_records_without_timer(
     assert state.attributes["brightness"] == 120
     assert state.attributes["last_brightness_change_physical"] is not None
 
-    # Occupancy still suspends the timer — well past the timeout, still on.
+    # Occupancy still suspends the timer: well past the timeout, still on.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -727,7 +727,7 @@ async def test_real_brightness_reflects_in_virtual_light(
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
-    # Adopt the real light coming on at a brightness — reflected immediately,
+    # Adopt the real light coming on at a brightness: reflected immediately,
     # on the off→on adoption edge (not only on later dims).
     hass.states.async_set("light.living_room", "on", {"brightness": 180})
     await _settle(hass)
@@ -876,7 +876,7 @@ async def test_false_detection_never_cuts_manual_lights(
     attrs = hass.states.get("light.fd_light").attributes
     assert attrs["molight_state"] == STATE_OCCUPIED
 
-    # False clear — but occupancy didn't light these lights, so the normal
+    # False clear, but occupancy didn't light these lights, so the normal
     # countdown (60s here, lot never advanced) applies, not the 5s quick-off.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
@@ -914,7 +914,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     )
     await _setup_entries(hass, _fd_occupancy_entry(), illuminance_entry, light)
 
-    # Occupancy lights the room (dark by default) — occupancy owns the lights.
+    # Occupancy lights the room (dark by default); occupancy owns the lights.
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"
@@ -941,7 +941,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
 
-    # The quick-off (5s) must NOT fire — the user owns this on-period.
+    # The quick-off (5s) must NOT fire; the user owns this on-period.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -980,7 +980,7 @@ async def test_illuminance_gate_mode_never_forces_off(
     await _settle(hass)
     assert hass.states.get("light.gate_only_light").state == "on"
 
-    # It reads bright (e.g. the lights themselves raised the lux) — the
+    # It reads bright (e.g. the lights themselves raised the lux): the
     # lights must stay on instead of oscillating.
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
@@ -1029,7 +1029,7 @@ async def test_follow_mode_lifecycle(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["schedule_window_start"] == "2026-07-02T21:00:00+00:00"
 
-    # Way past light_timeout (60s) — no timer runs in SCHEDULED.
+    # Way past light_timeout (60s): no timer runs in SCHEDULED.
     t = datetime(2026, 7, 2, 23, 0, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -1072,7 +1072,7 @@ async def test_follow_mode_respects_manual_off(hass: HomeAssistant, freezer) -> 
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 22:00:00+00:00")
     marker = "2026-07-02T21:00:00+00:00"
-    # The light had already applied this window's start before the restart —
+    # The light had already applied this window's start before the restart,
     # so its being off now means the user turned it off manually.
     mock_restore_cache(
         hass,
@@ -1245,14 +1245,14 @@ async def test_follow_mode_manual_re_on_rejoins_window(
     await _settle(hass)
     assert hass.states.get("light.porch_light").state == "on"
 
-    # Manual off mid-window — respected.
+    # Manual off mid-window: respected.
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": "light.porch_light"}
     )
     await _settle(hass)
     assert hass.states.get("light.porch_light").state == "off"
 
-    # Manual on again — must rejoin the window, not run the 60s timer.
+    # Manual on again: must rejoin the window, not run the 60s timer.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.porch_light"}
     )
@@ -1262,7 +1262,7 @@ async def test_follow_mode_manual_re_on_rejoins_window(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
-    # Well past light_timeout, still before window end — must stay on.
+    # Well past light_timeout, still before window end: must stay on.
     t = datetime(2026, 7, 2, 23, 30, 0, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -1296,7 +1296,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     await _settle(hass)
     assert hass.states.get("light.gate_light").state == "off"
 
-    # Window starts — occupancy is still active, so lights come on now.
+    # Window starts: occupancy is still active, so lights come on now.
     t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -1306,7 +1306,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
-    # Window ends — lights forced off even though occupancy never cleared.
+    # Window ends: lights forced off even though occupancy never cleared.
     t = datetime(2026, 7, 3, 7, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -1356,8 +1356,8 @@ async def test_light_restore_ignores_corrupt_attributes(
                     "last_on_occupancy": "also-garbage",
                     "last_brightness_change_physical": "garbage",
                     "last_brightness_change_virtual": "garbage",
-                    "brightness": "200",  # wrong type — ignored
-                    "pre_warn_brightness": "150",  # wrong type — ignored
+                    "brightness": "200",  # wrong type, ignored
+                    "pre_warn_brightness": "150",  # wrong type, ignored
                 },
             )
         ],
@@ -1438,7 +1438,7 @@ def _real_calls(calls: list[dict], service: str) -> list[dict]:
 @pytest.mark.asyncio
 async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
     """At auto-off the light blinks off (effect), holds a grace period (warn),
-    then turns off — instead of turning off immediately."""
+    then turns off, instead of turning off immediately."""
     entry = _warn_light_entry(
         effect_timeout=10, effect_brightness=0, warn_timeout=15, warn_brightness=100
     )

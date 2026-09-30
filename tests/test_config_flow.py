@@ -395,7 +395,7 @@ async def test_config_flow_schedule_rejects_incomplete_window(
     )
     result = await _choose_time_schedule(hass, result)
 
-    # Start edge only — no end.
+    # Start edge only, no end.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -897,7 +897,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
     scheduled_result = await hass.config_entries.options.async_init(scheduled.entry_id)
 
     # The replacement appears after both forms were rendered, so flow-level
-    # validation—not only the selector's original exclusion list—must reject it.
+    # validation, not only the selector's original exclusion list, must reject it.
     await setup_entries(hass, illuminance_entry)
     result = await hass.config_entries.options.async_configure(
         regular_result["flow_id"],
@@ -1444,7 +1444,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
-    # Inside: clear the target — no selection page, and its values are dropped.
+    # Inside: clear the target; no selection page, and its values are dropped.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
@@ -1462,7 +1462,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert CONF_TURN_ON_SELECT_OPTION not in inside
     assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in inside
 
-    # A second pass that keeps the target but omits the source clears it —
+    # A second pass that keeps the target but omits the source clears it:
     # the selection form owns the field, so absence is a clear, not a keep.
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
@@ -1601,7 +1601,7 @@ async def test_scheduled_light_requires_lights(hass: HomeAssistant) -> None:
 async def test_scheduled_light_explicit_entity_id_conflict(
     hass: HomeAssistant,
 ) -> None:
-    """A taken explicit id blocks the first form — and a late one returns to it."""
+    """A taken explicit id blocks the first form, and a late one returns to it."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.taken", "off")
     result = await _start_create(hass)
@@ -2018,7 +2018,7 @@ async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> N
             CONF_LIGHT_TIMEOUT: 60,
             SECTION_WARNING: {
                 CONF_WARN_TIMEOUT: 20,
-                # warn_brightness intentionally omitted — the user cleared it.
+                # warn_brightness intentionally omitted; the user cleared it.
             },
         },
     )
@@ -2068,7 +2068,7 @@ async def test_light_flow_stores_transitions(hass: HomeAssistant) -> None:
 async def test_light_flow_rejects_stage_transition_above_timeout(
     hass: HomeAssistant,
 ) -> None:
-    """A stage transition longer than its stage timeout is rejected — including
+    """A stage transition longer than its stage timeout is rejected, including
     a transition on a disabled (timeout 0) stage."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -2166,7 +2166,7 @@ def _colored_light_entry() -> MockConfigEntry:
 
 @pytest.mark.asyncio
 async def test_light_options_clears_set_colors(hass: HomeAssistant) -> None:
-    """The "None" color mode removes colors that were already set — the bare
+    """The "None" color mode removes colors that were already set; the bare
     color selectors can't be cleared once they have a value."""
     entry = _colored_light_entry()
     await setup_entries(hass, entry)
@@ -2247,7 +2247,7 @@ async def test_light_options_leaves_unset_color_modes_blank(
 async def test_light_options_color_mode_picks_one_of_a_pair(
     hass: HomeAssistant,
 ) -> None:
-    """A submitted mode keeps only the color it names — the other half of the
+    """A submitted mode keeps only the color it names; the other half of the
     pair (a stale prefill, or a fresh but unselected swatch) is dropped."""
     entry = _colored_light_entry()
     await setup_entries(hass, entry)
@@ -2348,8 +2348,8 @@ async def test_light_flow_rejects_color_conflicts(
 async def test_light_flow_rejects_effect_color_without_brightness(
     hass: HomeAssistant,
 ) -> None:
-    """An effect color with effect_brightness 0 (blink fully off) is rejected
-    — there would be no lit stage to show the color on."""
+    """An effect color with effect_brightness 0 (blink fully off) is rejected:
+    there would be no lit stage to show the color on."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -2476,7 +2476,7 @@ async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
             CONF_NAME: "Pantry",
             CONF_LIGHTS: ["light.pantry_real"],
             CONF_LIGHT_TIMEOUT: 120,
-            # Door entity intentionally omitted — the user cleared it.
+            # Door entity intentionally omitted; the user cleared it.
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -2533,7 +2533,7 @@ async def test_light_options_validate_and_clear_transitions(
             CONF_LIGHT_TIMEOUT: 60,
             SECTION_WARNING: {CONF_WARN_TIMEOUT: 20},
             SECTION_BEHAVIOR: {CONF_AUTO_OFF_TRANSITION: 4},
-            # warn/auto-on transitions intentionally omitted — cleared.
+            # warn/auto-on transitions intentionally omitted; cleared.
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -2929,7 +2929,7 @@ async def test_light_options_can_clear_occupancy_reference(
             CONF_NAME: "Hall Light",
             CONF_LIGHTS: ["light.hall"],
             CONF_LIGHT_TIMEOUT: 60,
-            # occupancy_entity intentionally omitted — the user cleared it.
+            # occupancy_entity intentionally omitted; the user cleared it.
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -3045,9 +3045,9 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
         "off",
         {"device_class": "presence", "friendly_name": "Study Presence"},
     )
-    # Wrong device_class — must not be offered.
+    # Wrong device_class: must not be offered.
     hass.states.async_set("binary_sensor.front_door", "off", {"device_class": "door"})
-    # Kitchen is already wrapped by an existing MoLight entry — must be hidden.
+    # Kitchen is already wrapped by an existing MoLight entry: must be hidden.
     existing = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3217,7 +3217,7 @@ async def test_discover_illuminance_creates_with_defaults(
 async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None:
     """Light discovery wraps real lights (stored as a single-item list)."""
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
-    # Already wrapped by an existing virtual light — must be hidden.
+    # Already wrapped by an existing virtual light: must be hidden.
     existing = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3480,7 +3480,7 @@ async def test_discover_filter_by_area(hass: HomeAssistant) -> None:
     via_device = _motion_registry_entry(
         hass, "uid_dev", "kitchen_dev_pir", device_id=device.id
     )
-    # State-only candidate — would be offered unfiltered, hidden by any filter.
+    # State-only candidate: would be offered unfiltered, hidden by any filter.
     hass.states.async_set("binary_sensor.floating", "off", {"device_class": "motion"})
 
     result = await _start_discovery(hass, "discover_occupancy")
@@ -3571,7 +3571,7 @@ async def test_discover_preselect_none_and_empty_selection(
 
 
 # ---------------------------------------------------------------------------
-# Manual create — optional explicit entity_id
+# Manual create: optional explicit entity_id
 # ---------------------------------------------------------------------------
 
 
@@ -4947,7 +4947,7 @@ async def test_bulk_conversion_is_atomic_when_target_is_removed(
 
 
 # ---------------------------------------------------------------------------
-# Options flow — entry title, error paths, and reference-resolution edges
+# Options flow: entry title, error paths, and reference-resolution edges
 # ---------------------------------------------------------------------------
 
 
@@ -5045,7 +5045,7 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
 
     Covers a reference to a MoLight entry of a non-occupancy type, one to a
     registered entity without a config entry, and one to another domain's
-    entity — none of them can supply a timeout, so a tiny light_timeout is
+    entity: none of them can supply a timeout, so a tiny light_timeout is
     accepted.
     """
     await setup_entries(hass, illuminance_entry)
@@ -5131,7 +5131,7 @@ async def test_discover_candidates_from_registry(hass: HomeAssistant) -> None:
     )
     # A matching state must not re-offer what the registry already excludes.
     hass.states.async_set(own.entity_id, "off", {"device_class": "occupancy"})
-    # Registered with a non-matching class — hidden.
+    # Registered with a non-matching class: hidden.
     registry.async_get_or_create(
         "sensor", "test", "uid_lux", suggested_object_id="reg_lux"
     )
@@ -5167,7 +5167,7 @@ async def test_assign_ignores_stale_light_pick(
 
 @pytest.mark.asyncio
 async def test_config_flow_schedule_requires_window(hass: HomeAssistant) -> None:
-    """An empty schedule form is rejected — it would create a sensor that is
+    """An empty schedule form is rejected: it would create a sensor that is
     permanently off, which nothing can ever follow or gate on."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -5298,7 +5298,7 @@ async def test_assign_noop_leaves_entry_untouched(
     assert result["description_placeholders"] == {"assigned": "0", "removed": "0"}
     await hass.async_block_till_done()
 
-    # No options were written — the reference still comes from the entry data.
+    # No options were written; the reference still comes from the entry data.
     assert not light.options
     assert (
         molight_config(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
@@ -5371,7 +5371,7 @@ async def test_light_flow_rejects_fade_no_light_can_apply(hass: HomeAssistant) -
 async def test_light_flow_allows_fade_when_a_light_can_apply_it(
     hass: HomeAssistant,
 ) -> None:
-    """One capable light is enough — mixed groups are the documented case."""
+    """One capable light is enough; mixed groups are the documented case."""
     _no_fade(hass)
     _can_fade(hass)
     result = await _submit_light_create(hass, [PLUG, DIMMER])
@@ -5396,7 +5396,7 @@ async def test_light_flow_allows_fade_when_any_light_is_unjudgeable(
     hass: HomeAssistant,
 ) -> None:
     """An unjudgeable member keeps the whole set unjudgeable, so the fade is
-    allowed — the known member being incapable is not proof about the rest."""
+    allowed: the known member being incapable is not proof about the rest."""
     _no_fade(hass)
     result = await _submit_light_create(hass, [PLUG, "light.not_created_yet"])
 
@@ -5439,7 +5439,7 @@ async def test_light_options_reject_fade_no_light_can_apply(
 async def test_scheduled_light_side_form_rejects_fade_no_light_can_apply(
     hass: HomeAssistant,
 ) -> None:
-    """A scheduled light's side forms carry no light picker — the guard reads
+    """A scheduled light's side forms carry no light picker; the guard reads
     the members from the shared first form."""
     await _setup_night_schedule(hass)
     _no_fade(hass)
@@ -5523,10 +5523,10 @@ async def test_discover_light_defaults_reject_fade_one_pick_cannot_apply(
 # A color none of the chosen lights could show
 #
 # Color temperature and RGB are separate capabilities, so they are judged
-# separately — a tunable-white bulb has one and not the other.
+# separately: a tunable-white bulb has one and not the other.
 # ---------------------------------------------------------------------------
 
-WHITE = "light.white"  # dimmable only — no color, no color temp
+WHITE = "light.white"  # dimmable only, no color, no color temp
 TUNABLE = "light.tunable"  # color temp, but cannot show a color
 RGB = "light.rgb"  # full color
 
@@ -5600,7 +5600,7 @@ async def test_light_flow_rejects_stage_color_temp_no_light_can_show(
 @pytest.mark.asyncio
 async def test_light_flow_rejects_color_no_light_can_show(hass: HomeAssistant) -> None:
     """An auto-on color on lights that can only do color temperature is
-    rejected — the two capabilities are judged separately."""
+    rejected: the two capabilities are judged separately."""
     _modes(hass, TUNABLE, ["color_temp"])
     result = await _submit_light_create_colors(
         hass, [TUNABLE], {CONF_AUTO_ON_RGB_COLOR: [255, 0, 0]}
@@ -5727,7 +5727,7 @@ async def test_light_flow_allows_color_when_a_light_advertises_no_modes(
 # A brightness none of the chosen lights could apply
 # ---------------------------------------------------------------------------
 
-PLAIN = "light.plain"  # on/off only — not dimmable
+PLAIN = "light.plain"  # on/off only, not dimmable
 
 
 @pytest.mark.asyncio
@@ -5761,7 +5761,7 @@ async def test_light_flow_allows_brightness_on_a_dimmable_light(
 async def test_light_flow_allows_blink_fully_off_on_onoff_lights(
     hass: HomeAssistant,
 ) -> None:
-    """An effect brightness of 0 is a blink fully off, sent as turn_off — the
+    """An effect brightness of 0 is a blink fully off, sent as turn_off, the
     one warning cue that works without dimming, so it must not be rejected."""
     _modes(hass, PLAIN, ["onoff"])
     result = await _start_create(hass)
@@ -5872,7 +5872,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """One created after the form rendered slips past the picker's exclusion
-    snapshot, so the handler re-checks — it used to abort with a
+    snapshot, so the handler re-checks; it used to abort with a
     successful-looking "assigned: 0, removed: 0"."""
     await _setup_night_schedule(hass)
     regular = _light_entry("Hall", "hall")
@@ -5900,7 +5900,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "assign_lights"
     assert result["errors"] == {CONF_ASSIGN_LIGHTS: "assign_lights_scheduled"}
-    # Nothing was applied — not even the valid pick alongside it.
+    # Nothing was applied: not even the valid pick alongside it.
     assert CONF_OCCUPANCY_ENTITY not in molight_config(regular)
     # The submitted selection is preserved so it needn't be rebuilt.
     assert _suggested_values(result["data_schema"])[CONF_ASSIGN_LIGHTS] == [
@@ -5971,7 +5971,7 @@ async def test_light_flow_allows_zero_effect_brightness_on_disabled_stage(
 async def test_discovery_count_reflects_entries_that_actually_got_created(
     hass: HomeAssistant,
 ) -> None:
-    """The summary reports what was created, not what was attempted — the
+    """The summary reports what was created, not what was attempted; the
     imports are awaited, so a failure is counted out and logged."""
     hass.states.async_set(
         "binary_sensor.hall_motion", "off", {"device_class": "motion"}

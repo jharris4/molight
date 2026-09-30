@@ -6669,8 +6669,8 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", FAULTY_LIGHT)
 
-    # The silent member finally reports — on, contradicting the off it was
-    # last sent — which reads as a physical turn-on and is adopted.
+    # The silent member finally reports on, contradicting the off it was
+    # last sent, which reads as a physical turn-on and is adopted.
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 180})
     client.wait_state(
         FAULTY_LIGHT,

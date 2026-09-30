@@ -4,7 +4,7 @@ Occupancy normally takes the light over on its own rising edge. When it is
 already on while the light turns on (manual/physical after a manual off, or
 suppressed earlier by bright/window), or when the gate suppressing it lifts
 (illuminance turning dark, a gate-mode window opening) while the light is
-already on, the light must adopt it as OCCUPIED — otherwise a timer expires
+already on, the light must adopt it as OCCUPIED; otherwise a timer expires
 despite presence and the steady-on sensor produces no event that could ever
 rescue the light. Adoption is gated exactly like a turn-on (bright or
 outside a gate-mode window suppress it); the maintain entity stays ungated.
@@ -107,7 +107,7 @@ async def test_manual_on_while_bright_does_not_adopt_occupancy(
     """Adoption is gated like a turn-on: bright keeps the timer running."""
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
     hass.states.async_set(ILLUM, "on")  # bright
-    hass.states.async_set(OCC, "on")  # suppressed — no turn-on
+    hass.states.async_set(OCC, "on")  # suppressed: no turn-on
     await settle(hass)
     assert _state(hass).state == "off"
 
@@ -134,7 +134,7 @@ async def test_dark_adopts_active_occupancy_into_on_light(
     hass.states.async_set(OCC, "on")  # suppressed
     await settle(hass)
 
-    # User turns the light on regardless — ACTIVE with a timer (still bright).
+    # User turns the light on regardless: ACTIVE with a timer (still bright).
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE

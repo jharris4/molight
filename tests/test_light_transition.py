@@ -6,7 +6,7 @@ warning stages. Manual turn-ons/offs through the virtual entity never carry a
 *configured* transition.
 
 A caller-supplied transition is separate: it is forwarded to the members, which
-requires advertising LightEntityFeature.TRANSITION. That feature fails open —
+requires advertising LightEntityFeature.TRANSITION. That feature fails open:
 withheld only once every member is visible and none can fade.
 """
 
@@ -177,7 +177,7 @@ async def test_stage_and_final_off_transitions(hass: HomeAssistant, freezer) -> 
 async def test_effect_blink_off_uses_effect_transition(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An effect brightness of 0 blinks the real lights off via turn_off — that
+    """An effect brightness of 0 blinks the real lights off via turn_off; that
     call still fades with the effect transition."""
     entry = make_light_entry(
         effect_timeout=10, effect_brightness=0, warn_timeout=0, effect_transition=1
@@ -226,7 +226,7 @@ async def test_no_transition_attribute_when_unconfigured(
 
 
 # ---------------------------------------------------------------------------
-# Caller-supplied transitions — arrive on the service call itself, and only
+# Caller-supplied transitions: arrive on the service call itself, and only
 # reach async_turn_on when the entity advertises LightEntityFeature.TRANSITION.
 # ---------------------------------------------------------------------------
 
@@ -377,7 +377,7 @@ async def test_transition_stays_advertised_until_the_last_member_is_judged(
     entry = make_light_entry(lights=[REAL, other])
     await setup_entries(hass, entry)
 
-    # real_2 has no state yet — still unknown, so still advertised.
+    # real_2 has no state yet: still unknown, so still advertised.
     assert _features(hass) & LightEntityFeature.TRANSITION
 
     hass.states.async_set(other, "off", {"supported_features": 0})
@@ -400,7 +400,7 @@ async def test_transition_advertised_during_the_startup_window(
 
     At boot _seed_state (and with it _update_capabilities) waits for
     EVENT_HOMEASSISTANT_STARTED, but the entity exists and takes service
-    calls before that — a startup scene's fade must not be stripped.
+    calls before that: a startup scene's fade must not be stripped.
     """
     hass.set_state(CoreState.starting)
     hass.states.async_set(REAL, "off", {"supported_features": 0})

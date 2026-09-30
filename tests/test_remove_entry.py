@@ -314,7 +314,7 @@ async def test_remove_entry_strips_references_from_dependents(
 ) -> None:
     """Removing a sensor entry cleans its references out of surviving entries.
 
-    A dangling reference silently degrades the dependents — worst of all a
+    A dangling reference silently degrades the dependents, worst of all a
     gate-mode schedule reference, which would read as a gate that never opens
     and block every automatic turn-on.
     """
@@ -461,7 +461,7 @@ async def test_remove_wrapped_virtual_light_strips_member_reference(
     the inner entry is removed.
 
     Regression: CONF_LIGHTS was missing from the reference cleanup, and
-    _all_lights_off treats an unresolvable member as "maybe still on" — the
+    _all_lights_off treats an unresolvable member as "maybe still on"; the
     dangling id would have pinned the outer light on forever.
     """
     inner = make_light_entry(name="Rm Inner", lights=["light.inner_real"])
@@ -497,7 +497,7 @@ async def test_remove_entry_without_references_leaves_others_alone(
     # Untouched: no options were written onto the light entry.
     assert not light.options
 
-    # An entry that never loaded registered no entities — removing it has
+    # An entry that never loaded registered no entities; removing it has
     # nothing to clean up and equally touches nobody.
     never_loaded = _illuminance_entry()
     never_loaded.add_to_hass(hass)
@@ -511,7 +511,7 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
     """A scheduled light missing a settings side must not be rewritten just to
-    materialise that side as an empty dict — that would differ from its stored
+    materialise that side as an empty dict; that would differ from its stored
     config and force a reload of an entry referencing nothing removed."""
     occupancy = _occupancy_entry()
     partial = MockConfigEntry(

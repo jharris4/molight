@@ -1043,7 +1043,7 @@ async def test_schedule_change_ignores_a_standing_open_momentary_door(
     hass: HomeAssistant,
 ) -> None:
     """In plain open mode the door is a momentary trigger, so a profile switch
-    is not an opening — matching startup, illuminance going dark and a
+    is not an opening, matching startup, illuminance going dark and a
     gate-mode window starting, which all ignore a door that is merely open."""
     door = "binary_sensor.inside_door"
     hass.states.async_set(REAL, "off")
@@ -1323,7 +1323,7 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     assert hass.states.get(VIRTUAL).attributes["auto_off_held"] is False
 
     # Entering the schedule selects the inside side, where the schedule
-    # itself is the keep-on entity — and it is on.
+    # itself is the keep-on entity, and it is on.
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
     state = hass.states.get(VIRTUAL)

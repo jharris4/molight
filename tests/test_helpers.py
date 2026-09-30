@@ -49,7 +49,7 @@ def test_molight_config_without_options_uses_data() -> None:
 
 
 def test_molight_config_options_fully_replace_data() -> None:
-    """Options replace data — cleared optional fields must not resurrect."""
+    """Options replace data; cleared optional fields must not resurrect."""
     entry = _entry(
         {
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,

@@ -301,7 +301,7 @@ async def test_external_off_works_while_held(hass: HomeAssistant, freezer) -> No
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    # Wall switch off — never suppressed by the hold.
+    # Wall switch off: never suppressed by the hold.
     hass.states.async_set("light.real_1", "off")
     await settle(hass)
     assert _state(hass).state == "off"
@@ -361,7 +361,7 @@ async def test_release_while_occupied_but_bright_gated_runs_timer(
 ) -> None:
     """Occupancy adoption at release is gated like any other adoption: bright
     (gate mode, so no forced off) means the released light runs a fresh timer
-    instead of being held OCCUPIED — exactly what a turn-on under the same
+    instead of being held OCCUPIED, exactly what a turn-on under the same
     conditions does."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(ILLUM, "on")  # bright
@@ -633,7 +633,7 @@ async def test_hold_blocks_gate_window_end_release_applies_it(
 async def test_hold_suppresses_false_detection_quick_off(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The false-detection quick off is an automatic off — held like the rest."""
+    """The false-detection quick off is an automatic off; held like the rest."""
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 

@@ -212,7 +212,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
     hass: HomeAssistant, freezer
 ) -> None:
     """A reload landing during the effect blink-off finds the real lights off
-    and seeds IDLE — the auto-off effectively completed early."""
+    and seeds IDLE: the auto-off effectively completed early."""
     contexts = []
 
     @callback

@@ -200,7 +200,7 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["current_window_start"] == "2026-07-02T18:00:00+00:00"
     assert state.attributes["next_transition"] == "2026-07-03T02:00:00+00:00"
 
-    # The first window ends at 23:00 — still inside the second window.
+    # The first window ends at 23:00, still inside the second window.
     t = datetime(2026, 7, 2, 23, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -209,7 +209,7 @@ async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T18:00:00+00:00"
 
-    # The overnight window ends at 02:00 — now everything is over.
+    # The overnight window ends at 02:00; now everything is over.
     t = datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -477,7 +477,7 @@ async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
     assert state.state == "off"
     assert state.attributes["next_transition"] is None
 
-    # No boundaries in sight — the sensor re-evaluates tomorrow without error.
+    # No boundaries in sight: the sensor re-evaluates tomorrow without error.
     freezer.tick(timedelta(days=1, minutes=1))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -936,7 +936,7 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
     """Edges are ordered by real instant, not wall clock, across a DST gap.
 
     On 2026-03-08 in America/New_York, 02:30 does not exist; resolved with
-    fold=0 it lands on EST (07:30 UTC) — a *later* real instant than
+    fold=0 it lands on EST (07:30 UTC), a *later* real instant than
     03:05 EDT (07:05 UTC) despite the earlier wall time. The 03:05 window's
     start must not be shadowed by the gap edge.
     """
@@ -954,7 +954,7 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
 
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "off"
-    # 02:30 resolves into the gap (07:30 UTC as EST) — a later real instant
+    # 02:30 resolves into the gap (07:30 UTC as EST), a later real instant
     # than 03:05 EDT (07:05 UTC). The timer must be armed for 03:05.
     assert state.attributes["next_transition"] == "2026-03-08T03:05:00-04:00"
 

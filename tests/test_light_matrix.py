@@ -3,7 +3,7 @@
 test_light.py covers the main end-to-end scenarios; this file sweeps the
 remaining occupancy x illuminance x schedule x light-state combinations so
 every gating rule of the state machine is pinned. The watched sensors are
-plain states set via hass.states.async_set — the light only reads states
+plain states set via hass.states.async_set; the light only reads states
 and attributes, so the tests stay independent of the virtual-sensor
 implementations.
 """
@@ -674,7 +674,7 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
     """After a manual off mid-window the state is IDLE, so occupancy applies again.
 
     Pins current behavior: only the SCHEDULED state shields the follow window
-    from occupancy — a manual override hands control back to the sensors.
+    from occupancy: a manual override hands control back to the sensors.
     """
     entry = make_light_entry(
         occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
@@ -1186,7 +1186,7 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
 
     Companion to test_scheduled_ignores_occupancy_and_illuminance (follow mode):
     this pins the gate/control combination. Precedence while running is
-    control-bright > occupancy and gate-window-end > occupancy — active
+    control-bright > occupancy and gate-window-end > occupancy: active
     occupancy never shields the light from either forced off.
     """
     entry = make_light_entry(
@@ -1288,7 +1288,7 @@ async def test_reoccupancy_during_countdown_cancels_timer(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Way past any timer — occupied lights never time out.
+    # Way past any timer: occupied lights never time out.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1302,7 +1302,7 @@ async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
     """A timer expiring in the same loop iteration occupancy returns is a no-op.
 
     async_call_later has already fired the callback at that point, so the
-    occupancy handler's _cancel_timer can't stop it — _timer_expired itself
+    occupancy handler's _cancel_timer can't stop it; _timer_expired itself
     must notice the state machine moved on (mirroring its _held guard) instead
     of turning the lights off over an occupied room.
     """
@@ -1401,7 +1401,7 @@ async def test_external_off_during_occupied_goes_idle(hass: HomeAssistant) -> No
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 
-    # Occupancy is still on but fires no new event — the lights stay off.
+    # Occupancy is still on but fires no new event; the lights stay off.
     await settle(hass)
     assert _state(hass).state == "off"
 
@@ -1473,7 +1473,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
 
     Illuminance-dark re-activation grants only the remaining portion of the
     original on-period. When the real light's state then echoes our own
-    service call, that echo must be recognised as self-caused — treating it
+    service call, that echo must be recognised as self-caused; treating it
     as an external turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
     full timer.
     """
@@ -1514,7 +1514,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The remaining ~20s countdown still stands — not a fresh 60s timer.
+    # The remaining ~20s countdown still stands, not a fresh 60s timer.
     freezer.tick(timedelta(seconds=21))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1567,7 +1567,7 @@ async def test_attribute_only_change_does_not_restart_timer(
     hass.states.async_set(REAL, "on", {"brightness": 100, "battery": 42})
     await settle(hass)
 
-    # The original 60s timer still expires on schedule — it was not restarted
+    # The original 60s timer still expires on schedule; it was not restarted
     # by the attribute update at the 30s mark.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
@@ -1609,7 +1609,7 @@ async def test_external_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> 
     """An external off→on at brightness 0 is an off in disguise.
 
     The virtual light must stay off without attributing a turn-on or starting
-    a timer — matching how a dim to 0, _all_lights_off and the startup seed
+    a timer, matching how a dim to 0, _all_lights_off and the startup seed
     already treat brightness 0. The later 0 → non-zero dim is the turn-on.
     """
     hass.states.async_set(REAL, "off")
@@ -1639,7 +1639,7 @@ async def test_member_on_at_brightness_zero_keeps_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A member appearing on at brightness 0 while another is lit must not
-    restart the running countdown — it carries no human activity."""
+    restart the running countdown; it carries no human activity."""
     hass.states.async_set(REAL, "on", {"brightness": 100})
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE

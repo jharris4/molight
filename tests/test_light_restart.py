@@ -277,7 +277,7 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
 async def test_restart_missed_window_end_with_lights_already_off(
     hass: HomeAssistant,
 ) -> None:
-    """Same boundary catch-up, but nothing to turn off — just clear the marker."""
+    """Same boundary catch-up, but nothing to turn off; just clear the marker."""
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
@@ -339,7 +339,7 @@ async def test_restart_applies_missed_window_start(
 async def test_restart_missed_window_start_with_lights_already_on(
     hass: HomeAssistant,
 ) -> None:
-    """Same boundary catch-up, but nothing to turn on — adopt SCHEDULED and
+    """Same boundary catch-up, but nothing to turn on; adopt SCHEDULED and
     stamp the marker, leaving the already-on lights alone."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "on")
@@ -425,7 +425,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
     hass: HomeAssistant,
 ) -> None:
     """A restart during the effect blink-off finds the real lights off and
-    seeds IDLE — the auto-off effectively completed early; the restored
+    seeds IDLE: the auto-off effectively completed early; the restored
     pre-warn snapshot must not re-light the room."""
     mock_restore_cache(
         hass,
@@ -501,7 +501,7 @@ async def test_restart_mid_warning_without_warning_active_uses_the_snapshot(
     hass: HomeAssistant,
 ) -> None:
     """A state written before warning_active existed is judged the old way, by
-    whether a snapshot was taken — so an upgrade landing mid-warning still
+    whether a snapshot was taken, so an upgrade landing mid-warning still
     restores the pre-warning brightness instead of adopting the warn stage's."""
     mock_restore_cache(
         hass,

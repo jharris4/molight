@@ -132,7 +132,7 @@ async def test_unload_entry_succeeds_for_every_type(
     await settle(hass)
 
     # Unloaded (not removed) entities are left as restored "unavailable"
-    # placeholders — the live entity objects are gone.
+    # placeholders; the live entity objects are gone.
     registry = er.async_get(hass)
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         state = hass.states.get(reg_entry.entity_id)

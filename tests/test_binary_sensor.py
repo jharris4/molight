@@ -161,7 +161,7 @@ async def test_occupancy_clears_after_unavailable_timeout(
     """A prolonged dropout while occupied clears occupancy after the timeout.
 
     latest_occupied_time advances to the dropout moment immediately, and the
-    clear is flagged via last_clear_unavailable — never as a false detection.
+    clear is flagged via last_clear_unavailable, never as a false detection.
     """
     occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
@@ -208,7 +208,7 @@ async def test_occupancy_dropout_recovery_to_on_cancels_clear(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
 
-    # The pending clear was cancelled — still on long after it would have fired.
+    # The pending clear was cancelled: still on long after it would have fired.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -534,7 +534,7 @@ async def test_second_dropout_event_does_not_rearm_clear_timer(
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await hass.async_block_till_done()
 
-    # 30s in, the source flaps to unknown — the countdown is already armed.
+    # 30s in, the source flaps to unknown; the countdown is already armed.
     freezer.tick(timedelta(seconds=30))
     hass.states.async_set("binary_sensor.motion_1", "unknown")
     await hass.async_block_till_done()
@@ -690,13 +690,13 @@ async def test_combined_trigger_maintain_and_lot(
     await settle(hass)
     assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
 
-    # Trigger clears — the maintain sensor keeps occupancy alive.
+    # Trigger clears: the maintain sensor keeps occupancy alive.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await settle(hass)
     assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
 
-    # Maintain clears — occupancy ends; latest_occupied_time is the max of
+    # Maintain clears: occupancy ends; latest_occupied_time is the max of
     # the constituents': trigger cleared at T+10 with timeout 30 (→ T-20),
     # maintain at T+20 with timeout 45 (→ T-25). The trigger's wins.
     freezer.tick(timedelta(seconds=10))
@@ -1254,7 +1254,7 @@ async def test_combined_keeps_newest_lot_over_older_clear(
     hass: HomeAssistant,
 ) -> None:
     """A constituent clearing with an older latest_occupied_time must not
-    regress the combined sensor's own — and a cycle that advanced nothing is
+    regress the combined sensor's own, and a cycle that advanced nothing is
     flagged as a false detection."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
@@ -1551,7 +1551,7 @@ async def test_occupancy_seeds_off_when_source_unavailable_at_startup(
 
     Consistent with the clear-on-unavailable behavior: after a restart we
     can't know how long the source has been gone, so the safe read is 'not
-    occupied' — a recovery to 'on' re-triggers normally.
+    occupied'; a recovery to 'on' re-triggers normally.
     """
     lot = "2026-07-01T10:00:00+00:00"
     mock_restore_cache(
@@ -1609,7 +1609,7 @@ async def test_illuminance_restores_state(
     await hass.config_entries.async_setup(illuminance_entry.entry_id)
     await hass.async_block_till_done()
 
-    # sensor.lux_1 does not exist yet — the restored value must hold.
+    # sensor.lux_1 does not exist yet; the restored value must hold.
     assert hass.states.get("binary_sensor.test_illuminance").state == "on"
 
 
@@ -1617,7 +1617,7 @@ async def test_illuminance_restores_state(
 async def test_illuminance_unavailable_before_first_reading(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry
 ) -> None:
-    """Without a reading the sensor must not claim 'dark' — off opens the gates."""
+    """Without a reading the sensor must not claim 'dark'; off opens the gates."""
     illuminance_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(illuminance_entry.entry_id)
     await hass.async_block_till_done()
@@ -1720,7 +1720,7 @@ async def test_illuminance_holds_state_on_unparsable_reading(
 
 
 # ---------------------------------------------------------------------------
-# Restore robustness — corrupt attributes must never break setup
+# Restore robustness: corrupt attributes must never break setup
 # ---------------------------------------------------------------------------
 
 

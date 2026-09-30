@@ -579,7 +579,7 @@ async def test_foreign_write_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """While the command settles, a write under another context is a real change
-    even if it would pass as an echo — HA reuses our context for the reply."""
+    even if it would pass as an echo; HA reuses our context for the reply."""
     await _setup(hass, light_entry)
     await _virtual(hass, "turn_on", brightness=153)
 

@@ -1,7 +1,7 @@
 """Unavailability tests for the MoLight Virtual Light.
 
 Each entity the light watches (real lights, occupancy, illuminance,
-schedule) can drop to unavailable/unknown at any time — e.g. a Zigbee
+schedule) can drop to unavailable/unknown at any time, e.g. a Zigbee
 device falling off the mesh or an integration reloading. Those blips must
 never be read as state changes, and recovery transitions must behave like
 fresh events.
@@ -130,7 +130,7 @@ async def test_real_light_recovery_keeps_running_countdown(
     """A member blip/recovery mid-countdown must not win a fresh full timer.
 
     Regression: unavailable → on used to be handled as an external turn-on,
-    replacing an occupancy-anchored countdown with a full ACTIVE timer — a
+    replacing an occupancy-anchored countdown with a full ACTIVE timer: a
     bulb that blips off the mesh every few minutes never turned off.
     """
     await setup_entries(hass, make_light_entry(occupancy=OCC, timeout=60))
@@ -152,7 +152,7 @@ async def test_real_light_recovery_keeps_running_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The original countdown completes on schedule — 31s later, not 60s.
+    # The original countdown completes on schedule: 31s later, not 60s.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -679,7 +679,7 @@ async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
-    # Manual off mid-window — respected.
+    # Manual off mid-window: respected.
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).state == "off"
@@ -1076,8 +1076,8 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
 
     The virtual occupancy sensor clears itself after its clear-on-unavailable
     timeout (default 60s), and because the clear is not flagged as a false
-    detection, the light runs its normal countdown — anchored to the dropout
-    moment — instead of the quick-off.
+    detection, the light runs its normal countdown (anchored to the dropout
+    moment) instead of the quick-off.
     """
     occupancy = MockConfigEntry(
         domain=DOMAIN,
@@ -1095,7 +1095,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # The motion sensor falls off the network — nothing happens yet.
+    # The motion sensor falls off the network: nothing happens yet.
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -1165,7 +1165,7 @@ async def test_registered_light_with_no_state_never_counts_as_off(
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # REAL2 is registered but has no state — its integration has not loaded
+    # REAL2 is registered but has no state: its integration has not loaded
     # (yet); turning REAL off must not release the virtual light, since REAL2
     # may well still be burning.
     hass.states.async_set(REAL, "off")
@@ -1180,7 +1180,7 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
     """A member gone from HA entirely no longer pins the virtual light on.
 
     A deleted entity loses both its state and its registry entry, and can
-    never report again — treating it as "maybe still on" would keep the
+    never report again; treating it as "maybe still on" would keep the
     virtual light from ever reaching IDLE on external offs.
     """
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
@@ -1286,7 +1286,7 @@ async def test_follow_member_recovery_mid_window_reasserts_window(
 ) -> None:
     """A member rebooting mid-window is re-lit with the scheduled settings.
 
-    Whatever it boots into — dark, or lit at its own defaults — is not human
+    Whatever it boots into (dark, or lit at its own defaults) is not human
     activity: the window still owns the lights, so the auto-on brightness is
     re-sent and the machine stays SCHEDULED.
     """

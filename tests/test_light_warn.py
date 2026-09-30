@@ -93,7 +93,7 @@ async def _turn_on_virtual(hass: HomeAssistant, brightness: int | None = None) -
 
 
 # ---------------------------------------------------------------------------
-# Attribute invariance — the warning stages drive the real lights themselves
+# Attribute invariance: the warning stages drive the real lights themselves
 # and must never register as external activity
 # ---------------------------------------------------------------------------
 
@@ -218,7 +218,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 
 
 # ---------------------------------------------------------------------------
-# Offs during the warning — manual, external, bright, gate window end
+# Offs during the warning: manual, external, bright, gate window end
 # ---------------------------------------------------------------------------
 
 
@@ -479,7 +479,7 @@ async def test_follow_window_start_during_effect_restores_lights(
     assert resume, "window start must re-light the blinked-off real lights"
     assert resume[-1]["service_data"]["brightness"] == 200
 
-    # SCHEDULED runs no timer — the stage timer must be gone.
+    # SCHEDULED runs no timer; the stage timer must be gone.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -544,7 +544,7 @@ async def test_external_dim_during_warning_honors_new_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """An external dim mid-warning cancels the sequence and restarts the full
-    timer, but keeps the dim's own brightness — the pre-warn snapshot is not
+    timer, but keeps the dim's own brightness; the pre-warn snapshot is not
     restored over the user's explicit choice."""
     entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
     await setup_entries(hass, entry)
@@ -755,7 +755,7 @@ async def test_external_recolor_during_warning_without_a_brightness_to_restore(
 
 
 # ---------------------------------------------------------------------------
-# A turn-on naming no brightness — the warning uses the level the real light
+# A turn-on naming no brightness: the warning uses the level the real light
 # came on at
 # ---------------------------------------------------------------------------
 

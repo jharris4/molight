@@ -3,7 +3,7 @@
 The maintain entity holds an already-on light on while it is on; it never
 turns the light on. Unlike the combined sensor's maintain_sensors (which only
 extend occupancy started by a trigger sensor), it holds the light regardless
-of how it was lit — manual, physical, or occupancy. The watched sensors are
+of how it was lit: manual, physical, or occupancy. The watched sensors are
 plain states set via hass.states.async_set, as in test_light_matrix.py.
 """
 
@@ -96,7 +96,7 @@ async def test_maintain_holds_manual_light(hass: HomeAssistant, freezer) -> None
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Well past the timeout — the maintain hold suspends the timer.
+    # Well past the timeout: the maintain hold suspends the timer.
     await _tick(hass, freezer, 300)
     assert _state(hass).state == "on"
 
@@ -243,7 +243,7 @@ async def test_no_quick_off_when_maintain_clear_genuine(
     hass: HomeAssistant, freezer
 ) -> None:
     """A false occupancy clear followed by a genuine maintain clear runs the
-    normal countdown — the maintain sensor saw real presence."""
+    normal countdown: the maintain sensor saw real presence."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, entry)
@@ -520,7 +520,7 @@ async def test_maintain_only_false_clear_gets_normal_countdown(
     hass: HomeAssistant, freezer
 ) -> None:
     """With no regular occupancy sensor a false-flagged maintain clear still
-    earns the normal countdown — the quick off only cuts short occupancy-lit
+    earns the normal countdown: the quick off only cuts short occupancy-lit
     lights, and without an occupancy sensor no light is ever occupancy-lit."""
     entry = make_light_entry(maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
@@ -536,7 +536,7 @@ async def test_maintain_only_false_clear_gets_normal_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Past the 5s false-detection quick off — the normal 60s countdown runs.
+    # Past the 5s false-detection quick off: the normal 60s countdown runs.
     await _tick(hass, freezer, 10)
     assert _state(hass).state == "on"
     await _tick(hass, freezer, 51)

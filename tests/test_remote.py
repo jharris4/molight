@@ -102,8 +102,8 @@ def _fire(
 def _seed(hass: HomeAssistant, entity_id: str, event_types: list[str]) -> None:
     """Give an event entity an initial (restored-looking) state.
 
-    The runtime ignores an entity's first sighting — its state carries the
-    last pre-shutdown event — so tests seed before pressing.
+    The runtime ignores an entity's first sighting (its state carries the
+    last pre-shutdown event), so tests seed before pressing.
     """
     _fire(hass, entity_id, event_types[0], event_types)
 
@@ -173,7 +173,7 @@ async def test_pico_single_click_on_off(
 async def test_bilresa_single_vs_double_click(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """On a multi-press button, only multi_press_1/_2 fire — the constituent
+    """On a multi-press button, only multi_press_1/_2 fire; the constituent
     initial_press/short_release of the same physical click never do."""
     remote = _remote_entry(
         **{
@@ -303,7 +303,7 @@ async def test_brightness_step_up_and_down(
 
     _fire(hass, "event.pico_lower", "press", PICO_TYPES)
     await settle(hass)
-    # HA's own step rounding may not be perfectly symmetric — back to ~200.
+    # HA's own step rounding may not be perfectly symmetric: back to ~200.
     assert abs(_vlight(hass).attributes["brightness"] - 200) <= 1
 
     # Down from near-minimum turns the light off (HA's own step handling).
@@ -430,7 +430,7 @@ async def test_removing_light_strips_remote_target(
 async def test_last_action_sensor(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """The diagnostic sensor records each executed binding — and starts
+    """The diagnostic sensor records each executed binding, and starts
     unknown, since a pre-restart action shown as current would mislead."""
     remote = _remote_entry(
         **{
@@ -474,7 +474,7 @@ async def test_first_press_of_a_brand_new_button_fires(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A freshly paired button (state "unknown", never fired an event) has
-    nothing stale to replay — its very first press must execute.
+    nothing stale to replay; its very first press must execute.
 
     Regression: the guard used to swallow any transition out of "unknown",
     so the first press of every new button did nothing.
@@ -493,7 +493,7 @@ async def test_first_press_of_a_brand_new_button_fires(
 async def test_remote_added_before_startup_defers_subscription(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A remote set up before HA has started only subscribes at STARTED —
+    """A remote set up before HA has started only subscribes at STARTED;
     events replayed during startup must never fire a binding."""
     hass.set_state(CoreState.not_running)
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
@@ -539,7 +539,7 @@ async def test_remote_without_targets_is_inert(
 async def test_last_action_sensor_is_not_restored(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """The Last Action sensor deliberately forgets across restarts — a stale
+    """The Last Action sensor deliberately forgets across restarts: a stale
     pre-restart action shown as current would read as recent activity."""
     mock_restore_cache(
         hass,
@@ -666,7 +666,7 @@ async def test_attribute_only_write_never_refires(
     await settle(hass)
     assert _vlight(hass).state == "on"
 
-    # Re-write the same state with an extra attribute — not a new event.
+    # Re-write the same state with an extra attribute: not a new event.
     current = hass.states.get("event.pico_on")
     hass.states.async_set(
         "event.pico_on",
@@ -831,7 +831,7 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
     """A double-click binding is accepted on a button that advertises one,
     and on a button with no state yet (it can't be judged, so it is allowed
     and simply never fires until the entity proves itself). An advertised
-    empty event_types list is judged — and rejected."""
+    empty event_types list is judged, and rejected."""
     _seed(hass, "event.bilresa", BILRESA_TYPES)
     hass.states.async_set("event.no_types", "unknown", {"event_types": []})
     base = {
@@ -986,7 +986,7 @@ async def test_remote_options_clears_a_set_preset_color(
 
 @pytest.mark.asyncio
 async def test_unbound_click_is_ignored(hass: HomeAssistant) -> None:
-    """A recognised click with no binding fires nothing — no call, no action."""
+    """A recognised click with no binding fires nothing: no call, no action."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     await setup_entries(hass, remote)
     _seed(hass, "event.pico_on", LUTRON_EVENT_TYPES)
