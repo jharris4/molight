@@ -492,9 +492,10 @@ git push origin v1.x.0
 ```
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
-validates that the tag, manifest and changelog versions agree, runs every
-live E2E suite, then puts the release notes extracted from the changelog in
-its job summary. It does **not** create the GitHub Release. After the workflow
+validates that the tag is on `main` and that the tag, manifest and changelog
+versions agree, runs the lint, unit test and validation jobs and every live
+E2E suite, then puts the release notes extracted from the changelog in its
+job summary. It does **not** create the GitHub Release. After the workflow
 succeeds:
 
 1. Open its job summary and copy the generated release notes.

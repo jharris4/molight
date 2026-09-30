@@ -6,6 +6,8 @@ on:
   pull_request:
   schedule:
     - cron: "0 0 * * *"
+  # Release tags run this too; see release.yml.
+  workflow_call:
 
 permissions:
   contents: read
