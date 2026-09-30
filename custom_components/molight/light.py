@@ -657,6 +657,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # What each member should echo for our recent commands, oldest first
         # (see judge()): a reply to the previous one may trail the latest.
         self._echo_expectations: dict[str, deque[_EchoExpectation]] = {}
+        # Counts commands and offs, so a turn-on that waited for its turn-on
+        # selection can tell that it was overtaken.
+        self._command_generation = 0
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1289,14 +1292,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         if color is None and self._in_warning():
             # Same for the color: a colored stage must leave no trace either.
             color = self._pre_warn_color
-        await self._set_lights(
+        if await self._set_lights(
             True,
             brightness=brightness,
             transition=kwargs.get(ATTR_TRANSITION),
             color=color,
             apply_turn_on_selection=True,
-        )
-        self._transition_on()
+        ):
+            self._transition_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off all real lights and go idle.
@@ -2625,6 +2628,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _go_idle(self, *, bright_forced: bool = False) -> None:
         """Cancel any timer and move to IDLE."""
         self._cancel_timer()
+        self._command_generation += 1
         if self._machine_state != STATE_IDLE:
             # Why the on-period ended; an off while idle ends none.
             self._bright_forced_off = bright_forced
@@ -2774,6 +2778,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         context = Context()
         self._self_context_ids.append(context.id)
+        self._command_generation += 1
         self._expect_echo(bool(brightness), brightness or None, color, transition)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
@@ -2812,7 +2817,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _auto_lights_on(
         self, *, force_selection: bool = False
-    ) -> Coroutine[Any, Any, None]:
+    ) -> Coroutine[Any, Any, bool]:
         """Turn the real lights on for an automatic trigger.
 
         Applies the configured auto-on brightness, color and transition.
@@ -2826,14 +2831,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             force_selection=force_selection,
         )
 
-    def _auto_lights_off(self) -> Coroutine[Any, Any, None]:
+    def _auto_lights_off(self) -> Coroutine[Any, Any, bool]:
         """Turn the real lights off for an automatic turn-off.
 
         Applies the configured auto-off transition. Manual offs bypass this.
         """
         return self._set_lights(False, transition=self._auto_off_transition)
 
-    def _scheduled_end_lights_off(self) -> Coroutine[Any, Any, None]:
+    def _scheduled_end_lights_off(self) -> Coroutine[Any, Any, bool]:
         """Turn off at a scheduled-light boundary using the outgoing profile."""
         transition = _opt_transition(
             self._inside_schedule_settings.get(CONF_AUTO_OFF_TRANSITION)
@@ -2848,7 +2853,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         color: dict | None = None,
         apply_turn_on_selection: bool = False,
         force_selection: bool = False,
-    ) -> None:
+    ) -> bool:
+        """Command the real lights; False when a newer command overtook it."""
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
@@ -2856,8 +2862,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._bright_forced_off = False
         context = Context()
         self._self_context_ids.append(context.id)
+        self._command_generation += 1
+        generation = self._command_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
             await self._apply_turn_on_selection(context)
+            if generation != self._command_generation:
+                # An off or a newer command landed while the select call
+                # was awaited; it stands.
+                return False
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:
             service_data[ATTR_TRANSITION] = transition
@@ -2882,6 +2894,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._attr_is_on = on
         self.async_write_ha_state()
+        return True
 
     async def _apply_turn_on_selection(self, context: Context) -> None:
         """Apply the configured select option before an off-to-on command."""

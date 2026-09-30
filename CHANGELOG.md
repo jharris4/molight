@@ -86,6 +86,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changing only the color of a real light during the effect or warn stage
   now restores the brightness the light had before the warning. Previously
   the light stayed at the stage's brightness for the whole new on-period.
+- A light turned off while its turn-on was still waiting for a slow turn-on
+  selection now stays off. Previously the waiting turn-on was sent
+  afterwards, leaving the light on with no timer to turn it off.
 
 ## [1.7.0] - 2026-08-27
 

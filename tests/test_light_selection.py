@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -347,3 +348,151 @@ async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     await settle(hass)
 
     assert selected == ["Cozy", "Cozy"]
+
+
+class _SlowSelect:
+    """A select service that blocks until released."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        hass.services.async_register("select", "select_option", self._select)
+
+    async def _select(self, _call: ServiceCall) -> None:
+        self.started.set()
+        await self.release.wait()
+
+
+def _light_calls(hass: HomeAssistant) -> list[tuple[str, int | None]]:
+    """Record (service, brightness) of each command to the real light."""
+    calls: list[tuple[str, int | None]] = []
+
+    @callback
+    def record_call(event: Event) -> None:
+        data = event.data["service_data"]
+        if event.data["domain"] == "light" and data["entity_id"] == ["light.ambient"]:
+            calls.append((event.data["service"], data.get("brightness")))
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_call)
+    return calls
+
+
+async def _park_automatic_turn_on(hass: HomeAssistant, **kwargs: Any) -> _SlowSelect:
+    """Occupancy lights the room; the turn-on waits for the select call."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry(occupancy="binary_sensor.occ", **kwargs))
+    hass.states.async_set("binary_sensor.occ", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["molight_state"] == "occupied"
+    return select
+
+
+@pytest.mark.asyncio
+async def test_manual_off_during_slow_selection_stands(hass: HomeAssistant) -> None:
+    """A turn-on still waiting for its selection does not undo a later off."""
+    select = await _park_automatic_turn_on(hass)
+    calls = _light_calls(hass)
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_bright_off_during_slow_selection_stands(hass: HomeAssistant) -> None:
+    """An automatic off overtakes a waiting turn-on like a manual one."""
+    hass.states.async_set("binary_sensor.illum", "off")
+    select = await _park_automatic_turn_on(hass, illuminance="binary_sensor.illum")
+    calls = _light_calls(hass)
+
+    hass.states.async_set("binary_sensor.illum", "on")
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_manual_on_then_off_during_slow_selection_stays_off(
+    hass: HomeAssistant,
+) -> None:
+    """An overtaken manual turn-on neither lights the room nor starts a timer."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+    calls = _light_calls(hass)
+
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_newer_turn_on_during_slow_selection_replaces_the_waiting_one(
+    hass: HomeAssistant,
+) -> None:
+    """Of two turn-ons waiting for the selection, only the newer is sent."""
+    select = await _park_automatic_turn_on(hass, auto_on_brightness=40)
+    calls = _light_calls(hass)
+
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    )
+    await asyncio.sleep(0)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 200)]
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 200
+
+
+@pytest.mark.asyncio
+async def test_uninterrupted_slow_selection_still_turns_on(
+    hass: HomeAssistant,
+) -> None:
+    """With nothing in between, the waiting turn-on is sent."""
+    select = await _park_automatic_turn_on(hass, auto_on_brightness=40)
+    calls = _light_calls(hass)
+
+    select.release.set()
+    await settle(hass)
+
+    assert calls == [("turn_on", 102)]
+    assert hass.states.get("light.selection_light").state == "on"
