@@ -81,9 +81,17 @@ async function submit(page) {
   await page.getByRole("button", { name: /submit|next/i }).click();
 }
 
+function timeoutField(page) {
+  return page.getByRole("spinbutton", { name: /^Turn-off timeout/ });
+}
+
 async function fillTimeout(page, seconds) {
-  const timeout = page.getByRole("spinbutton", { name: /^Turn-off timeout/ });
-  await timeout.fill(String(seconds));
+  await timeoutField(page).fill(String(seconds));
+}
+
+// The options flow prefills each profile from the stored entry.
+async function expectTimeout(page, seconds) {
+  await expect(timeoutField(page)).toHaveValue(String(seconds));
 }
 
 async function createScheduledLight(page) {
@@ -125,14 +133,31 @@ async function editScheduledLight(page) {
   await page.getByRole("textbox", { name: /^Name/ }).fill(EDITED_LIGHT_NAME);
   await submit(page);
   await expectFlowTitle(page, "Outside-schedule settings");
+  await expectTimeout(page, 31);
   await fillTimeout(page, 32);
   await submit(page);
   await expectFlowTitle(page, "Inside-schedule settings");
+  await expectTimeout(page, 62);
   await fillTimeout(page, 63);
   await submit(page);
   await expect(page.getByText(/options successfully saved/i)).toBeVisible();
   await page.getByRole("button", { name: /finish/i }).click();
   await expect((await entryCard(page, EDITED_LIGHT_NAME))).toBeVisible();
+}
+
+async function expectStoredTimeouts(page, name, outside, inside) {
+  const card = await entryCard(page, name);
+  await card.getByRole("button", { name: /configure/i }).click();
+  await expectFlowTitle(page, "Virtual Scheduled Light");
+  await submit(page);
+  await expectFlowTitle(page, "Outside-schedule settings");
+  await expectTimeout(page, outside);
+  await submit(page);
+  await expectFlowTitle(page, "Inside-schedule settings");
+  await expectTimeout(page, inside);
+  // Close without saving.
+  await page.getByRole("button", { name: "Close", exact: true }).filter({ visible: true }).last().click();
+  await expect(visibleText(page, "Inside-schedule settings")).toBeHidden();
 }
 
 async function convert(page, menuChoice, entityLabel) {
@@ -186,22 +211,39 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
     EDITED_LIGHT_NAME,
   );
 
+  // The browser fixture holds the schedule off.
+  await expect
+    .poll(async () => (await entityState(page, LIGHT_ENTITY_ID)).attributes.active_settings)
+    .toBe("outside_schedule");
   const state = await entityState(page, LIGHT_ENTITY_ID);
   expect(state.entity_id).toBe(LIGHT_ENTITY_ID);
   expect(state.attributes.friendly_name).toBe(EDITED_LIGHT_NAME);
-  expect(state.attributes.active_settings).toBeDefined();
-  const card = await entryCard(page, EDITED_LIGHT_NAME);
-  await expect(card).toBeVisible();
+  // Converting to a gated light keeps the inside profile, and converting back
+  // copies it into both.
+  await expectStoredTimeouts(page, EDITED_LIGHT_NAME, 63, 63);
 });
 
 async function sectionPanel(page, title) {
   const panel = page.locator("ha-expansion-panel").filter({ hasText: title }).first();
   await expect(panel).toBeVisible();
   if ((await panel.getAttribute("expanded")) === null) {
+    const collapsed = (await panel.boundingBox()).height;
     await panel.getByText(title, { exact: true }).first().click();
     await expect(panel).toHaveAttribute("expanded", "");
-    // Let the expand animation finish so the pickers inside stay put.
-    await page.waitForTimeout(500);
+    // Let the expand animation finish so the pickers inside stay put: the
+    // panel has grown and kept its height across two samples.
+    let previous;
+    await expect
+      .poll(
+        async () => {
+          const { height } = await panel.boundingBox();
+          const settled = height > collapsed && height === previous;
+          previous = height;
+          return settled;
+        },
+        { intervals: [100] },
+      )
+      .toBe(true);
   }
   return panel;
 }

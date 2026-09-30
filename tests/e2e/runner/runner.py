@@ -3676,12 +3676,10 @@ def run_browser_prepare() -> None:
     client.authenticate()
     client.finish_onboarding()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
+    # Off, so the smoke test knows which profile its scheduled light uses.
+    client.set_state(RAW_SCHEDULE, "off")
     create_virtual_schedule(client)
-    client.wait_state(
-        VIRTUAL_SCHEDULE,
-        lambda state: state["state"] in {"on", "off"},
-        "available",
-    )
+    client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     print("PASS: browser fixture and owner account are ready")
 
 
