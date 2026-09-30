@@ -38,10 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   earlier values, so the warn stage could jump to full brightness and a
   re-trigger could leave the room at the warn brightness.
 - A real light's reply to one command that arrives after the next command
-  was sent is no longer read as a manual change. Previously a slow bulb
-  reporting the end of its effect-stage fade just after the warn stage began
-  could restart the full timer at every expiry, so the light never turned
-  off.
+  was sent is no longer read as a manual change, unless the next command
+  switched the light the other way and the reply comes more than a few
+  seconds after its own command. Previously a slow bulb reporting the end of
+  its effect-stage fade just after the warn stage began could restart the
+  full timer at every expiry, so the light never turned off.
 - A dim or recolor of a real light within 30 s of a command that changed
   nothing on it — such as a remote's "on" press while the light is already
   on — is now recognised as a manual change. Previously the virtual light

@@ -484,6 +484,8 @@ class _EchoExpectation:
     color: tuple[ColorMode, tuple] | None
     transition: float
     issued: float
+    # A later command flipped power: only a reply while settling is its echo.
+    overtaken: bool = False
 
     def judge(
         self, old_state: State | None, new_state: State, *, settling: bool
@@ -1733,6 +1735,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             float(transition or 0),
             self.hass.loop.time(),
         )
+        for expectations in self._echo_expectations.values():
+            for earlier in expectations:
+                if earlier.on != on:
+                    earlier.overtaken = True
         plain = expectation.brightness is None and expectation.color is None
         for entity_id in self._lights:
             # A member already there has nothing to report, and the unanswered
@@ -1767,7 +1773,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         still counts; anything else — stale, missing, contradicted — is a real
         change. A reply to an earlier command may arrive after a newer one
         was sent, so each command still awaiting its reply is tried, newest
-        first.
+        first. Once a newer command flipped power, the older one's reply only
+        counts while it settles, or a manual flip back would pass as it.
         """
         now = self.hass.loop.time()
         waiting: list[_EchoExpectation] = []
@@ -1779,6 +1786,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             if age > ECHO_LATE_SECONDS + expectation.transition:
                 continue
             settling = age <= ECHO_SETTLE_SECONDS + expectation.transition
+            if expectation.overtaken and not settling:
+                contradicted.append(expectation)
+                continue
             if settling and not own_context:
                 waiting.append(expectation)
                 continue

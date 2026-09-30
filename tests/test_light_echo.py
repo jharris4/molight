@@ -513,6 +513,49 @@ async def test_late_matching_reply_under_its_own_context_is_not_physical(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("reply_context", ["ours", "own"])
+async def test_late_on_after_our_off_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, reply_context: str
+) -> None:
+    """A silent member reporting on after our off is a human turn-on, not the
+    late reply to the turn-on before it, even under the off's context."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on")
+    await _virtual(hass, "turn_off")
+    _age_expectations(hass, 10)
+    context = contexts[-1] if reply_context == "ours" else Context()
+
+    await _write(hass, "on", context, brightness=180)
+
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply_context", ["ours", "own"])
+async def test_late_off_after_our_on_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, reply_context: str
+) -> None:
+    """A silent member reporting off after our turn-on is a human turn-off, not
+    the late reply to the turn-off before it, even under the turn-on's context."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+    await _virtual(hass, "turn_off")
+    await _virtual(hass, "turn_on")
+    _age_expectations(hass, 10)
+    context = contexts[-1] if reply_context == "ours" else Context()
+
+    await _write(hass, "off", context)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_late_partial_reply_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
@@ -713,7 +756,7 @@ async def _into_warn(
     assert _attrs(hass)["molight_state"] == STATE_EFFECT
     effect_context = contexts[-1]
 
-    freezer.tick(timedelta(seconds=3))
+    freezer.tick(timedelta(seconds=2.5))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _attrs(hass)["molight_state"] == STATE_WARN
