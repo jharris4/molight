@@ -11,6 +11,7 @@ prefix() {
 
 # Lanes run in the background, where SIGINT is ignored, so pass an interrupt
 # on to them as TERM and wait while they clean up.
+# shellcheck disable=SC2329  # called from the traps below
 interrupt() {
     trap '' INT TERM
     for pid in $(jobs -p); do kill -TERM "$pid" 2>/dev/null || true; done

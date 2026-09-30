@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared environment and helpers for scripts/e2e*; source after cd to the repo root.
 # The Playwright image must match the pinned @playwright/test package.
 MOLIGHT_E2E_PLAYWRIGHT_VERSION="$(sed -n 's/.*"@playwright\/test": *"\([^"]*\)".*/\1/p' package.json)"
