@@ -167,6 +167,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contained. Previously, when the last sensor then cleared without a newer
   detection, the cycle was reported as a false detection, so lights it had
   lit turned off after the false-detection delay.
+- A light's **Configure** form that was opened before the light was
+  converted through **Convert virtual lights** can no longer be saved.
+  Previously the stale form replaced the converted profiles with its own
+  settings, so the light ran default settings on both sides of its schedule.
 
 ## [1.7.0] - 2026-08-27
 

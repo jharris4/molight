@@ -106,7 +106,7 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 
 ### Light conversion
 
-**Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references.
+**Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
 - **Gated → scheduled**: available for Virtual Lights with any gate behavior and a schedule sensor. Each light retains its own schedule. Its current settings become the inside-schedule profile; the outside profile keeps its timing, appearance, warnings, turn-on selection, and keep-on entities but starts without occupancy, maintain, illuminance, or door inputs. Turn-off, switch-state, and keep-state gates map to the same-named schedule-end actions. This creates a useful starting profile rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
 - **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile is permanently discarded after an explicit confirmation warning.

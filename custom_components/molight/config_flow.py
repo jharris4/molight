@@ -3564,8 +3564,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         rename fires the reload listener once instead of twice.
 
         Another light's options may have been saved while a multi-step form
-        was open, so the member graph is checked again at the final save.
+        was open, so the member graph is checked again at the final save; a
+        form opened before the light was converted no longer fits its entry.
         """
+        if self._entry.data[CONF_ENTITY_TYPE] != self._cfg[CONF_ENTITY_TYPE]:
+            return self.async_abort(reason="entry_converted")
         if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES and (
             _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS])
         ):

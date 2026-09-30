@@ -5064,6 +5064,57 @@ async def test_conversion_round_trip_restores_flat_config(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("direction", ["convert_to_scheduled", "convert_to_regular"])
+async def test_options_form_opened_before_a_conversion_is_refused(
+    hass: HomeAssistant, direction: str
+) -> None:
+    """A form of the old kind cannot be saved over the converted light."""
+    await _setup_night_schedule(hass)
+    if direction == "convert_to_scheduled":
+        light = _light_entry(
+            "Kitchen",
+            "kitchen",
+            timeout=45,
+            schedule_entity="binary_sensor.night_schedule",
+            schedule_mode=SCHEDULE_MODE_GATE,
+        )
+    else:
+        light = _scheduled_light_entry("Kitchen", "kitchen")
+    await setup_entries(hass, light)
+    result = await hass.config_entries.options.async_init(light.entry_id)
+
+    await _convert(hass, direction, "light.kitchen")
+    converted = molight_config(light)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Kitchen",
+            CONF_LIGHTS: ["light.kitchen_real"],
+            CONF_LIGHT_TIMEOUT: 45,
+        }
+        if direction == "convert_to_scheduled"
+        else {
+            CONF_NAME: "Kitchen",
+            CONF_LIGHTS: ["light.kitchen_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    if direction == "convert_to_regular":
+        # The scheduled form only saves after both side pages.
+        assert result["step_id"] == "scheduled_light_outside"
+        for _ in range(2):
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 45}
+            )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "entry_converted"
+    assert molight_config(light) == converted
+
+
+@pytest.mark.asyncio
 async def test_conversion_round_trip_keeps_a_derived_entity_id(
     hass: HomeAssistant,
 ) -> None:

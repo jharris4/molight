@@ -1742,7 +1742,8 @@
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
     },
     "abort": {
-      "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again."
+      "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
+      "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again."
     }
   }
 }
