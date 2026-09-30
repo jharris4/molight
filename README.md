@@ -625,7 +625,8 @@ every suite (API lanes and the browser smoke tests) on a
 minimum-supported/current matrix plus an advisory floating `stable` canary.
 Release tags run every suite before the release guard passes. Every CI job
 uploads the retained run directory (HA config and Compose logs) as a workflow
-artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` pins that directory.
+artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory
+that each run creates its own run directory in.
 
 ## Design notes
 
