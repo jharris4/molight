@@ -13,7 +13,12 @@ prefix() {
 # on to them as TERM and wait while they clean up.
 interrupt() {
     trap '' INT TERM
-    for pid in $(jobs -p); do kill -TERM "$pid" 2>/dev/null || true; done
+    for pid in $(jobs -p); do
+        # A lane acts on the signal only once its foreground compose command
+        # exits, so signal that command as well.
+        pkill -TERM -P "$pid" 2>/dev/null || true
+        kill -TERM "$pid" 2>/dev/null || true
+    done
     wait
     exit "$1"
 }

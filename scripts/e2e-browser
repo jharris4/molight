@@ -5,7 +5,13 @@ cd "$(dirname "$0")/.."
 source tests/e2e/env.sh
 
 COMPOSE_FILE="tests/e2e/compose.yaml"
-RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/molight-e2e-browser.XXXXXX")"
+# MOLIGHT_E2E_RUN_ROOT pins where the run directory is made (CI uploads it on
+# failure, so the HA logs survive a timeout that kills the step before
+# cleanup copies them). Each run makes its own there.
+RUN_PARENT="${MOLIGHT_E2E_RUN_ROOT:-${TMPDIR:-/tmp}}"
+mkdir -p "$RUN_PARENT"
+RUN_PARENT="$(cd "$RUN_PARENT" && pwd)"  # compose resolves relative mounts elsewhere
+RUN_ROOT="$(mktemp -d "$RUN_PARENT/molight-e2e-browser.XXXXXX")"
 export MOLIGHT_E2E_CONFIG_DIR="$RUN_ROOT/config"
 export MOLIGHT_E2E_BROWSER_ARTIFACT_DIR="$PWD/tests/e2e/artifacts/browser"
 export COMPOSE_PROJECT_NAME="molight-e2e-browser-$$"

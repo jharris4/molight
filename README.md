@@ -636,12 +636,12 @@ container's CPU to approximate that locally (the suites take about twice as
 long); `npm run test:e2e` also loads the machine by running all lanes at once.
 
 A successful run removes its temporary configuration. On failure the runner
-prints a retained directory under the system temporary directory containing
-the isolated HA configuration and Compose logs. That directory contains the
-disposable test account, so remove it after debugging. The browser lane
-instead keeps its failure artifacts (Playwright output, HA configuration and
-Compose logs) in `tests/e2e/artifacts/browser` in the repository, and clears
-that directory at the start of each run.
+prints a retained run directory under the system temporary directory
+containing the isolated HA configuration and Compose logs. That directory
+contains the disposable test account, so remove it after debugging. The
+browser lane also keeps its failure artifacts (Playwright output, a copy of
+the HA configuration, and Compose logs) in `tests/e2e/artifacts/browser` in
+the repository, and clears that directory at the start of each run.
 
 CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
@@ -649,10 +649,11 @@ every suite (API lanes and the browser smoke tests) on a
 minimum-supported/current matrix plus an advisory floating `stable` canary;
 the nightly run covers both `main` and `develop`. Release tags run every
 suite on the current and minimum-supported images, and write their release
-notes only after all of them pass. Every CI job uploads the retained run
-directory (HA config and Compose logs) as a workflow artifact when it fails;
-locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory that each API lane run
-creates its own run directory in (the browser lane ignores it).
+notes only after all of them pass. Every CI job uploads what its lane
+retained (the run directory with the HA config and Compose logs, plus
+`tests/e2e/artifacts/browser` for the browser suite) as a workflow artifact
+when it fails or is cancelled; locally, `MOLIGHT_E2E_RUN_ROOT` sets the
+directory that each lane run creates its own run directory in.
 
 ## Design notes
 
