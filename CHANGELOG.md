@@ -117,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on. Previously the running light ignored the new window, but turned on at
   the next restart or options edit, even after a manual off that day.
 - A follow-mode light turned off manually after its window ended while
-  auto-off was held no longer remembers that window. Previously, when it was
+  auto-off was held no longer remembers that window, also when the manual
+  off came while the schedule was unavailable. Previously, when it was
   turned on again later, the next hold release or restart turned it off.
 - Changing only the color of a real light during the effect or warn stage
   now restores the brightness the light had before the warning. Previously

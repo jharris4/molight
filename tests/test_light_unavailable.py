@@ -1135,6 +1135,55 @@ async def test_follow_schedule_outage_is_not_end_boundary_on_hold_release(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A held window that ended is forgotten once the light is off, even when
+    the off came while the schedule was unavailable: a later manual on is not
+    turned off when the hold releases."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            hold_entities=[HOLD],
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["schedule_window_start"] == MARKER
+
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).attributes["schedule_window_start"] is None
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
 async def test_hard_gate_outage_does_not_force_off_on_hold_release(
     hass: HomeAssistant,
 ) -> None:

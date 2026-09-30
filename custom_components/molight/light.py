@@ -2116,7 +2116,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                     return
                 self._apply_window_start(marker)
             elif replay:
-                pass  # still outside the window: a manual on stands
+                # Still outside the window: a manual on stands. A window that
+                # ended under a hold and was turned off by hand during the
+                # outage is over, now that the schedule reads off again.
+                if not self._attr_is_on:
+                    self._forget_ended_follow_window()
+                    self.async_write_ha_state()
             elif self._held and self._attr_is_on:
                 # Auto-off held: keep the window marker so releasing the
                 # hold applies this off boundary.
