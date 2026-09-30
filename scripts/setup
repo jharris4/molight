@@ -32,6 +32,9 @@ RUNTIME_REQS="$(mktemp)"
 "$VENV/bin/pip" install -r "$RUNTIME_REQS" -c "$CONSTRAINTS"
 rm -f "$RUNTIME_REQS"
 
+# scripts/ensure-venv reruns setup once any of these change.
+sha256sum requirements_test.txt scripts/setup scripts/gather_ha_requirements.py > "$VENV/.setup-inputs"
+
 echo ""
 echo "✅ Dev environment ready!"
 echo ""

@@ -1,7 +1,8 @@
 {
     "name": "MoLight Dev",
     "image": "mcr.microsoft.com/devcontainers/base:debian",
-    "postCreateCommand": "bash scripts/setup",
+    "postCreateCommand": "bash scripts/ensure-venv",
+    "postStartCommand": "bash scripts/ensure-venv",
     "remoteUser": "root",
     "appPort": [8123],
     "forwardPorts": [8123],

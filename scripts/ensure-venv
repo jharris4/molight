@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Rerun setup when the venv is missing or was built from other inputs, then
+# run the given command, if any. Setup records what it was built from.
+set -e
+cd "$(dirname "$0")/.."
+
+VENV=/opt/molight-venv
+
+if [ ! -f "$VENV/bin/python" ] || ! sha256sum --check --status "$VENV/.setup-inputs" 2>/dev/null; then
+    echo "▶ Virtual environment missing or out of date, running setup..."
+    bash scripts/setup
+fi
+
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi

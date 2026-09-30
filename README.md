@@ -536,6 +536,8 @@ npm run dev:down      # stop and remove the container (dev:up recreates it)
 npm run dev:rebuild   # tear down and rebuild from scratch (e.g. after changing devcontainer.json)
 ```
 
+The container's virtual environment is rebuilt when `requirements_test.txt` or the setup scripts change: checked at every container start and before `npm test`, `lint` and `format`, so a dependency bump needs no `dev:rebuild`.
+
 If you open the repository locally rather than in the container, Pylance can't see the container's Python environment and flags every Home Assistant import as unresolved; see [LOCAL_DEV_NOTES.md](LOCAL_DEV_NOTES.md) for the editor-only fix.
 
 ### Running Home Assistant

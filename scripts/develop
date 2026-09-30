@@ -5,11 +5,7 @@ cd "$(dirname "$0")/.."
 VENV=/opt/molight-venv
 PYTHON="$VENV/bin/python"
 
-# Self-healing: run setup if venv is missing
-if [ ! -f "$PYTHON" ]; then
-    echo "▶ Virtual environment not found, running setup..."
-    bash scripts/setup
-fi
+bash scripts/ensure-venv
 
 # Kill any existing HA instance before starting
 pkill -f "python.*-m homeassistant" 2>/dev/null && sleep 1 || true
