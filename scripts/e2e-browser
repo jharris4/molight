@@ -46,7 +46,6 @@ echo "Running the browser smoke tests..."
 compose run --rm browser npx playwright test \
     --config tests/e2e/browser/playwright.config.mjs
 
-echo "Checking Home Assistant logs..."
-compose run --rm runner python runner.py logs
+check_ha_logs
 
 echo "MoLight browser E2E smoke test passed."

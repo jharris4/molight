@@ -37,6 +37,7 @@ echo "Starting isolated Home Assistant for behaviour scenario shard $SHARD..."
 compose up --detach homeassistant
 
 echo "Running behaviour scenario shard $SHARD..."
-compose run --rm runner python runner.py "scenarios-$SHARD" logs
+compose run --rm runner python runner.py "scenarios-$SHARD"
+check_ha_logs
 
 echo "MoLight E2E behaviour scenario shard $SHARD passed."

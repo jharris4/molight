@@ -7807,21 +7807,26 @@ def run_scenarios(shard: str) -> None:
     print(f"PASS: behaviour scenario shard {shard} completed on a fresh Home Assistant")
 
 
+# The lane scripts save the container's output here before the logs phase. It
+# keeps every boot, while home-assistant.log rolls at each start and keeps one.
+CONTAINER_LOG = Path("/ha-config/e2e-container.log")
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+# Logged once by every boot, so it counts the boots the check covered.
+BOOT_LINE = "We found a custom integration molight which"
+
+
 def check_logs() -> None:
-    """Fail for MoLight errors, warnings, or tracebacks in all HA logs."""
-    paths = sorted(Path("/ha-config").glob("home-assistant.log*"))
-    if not paths:
-        raise AssertionError("Home Assistant produced no log file")
-    bad_lines = [
-        f"{path.name}: {line}"
-        for path in paths
-        for line in log_failures(path.read_text(errors="replace"))
-    ]
+    """Fail for MoLight errors, warnings, or tracebacks from any HA boot."""
+    if not CONTAINER_LOG.exists():
+        raise AssertionError(f"{CONTAINER_LOG} is missing; the lane script saves it")
+    content = ANSI_ESCAPE.sub("", CONTAINER_LOG.read_text(errors="replace"))
+    bad_lines = log_failures(content)
     if bad_lines:
         raise AssertionError(
             "Unexpected MoLight log failures:\n" + "\n".join(bad_lines)
         )
-    print(f"PASS: no MoLight errors or warnings in {len(paths)} log file(s)")
+    boots = content.count(BOOT_LINE)
+    print(f"PASS: no MoLight errors or warnings in the logs of {boots} boot(s)")
 
 
 def main() -> None:
