@@ -1586,8 +1586,8 @@ def _illuminance_payload(entity_id: str, name: str) -> dict[str, Any]:
 
 
 def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
-    # Wraps a single real light with defaults and no entity references; the
-    # user wires up occupancy/illuminance/schedule afterwards via options.
+    # Wraps a single real light with defaults; the discovery defaults step
+    # layers the chosen sensors and settings on top.
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: name,
