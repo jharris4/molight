@@ -3,7 +3,7 @@
 Every Virtual Remote entry gets one "<name> Last Action" sensor. Its state is
 the last action the remote executed (turn_on, brightness_down, preset_1, ...),
 with the source button, the resolved click kind, the raw event_type, and the
-time as attributes — the link between "a button fired" (visible on the source
+time as attributes: the link between "a button fired" (visible on the source
 event entity) and "a light changed" (visible on the virtual light) that would
 otherwise only exist in debug logs.
 

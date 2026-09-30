@@ -45,7 +45,7 @@ CONF_NAME = "name"
 # Optional explicit object_id for the entity this entry creates, applied as a
 # suggested object_id at first registration (HA still uniquifies with _2 on a
 # clash). Absent = derive the entity_id from the name, as usual. Immutable, so
-# it lives only in entry.data and is never edited by the options flow — read it
+# it lives only in entry.data and is never edited by the options flow; read it
 # straight from entry.data (molight_config would drop it once options exist).
 CONF_ENTITY_ID = "entity_id"
 
@@ -75,7 +75,7 @@ AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 # Bulk-assign config-flow steps: attach one virtual sensor to many virtual
 # lights at once. The chosen sensor and (for occupancy) its role are picked
 # first; the second step lists all virtual lights, pre-selecting those that
-# already reference the sensor. The submitted set is the source of truth —
+# already reference the sensor. The submitted set is the source of truth:
 # deselecting a pre-selected light removes the reference.
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
 CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
@@ -86,14 +86,14 @@ ASSIGN_ROLE_REGULAR = "regular"
 ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
-# --- Virtual Occupancy Binary Sensor (simple — one real sensor) ---
+# --- Virtual Occupancy Binary Sensor (simple: one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 DEFAULT_OCCUPANCY_TIMEOUT = 120
 # A cycle whose on-duration exceeds the timeout by no more than this many
 # seconds contained exactly one instantaneous detection (the sensor never
-# re-triggered during its hold time) — almost always a false detection.
+# re-triggered during its hold time), almost always a false detection.
 # Such cycles don't advance latest_occupied_time and are counted in the
 # false_detection_count attribute. 0 disables classification.
 CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
@@ -102,7 +102,7 @@ DEFAULT_FALSE_DETECTION_GRACE = 3
 # occupancy is active, treat it as occupancy having cleared (the room may
 # still be occupied, so the clear is flagged via last_clear_unavailable and
 # never classified as a false detection). latest_occupied_time is advanced
-# to the dropout moment immediately. 0 disables — occupancy then holds its
+# to the dropout moment immediately. 0 disables; occupancy then holds its
 # last value for as long as the source is unavailable.
 CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT = "clear_on_unavailable_timeout"
 DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT = 60
@@ -177,8 +177,8 @@ ACTIVE_SETTINGS_INSIDE = "inside_schedule"
 CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
-# *automatically* — by occupancy, a door opening, illuminance going dark, or
-# a schedule window. Manual and physical turn-ons are never affected (they
+# *automatically* (by occupancy, a door opening, illuminance going dark, or
+# a schedule window). Manual and physical turn-ons are never affected (they
 # keep whatever brightness the user/last state set). Absent = don't set a
 # brightness on automatic turn-ons either (the real lights use their own
 # last/default).
@@ -186,9 +186,9 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # Optional color applied when the light is turned on *automatically*, exactly
 # like auto_on_brightness (manual and physical turn-ons are never affected).
 # At most one may be set (the config/options flows enforce it):
-#   auto_on_color_temp — white color temperature in Kelvin
-#   auto_on_rgb_color  — an [r, g, b] color
-# Members that can't show the color get only the brightness — Home Assistant
+#   auto_on_color_temp: white color temperature in Kelvin
+#   auto_on_rgb_color:  an [r, g, b] color
+# Members that can't show the color get only the brightness; Home Assistant
 # filters/converts color parameters per real light.
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
@@ -210,12 +210,12 @@ CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 DEFAULT_FALSE_OFF_DELAY = 5
 # Effect/warn warning sequence before an automatic turn-off. When the auto-off
 # timer expires the light can flag the impending off before going dark:
-#   EFFECT — a brief attention cue (a blink/dip to effect_brightness), shown
-#            for effect_timeout seconds. effect_brightness is a percent 0-100
-#            where 0 blinks the real lights fully off.
-#   WARN   — a grace period at warn_brightness for warn_timeout seconds, then
-#            the lights turn off. warn_brightness is an optional percent 1-100;
-#            absent = keep whatever brightness was in effect before the warning.
+#   EFFECT: a brief attention cue (a blink/dip to effect_brightness), shown
+#           for effect_timeout seconds. effect_brightness is a percent 0-100
+#           where 0 blinks the real lights fully off.
+#   WARN:   a grace period at warn_brightness for warn_timeout seconds, then
+#           the lights turn off. warn_brightness is an optional percent 1-100;
+#           absent = keep whatever brightness was in effect before the warning.
 # Each stage is skipped when its timeout is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
 # either stage (occupancy, manual/physical on, a dim, ...) cancels it and
@@ -227,7 +227,7 @@ DEFAULT_EFFECT_BRIGHTNESS = 0
 CONF_WARN_TIMEOUT = "warn_timeout"
 DEFAULT_WARN_TIMEOUT = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
-# Optional colors for the warning stages — e.g. a red warn stage is a much
+# Optional colors for the warning stages, e.g. a red warn stage is a much
 # clearer "lights about to go off" cue than a dim. Like the auto-on color,
 # each stage takes a color temperature (Kelvin) OR an [r, g, b] color
 # (mutually exclusive keys, enforced by the config/options flows), so
@@ -243,14 +243,14 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # Optional fade times (seconds) sent as the transition of the service calls
 # the virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
-#   auto_on_transition  — automatic turn-ons only (occupancy, a door opening,
+#   auto_on_transition:   automatic turn-ons only (occupancy, a door opening,
 #                         illuminance going dark, a window start); manual and
 #                         physical turn-ons are untouched.
-#   auto_off_transition — automatic turn-offs (timer expiry, false-detection
+#   auto_off_transition:  automatic turn-offs (timer expiry, false-detection
 #                         quick off, bright-forces-off, window end); a manual
 #                         off is untouched.
-#   effect_transition   — fade into the effect stage's brightness.
-#   warn_transition     — fade into the warn stage's brightness.
+#   effect_transition:    fade into the effect stage's brightness.
+#   warn_transition:      fade into the warn stage's brightness.
 # A stage fade must fit inside its stage: effect_transition <= effect_timeout
 # and warn_transition <= warn_timeout (enforced by the config/options flows,
 # which also rejects a fade on a disabled stage since its timeout is 0).
@@ -263,7 +263,7 @@ CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 # Maintain occupancy entity: keeps an already-on light on while it is on, but
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
-# light regardless of how it was lit — manual, physical, or occupancy.
+# light regardless of how it was lit: manual, physical, or occupancy.
 CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
@@ -287,8 +287,8 @@ DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
 # How a referenced illuminance entity affects the light:
-#   control — dark gates turn-ons AND turning bright forces the lights off
-#   gate    — dark gates turn-ons only; bright never turns the lights off.
+#   control:  dark gates turn-ons AND turning bright forces the lights off
+#   gate:     dark gates turn-ons only; bright never turns the lights off.
 #             Use when the lux sensor can see the controlled lights, which
 #             would otherwise oscillate (lights on → bright → forced off →
 #             dark → on ...).
@@ -299,12 +299,12 @@ ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE]
 DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How a referenced schedule entity affects the light:
-#   follow — lights turn on at window start and off at window end (porch lights)
-#   gate        — occupancy may only activate lights inside the window; the
+#   follow:       lights turn on at window start and off at window end (porch lights)
+#   gate:         occupancy may only activate lights inside the window; the
 #                 window end forces the lights off (the original behaviour)
-#   gate_switch — the same activation gate, but the window end reconciles an
+#   gate_switch:  the same activation gate, but the window end reconciles an
 #                 already-on light from current sensor state and history
-#   gate_keep   — the same activation gate, but the window end leaves an
+#   gate_keep:    the same activation gate, but the window end leaves an
 #                 already-on light under its current state-machine policy
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
@@ -342,10 +342,10 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
 # like occupancy (only lights up when dark and inside a gate-mode window).
 # door_mode controls what the door state does after that:
-#   open       — opening turns the lights on with the normal timeout; the door
+#   open:        opening turns the lights on with the normal timeout; the door
 #                is otherwise ignored (closing does nothing). A momentary
 #                trigger, like a light switch that pops back out.
-#   open_close — the open door holds the lights on (no timer) while it stays
+#   open_close:  the open door holds the lights on (no timer) while it stays
 #                open, and closing starts the auto-off countdown, deferring to
 #                occupancy/keep-on holds (a closed door never cuts the lights
 #                over someone the occupancy sensor still sees).
@@ -371,7 +371,7 @@ DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
 CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
 # Percent step applied per brightness up/down press (one step per click; a
 # step below the minimum turns the light off, per the light domain's own
-# brightness_step handling — and a step on an off light turns it on dim).
+# brightness_step handling, and a step on an off light turns it on dim).
 CONF_DIM_STEP = "dim_step"
 DEFAULT_DIM_STEP = 10
 
@@ -385,7 +385,7 @@ CONF_BRIGHTNESS_UP_BUTTONS_SINGLE = "brightness_up_buttons_single"
 CONF_BRIGHTNESS_UP_BUTTONS_DOUBLE = "brightness_up_buttons_double"
 CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE = "brightness_down_buttons_single"
 CONF_BRIGHTNESS_DOWN_BUTTONS_DOUBLE = "brightness_down_buttons_double"
-# Presets turn the lights on at a fixed brightness and/or color — the Pico's
+# Presets turn the lights on at a fixed brightness and/or color, like the Pico's
 # favorite button. The color temperature and RGB color are mutually
 # exclusive, like the virtual light's auto-on color pair.
 CONF_PRESET_1_BUTTONS_SINGLE = "preset_1_buttons_single"
@@ -409,7 +409,7 @@ REMOTE_ACTION_BRIGHTNESS_DOWN = "brightness_down"
 REMOTE_ACTION_PRESET_1 = "preset_1"
 REMOTE_ACTION_PRESET_2 = "preset_2"
 
-# (single-click key, double-click key, action) per bindable action slot —
+# (single-click key, double-click key, action) per bindable action slot:
 # the one table the config flow, the runtime, and the cleanup all iterate.
 REMOTE_ACTION_FIELDS = (
     (CONF_ON_BUTTONS_SINGLE, CONF_ON_BUTTONS_DOUBLE, REMOTE_ACTION_ON),
@@ -461,8 +461,8 @@ REMOTE_PRESET_VALUE_KEYS = {
 # --- Virtual Light state machine states ---
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied)
-STATE_OCCUPIED = "occupied"  # lights on, occupancy active — no countdown
+STATE_OCCUPIED = "occupied"  # lights on, occupancy active, no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
-STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window — no timer
-STATE_EFFECT = "effect"  # auto-off imminent — brief effect/blink stage
-STATE_WARN = "warn"  # auto-off imminent — grace period before lights-off
+STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
+STATE_EFFECT = "effect"  # auto-off imminent, brief effect/blink stage
+STATE_WARN = "warn"  # auto-off imminent, grace period before lights-off

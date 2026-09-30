@@ -2,7 +2,7 @@
 
 Every Virtual Light config entry gets one "<name> Auto-off" switch. ON (the
 default) means normal behavior; OFF suspends all of the light's automatic
-turn-offs — exactly like a configured keep-on entity being on — until it is
+turn-offs (exactly like a configured keep-on entity being on) until it is
 turned back on. Turn-ons and manual control are never affected.
 
 The switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies

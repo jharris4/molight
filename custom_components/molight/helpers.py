@@ -27,7 +27,7 @@ def molight_config(entry: ConfigEntry) -> dict:
     """Return the effective configuration for a MoLight entry.
 
     Options flows store the complete edited form, so once options exist they
-    fully replace the original data — merging the two would resurrect
+    fully replace the original data; merging the two would resurrect
     optional fields the user cleared (e.g. removing a light's occupancy
     reference). entity_type is authoritative in data (and is changed only by
     the explicit light-conversion flow), never by ordinary options edits.
@@ -45,7 +45,7 @@ def suggested_entity_id(
 ) -> str | None:
     """Suggested entity_id from an entry's stored object_id, or None to derive.
 
-    Honored only at first registration — HA uniquifies with _2 on a clash and
+    Honored only at first registration: HA uniquifies with _2 on a clash and
     the registry pins the id thereafter. The object_id is read straight from
     entry.data (the entity id is immutable and absent from molight_config once
     options exist). `suffix` lets the companion switch parallel its light, e.g.

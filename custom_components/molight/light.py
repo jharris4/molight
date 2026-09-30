@@ -4,16 +4,16 @@ A VirtualLight controls N real light entities and manages a state machine
 that integrates optional occupancy, illuminance, and schedule virtual sensors.
 
 State machine
-─────────────
+=============
   IDLE       lights off, no timer
   ACTIVE     lights on, timer running
                → entered on a manual/physical turn-on or an open-mode door
                  trigger, when no occupancy/maintain/door hold applies
-  OCCUPIED   lights on, occupancy active — timer suspended
+  OCCUPIED   lights on, occupancy active, timer suspended
   COUNTDOWN  occupancy just cleared, timer ticking toward lights-off
-  SCHEDULED  lights on inside a follow-mode schedule window — no timer
-  EFFECT     auto-off imminent — showing the brief effect/blink warning stage
-  WARN       auto-off imminent — grace period before the lights go off
+  SCHEDULED  lights on inside a follow-mode schedule window, no timer
+  EFFECT     auto-off imminent, showing the brief effect/blink warning stage
+  WARN       auto-off imminent, grace period before the lights go off
 
 Transitions
   IDLE + (manual/physical on OR open-mode door trigger) [no active hold]
@@ -32,19 +32,19 @@ Effect/warn warning
   When the auto-off timer expires the light can flag the impending off before
   going dark, controlled by these options (all default to the feature being
   off, so the light turns straight off exactly as before):
-    EFFECT — a brief cue (blink/dip to effect_brightness, 0 = fully off) shown
-             for effect_timeout seconds. Skipped when effect_timeout is 0.
-    WARN   — a grace period at warn_brightness (absent = the brightness the
-             light had before the warning) for warn_timeout seconds, then off.
-             Skipped when warn_timeout is 0.
+    EFFECT: a brief cue (blink/dip to effect_brightness, 0 = fully off) shown
+            for effect_timeout seconds. Skipped when effect_timeout is 0.
+    WARN:   a grace period at warn_brightness (absent = the brightness the
+            light had before the warning) for warn_timeout seconds, then off.
+            Skipped when warn_timeout is 0.
   Each stage can optionally fade into its brightness over effect_transition /
   warn_transition seconds (each validated <= its stage's timeout). Separately,
   auto_on_transition / auto_off_transition fade automatic turn-ons and
   turn-offs; manual/physical turn-ons and a manual off never get a *configured*
-  transition (a caller-supplied one is forwarded — see "Transition support").
+  transition (a caller-supplied one is forwarded; see "Transition support").
   Throughout EFFECT and WARN the virtual light stays logically on. Any
-  re-trigger — occupancy/maintain becoming active, a manual or physical
-  turn-on, an external dim — cancels the sequence and behaves exactly as if
+  re-trigger (occupancy/maintain becoming active, a manual or physical
+  turn-on, an external dim) cancels the sequence and behaves exactly as if
   the pre-off timer were still running. Re-triggers that carry no brightness
   of their own (occupancy/maintain/door, a virtual turn-on without an explicit
   brightness, a gate lifting, auto-off becoming held) restore the pre-warning
@@ -53,7 +53,7 @@ Effect/warn warning
   Bright-forces-off (control mode) and a hard-gate/follow window ending still turn
   the lights off during the sequence, as they would mid-countdown.
   Each stage can also show an optional color (effect_rgb_color /
-  warn_rgb_color — e.g. a red warn stage as an unmissable cue); color-capable
+  warn_rgb_color, e.g. a red warn stage as an unmissable cue); color-capable
   members show it, brightness-only members just show the stage brightness. A
   warn stage without a color of its own undoes an effect-stage recolor, and
   every re-trigger restores the pre-warning color along with the brightness.
@@ -68,15 +68,15 @@ Effect/warn warning
 
 Turn-on attribution
   Four timestamps record the last time the virtual light was activated and why:
-    last_on_physical   — an underlying real light entity changed to ON from an
+    last_on_physical:    an underlying real light entity changed to ON from an
                          external source (physical switch, another automation, HA
                          UI acting on the real entity) while this virtual light
                          was IDLE.
-    last_on_virtual    — the user toggled this virtual light entity ON via the HA UI
+    last_on_virtual:     the user toggled this virtual light entity ON via the HA UI
                          (async_turn_on was called directly).
-    last_on_occupancy  — occupancy sensor triggered the lights.
-    last_on_illuminance— an illuminance→dark change triggered the lights.
-    last_on_door       — a door sensor opening triggered the lights.
+    last_on_occupancy:   occupancy sensor triggered the lights.
+    last_on_illuminance: an illuminance→dark change triggered the lights.
+    last_on_door:        a door sensor opening triggered the lights.
 
   All are exposed as extra state attributes (ISO strings or null).
   In the absence of an occupancy sensor, the illuminance-dark countdown is
@@ -91,18 +91,18 @@ Turn-on attribution
   last_brightness_change_virtual records brightness set through this entity.
   Color changes are tracked identically via last_color_change_physical /
   last_color_change_virtual, and an external recolor restarts a running timer
-  exactly like an external dim — both are human activity.
+  exactly like an external dim, since both are human activity.
 
 Color support
   The virtual light derives its color capabilities from the real lights: it
-  advertises HS when any member can show a color (hs/rgb/rgbw/rgbww/xy — HA
+  advertises HS when any member can show a color (hs/rgb/rgbw/rgbww/xy; HA
   converts hs to each member's native mode) and COLOR_TEMP when any member
-  supports it, falling back to brightness — or to plain on/off when no member
+  supports it, falling back to brightness, or to plain on/off when no member
   dims at all. Capabilities are
   re-derived on every member event, so members that are unavailable at startup
   contribute theirs once they appear. Color commands are forwarded to ALL
   members in one service call; HA filters/converts the color per real light,
-  so mixed setups (color + brightness-only members) just work — each light
+  so mixed setups (color + brightness-only members) just work: each light
   shows what it can. The reported color mirrors the first on member that has
   one, exactly like brightness.
 
@@ -117,41 +117,41 @@ Maintain occupancy (when a maintain occupancy entity is configured)
   The maintain entity holds an already-on light on while it is on; it never
   turns the light on and is ignored while the light is off. Unlike the
   combined sensor's maintain_sensors (which only extend occupancy started by
-  a trigger sensor), it holds the light regardless of how it was lit —
+  a trigger sensor), it holds the light regardless of how it was lit:
   manual, physical, or occupancy.
 
-  • Maintain ON while the light is on (ACTIVE/COUNTDOWN) → OCCUPIED, timer
+  - Maintain ON while the light is on (ACTIVE/COUNTDOWN) → OCCUPIED, timer
     cancelled. Illuminance/schedule gating does not apply: it is not a
     turn-on. Forced offs (bright in control mode, hard-gate window end) still win,
     exactly as they do over regular occupancy.
-  • Occupancy clearing while maintain is on keeps the light OCCUPIED.
-  • The countdown starts only when both the regular occupancy entity and the
+  - Occupancy clearing while maintain is on keeps the light OCCUPIED.
+  - The countdown starts only when both the regular occupancy entity and the
     maintain entity are clear, anchored to the max of their
     latest_occupied_time attributes.
-  • The false-detection quick off applies on a maintain clear only when both
+  - The false-detection quick off applies on a maintain clear only when both
     sensors flagged their clears false (a genuine presence on either side
     means the light earns its normal countdown).
-  • Startup: a light that is already on with the maintain entity on is
+  - Startup: a light that is already on with the maintain entity on is
     adopted as OCCUPIED (no timer).
 
 Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
-  • Occupancy only turns lights ON when illuminance is OFF (dark) — both modes.
-  • Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
+  - Occupancy only turns lights ON when illuminance is OFF (dark), in both modes.
+  - Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
     else if brightness forced the lights off and that on-period has time left
     (countdown > 0), enter COUNTDOWN with adjusted timer. An on-period ended
     any other way (manual off, timer, schedule) is never resumed.
-  • Illuminance OFF→ON (dark→bright):
-      control — go IDLE, turn lights off.
-      gate    — no effect; bright never turns lights off. Use when the lux
+  - Illuminance OFF→ON (dark→bright):
+      control:  go IDLE, turn lights off.
+      gate:     no effect; bright never turns lights off. Use when the lux
                 sensor can see the controlled lights, which would otherwise
-                oscillate (lights on → reads bright → forced off → dark → …).
+                oscillate (lights on → reads bright → forced off → dark → ...).
 
 Holding auto-off
   Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
   any configured keep-on entity (hold_entities) is on. While held, every
-  automatic turn-off is suspended — timer expiry, the false-detection quick
-  off, bright-forces-off, and schedule window ends — but turn-ons and manual
+  automatic turn-off is suspended (timer expiry, the false-detection quick
+  off, bright-forces-off, and schedule window ends), but turn-ons and manual
   control work exactly as usual (a manual off still turns the lights off).
   State-machine transitions keep happening; they just never arm a timer.
 
@@ -167,7 +167,7 @@ Holding auto-off
   entity counts as not holding.
 
 Schedule handling (when a schedule entity is configured), per schedule_mode:
-  • follow — lights turn ON at window start (state SCHEDULED, no timer) and
+  - follow: lights turn ON at window start (state SCHEDULED, no timer) and
     OFF at window end. Boundaries are edge-triggered: manual changes between
     them stand. A marker that changes while the schedule stays on (an all-day
     window at midnight) is a window start. schedule_window_start records the
@@ -175,26 +175,26 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     missed while HA was down is applied exactly once at startup, while a
     manual off mid-window is respected. Occupancy/illuminance are ignored
     while SCHEDULED.
-  • gate — occupancy may only activate lights inside the window; window end
+  - gate: occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
-  • gate_switch — the same activation gate for an OFF light. Window end keeps
+  - gate_switch: the same activation gate for an OFF light. Window end keeps
     an ON light on but recalculates its state and timer from current occupancy
     history; active presence adopts it, while an expired timeout applies the
     configured effect/warn/off behavior.
-  • gate_keep — the same gate for turning an OFF light on; once the lights
+  - gate_keep: the same gate for turning an OFF light on; once the lights
     are on, occupancy and the door behave as inside the window (adopt, hold,
     re-hold), and window end preserves the current on-period, including its
     sensor hold, countdown or warning.
 
 Door handling (when a door entity is configured), per door_mode:
   Opening the door (state on) is a turn-on trigger, gated by illuminance and
-  a gate-mode schedule exactly like occupancy — it only lights the room when
+  a gate-mode schedule exactly like occupancy: it only lights the room when
   it is dark (if an illuminance entity is set) and inside a gate window.
-  • open       — opening turns the lights on with the normal timeout (ACTIVE);
+  - open:       opening turns the lights on with the normal timeout (ACTIVE);
     the door is otherwise ignored, so closing does nothing and the lights
     time out even if the door stays open. A momentary trigger.
-  • open_close — the open door holds the lights on with no timer (OCCUPIED,
+  - open_close: the open door holds the lights on with no timer (OCCUPIED,
     just like an occupancy sensor) for as long as it stays open; closing
     starts the auto-off countdown, but defers to any active occupancy/maintain
     entity or keep-on hold so a closed door never cuts the lights over someone
@@ -525,7 +525,7 @@ class _EchoExpectation:
                     and not (new_b == old_b or _toward(old_b, new_b, self.brightness))
                 ):
                     return "contradiction"
-                # Without an old level there is no direction to judge — a
+                # Without an old level there is no direction to judge: a
                 # power-first bulb's fade step must not read as a human dim.
                 settled = False
         if self.color is not None:
@@ -542,7 +542,7 @@ class _EchoExpectation:
                     and new_color != old_color
                 ):
                     return "contradiction"
-                # Without an old color there is no anchor to judge against —
+                # Without an old color there is no anchor to judge against:
                 # a member showing its color late is not a human recolor.
                 settled = False
         if settled:
@@ -557,7 +557,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     # Reassigned per-instance by _update_capabilities, never mutated in place.
     _attr_supported_color_modes: ClassVar[set[ColorMode]] = {ColorMode.BRIGHTNESS}
     # Fail open until the first capability derivation (which at boot waits for
-    # EVENT_HOMEASSISTANT_STARTED) — a startup caller must not lose their fade.
+    # EVENT_HOMEASSISTANT_STARTED): a startup caller must not lose their fade.
     _attr_supported_features = LightEntityFeature.TRANSITION
     _attr_should_poll = False
 
@@ -595,8 +595,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Home Assistant was down. The restored active side proves whether the
         # configured schedule actually crossed from inside to outside.
         self._schedule_end_switch_pending = False
-        # Every settings mapping this light may run under — both sides of a
-        # scheduled light, or the regular light's own config — so the entity
+        # Every settings mapping this light may run under (both sides of a
+        # scheduled light, or the regular light's own config), so the entity
         # references of all of them can be subscribed to up front.
         self._settings_sets: tuple[dict[str, Any], ...] = (
             (self._outside_schedule_settings, self._inside_schedule_settings)
@@ -608,7 +608,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_turn_on_selection_option: str | None = None
         self._last_turn_on_selection_source: str | None = None
         # True while the current on-period was started by occupancy (not by
-        # the user) — the only case where a false-detection clear may cut the
+        # the user), the only case where a false-detection clear may cut the
         # lights short.
         self._occupancy_lit_lights: bool = False
 
@@ -623,20 +623,20 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warning_active: bool = False
         self._effect_sent_color: bool = False
 
-        # Last known open/closed of the door — kept ourselves so a briefly
+        # Last known open/closed of the door, kept ourselves so a briefly
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.
         self._door_open: bool = False
-        # Last known on/off of each keep-on entity — kept ourselves so an
+        # Last known on/off of each keep-on entity, kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
         self._hold_states: dict[str, bool] = {}
-        # Last known bright/dark, None until first seen — a recovery matching
+        # Last known bright/dark, None until first seen; a recovery matching
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
-        # Last known occupied/clear, None until first seen — a recovery
+        # Last known occupied/clear, None until first seen; a recovery
         # matching it must not re-light a room the user turned off.
         self._occupancy_last_on: bool | None = None
-        # Last known on/off of the schedule, None until first seen — a
+        # Last known on/off of the schedule, None until first seen; a
         # recovery matching it crossed no window boundary.
         self._schedule_last_on: bool | None = None
         # True while the light is off because brightness forced it off: only
@@ -738,7 +738,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
 
         # Sensor wiring. The schedule fields only ever come from a regular
-        # Virtual Light's config — a Virtual Scheduled Light's settings forms
+        # Virtual Light's config; a Virtual Scheduled Light's settings forms
         # omit them (its schedule selects settings rather than gating them).
         self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._maintain_entity = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
@@ -828,7 +828,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             elif (
                 raw_mode == ColorMode.HS
                 and isinstance(raw_hs, (list, tuple))
-                and len(raw_hs) == 2  # noqa: PLR2004 — an hs pair is (hue, sat)
+                and len(raw_hs) == 2  # noqa: PLR2004 hs is a (hue, sat) pair
             ):
                 self._attr_color_mode = ColorMode.HS
                 self._attr_hs_color = tuple(raw_hs)
@@ -865,7 +865,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if (entity_id := settings.get(key))
             )
             watch.extend(settings.get(CONF_HOLD_ENTITIES, []))
-        # One entity may serve several roles — subscribe to it only once.
+        # One entity may serve several roles; subscribe to it only once.
         watch = list(dict.fromkeys(watch))
 
         unsub_start: CALLBACK_TYPE | None = None
@@ -978,7 +978,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Seed stateful inputs from their current values. Inactive settings
         # entities remain subscribed but are ignored by _handle_state_change.
         # An entity carried over from the other side keeps its cached value
-        # while it reads unavailable/unknown — a blip at the boundary must not
+        # while it reads unavailable/unknown: a blip at the boundary must not
         # read as "closed" or "hold released", the same rule
         # _handle_state_change applies mid-run.
         door = self.hass.states.get(self._door_entity) if self._door_entity else None
@@ -1168,7 +1168,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # adopted).
                 self._resume_lights()
             else:
-                # The lights ended up off (e.g. mid blink-off) — treat the
+                # The lights ended up off (e.g. mid blink-off): treat the
                 # auto-off as having completed; the room is not re-lit.
                 self._warning_active = False
                 self._pre_warn_brightness = None
@@ -1190,7 +1190,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
 
         if self._attr_is_on and (self._maintain_active() or self._door_holds()):
-            # Adopt an already-on light as maintained — no gating, since this
+            # Adopt an already-on light as maintained without gating, since this
             # is not a turn-on; the maintain entity clearing, or the door
             # closing, starts the countdown as usual.
             self._machine_state = STATE_OCCUPIED
@@ -1198,7 +1198,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
 
         if self._attr_is_on:
-            # Lights are already on (whatever the illuminance) — adopt them
+            # Lights are already on (whatever the illuminance), so adopt them
             # and run the normal timer so they still turn off eventually.
             self._machine_state = STATE_ACTIVE
             self._start_timer()
@@ -1210,7 +1210,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         The stored window marker distinguishes a boundary missed while HA was
         down (apply it now) from one we already handled before the restart
-        (leave the lights alone — if they're off, the user turned them off).
+        (leave the lights alone; if they're off, the user turned them off).
         """
         if not self._schedule_entity or self._schedule_mode != SCHEDULE_MODE_FOLLOW:
             return False
@@ -1227,7 +1227,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if sched.state == "on":
             marker = sched.attributes.get("current_window_start")
             if marker and marker != self._schedule_window_applied:
-                # Window started while HA was down — catch up now.
+                # Window started while HA was down: catch up now.
                 self._apply_window_start(marker)
             elif self._attr_is_on:
                 # Already handled this window before the restart; adopt.
@@ -1240,12 +1240,12 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         if self._schedule_window_applied is not None:
             if self._held and self._attr_is_on:
-                # Auto-off is held — keep the marker so releasing the hold
+                # Auto-off is held: keep the marker so releasing the hold
                 # applies the missed off boundary.
                 self._machine_state = STATE_SCHEDULED
                 self.async_write_ha_state()
                 return True
-            # Window ended while HA was down — apply the off boundary.
+            # Window ended while HA was down: apply the off boundary.
             self._schedule_window_applied = None
             self._machine_state = STATE_IDLE
             if self._attr_is_on:
@@ -1327,7 +1327,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         if entity_id in self._lights:
             # Capabilities can appear late (members unavailable at startup):
-            # re-derive on every member event, before the echo check — our own
+            # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
             self._update_capabilities()
             if self._is_own_echo(
@@ -1363,7 +1363,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # A member reappearing (first sighting, or recovery from
                 # unavailable) while the virtual light is already on is not
                 # human activity: mirror its brightness/color but leave the
-                # running timer, countdown, or warning sequence untouched —
+                # running timer, countdown, or warning sequence untouched;
                 # a bulb that blips off the mesh mid-countdown must not win
                 # itself a fresh full timer.
                 if brightness := new_state.attributes.get("brightness"):
@@ -1472,7 +1472,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
-            # matches it — including on this off→on adoption edge, not just on
+            # matches it, including on this off→on adoption edge, not just on
             # later dims (which _on_light_brightness_change handles).
             if brightness:
                 self._attr_brightness = brightness
@@ -1560,7 +1560,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             state = self.hass.states.get(entity_id)
             if state is None:
                 # Registered but stateless: an integration that hasn't loaded
-                # (yet) — the bulb may still be burning, so don't assume off.
+                # (yet); the bulb may still be burning, so don't assume off.
                 # No registry entry either means the member is gone from HA
                 # entirely and can never report again; counting such a ghost
                 # as "maybe on" would pin the virtual light on forever.
@@ -1676,7 +1676,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _set_color_state(self, mode: ColorMode, value: float | tuple) -> None:
         """Adopt a commanded or mirrored color as this light's reported color.
 
-        A no-op for modes we don't advertise — notably everything on a
+        A no-op for modes we don't advertise, notably everything on a
         brightness-only virtual light.
         """
         if mode not in (self._attr_supported_color_modes or ()):
@@ -1705,7 +1705,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _current_color(self) -> dict | None:
         """Return this light's current color as turn-on service data, or None.
 
-        The hs value is a list so the dict is JSON-serializable — it is also
+        The hs value is a list so the dict is JSON-serializable; it is also
         exposed as the pre_warn_color attribute to survive restarts.
         """
         if self._attr_color_mode == ColorMode.COLOR_TEMP and (
@@ -1770,7 +1770,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         consistent with what we asked for is its echo (Home Assistant reuses
         that context for the member's reply). Later, a slow bulb's reply
         arrives under its own context, so a write fully matching the command
-        still counts; anything else — stale, missing, contradicted — is a real
+        still counts; anything else (stale, missing, contradicted) is a real
         change. A reply to an earlier command may arrive after a newer one
         was sent, so each command still awaiting its reply is tried, newest
         first. Once a newer command flipped power, the older one's reply only
@@ -1931,7 +1931,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         Automatic turn-offs suppressed while held are applied from current
         conditions: a follow/hard-gate window that ended, or bright in control
         mode, turns the lights off now; an active follow
-        window or active occupancy (gated like any adoption — suppressed when
+        window or active occupancy (gated like any adoption: suppressed when
         bright or outside a gate window) keeps them on without a timer;
         otherwise a fresh full timer starts.
         """
@@ -1946,7 +1946,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         sched = self._follow_schedule_state()
         if sched is not None:
-            # Active follow window owns the lights — no timer.
+            # Active follow window owns the lights, with no timer.
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
         schedule_state = (
@@ -2075,13 +2075,13 @@ class VirtualLight(LightEntity, RestoreEntity):
                     if marker
                     else replay and self._schedule_window_applied is None
                 ):
-                    # Same window we already applied — the schedule entity
+                    # Same window we already applied: the schedule entity
                     # blipped unavailable and recovered mid-window. A manual
                     # off in between stands, mirroring the restart seed.
                     if self._attr_is_on:
                         if self._in_warning():
                             # A timer that ran while the schedule was
-                            # unavailable reached the warning — undo it, the
+                            # unavailable reached the warning; undo it, as the
                             # recovered window owns the lights again.
                             self._resume_lights()
                         self._machine_state = STATE_SCHEDULED
@@ -2092,11 +2092,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             elif replay:
                 pass  # still outside the window: a manual on stands
             elif self._held and self._attr_is_on:
-                # Auto-off held — keep the window marker so releasing the
+                # Auto-off held: keep the window marker so releasing the
                 # hold applies this off boundary.
                 pass
             else:
-                # Window ended — apply the off boundary.
+                # Window ended: apply the off boundary.
                 self._schedule_window_applied = None
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
@@ -2217,7 +2217,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if was_warning:
             # The window takes over mid-warning: the virtual light is
             # logically on but the real lights are blinked off / dimmed by
-            # the effect/warn stage — restore them for the window.
+            # the effect/warn stage; restore them for the window.
             self._resume_lights()
         elif not self._attr_is_on:
             self.hass.async_create_task(self._auto_lights_on())
@@ -2229,11 +2229,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             return  # follow-mode window owns the lights
         if occupied:
             if self._is_illuminance_bright():
-                # Bright enough — suppress lights; when illuminance turns off we
+                # Bright enough: suppress lights; when illuminance turns off we
                 # re-evaluate occupancy from the sensor's current state.
                 return
             if self._gate_schedule_inactive():
-                # Outside the schedule window — occupancy may not turn lights
+                # Outside the schedule window: occupancy may not turn lights
                 # on; window start re-evaluates occupancy.
                 return
             was_warning = self._in_warning()
@@ -2254,7 +2254,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._machine_state = STATE_COUNTDOWN
             if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                 # The whole cycle was a false detection and nobody else
-                # asked for these lights — turn them off quickly.
+                # asked for these lights, so turn them off quickly.
                 self._start_timer(self._false_off_delay)
             else:
                 self._start_timer(self._compute_occupancy_countdown())
@@ -2292,7 +2292,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 and self._occupancy_clear_was_false()
                 and self._clear_was_false(self._maintain_entity)
             ):
-                # Both sensors flagged their clears false — the whole episode
+                # Both sensors flagged their clears false: the whole episode
                 # was a false detection; a genuine presence on either side
                 # earns the normal countdown instead.
                 self._start_timer(self._false_off_delay)
@@ -2313,7 +2313,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         Adoption is gated exactly like a turn-on (bright or outside a
         gate-mode window suppress it), unlike the maintain entity, which is
         never gated. Without adoption, a light turned on while occupancy is
-        already active would run a timer that expires despite presence — and
+        already active would run a timer that expires despite presence, and
         the steady-on sensor produces no event that could ever rescue it.
         """
         return (
@@ -2376,8 +2376,8 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         Such a door holds an already-on light on with no timer, exactly like
         active occupancy or the maintain entity, and its closing starts the
-        countdown. In plain open mode a door never holds — it is only a
-        momentary turn-on trigger — so this is always False there. Reads the
+        countdown. In plain open mode a door never holds (it is only a
+        momentary turn-on trigger), so this is always False there. Reads the
         last known door state, so a sensor that blips unavailable keeps
         holding until it reports closed.
         """
@@ -2407,7 +2407,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # An open_close door holds the light (no timer) like the maintain
             # entity; an already-occupied/maintained room holds it too. Only a
             # plain open-mode trigger with no other hold runs the timeout.
-            # (Occupancy needs no bright/window re-check here — the gates
+            # (Occupancy needs no bright/window re-check here; the gates
             # above already returned.)
             holds = (
                 self._door_holds()
@@ -2472,7 +2472,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # lights). Occupancy/timeout handle turning off.
                 return
             if self._held:
-                # Auto-off held — releasing the hold re-checks brightness.
+                # Auto-off held: releasing the hold re-checks brightness.
                 return
             if self._machine_state != STATE_IDLE:
                 self.hass.async_create_task(self._auto_lights_off())
@@ -2481,12 +2481,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._machine_state != STATE_IDLE:
                 # Lights already on: going dark lifts the gate that kept
                 # already-active occupancy (or an open door) from holding
-                # them — adopt so a timer can't expire despite presence.
+                # them; adopt so a timer can't expire despite presence.
                 if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
                 return
             if self._gate_schedule_inactive():
-                return  # outside the schedule window — no activation
+                return  # outside the schedule window, so no activation
 
             # Check whether we should activate due to occupancy, a held-open
             # door, or recent history.
@@ -2525,7 +2525,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         entities (whichever saw the person last) so that each sub-sensor's
         individual timeout is respected: the lights go off light_timeout
         seconds after the person actually left, i.e. at
-        latest_occupied_time + light_timeout — which is why light_timeout must
+        latest_occupied_time + light_timeout, which is why light_timeout must
         be >= the sensor's occupancy_timeout (the flows enforce it).
         """
         base = self._light_timeout
@@ -2553,7 +2553,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _most_recent_on_time(self) -> datetime | None:
         """Return the latest recorded turn-on timestamp across all sources.
 
-        Illuminance is excluded — it is only relevant for gating, not
+        Illuminance is excluded because it is only relevant for gating, not
         attribution.
         """
         candidates = [
@@ -2661,7 +2661,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _start_timer(self, duration: int | None = None) -> None:
         self._cancel_timer()
         if self._held:
-            # Auto-off held — the state machine transitions normally but no
+            # Auto-off held: the state machine transitions normally but no
             # timer is armed; releasing the hold starts a fresh one.
             return
         self._timer_unsub = async_call_later(
@@ -2687,7 +2687,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle()
         # any other state: the machine moved on in the same loop iteration the
-        # timer fired — nothing to do.
+        # timer fired, so there is nothing to do.
 
     def _cancel_timer(self) -> None:
         if self._timer_unsub is not None:
@@ -2707,7 +2707,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         Snapshots the current brightness and color (restored if the user
         re-triggers or reused by a warn stage with no brightness/color of its
-        own). Falls through to the warn stage — and to a plain off — when the
+        own). Falls through to the warn stage (and to a plain off) when the
         earlier stage is disabled, so both timeouts at 0 behaves exactly like
         the old immediate off.
         """

@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 # Config keys under which one MoLight entry may reference another entry's
-# entities. Cleaned up when the referenced entry is removed — a dangling
+# entities. Cleaned up when the referenced entry is removed: a dangling
 # reference is worse than a missing one (a light whose gate-mode schedule
 # entity no longer exists would read the gate as permanently closed and
 # silently stop automating).

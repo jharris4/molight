@@ -163,7 +163,7 @@ if TYPE_CHECKING:
     # form, since every step defaults user_input to None.
     _StepHandler = Callable[..., Awaitable[config_entries.FlowResult]]
 
-# "none" lets a previously chosen sun anchor be cleared in the options flow —
+# "none" lets a previously chosen sun anchor be cleared in the options flow:
 # a bare SelectSelector can't be un-set once it has a value.
 _LOGGER = logging.getLogger(__name__)
 
@@ -205,12 +205,12 @@ _COLOR_TEMP_SELECTOR = selector.ColorTempSelector(
 )
 _RGB_COLOR_SELECTOR = selector.ColorRGBSelector()
 
-# Every optional color is stored as one of two mutually exclusive keys — a
-# color temperature or an [r, g, b] — set through a pair of swatch selectors.
+# Every optional color is stored as one of two mutually exclusive keys (a
+# color temperature or an [r, g, b]), set through a pair of swatch selectors.
 # The frontend offers no way to clear a bare color selector once it has a
 # value, so each pair gets a companion "color mode" dropdown: it is form-only
 # (never stored), prefilled from whichever key is set, and on submit keeps
-# only the key it selects — "none" keeps neither, which is the only way to
+# only the key it selects; "none" keeps neither, which is the only way to
 # un-set a color. Left blank (new forms, programmatic submissions) it keeps
 # the color fields exactly as submitted.
 COLOR_MODE_NONE = "none"
@@ -257,7 +257,7 @@ _REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
 #
 # Every section is vol.Required with NO marker default. A marker default gets
 # serialized onto the expandable field itself, and the frontend's initial-data
-# pass prefers a field default over recursing into a section — so a section
+# pass prefers a field default over recursing into a section, so a section
 # default (even an empty dict) hides every per-field default and suggested
 # value inside it. Submissions must therefore include each section key: the
 # frontend always submits sections (collapsed or not), and programmatic
@@ -367,8 +367,8 @@ def _apply_color_modes(
 ) -> dict[str, Any]:
     """Resolve each submitted color-mode dropdown against its color pair.
 
-    A submitted mode keeps only the color key it names — "none" keeps
-    neither, clearing a previously stored color — and is dropped itself, so
+    A submitted mode keeps only the color key it names ("none" keeps
+    neither, clearing a previously stored color) and is dropped itself, so
     only the color keys are ever stored. An absent mode (a new form's blank
     dropdown, or a programmatic submission) leaves the pair as submitted;
     the conflict validations then catch a double submission.
@@ -491,7 +491,7 @@ def _window_suggested(window: dict | None) -> dict:
 
 
 def _schedule_edge_fields() -> dict:
-    """Start/end sections for the schedule window (expanded — both required)."""
+    """Start/end sections for the schedule window (expanded, both required)."""
 
     def _edge_section() -> section:
         return section(
@@ -535,7 +535,7 @@ def _schedule_edge_fields() -> dict:
 # (integration=DOMAIN). Schedule sensors have no suitable device_class, so
 # their picker is built dynamically below from MoLight schedule config entries.
 # The door sensor is a plain real contact sensor, so its picker is not
-# restricted to MoLight — only to door-ish binary_sensor device classes.
+# restricted to MoLight, only to door-ish binary_sensor device classes.
 # Keep-on entities can be anything with an on/off state (input_boolean,
 # switch, binary_sensor, ...), so that picker is not narrowed at all.
 _LIGHT_REF_SELECTORS = {
@@ -1026,7 +1026,7 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     Each color pair is mutually exclusive (a turn-on can only carry one
     color). A submitted color-mode dropdown enforces that by construction, so
     the conflict errors only fire when the dropdown was left blank. An effect
-    color needs a visible effect stage (effect_brightness > 0 — a blink fully
+    color needs a visible effect stage (effect_brightness > 0; a blink fully
     off has no color to show), and a stage brightness/color on a disabled
     stage (timeout 0) is rejected rather than silently ignored, mirroring the
     stage-fade rule. Reported as base errors: the fields live inside
@@ -1089,7 +1089,7 @@ def _validate_brightness_support(
     """Reject a configured brightness none of the chosen lights could apply.
 
     An effect brightness of 0 is exempt: a blink fully off is sent as turn_off,
-    which every light can do — it is the one warning cue that still works
+    which every light can do; it is the one warning cue that still works
     without dimming.
     """
     keys = (
@@ -1109,8 +1109,8 @@ def _validate_color_support(
 ) -> dict[str, str]:
     """Reject a configured color none of the chosen lights could show.
 
-    Color temperature and RGB are separate capabilities — a tunable-white bulb
-    has one and not the other — so they are judged separately. Same rule as the
+    Color temperature and RGB are separate capabilities (a tunable-white bulb
+    has one and not the other), so they are judged separately. Same rule as the
     fade check: only a positive "none of them can" blocks, and a mixed group
     passes on the strength of one capable member, which is the documented case.
     """
@@ -1455,7 +1455,7 @@ def _remote_option_fields() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Discovery — scan real entities and bulk-create virtual entities for them
+# Discovery: scan real entities and bulk-create virtual entities for them
 # ---------------------------------------------------------------------------
 
 
@@ -1489,8 +1489,8 @@ def _discovery_candidates(
     registry = er.async_get(hass)
     used = _molight_used_entities(hass, used_key)
     candidates: dict[str, str] = {}
-    # Track every registered entity of this domain up front — including
-    # MoLight's own virtual entities and disabled ones — so the state-based
+    # Track every registered entity of this domain up front (including
+    # MoLight's own virtual entities and disabled ones), so the state-based
     # fallback below can't re-offer something the registry already excludes.
     seen: set[str] = set()
     for ent in registry.entities.values():
@@ -1598,7 +1598,7 @@ def _molight_light_entries(
 ) -> dict[str, config_entries.ConfigEntry]:
     """Map each virtual light's entity_id to its config entry.
 
-    Only entries that have actually registered a light entity appear — the
+    Only entries that have actually registered a light entity appear: the
     entity_id is what the bulk-assign light picker stores, and what a light's
     sensor references are keyed against.
     """
@@ -1664,8 +1664,8 @@ class _ScheduledLightSettingsSteps:
     Light settings form (minus the schedule fields) and, when it picks a
     turn-on selection target, the same target-dependent selection page.
 
-    Subclasses provide `_scheduled_light_defaults(side)` — what a side's form
-    starts from before anything has been entered for it — and an async
+    Subclasses provide `_scheduled_light_defaults(side)` (what a side's form
+    starts from before anything has been entered for it) and an async
     `_finish_scheduled_light()`.
     """
 
@@ -1859,15 +1859,15 @@ class MoLightConfigFlow(
         """Resolve the optional entity_id field of a manual create step.
 
         Returns (object_id, errors, needs_confirm, candidate):
-          object_id     — slug to store in CONF_ENTITY_ID, or None to derive it
-          errors        — {"base": "entity_id_conflict"} on an explicit clash,
+          object_id:      slug to store in CONF_ENTITY_ID, or None to derive it
+          errors:         {"base": "entity_id_conflict"} on an explicit clash,
                           {"base": "entity_id_invalid"} on an explicit id with
                           no usable characters (base, not field: the entity_id
                           field sits inside a collapsed section where a field
                           error can't anchor); the caller re-shows the form
-          needs_confirm — True when blank and the name-derived id already
+          needs_confirm:  True when blank and the name-derived id already
                           exists (divert to the confirm step)
-          candidate     — the would-be entity_id, for the confirm message
+          candidate:      the would-be entity_id, for the confirm message
         """
         explicit = (user_input.get(CONF_ENTITY_ID) or "").strip()
         if explicit:
@@ -1951,7 +1951,7 @@ class MoLightConfigFlow(
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 1 — create one entity manually, or discover many at once."""
+        """Step 1: create one entity manually, or discover many at once."""
         return self.async_show_menu(
             step_id="user",
             menu_options=[
@@ -1996,7 +1996,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Discovery — bulk-create from scanned real entities
+    # Discovery: bulk-create from scanned real entities
     # ------------------------------------------------------------------
 
     async def _async_discovery_filter(
@@ -2309,7 +2309,7 @@ class MoLightConfigFlow(
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
             # Each pick becomes its own single-light entry, so the capability
-            # checks must hold per pick — pooled, one capable pick would let a
+            # checks must hold per pick; pooled, one capable pick would let a
             # setting through that another pick's entry could never apply.
             for entity_id in self._discovery.get("selected", []):
                 pick_errors = _validate_transition_support(self.hass, flat, [entity_id])
@@ -2709,7 +2709,7 @@ class MoLightConfigFlow(
         Occupancy targets whose turn-off timeout is shorter than the sensor's
         timeout are skipped and reported rather than silently misconfigured.
 
-        Only regular Virtual Lights can be assigned this way — a Virtual
+        Only regular Virtual Lights can be assigned this way: a Virtual
         Scheduled Light keeps a separate sensor set per profile, so there is no
         single reference to write. They are kept out of the picker and rejected
         on submit (a stale form can still offer one), rather than being
@@ -2820,7 +2820,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Occupancy (simple — one sensor, one timeout)
+    # Occupancy (simple: one sensor, one timeout)
     # ------------------------------------------------------------------
 
     async def async_step_occupancy(
@@ -3022,8 +3022,8 @@ class MoLightConfigFlow(
             window = _window_from_input(user_input)
             if window is None:
                 # A half-filled window would be silently dropped and an empty
-                # form would create a sensor that is permanently off — either
-                # way a schedule nothing can ever follow.
+                # form would create a sensor that is permanently off; either
+                # way, a schedule nothing can ever follow.
                 errors["base"] = (
                     "window_incomplete"
                     if _window_input_provided(user_input)
@@ -3395,7 +3395,7 @@ class MoLightConfigFlow(
 
         The entry is wiring between button event entities and target lights;
         its only entity is the diagnostic Last Action sensor, whose id
-        derives from the name — so there is no entity_id field to resolve.
+        derives from the name, so there is no entity_id field to resolve.
         """
         errors: dict[str, str] = {}
 
@@ -3426,7 +3426,7 @@ class MoLightConfigFlow(
 
 
 # ---------------------------------------------------------------------------
-# Options flow — edit an existing MoLight entity
+# Options flow: edit an existing MoLight entity
 # ---------------------------------------------------------------------------
 
 
@@ -3590,7 +3590,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     )
                 ),
                 # Suggested value, not a default: the frontend omits an emptied
-                # optional field, and a default would refill the old list —
+                # optional field, and a default would refill the old list,
                 # making the last maintain sensor impossible to clear.
                 vol.Optional(CONF_MAINTAIN_SENSORS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
@@ -3845,7 +3845,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
 
         cfg = self._cfg
         # Current values are applied as suggested values (not defaults) so the
-        # optional fields — sensor references, brightness/fade overrides — can
+        # optional fields (sensor references, brightness/fade overrides) can
         # be cleared back to "not set" once given a value.
         schema = vol.Schema(
             {

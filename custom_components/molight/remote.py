@@ -1,4 +1,4 @@
-"""Virtual Remote — drive lights from remote-control button event entities.
+"""Virtual Remote: drive lights from remote-control button event entities.
 
 A Virtual Remote config entry's runtime lives here rather than in an entity
 (its only entity is the diagnostic Last Action sensor, see sensor.py). It
@@ -12,7 +12,7 @@ darkness or a schedule, cancels an effect/warn sequence, restarts the timer.
 
 Single vs. double click is resolved per button from the event entity's
 advertised `event_types`, because the same physical click is spelled
-differently per ecosystem — and a button that supports multi-press announces
+differently per ecosystem, and a button that supports multi-press announces
 one click with several events (initial_press, short_release, multi_press_1),
 of which only one may fire the binding:
 
@@ -21,7 +21,7 @@ of which only one may fire the binding:
     initial_press/short_release events are ignored.
   - Zigbee2MQTT-style: literal `single` / `double`.
   - Lutron Caséta buttons (event entities provided by the companion
-    lutron-caseta-events integration — HA's own lutron_caseta creates
+    lutron-caseta-events integration; HA's own lutron_caseta creates
     none): single = `press` (`release` is ignored), double = `multi_tap`
     where the bridge reports multi-taps.
   - Hue-style / Matter without MSM: `short_release` (preferred over
@@ -99,7 +99,7 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
 
     Resolved from the advertised event_types of the entity's current state,
     so the config flow can reject a double-click binding on a button that
-    will never emit one. An absent state can't be judged — the binding is
+    will never emit one. An absent state can't be judged, so the binding is
     allowed and simply never fires until the entity proves itself.
     """
     state = hass.states.get(entity_id)
@@ -114,7 +114,7 @@ def _action_call(
 ) -> tuple[str, dict[str, Any]] | None:
     """Map an action slot to its light-domain (service, extra data) call.
 
-    Returns None for a preset with no values configured — such a binding
+    Returns None for a preset with no values configured: such a binding
     would be a plain turn-on pretending to be a preset, so it stays inert
     (the config flow rejects the combination anyway).
     """
@@ -181,7 +181,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
         if old_state is None or old_state.state == STATE_UNAVAILABLE:
-            # The entity just appeared or recovered — its state carries its
+            # The entity just appeared or recovered; its state carries its
             # last (possibly restored, certainly stale) event; never replay
             # it. An "unknown" old state is different: the entity existed but
             # had never fired an event (a freshly paired button), so this

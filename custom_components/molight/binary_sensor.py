@@ -2,14 +2,14 @@
 
 Provides five sensor types, all created via the config flow:
 
-  VirtualOccupancySensor         — wraps one real sensor with a timeout;
+  VirtualOccupancySensor:          wraps one real sensor with a timeout;
                                    exposes latest_occupied_time = last_off - timeout
-  VirtualCombinedOccupancySensor — combines VirtualOccupancySensors using
+  VirtualCombinedOccupancySensor:  combines VirtualOccupancySensors using
                                    trigger/maintain logic; latest_occupied_time
                                    is the max across all constituents
-  VirtualIlluminanceSensor       — compares a real illuminance sensor to a threshold
-  VirtualScheduleSensor          — evaluates time windows or mirrors a binary sensor
-  VirtualCombinedScheduleSensor  — combines schedules with any/all logic
+  VirtualIlluminanceSensor:        compares a real illuminance sensor to a threshold
+  VirtualScheduleSensor:           evaluates time windows or mirrors a binary sensor
+  VirtualCombinedScheduleSensor:   combines schedules with any/all logic
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     False-detection classification (when false_detection_grace > 0): a cycle
     whose on-duration exceeds the timeout by no more than the grace contained
-    exactly one instantaneous detection — the sensor never re-triggered
+    exactly one instantaneous detection: the sensor never re-triggered
     during its hold time, so it was almost certainly a fly/heat blip, or a
     brief pass-through. Such cycles don't advance latest_occupied_time, are
     counted in false_detection_count, and flag the clear via
@@ -187,7 +187,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     Clear-on-unavailable (when clear_on_unavailable_timeout > 0): a source
     that stays unavailable/unknown while occupancy is active would otherwise
-    hold occupancy — and any lights it lit — on forever. Instead, the person
+    hold occupancy (and any lights it lit) on forever. Instead, the person
     is assumed present right up to the dropout: latest_occupied_time advances
     to that moment immediately, and if the source hasn't recovered after the
     timeout the occupancy is cleared, flagged via last_clear_unavailable.
@@ -278,7 +278,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         self._cancel_unavailable_timer()
         if new_state.state == "on":
             # A recovery from unavailable while already occupied continues the
-            # running cycle — restamping last_on_time here would make a later
+            # running cycle; restamping last_on_time here would make a later
             # clear measure the on-duration from the recovery moment and
             # misclassify a long occupancy as a false detection.
             if not self._attr_is_on:
@@ -302,7 +302,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             self._attr_is_on = True
         else:
             if not self._attr_is_on:
-                # Already cleared (the unavailable timeout fired) — a late
+                # Already cleared (the unavailable timeout fired): a late
                 # recovery straight to "off" must not re-process the clear,
                 # which would advance latest_occupied_time past the dropout
                 # and overwrite the clear's classification.
@@ -331,7 +331,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             or self._unavailable_unsub is not None
         ):
             return
-        # The person may have been present right up to the dropout — advance
+        # The person may have been present right up to the dropout, so advance
         # latest_occupied_time now, whether or not the source recovers.
         now = datetime.now(UTC)
         if self._latest_occupied_time is None or now > self._latest_occupied_time:
@@ -392,7 +392,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
     False-detection classification: constituents that classify a clear as a
     false detection don't advance their latest_occupied_time, so a combined
     cycle during which our own latest_occupied_time never advanced was made
-    up entirely of false (or stale) cycles — count it and flag the clear.
+    up entirely of false (or stale) cycles, so count it and flag the clear.
     """
 
     _attr_device_class = "occupancy"
@@ -451,14 +451,14 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             # already triggered before the restart, so a maintain sensor
             # still showing presence carries it across. (An on-duration
             # heuristic can't do this job: constituents rewrite their state
-            # at boot, resetting last_changed — and it would wrongly start
+            # at boot, resetting last_changed, and it would wrongly start
             # occupancy on a mid-run options reload.)
             self._attr_is_on = True
         elif restored_on:
             # Constituents are separate config entries that set up
             # concurrently, so a maintain sensor may still be HA's restored
-            # placeholder here — or, for a virtual sensor whose own source has
-            # not loaded, a provisional "off". Let a maintain sensor that
+            # placeholder here (or, for a virtual sensor whose own source has
+            # not loaded, a provisional "off"). Let a maintain sensor that
             # shows presence before startup finishes, or on its first sighting
             # after it, carry the restored occupancy instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
@@ -604,7 +604,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         A constituent leaving the state machine (its entry unloaded, the
         entity removed) must not hold the combined sensor on forever. Like
         the simple sensor's clear-on-unavailable, never classified as a
-        false detection — the room may still be occupied — and the person is
+        false detection (the room may still be occupied), and the person is
         assumed present right up to the dropout, so latest_occupied_time
         advances to that moment: dependent lights run their normal gentle
         countdown, and a nesting combined sensor sees an advanced lot rather
@@ -713,7 +713,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
         try:
             value = float(state_value)
         except (ValueError, TypeError):
-            return  # unparsable reading — hold last known value
+            return  # unparsable reading: hold last known value
         if not self._attr_available:
             # First-ever reading: there is no held state to apply the
             # hysteresis band to, so judge the bare threshold.
@@ -747,7 +747,7 @@ def _resolve_edge(
 
     sun: datetime | None = None
     if edge.get(EDGE_SUN) in SUN_EVENTS:
-        # None on polar days when the event doesn't occur — the fixed
+        # None on polar days when the event doesn't occur; the fixed
         # time (if any) then stands alone.
         sun = get_astral_event_date(hass, edge[EDGE_SUN], day)
         if sun is not None:
@@ -772,7 +772,7 @@ def _resolve_window(
         return None
     end = _resolve_edge(hass, window.get("end"), day)
     if end is not None and end <= start:
-        # Overnight window — the end belongs to the next day.
+        # Overnight window: the end belongs to the next day.
         end = _resolve_edge(hass, window.get("end"), day + timedelta(days=1))
     if end is None or end.timestamp() <= start.timestamp():
         # A start in the spring-forward gap lands an hour later on the clock,
@@ -800,7 +800,7 @@ def _merged_window_intervals(
         is not None
     ]
     merged: list[list[datetime]] = []
-    # Order and compare by real instant — same-tzinfo datetimes sort by
+    # Order and compare by real instant; same-tzinfo datetimes sort by
     # wall clock (PEP 495), which misorders edges around a DST gap.
     for start, end in sorted(
         intervals, key=lambda iv: (iv[0].timestamp(), iv[1].timestamp())
@@ -840,7 +840,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
 
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
     plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
-    "offset": <minutes>, "combine": "latest"|"earliest"} — e.g. start at the
+    "offset": <minutes>, "combine": "latest"|"earliest"}, e.g. start at the
     later of sunset-15min and 21:00. Overnight windows (end before start)
     roll the end to the next day.
 
@@ -932,7 +932,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
 
         self._cancel_transition_timer()
         if next_transition is None:
-            # No boundaries in sight (no valid windows) — re-check tomorrow in
+            # No boundaries in sight (no valid windows): re-check tomorrow in
             # case sun events become resolvable again (polar day/night).
             next_transition = dt_util.start_of_local_day() + timedelta(days=1)
         self._unsub_transition = async_track_point_in_time(
