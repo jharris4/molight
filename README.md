@@ -115,7 +115,7 @@ Follow-mode Virtual Lights are not offered for conversion because their schedule
 
 ## Examples
 
-For worked examples with the exact field values to enter, see [EXAMPLES.md](EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, the full occupancy/illuminance/schedule setup, a porch light, a night-only stairs light, a day/night hallway light, and a bedside lamp on for a morning and an evening window.
+For worked examples with the exact field values to enter, see [EXAMPLES.md](EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, and a bedside lamp on for a morning and an evening window.
 
 ## Entity reference
 
