@@ -510,6 +510,84 @@ async def test_occupancy_blip_after_a_gate_lifted_earlier_keeps_manual_off(
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
 
+async def _turn_off_by(hass: HomeAssistant, off_via: str) -> None:
+    if off_via == "virtual":
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("off_via", ["virtual", "physical"])
+async def test_occupancy_recovery_respects_a_manual_off_after_the_gate_lifted(
+    hass: HomeAssistant, freezer, off_via: str
+) -> None:
+    """A light turned off by hand after the gate lifted stays off on recovery."""
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    freezer.tick(timedelta(seconds=5))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await _turn_off_by(hass, off_via)
+
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_occupancy_recovery_applies_a_gate_lifted_after_a_manual_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A manual off before the gate lifted does not stand in for the start."""
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    await settle(hass)
+
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await _turn_off_by(hass, "virtual")
+
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
 @pytest.mark.asyncio
 async def test_occupancy_blip_keeps_occupied_light_untouched(
     hass: HomeAssistant,
@@ -1035,6 +1113,52 @@ async def test_gate_recovery_applies_a_start_the_outage_blocked(
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("trigger", ["occupancy", "door"])
+async def test_gate_recovery_respects_a_manual_off_after_the_blocked_start(
+    hass: HomeAssistant, freezer, trigger: str
+) -> None:
+    """A light turned off by hand after the blocked start stays off."""
+    door = "binary_sensor.door"
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(door, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            door=door,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+    )
+
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(OCC if trigger == "occupancy" else door, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    freezer.tick(timedelta(seconds=5))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await _turn_off_by(hass, "virtual")
+
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio

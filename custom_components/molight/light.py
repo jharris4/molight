@@ -637,6 +637,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Last known occupied/clear, None until first seen; a recovery
         # matching it must not re-light a room the user turned off.
         self._occupancy_last_on: bool | None = None
+        # When the user last turned the light off, here or at the wall: a
+        # start deferred by an unreadable sensor is not applied over it.
+        self._last_manual_off: datetime | None = None
         # Members that have reported on/off since this light was set up: a
         # placeholder they leave later is a reload, not startup loading.
         self._members_seen: set[str] = set()
@@ -1324,7 +1327,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         No configured fade, but a caller-supplied transition is forwarded.
         """
         await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
-        self._go_idle()
+        self._go_idle(manual=True)
 
     # ------------------------------------------------------------------
     # State machine
@@ -1442,7 +1445,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 occupied
                 and self._machine_state == STATE_IDLE
                 and old_state is not None
-                and self._gate_lifted_since(old_state.last_changed)
+                and self._gate_lifted_since(
+                    self._after_manual_off(old_state.last_changed)
+                )
             ):
                 # A gate that lifted during the outage read the sensor as
                 # clear, so nothing lit the room: apply that start now.
@@ -1497,7 +1502,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
             # dim is then handled as the turn-on (in _on_light_attrs_change).
             if self._all_lights_off():
-                self._go_idle()
+                self._go_idle(manual=True)
             return
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
@@ -1510,7 +1515,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = False  # the user owns this on-period
             self._transition_on()
         elif self._all_lights_off():
-            self._go_idle()
+            self._go_idle(manual=True)
 
     def _on_light_attrs_change(self, old_state: State, new_state: State) -> None:
         """Handle an external brightness/color change on an on real light.
@@ -1541,7 +1546,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
             if new_b == 0:
                 if self._all_lights_off():
-                    self._go_idle()
+                    self._go_idle(manual=True)
                 else:
                     self.async_write_ha_state()
                 return
@@ -2173,6 +2178,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if replay_since is not None:
                 # Only a start the unreadable gate blocked is applied now; a
                 # light turned off by hand in an occupied room stays off.
+                replay_since = self._after_manual_off(replay_since)
                 occ_active = occ_active and occ_state.last_changed >= replay_since
                 door = self.hass.states.get(self._door_entity or "")
                 door_holds = (
@@ -2355,6 +2361,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._is_illuminance_bright()
             and not self._gate_schedule_inactive()
         )
+
+    def _after_manual_off(self, since: datetime) -> datetime:
+        """Push a deferred start's window past the user's last turn-off.
+
+        A start that a gate or an unreadable sensor blocked is only applied
+        on recovery when the user has not turned the light off since.
+        """
+        if self._last_manual_off is not None and self._last_manual_off > since:
+            return self._last_manual_off
+        return since
 
     def _gate_lifted_since(self, since: datetime) -> bool:
         """Return True when a turn-on gate opened at or after `since`.
@@ -2713,10 +2729,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.hass.async_create_task(self._scheduled_end_lights_off())
         self._go_idle()
 
-    def _go_idle(self, *, bright_forced: bool = False) -> None:
+    def _go_idle(self, *, bright_forced: bool = False, manual: bool = False) -> None:
         """Cancel any timer and move to IDLE."""
         self._cancel_timer()
         self._command_generation += 1
+        if manual:
+            self._last_manual_off = datetime.now(UTC)
         if self._machine_state != STATE_IDLE:
             # Why the on-period ended; an off while idle ends none.
             self._bright_forced_off = bright_forced
