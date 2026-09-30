@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > Entries for 1.5.0 and earlier were reconstructed from the commit history after
-> the fact and are deliberately coarse — they summarise each release rather than
+> the fact and are deliberately coarse: they summarise each release rather than
 > enumerate it. Later entries are written as the work lands.
 
 ## [Unreleased]
@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Virtual Combined Schedule**: combines schedules with any/all logic, so
-  one light can follow several windows — e.g. a bedside lamp on in the
+  one light can follow several windows, e.g. a bedside lamp on in the
   morning and again in the evening. Combined schedules nest, and an
   unavailable input only matters when it could change the result.
 
@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one that boots dark stayed off for the rest of the night. A light that is
   still loading when Home Assistant starts is not a reboot: its first state
   is adopted by the startup rules, so a manual off mid-window still stands.
-- A turn-on that names no brightness or color — occupancy with no auto-on
-  brightness, or a plain `light.turn_on` — now reports the brightness and
+- A turn-on that names no brightness or color (occupancy with no auto-on
+  brightness, or a plain `light.turn_on`) now reports the brightness and
   color the real light came on at. Previously the virtual light kept its
   earlier values, so the warn stage could jump to full brightness and a
   re-trigger could leave the room at the warn brightness.
@@ -49,17 +49,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its effect-stage fade just after the warn stage began could restart the
   full timer at every expiry, so the light never turned off.
 - A dim or recolor of a real light within 30 s of a command that changed
-  nothing on it — such as a remote's "on" press while the light is already
-  on — is now recognised as a manual change. Previously the virtual light
+  nothing on it (such as a remote's "on" press while the light is already
+  on) is now recognised as a manual change. Previously the virtual light
   kept reporting the old brightness and the timer was not restarted.
 - A schedule that goes `unavailable` and comes back with the value it had
-  before — as every MoLight schedule does when its options are edited — is
+  before (as every MoLight schedule does when its options are edited) is
   no longer treated as a window starting or ending. Previously a light
   turned on manually outside the window was turned off, and in the gate
   modes a light turned off manually in an occupied room was turned back on.
 - An occupancy sensor that goes `unavailable` and comes back still occupied
-  — as a Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor does
-  when its options are edited — no longer counts as someone entering the
+  (as a Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor does
+  when its options are edited) no longer counts as someone entering the
   room. Previously a light turned off manually in an occupied room was
   turned back on.
 - Editing the options of a sensor that is part of a Virtual Combined
@@ -127,28 +127,28 @@ longer needs a custom repository.
 
 - **Existing schedule-gated lights behave exactly as before.** This release
   adds two more gate modes (see *Added*), so the original behaviour now sits
-  beside them under the label *Gate and turn off* — a rename only.
+  beside them under the label *Gate and turn off*; only the name is new.
 - **No existing entry stops working after upgrading.** The stricter settings
   validation added to the config forms (see *Changed*) never runs at startup,
-  so entries configured under earlier versions keep running as they are — but
+  so entries configured under earlier versions keep running as they are, but
   the next time one is edited, the form won't save until any newly rejected
   setting is corrected.
 
 ### Added
 
-- **Virtual Scheduled Light** — a new entity type holding two complete Virtual
+- **Virtual Scheduled Light**: a new entity type holding two complete Virtual
   Light settings sets, switched by a Virtual Schedule Sensor; **At schedule
   end** decides what the window's end does to a light that is still on.
-- **Convert virtual lights** — promote a gated Virtual Light to a scheduled
+- **Convert virtual lights**: promote a gated Virtual Light to a scheduled
   one, or back, in place, keeping entity IDs and history.
-- **Turn-on selection** — drive a `select` entity (a preset, theme, or mode)
+- **Turn-on selection**: drive a `select` entity (a preset, theme, or mode)
   whenever the light turns on, with an optional source entity supplying the
   option.
-- **Source-backed and inverted schedules** — a Virtual Schedule Sensor can
+- **Source-backed and inverted schedules**: a Virtual Schedule Sensor can
   mirror any existing binary sensor, and either definition can be inverted.
-- **Two new schedule gate modes** — *Gate and switch state* and *Gate and keep
+- **Two new schedule gate modes**: *Gate and switch state* and *Gate and keep
   state* choose what the window's end does to an already-on light.
-- **Transition pass-through** — a `transition` in a virtual light's
+- **Transition pass-through**: a `transition` in a virtual light's
   `turn_on`/`turn_off` is forwarded to the real lights.
 - A `warning_active` attribute reporting an in-progress pre-off warning,
   restored across restarts.
@@ -169,7 +169,7 @@ longer needs a custom repository.
 
 - Slow and chatty bulbs: replies that arrive late, in parts (power first, then
   level or color), quantised, or as fade steps are recognised as MoLight's own
-  echo — while a wall switch or dimmer used right after a MoLight command is no
+  echo, while a wall switch or dimmer used right after a MoLight command is no
   longer mistaken for one.
 - Restarts: occupancy already in progress at boot is no longer misread as a
   false detection, and maintained occupancy carries across regardless of which
@@ -193,7 +193,7 @@ longer needs a custom repository.
 
 ### Added
 
-- **Virtual Remote** — binds remote-control buttons to light actions with no
+- **Virtual Remote**: binds remote-control buttons to light actions with no
   hand-written automations. Single and double clicks of any remote whose buttons
   appear as `event` entities map to on/off/toggle/brightness-step/preset actions,
   with the single-vs-double vocabulary resolved per button from its advertised
@@ -216,7 +216,7 @@ longer needs a custom repository.
 
 - Color support for virtual lights, including automatic-on, effect and warning
   colors.
-- Door sensor support — an `open_close` entity can turn a light on and hold it.
+- Door sensor support: an `open_close` entity can turn a light on and hold it.
 - Area and label filters plus a select-all toggle as the first step of bulk
   discovery.
 - [EXAMPLES.md](EXAMPLES.md), with worked end-to-end configurations.
@@ -251,7 +251,7 @@ longer needs a custom repository.
 
 ### Added
 
-- Effect/warn warning before an automatic turn-off — blink or dim, with
+- Effect/warn warning before an automatic turn-off: blink or dim, with
   configurable warning and grace durations, instead of sudden darkness.
 - Transition (fade) options for the on, off, effect and warning stages.
 - Automatic-on brightness; leaving it blank keeps the light's existing
@@ -266,9 +266,9 @@ longer needs a custom repository.
 
 ### Added
 
-- Bulk discovery — create many virtual lights in one pass, with an optional name
+- Bulk discovery: create many virtual lights in one pass, with an optional name
   prefix and suffix.
-- Bulk assignment — attach one sensor to several existing virtual lights at once.
+- Bulk assignment: attach one sensor to several existing virtual lights at once.
 - Entity ID overrides in the config flow's create steps.
 - Apache-2.0 license, required by HACS.
 
@@ -282,17 +282,17 @@ Initial release.
 
 ### Added
 
-- **Virtual Occupancy Sensor** — wraps one real motion/presence sensor and
+- **Virtual Occupancy Sensor**: wraps one real motion/presence sensor and
   estimates when the person actually left, with a configurable source hold
   timeout, false-detection classification, and a clear-after-unavailable
   timeout.
-- **Virtual Combined Occupancy Sensor** — merges several occupancy sensors with
+- **Virtual Combined Occupancy Sensor**: merges several occupancy sensors with
   distinct trigger and maintain roles.
-- **Virtual Illuminance Sensor** — turns a lux reading into a steady bright/dark
+- **Virtual Illuminance Sensor**: turns a lux reading into a steady bright/dark
   signal, with hysteresis.
-- **Virtual Schedule Sensor** — a reusable schedule signal from a fixed-time
+- **Virtual Schedule Sensor**: a reusable schedule signal from a fixed-time
   and/or sun-based window, with sun offsets.
-- **Virtual Light** — controls N real lights from an occupancy-, illuminance- and
+- **Virtual Light**: controls N real lights from an occupancy-, illuminance- and
   schedule-aware state machine (including the illuminance control-vs-gate and
   schedule follow-vs-gate modes), with virtual brightness controls, an optional
   maintain-occupancy sensor, and a companion Auto-off switch for holding
