@@ -20,6 +20,8 @@ input_boolean:
     name: "Office Light State"
   light_rgb:
     name: "RGB Light State"
+  light_ct:
+    name: "CT Light State"
 
   # Bulk test lights (light.test_bulk_*)
   light_bulk_01:
@@ -105,6 +107,17 @@ input_boolean:
   schedule:
     name: "Schedule"
 
+  # Door sensors
+  door_front:
+    name: "Front Door Open"
+
+# Input buttons: each press fires the matching Test Button event
+input_button:
+  button_single:
+    name: "Test Button Single Press"
+  button_double:
+    name: "Test Button Double Press"
+
 # Input number: backing state for illuminance sensor
 input_number:
   illuminance_living_room:
@@ -146,6 +159,23 @@ input_number:
     step: 1
     unit_of_measurement: ""
     icon: mdi:palette
+
+  light_ct_brightness:
+    name: "CT Light Brightness"
+    min: 0
+    max: 255
+    step: 1
+    unit_of_measurement: ""
+    icon: mdi:brightness-5
+
+  light_ct_mireds:
+    name: "CT Light Color Temperature"
+    min: 153
+    max: 500
+    step: 1
+    initial: 370
+    unit_of_measurement: mired
+    icon: mdi:thermometer
 
 # Backing state for the turn-on selection test entity
 input_select:
@@ -261,6 +291,49 @@ template:
               value: "{{ b }}"
             target:
               entity_id: input_number.light_rgb_b
+
+      - name: "Test CT Light"
+        unique_id: test_ct_light
+        state: "{{ states('input_boolean.light_ct') }}"
+        level: "{{ states('input_number.light_ct_brightness') | int }}"
+        temperature: "{{ states('input_number.light_ct_mireds') | int }}"
+        min_mireds: 153
+        max_mireds: 500
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.light_ct
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.light_ct
+        # A turn-on with brightness or a temperature runs only one of these, so
+        # they switch the light on too, and set_temperature applies brightness.
+        set_level:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.light_ct
+          - action: input_number.set_value
+            data:
+              value: "{{ brightness }}"
+            target:
+              entity_id: input_number.light_ct_brightness
+        set_temperature:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.light_ct
+          - action: input_number.set_value
+            data:
+              value: "{{ color_temp }}"
+            target:
+              entity_id: input_number.light_ct_mireds
+          - if: "{{ brightness is defined }}"
+            then:
+              - action: input_number.set_value
+                data:
+                  value: "{{ brightness }}"
+                target:
+                  entity_id: input_number.light_ct_brightness
 
       - name: "Test Bulk Light 01"
         unique_id: test_light_bulk_01
@@ -622,7 +695,7 @@ template:
           target:
             entity_id: input_boolean.light_bulk_30
 
-  # Motion / Presence / Schedule binary sensors (binary_sensor.test_*)
+  # Motion / Presence / Schedule / Door binary sensors (binary_sensor.test_*)
   - binary_sensor:
       - name: "Test Living Room Motion"
         unique_id: test_motion_living_room
@@ -658,6 +731,11 @@ template:
         unique_id: test_schedule
         state: "{{ is_state('input_boolean.schedule', 'on') }}"
 
+      - name: "Test Front Door"
+        unique_id: test_door_front
+        device_class: door
+        state: "{{ is_state('input_boolean.door_front', 'on') }}"
+
   # Illuminance sensor (sensor.test_*)
   - sensor:
       - name: "Test Living Room Illuminance"
@@ -665,3 +743,20 @@ template:
         device_class: illuminance
         unit_of_measurement: lx
         state: "{{ states('input_number.illuminance_living_room') | float(0) }}"
+
+  # Button for a Virtual Remote (event.test_button), pressed through the input
+  # buttons. Its event types appear only with its first press after a start,
+  # so press it once before binding a double click to it.
+  - triggers:
+      - trigger: state
+        entity_id: input_button.button_single
+        id: single
+      - trigger: state
+        entity_id: input_button.button_double
+        id: double
+    event:
+      - name: "Test Button"
+        unique_id: test_button
+        device_class: button
+        event_type: "{{ trigger.id }}"
+        event_types: "{{ ['single', 'double'] }}"
