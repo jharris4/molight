@@ -64,11 +64,12 @@ jobs:
       - name: Run the ${{ matrix.suite }} suite
         run: npm run test:e2e:${{ matrix.suite }}
       - name: Make the retained artifacts readable
-        if: failure()
+        # A job that hits its timeout is cancelled, not failed.
+        if: failure() || cancelled()
         run: |
           sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
       - name: Upload failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-e2e-failure-${{ matrix.suite }}

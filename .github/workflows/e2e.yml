@@ -27,10 +27,11 @@ jobs:
       - name: Run the live acceptance suite
         run: npm run test:e2e:core
       - name: Make the retained run directory readable
-        if: failure()
+        # A job that hits its timeout is cancelled, not failed.
+        if: failure() || cancelled()
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-e2e-failure-core
@@ -49,10 +50,10 @@ jobs:
       - name: Run the independent restart scenarios
         run: npm run test:e2e:restarts
       - name: Make the retained run directory readable
-        if: failure()
+        if: failure() || cancelled()
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-e2e-failure-restarts
@@ -75,10 +76,10 @@ jobs:
       - name: Run behaviour scenario shard ${{ matrix.shard }}
         run: npm run test:e2e:scenarios-${{ matrix.shard }}
       - name: Make the retained run directory readable
-        if: failure()
+        if: failure() || cancelled()
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-e2e-failure-scenarios-${{ matrix.shard }}
@@ -103,10 +104,10 @@ jobs:
       - name: Run the browser smoke tests
         run: npm run test:e2e:browser
       - name: Make the retained artifacts readable
-        if: failure()
+        if: failure() || cancelled()
         run: sudo chmod -R a+rX tests/e2e/artifacts/browser || true
       - name: Upload browser failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-browser-e2e-failure
@@ -156,11 +157,11 @@ jobs:
         env:
           MOLIGHT_E2E_HA_IMAGE: ${{ matrix.ha.image }}
       - name: Make the retained artifacts readable
-        if: failure()
+        if: failure() || cancelled()
         run: |
           sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
       - name: Upload failure artifacts
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: molight-e2e-failure-${{ matrix.ha.slug }}-${{ matrix.suite }}
