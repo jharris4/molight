@@ -189,7 +189,7 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 | **Sun offset (min)** | Minutes to shift the sun event; negative is before it (`−15` = 15 min before) |
 | **Time vs. sun** | When both are set, whichever this picks wins: `latest` (the default) or `earliest` |
 
-e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone.
+e.g. *start at the later of sunset − 15 min and 21:00*. On polar days where the sun event doesn't occur, the fixed time stands alone. On the nights the clocks change, a fixed time in the spring-forward gap fires an hour later on the clock (02:30 fires at 03:30), and the window is skipped that night if that puts its start after its end; a fixed time in the repeated autumn hour fires at its first occurrence.
 
 Attributes: `current_window_start` (identifies the effective `on` period — overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_transition`, `source_entity`, `inverted`.
 
