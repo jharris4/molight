@@ -895,6 +895,16 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
                 restored_start=restored_start,
             )
         else:
+            # A saved marker is kept while its on-period runs on, so a
+            # restart inside the window does not date the window anew.
+            saved = await _restored_schedule_data(self)
+            restored_start = (
+                _parse_datetime(saved.get("current_window_start"))
+                if saved.get("is_on") is True and saved.get("source_entity") is None
+                else None
+            )
+            self._attr_is_on = restored_start is not None
+            self._current_window_start = restored_start
             self._refresh()
 
     @callback
@@ -971,8 +981,30 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
         active_start = next(
             (start for start, end in merged if start <= now < end), None
         )
+        if active_start is not None:
+            active_start = self._continued_marker(active_start, now) or active_start
         future = [t for interval in merged for t in interval if t > now]
         return active_start, min(future, key=lambda t: t.timestamp(), default=None)
+
+    def _continued_marker(
+        self, active_start: datetime, now: datetime
+    ) -> datetime | None:
+        """Return the current marker if its on-period has run on into this window.
+
+        Windows chained around the clock show each evaluation a later merged
+        start, and a moved marker would re-trigger Follow mode. The merged
+        windows are complete only from the first trusted day, so an older
+        marker is kept unless the schedule went off since then.
+        """
+        marker = self._current_window_start
+        if self._invert or not self._attr_is_on or not isinstance(marker, datetime):
+            return None
+        known_from = dt_util.start_of_local_day(
+            dt_util.as_local(now).date() + timedelta(days=_TRUSTED_DAYS[0])
+        )
+        if active_start.timestamp() <= max(marker.timestamp(), known_from.timestamp()):
+            return marker
+        return None
 
     def _inverted_window_start(self, now: datetime) -> datetime | str:
         """Return when the current gap between configured windows began."""

@@ -13,6 +13,7 @@ from homeassistant.helpers.sun import get_astral_event_date
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    async_mock_restore_state_shutdown_restart,
     mock_restore_cache,
 )
 
@@ -268,6 +269,116 @@ async def test_follow_light_takes_each_day_of_a_full_day_window(
     assert await hass.config_entries.async_reload(light.entry_id)
     await settle(hass)
     assert hass.states.get("light.desk_lamp").state == "off"
+
+
+_CHAINED = [{"start": "00:00", "end": "23:00"}, {"start": "22:00", "end": "01:00"}]
+
+
+@pytest.mark.asyncio
+async def test_windows_chained_around_the_clock_keep_one_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Windows that overlap around the clock never go off, so the merged
+    on-period keeps its first marker instead of one per evaluation."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    await _setup(hass, _schedule_entry(_CHAINED))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    marker = state.attributes["current_window_start"]
+
+    for when in (
+        "2026-07-02 23:00:02+00:00",
+        "2026-07-03 00:00:02+00:00",
+        "2026-07-03 01:00:02+00:00",
+        "2026-07-03 12:00:00+00:00",
+        "2026-07-04 01:00:02+00:00",
+        "2026-07-06 12:00:00+00:00",
+    ):
+        freezer.move_to(when)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        state = hass.states.get("binary_sensor.night_schedule")
+        assert state.state == "on"
+        assert state.attributes["current_window_start"] == marker
+
+
+async def _restart_at(
+    hass: HomeAssistant, freezer, entry: MockConfigEntry, when: str
+) -> None:
+    """Restart the entry from what Home Assistant saves now, at a later time."""
+    await async_mock_restore_state_shutdown_restart(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    freezer.move_to(when)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+async def test_windows_chained_around_the_clock_keep_the_marker_across_a_restart(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A restart days later, with the schedule still on, restores the marker."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    entry = _schedule_entry(_CHAINED)
+    await _setup(hass, entry)
+    marker = hass.states.get("binary_sensor.night_schedule").attributes[
+        "current_window_start"
+    ]
+
+    await _restart_at(hass, freezer, entry, "2026-07-05 12:00:00+00:00")
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("day", ["2026-07-03", "2026-07-04"])
+async def test_restart_after_the_window_ended_starts_a_new_window(
+    hass: HomeAssistant, freezer, day: str
+) -> None:
+    """A saved marker is dropped once the schedule has been off since it,
+    whether that off is within the resolved days or before them."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 22:00:00+00:00")
+    entry = _schedule_entry([{"start": "21:00", "end": "07:00"}])
+    await _setup(hass, entry)
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
+
+    await _restart_at(hass, freezer, entry, f"{day} 22:00:00+00:00")
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == f"{day}T21:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_time_window_schedule_ignores_a_marker_saved_by_a_source_definition(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A marker saved while the schedule mirrored a sensor dates that sensor's
+    on-period, not the window the schedule now follows."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 22:00:00+00:00")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                "binary_sensor.night_schedule",
+                "on",
+                {
+                    "current_window_start": "2026-07-02T21:30:00+00:00",
+                    "source_entity": "binary_sensor.house_mode",
+                    "inverted": False,
+                },
+            )
+        ],
+    )
+    await _setup(hass, _schedule_entry([{"start": "21:00", "end": "07:00"}]))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
 
 
 @pytest.mark.asyncio
