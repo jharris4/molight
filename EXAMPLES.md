@@ -223,7 +223,7 @@ Two things every Gate mode does at 22:00 that are easy to miss: if someone is al
 
 ### Example 7: Storage room light (door sensor)
 
-Open the storage room door → light on; close it → light off. A single entry driven by a real door/contact sensor:
+Open the storage room door → light on; close it → countdown to off. A single entry driven by a real door/contact sensor:
 
 **Virtual Light**
 
@@ -232,12 +232,12 @@ Name:              Storage Room                 # → light.storage_room
 Lights to control: light.storage_room_real
 Turn-off timeout:  120                          # countdown once the door closes
 Door sensor:       binary_sensor.storage_door   # a real contact sensor (on = open)
-Door mode:         open_close                   # on while open, off when closed
+Door mode:         open_close                   # on while open, countdown when closed
 ```
 
 Open the door and the light stays on the whole time it's open, with no timeout while you're rummaging. Close it and a countdown (the **Turn-off timeout**) begins.
 
-- Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off; closing is ignored. Handy for a walk-through door where you don't want the light killed the instant it shuts.
+- Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In `open_close` mode, if the room turns dark while the door is still standing open, the light comes on then.
 - In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor (or a keep-on entity is holding auto-off) and it still sees someone, the lights stay on instead of dropping on a person who just shut the door behind them.
 

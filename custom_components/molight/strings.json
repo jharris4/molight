@@ -1126,7 +1126,7 @@
     "door_mode": {
       "options": {
         "open": "On open: turn on when the door opens (normal timeout)",
-        "open_close": "Open & close: on while open, off when closed"
+        "open_close": "Open & close: on while open, countdown when closed"
       }
     }
   },
