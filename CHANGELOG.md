@@ -46,9 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   would pass its end. Previously an inverted schedule counted that as a
   boundary.
 - A follow-mode light whose schedule is `unavailable` or missing when Home
-  Assistant finishes starting no longer treats that as the window ending. Previously,
-  when the schedule recovered inside the same window, the light turned back
-  on even if it had been turned off manually.
+  Assistant finishes starting no longer treats that as the window ending.
+  Previously, when the schedule recovered inside the same window, the light
+  turned back on even if it had been turned off manually.
 - A follow-mode real light coming back from `unavailable` is now made to
   match its schedule instead of being read as a manual change: inside the
   window it is re-lit with the window's brightness, color and turn-on
@@ -102,11 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the hold, as a restart does, since a disabled switch cannot be turned on.
 - A schedule that is `unavailable` when Home Assistant restarts, or when its
   options are edited, keeps its window marker. Previously a source-backed
-  schedule started a new window when its source returned, and a combined
-  schedule could lose a marker it cannot work out again from its inputs, so
-  a follow-mode light turned off manually mid-window turned back on. Turning
-  *invert* on or off while the source is unavailable starts a new window
-  when it returns instead of reusing the old marker.
+  schedule started a new window when its source returned, so a follow-mode
+  light turned off manually mid-window turned back on. Turning *invert* on
+  or off while the source is unavailable starts a new window when it
+  returns instead of reusing the old marker.
 - Illuminance going dark now resumes only an on-period that brightness cut
   short. Previously a light turned off manually, by its timer or by a
   schedule was turned back on when the room went from bright to dark within

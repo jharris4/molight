@@ -383,7 +383,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
 - Gate modes keep no window marker, so a gate-mode window that ended while HA was down is not applied at startup, even under **Gate and turn off**: a light still on is adopted like any other, with a fresh timer.
-- Editing a virtual light's options reloads it. If its real lights are on, it adopts them with a fresh timer, so a running countdown restarts in full with the new timeout.
+- Editing a virtual light's options reloads it. If its real lights are on, it adopts them as the startup rules would: an active follow window claims them as `SCHEDULED`, a keep-on hold keeps them on without a timer, and otherwise they get a fresh timer, so a running countdown restarts in full with the new timeout.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. A restart landing mid effect/warn restores the pre-warning brightness and color.
 - Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer; a recovery to a different value is processed as a real event (except a follow-mode real light, which is reconciled with its schedule instead). A recovery to the value the entity had before the outage is not an event: an occupancy sensor that comes back still occupied does not re-light a room that was turned off manually, and a schedule that comes back still `off` does not turn off a light that was turned on manually. That is also what happens when a MoLight sensor or schedule reloads after its options are edited. A light turned on during the outage is still picked up by the occupancy or window that returns. A source sensor that stays unavailable is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
 
@@ -447,7 +447,7 @@ Deleting a virtual light strips it from every remote's target list, like any oth
 
 ## Troubleshooting
 
-MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, or a combined schedule that includes itself. To see why a light did what it did, read these attributes in **Developer tools → States**:
+MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, or a combined schedule that includes itself, and an error when discovery fails to create an entry. To see why a light did what it did, read these attributes in **Developer tools → States**:
 
 - `molight_state` on the virtual light: its [state-machine](#state-machine) state.
 - `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.
@@ -617,9 +617,10 @@ brightness/toggle actions, checks Last Action diagnostics across restarts, and
 confirms removing its target leaves the surviving remote inert. Virtual
 Combined Schedule scenarios check any/all/inverted/nested combinations of
 mirrored schedules, a gate-mode light using one, unavailable inputs,
-rebuilding after a time-window input is edited, and input deletion, then restart with a follow light manually off mid-window
-while an input and the member light load late, verifying the window is kept,
-the late member's first state doesn't re-light it, and a new window does.
+rebuilding after a time-window input is edited, and input deletion, then
+restart with a follow light manually off mid-window while an input and the
+member light load late, verifying the window is kept, the late member's
+first state doesn't re-light it, and a new window does.
 
 The default image is pinned, in `tests/e2e/env.sh`, to the Home Assistant
 release used by the current test dependencies; CI fails if the two drift
