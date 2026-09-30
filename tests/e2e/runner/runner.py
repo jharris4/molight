@@ -4226,7 +4226,7 @@ ALLOWED_WARNINGS = (
     # Deliberately provoked by the reference-cleanup scenario.
     "has no schedule; using outside-schedule settings",
     # Deliberately provoked by the turn-on selection scenario (target unavailable).
-    "Unable to resolve a turn-on selection option",
+    "Turn-on selection target select.e2e_target_mode is unavailable",
 )
 
 
