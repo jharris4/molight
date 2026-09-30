@@ -1263,6 +1263,8 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
     )
     # Every candidate is now wrapped, so a second discovery has nothing to offer.
     expect_abort(start_menu(client, "discover_occupancy"), "no_candidates")
+    # The base fixtures wrap the only lux sensor; shard c discovers it unwrapped.
+    expect_abort(start_menu(client, "discover_illuminance"), "no_candidates")
     remove_entry_and_entity(
         client,
         entry_id_by_title(client, "E2E Removal Motion"),
@@ -1396,6 +1398,48 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         raise AssertionError(f"Occupancy unassignment summary unexpected: {summary}")
     wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "unwired")
 
+    # The maintain role fills its own key, under the same timeout guard.
+    summary = assign(
+        "assign_occupancy",
+        {
+            "assign_sensor": "binary_sensor.e2e_slow_occupancy",
+            "assign_role": "maintain",
+        },
+        ["light.e2e_assign_a", "light.e2e_assign_b"],
+    )
+    if summary.get("assigned") != "1" or "E2E Assign B" not in summary.get(
+        "skipped", ""
+    ):
+        raise AssertionError(f"Maintain assignment summary unexpected: {summary}")
+    wait_stored_entry(
+        light_a,
+        lambda cfg: (
+            cfg.get("maintain_occupancy_entity") == "binary_sensor.e2e_slow_occupancy"
+            and not cfg.get("occupancy_entity")
+        ),
+        "wired to the slow occupancy sensor as its maintain sensor only",
+    )
+    wait_stored_entry(
+        light_b,
+        lambda cfg: not cfg.get("maintain_occupancy_entity"),
+        "left without a maintain sensor (timeout guard)",
+    )
+    summary = assign(
+        "assign_occupancy",
+        {
+            "assign_sensor": "binary_sensor.e2e_slow_occupancy",
+            "assign_role": "maintain",
+        },
+        [],
+    )
+    if summary.get("removed") != "1" or summary.get("assigned") != "0":
+        raise AssertionError(f"Maintain unassignment summary unexpected: {summary}")
+    wait_stored_entry(
+        light_a,
+        lambda cfg: not cfg.get("maintain_occupancy_entity"),
+        "without its maintain sensor",
+    )
+
     summary = assign(
         "assign_illuminance",
         {"assign_sensor": VIRTUAL_ILLUMINANCE, "illuminance_mode": "gate"},
@@ -1432,7 +1476,10 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         (slow, "binary_sensor.e2e_slow_occupancy"),
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
-    checkpoint("bulk assignment wires, unwires, skips by the timeout guard, sets modes")
+    checkpoint(
+        "bulk assignment wires both occupancy roles, unwires, skips by the timeout "
+        "guard, sets modes"
+    )
 
 
 def set_hold(client: HomeAssistantClient, on: bool) -> None:
@@ -5495,6 +5542,210 @@ def near(value: str | None, expected: datetime, tolerance: float = 2.0) -> bool:
     return parsed is not None and abs((parsed - expected).total_seconds()) <= tolerance
 
 
+DISCOVERED_ILLUMINANCE = "binary_sensor.v_e2e_illuminance"
+
+
+def run_illuminance_discovery_scenario(client: HomeAssistantClient) -> None:
+    """Illuminance discovery wraps a lux sensor with its checked defaults."""
+    lux_before = client.state(RAW_ILLUMINANCE)["state"]
+    result = start_menu(client, "discover_illuminance")
+    expect_step(result, "discover_illuminance")
+    result = client.continue_flow(
+        result, {"filter_areas": [], "filter_labels": [], "preselect_all": True}
+    )
+    expect_step(result, "discover_illuminance_select")
+    offered = form_suggested(result, "selected_entities") or []
+    if offered != [RAW_ILLUMINANCE]:
+        raise AssertionError(f"Illuminance discovery offered {offered}")
+    result = client.continue_flow(
+        result,
+        {
+            "selected_entities": [RAW_ILLUMINANCE],
+            "affix_prefix": "v_",
+            "affix_suffix": "",
+            "affix_target": "entity_id",
+        },
+    )
+    expect_step(result, "discover_illuminance_defaults")
+    result = client.continue_flow(
+        result, {"illuminance_threshold": 20, "illuminance_hysteresis": 20}
+    )
+    if (result.get("errors") or {}).get("illuminance_hysteresis") != (
+        "hysteresis_too_large"
+    ):
+        raise AssertionError(f"A band that never goes dark was accepted: {result}")
+    result = client.continue_flow(
+        result, {"illuminance_threshold": 20, "illuminance_hysteresis": 5}
+    )
+    placeholders = expect_abort(result, "discovery_done")
+    if placeholders.get("count") != "1":
+        raise AssertionError(f"Illuminance discovery did not report one: {result}")
+    client.wait_state(
+        DISCOVERED_ILLUMINANCE,
+        lambda state: state["attributes"].get("friendly_name") == "E2E Illuminance",
+        "created with the prefixed entity id and the source's name",
+    )
+    # Bright from 25 lx and dark below 15 lx: 18 and 22 hold the current state.
+    for lux, expected, holds in (
+        (100, "on", False),
+        (18, "on", True),
+        (12, "off", False),
+        (22, "off", True),
+    ):
+        client.set_state(RAW_ILLUMINANCE, lux)
+        client.wait_state(
+            RAW_ILLUMINANCE,
+            lambda state, lux=lux: state["state"] in {str(lux), f"{lux}.0"},
+            f"at {lux} lx",
+        )
+        description = f"{expected} at {lux} lx with the discovered 20 +/- 5 lx band"
+        if holds:
+            assert_state_stays(
+                client,
+                DISCOVERED_ILLUMINANCE,
+                lambda state, expected=expected: state["state"] == expected,
+                description,
+                duration=1,
+            )
+        else:
+            client.wait_state(
+                DISCOVERED_ILLUMINANCE,
+                lambda state, expected=expected: state["state"] == expected,
+                description,
+            )
+    expect_abort(start_menu(client, "discover_illuminance"), "no_candidates")
+    remove_entry_and_entity(
+        client, entry_id_by_title(client, "E2E Illuminance"), DISCOVERED_ILLUMINANCE
+    )
+    if lux_before not in {"unknown", "unavailable"}:
+        client.set_state(RAW_ILLUMINANCE, float(lux_before))
+    print(
+        "PASS: illuminance discovery rejected a latched band and applied its defaults"
+    )
+
+
+def run_entity_id_change_scenario(client: HomeAssistantClient) -> None:
+    """A taken entity ID sends the form back, prefilled, for a new one."""
+    payload = {
+        "name": "E2E Rename",
+        "occupancy_sensor": RAW_MOTION,
+        "occupancy_timeout": 1,
+        "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+    }
+    first = finish_creation(
+        submit_create(client, "occupancy", payload), "First E2E Rename"
+    )
+    client.wait_state("binary_sensor.e2e_rename", lambda _state: True, "created")
+    result = submit_create(client, "occupancy", payload)
+    expect_step(result, "confirm_entity_id")
+    result = client.continue_flow(result, {"next_step_id": "entity_id_change"})
+    expect_step(result, "occupancy")
+    for field in ("name", "occupancy_sensor"):
+        if form_suggested(result, field) != payload[field]:
+            raise AssertionError(f"The returned form lost its {field}: {result}")
+    result = client.continue_flow(
+        result,
+        {**payload, "advanced": {**payload["advanced"], "entity_id": "e2e_renamed"}},
+    )
+    second = finish_creation(result, "Renamed E2E Rename")
+    client.wait_state(
+        "binary_sensor.e2e_renamed",
+        lambda state: state["attributes"].get("friendly_name") == "E2E Rename",
+        "created under the new entity id",
+    )
+    wait_entity_absent(client, "binary_sensor.e2e_rename_2")
+    remove_entry_and_entity(client, first, "binary_sensor.e2e_rename")
+    remove_entry_and_entity(client, second, "binary_sensor.e2e_renamed")
+    print("PASS: changing a taken entity ID returned the prefilled form")
+
+
+def create_sun_schedule(
+    client: HomeAssistantClient,
+    name: str,
+    entity_id: str,
+    start: dict[str, Any],
+    end: dict[str, Any],
+) -> str:
+    """Create a time-window schedule whose edges are sun events."""
+    result = start_create(client, "schedule")
+    expect_step(result, "schedule")
+    result = client.continue_flow(result, {"schedule_definition": "time"})
+    expect_step(result, "schedule_time")
+    result = client.continue_flow(
+        result,
+        {
+            "name": name,
+            "start": start,
+            "end": end,
+            "advanced": {"entity_id": entity_id},
+        },
+    )
+    return finish_creation(result, name)
+
+
+def run_sun_window_scenario(client: HomeAssistantClient) -> None:
+    """Sun-anchored window edges agree with Home Assistant's own sun."""
+    night_id = create_sun_schedule(
+        client, "E2E Night", "e2e_night", {"sun": "sunset"}, {"sun": "sunrise"}
+    )
+    daylight_id = create_sun_schedule(
+        client,
+        "E2E Daylight",
+        "e2e_daylight",
+        {"sun": "sunrise", "offset": -60},
+        {"sun": "sunset", "offset": 60},
+    )
+    for entry_id in (night_id, daylight_id):
+        assert_entry_loaded(client, entry_id)
+    hour = timedelta(hours=1)
+
+    minute = timedelta(minutes=1)
+
+    def sun() -> tuple[bool, datetime, datetime]:
+        """Whether the sun is down, and its next rising and setting."""
+        state = client.state("sun.sun")
+        return (
+            state["state"] == "below_horizon",
+            datetime.fromisoformat(state["attributes"]["next_rising"]),
+            datetime.fromisoformat(state["attributes"]["next_setting"]),
+        )
+
+    def night_agrees(state: dict[str, Any]) -> bool:
+        down, rising, setting = sun()
+        return state["state"] == ("on" if down else "off") and near(
+            state["attributes"].get("next_transition"),
+            rising if down else setting,
+            60,
+        )
+
+    def daylight_agrees(state: dict[str, Any]) -> bool:
+        down, rising, setting = sun()
+        now = datetime.now(UTC)
+        upcoming = parse_ts(state["attributes"].get("next_transition"))
+        if upcoming is None:
+            return False
+        if state["state"] == "off":
+            return down and abs(upcoming - (rising - hour)) <= minute
+        if not down or now >= rising - hour - minute:
+            return abs(upcoming - (setting + hour)) <= minute
+        # Within an hour after sunset, the window ends at that sunset plus an hour.
+        return now < upcoming <= now + hour + minute
+
+    client.wait_state(
+        "binary_sensor.e2e_night",
+        night_agrees,
+        "on exactly while sun.sun is below the horizon, ending at its next rising",
+    )
+    client.wait_state(
+        "binary_sensor.e2e_daylight",
+        daylight_agrees,
+        "on from an hour before sunrise to an hour after sunset, per sun.sun",
+    )
+    remove_entry_and_entity(client, night_id, "binary_sensor.e2e_night")
+    remove_entry_and_entity(client, daylight_id, "binary_sensor.e2e_daylight")
+    print("PASS: sunrise and sunset window edges, with offsets, matched sun.sun")
+
+
 def run_time_window_scenario(client: HomeAssistantClient) -> None:
     """A fixed time window opens and closes on its own clock, reporting edges."""
     now = datetime.now(UTC).replace(microsecond=0)
@@ -7800,9 +8051,13 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_combined_schedule_scenarios,
     ],
     "c": [
+        # First, while nothing else wraps the lux sensor.
+        run_illuminance_discovery_scenario,
+        run_entity_id_change_scenario,
         run_dark_arrival_scenarios,
         run_scheduled_light_depth_scenarios,
         run_time_window_scenario,
+        run_sun_window_scenario,
         run_hold_release_scenarios,
         run_door_gate_scenarios,
         run_sensor_options_scenarios,
