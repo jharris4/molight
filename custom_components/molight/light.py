@@ -215,7 +215,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -420,6 +420,7 @@ ECHO_BRIGHTNESS_TOLERANCE = 5
 ECHO_HUE_TOLERANCE = 10.0
 ECHO_SATURATION_TOLERANCE = 10.0
 ECHO_KELVIN_TOLERANCE = 150
+HUE_ARC_EPSILON = 1e-3  # float drift when summing hue distances along an arc
 
 
 def _state_color(state: State) -> tuple[ColorMode, tuple] | None:
@@ -458,6 +459,11 @@ def _as_hs(color: tuple[ColorMode, tuple]) -> tuple[float, float]:
     return (float(value[0]), float(value[1]))
 
 
+def _hue_delta(a: float, b: float) -> float:
+    delta = abs(a - b) % 360
+    return min(delta, 360 - delta)
+
+
 def _colors_close(a: tuple[ColorMode, tuple], b: tuple[ColorMode, tuple]) -> bool:
     """Whether two canonical colors are the same allowing for conversion drift."""
     if a[0] is ColorMode.COLOR_TEMP and b[0] is ColorMode.COLOR_TEMP:
@@ -467,13 +473,37 @@ def _colors_close(a: tuple[ColorMode, tuple], b: tuple[ColorMode, tuple]) -> boo
         return False
     if sat_a <= ECHO_SATURATION_TOLERANCE and sat_b <= ECHO_SATURATION_TOLERANCE:
         return True  # both near white: hue is noise
-    hue_delta = abs(hue_a - hue_b) % 360
-    return min(hue_delta, 360 - hue_delta) <= ECHO_HUE_TOLERANCE
+    return _hue_delta(hue_a, hue_b) <= ECHO_HUE_TOLERANCE
 
 
 def _toward(old: int, new: int, target: int) -> bool:
     """Whether a brightness moved from old toward target without reaching it."""
     return (target - old) * (new - old) > 0 and abs(new - target) < abs(old - target)
+
+
+def _color_toward(
+    old: tuple[ColorMode, tuple],
+    new: tuple[ColorMode, tuple],
+    target: tuple[ColorMode, tuple],
+) -> bool:
+    """Whether a color moved from old toward target: a fade step, not a recolor."""
+    if old[0] is new[0] is target[0] is ColorMode.COLOR_TEMP:
+        return _toward(old[1], new[1], target[1])
+    (old_h, old_s), (new_h, new_s), (target_h, target_s) = (
+        _as_hs(old),
+        _as_hs(new),
+        _as_hs(target),
+    )
+    # The hue is on the short arc from old to target, the saturation between.
+    on_arc = (
+        abs(
+            _hue_delta(old_h, new_h)
+            + _hue_delta(new_h, target_h)
+            - _hue_delta(old_h, target_h)
+        )
+        < HUE_ARC_EPSILON
+    )
+    return on_arc and (new_s - old_s) * (target_s - new_s) >= 0
 
 
 @dataclass
@@ -541,6 +571,7 @@ class _EchoExpectation:
                     was_on
                     and (old_color := _state_color(old_state)) is not None
                     and new_color != old_color
+                    and not _color_toward(old_color, new_color, self.color)
                 ):
                     return "contradiction"
                 # Without an old color there is no anchor to judge against:
@@ -1781,7 +1812,30 @@ class VirtualLight(LightEntity, RestoreEntity):
                 continue
             self._echo_expectations.setdefault(
                 entity_id, deque(maxlen=ECHO_HISTORY)
-            ).append(expectation)
+            ).append(self._member_expectation(entity_id, expectation))
+
+    def _member_expectation(
+        self, entity_id: str, expectation: _EchoExpectation
+    ) -> _EchoExpectation:
+        """Narrow a kelvin command to the member's own range.
+
+        The virtual light offers the union of its members' ranges; a member
+        clamps a kelvin outside its own and reports the clamped value.
+        """
+        color = expectation.color
+        if color is None or color[0] is not ColorMode.COLOR_TEMP:
+            return expectation
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return expectation
+        kelvin = color[1]
+        if low := state.attributes.get(ATTR_MIN_COLOR_TEMP_KELVIN):
+            kelvin = max(kelvin, low)
+        if high := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
+            kelvin = min(kelvin, high)
+        if kelvin == color[1]:
+            return expectation
+        return replace(expectation, color=(ColorMode.COLOR_TEMP, kelvin))
 
     def _member_is_lit(self, entity_id: str) -> bool | None:
         """Whether a real light is on (brightness 0 is off), None if unknown."""

@@ -180,6 +180,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   occupancy that brightness or a gate-mode window keeps from holding the
   light no longer holds it: the countdown starts. Previously the light
   stayed on with no timer until that occupancy sensor next changed.
+- A real light reporting a color part way through a fade the effect or
+  warn stage asked for, or the color temperature it clamped a command to
+  because its own range is narrower than the Virtual Light's, is no longer
+  read as a recolor. Previously such a reply cancelled the warning sequence
+  and restarted the turn-off timeout.
 
 ## [1.7.0] - 2026-08-27
 

@@ -371,6 +371,192 @@ async def test_kelvin_command_echoed_as_hs_is_not_physical(
 
 
 @pytest.mark.asyncio
+async def test_kelvin_fade_step_toward_target_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A bulb reporting a kelvin between its old color and the command during
+    the requested transition is fading, not being recolored."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=4000)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=4000,
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", color_temp_kelvin=3000, transition=4)
+
+    for kelvin in (3500, 3200, 3000):
+        await _write(
+            hass,
+            "on",
+            contexts[-1],
+            brightness=153,
+            color_mode="color_temp",
+            color_temp_kelvin=kelvin,
+            **HS_TEMP_CAPS,
+        )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["color_temp_kelvin"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_kelvin_step_away_from_target_while_settling_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A kelvin moving away from the command is a human recolor."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=4000)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=4000,
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", color_temp_kelvin=3000, transition=4)
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=4500,
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is not None
+    assert _attrs(hass)["color_temp_kelvin"] == 4500
+
+
+@pytest.mark.asyncio
+async def test_hue_fade_step_along_the_arc_is_not_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A hue on the short arc from the old color to the command is a fade step."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[100, 80])
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[100, 80],
+        **HS_TEMP_CAPS,
+    )
+    await _virtual(hass, "turn_on", hs_color=[240, 80], transition=4)
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="hs",
+        hs_color=[170, 80],
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
+
+
+@pytest.mark.asyncio
+async def test_member_clamped_kelvin_reply_is_not_physical(
+    hass: HomeAssistant,
+) -> None:
+    """A member whose range is narrower than the virtual light's reports the
+    kelvin it clamped our command to; that reply is still its echo."""
+    warmer = "light.warmer"
+    entry = make_light_entry(name="Test Light", lights=[MEMBER, warmer])
+    await _setup(hass, entry)
+    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    hass.states.async_set(
+        warmer, "off", {**HS_TEMP_CAPS, "min_color_temp_kelvin": 2000}
+    )
+    await settle(hass)
+    assert _attrs(hass)["min_color_temp_kelvin"] == 2000
+    contexts = _member_contexts(hass)
+
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=2050)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=2202,
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["color_temp_kelvin"] == 2050
+
+
+@pytest.mark.asyncio
+async def test_effect_kelvin_fade_reply_keeps_the_sequence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A bulb reporting mid-fade during the effect's transition does not
+    re-trigger the light."""
+    entry = make_light_entry(
+        name="Test Light",
+        lights=[MEMBER],
+        timeout=60,
+        effect_timeout=8,
+        effect_brightness=80,  # percent: 204
+        effect_color_temp=3000,
+        effect_transition=4,
+        warn_timeout=0,
+    )
+    await _setup(hass, entry)
+    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    await settle(hass)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200, color_temp_kelvin=4000)
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=200,
+        color_mode="color_temp",
+        color_temp_kelvin=4000,
+        **HS_TEMP_CAPS,
+    )
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_EFFECT
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=204,
+        color_mode="color_temp",
+        color_temp_kelvin=3500,
+        **HS_TEMP_CAPS,
+    )
+    assert _attrs(hass)["molight_state"] == STATE_EFFECT
+
+    freezer.tick(timedelta(seconds=9))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_recolor_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
