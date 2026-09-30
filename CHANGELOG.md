@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A schedule window that sun offsets push past the following midnight is
+  found again after a restart, and a window whose start falls in the
+  spring-forward clock change is skipped that night when the shifted start
+  would pass its end. Previously an inverted schedule counted that as a
+  boundary.
 - A follow-mode light whose schedule is `unavailable` or missing when Home
   Assistant finishes starting no longer treats that as the window ending. Previously,
   when the schedule recovered inside the same window, the light turned back

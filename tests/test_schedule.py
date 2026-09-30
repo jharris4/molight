@@ -16,6 +16,7 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
+from custom_components.molight.binary_sensor import _resolve_window
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
@@ -852,6 +853,91 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-03-08T03:05:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_window_collapsed_by_the_spring_forward_gap_is_skipped(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A start in the gap lands an hour later on the clock. When that puts it
+    after the end, there is no window that day rather than one ending before
+    it began."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-03-08 12:00:00+00:00")
+    window = {"start": "02:30", "end": "03:15"}
+    assert _resolve_window(hass, window, date(2026, 3, 8)) is None
+
+    start, end = _resolve_window(
+        hass, {"start": "02:30", "end": "03:45"}, date(2026, 3, 8)
+    )
+    assert start.isoformat() == "2026-03-08T02:30:00-05:00"  # 03:30 EDT
+    assert end.isoformat() == "2026-03-08T03:45:00-04:00"
+
+    start, end = _resolve_window(hass, window, date(2026, 3, 9))
+    assert end.timestamp() - start.timestamp() == 45 * 60
+
+
+@pytest.mark.asyncio
+async def test_inverted_schedule_keeps_its_marker_over_a_skipped_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The gap-collapsed window is no boundary: the inverted on-period runs on."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-03-07 17:00:00+00:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Inverted Gap",
+            CONF_TIME_WINDOWS: [{"start": "02:30", "end": "03:15"}],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await _setup(hass, entry)
+    state = hass.states.get("binary_sensor.inverted_gap")
+    assert state.state == "on"
+    marker = state.attributes["current_window_start"]
+    assert marker == "2026-03-07T03:15:00-05:00"
+
+    for when in (
+        "2026-03-08 07:15:02+00:00",
+        "2026-03-08 07:30:02+00:00",
+        "2026-03-08 12:00:00+00:00",
+    ):
+        freezer.move_to(when)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        state = hass.states.get("binary_sensor.inverted_gap")
+        assert state.state == "on"
+        assert state.attributes["current_window_start"] == marker
+    assert state.attributes["next_transition"] == "2026-03-09T02:30:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_window_pushed_past_the_next_midnight_is_found_by_a_fresh_evaluation(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Large sun offsets can start a window the day after its sun event and
+    end it the day after that. A sensor set up inside it (as after a restart)
+    must still find it."""
+    await hass.config.async_set_time_zone("UTC")
+    hass.config.latitude = 45.0
+    hass.config.longitude = 0.0
+    window = {
+        "start": {"sun": "sunset", "offset": 720},
+        "end": {"sun": "sunset", "offset": 660},
+    }
+    freezer.move_to("2026-07-01 12:00:00+00:00")
+    start, end = _resolve_window(hass, window, date(2026, 7, 1))
+    assert start.date() == date(2026, 7, 2)
+    assert end.date() == date(2026, 7, 3)
+
+    freezer.move_to(end - timedelta(hours=3))
+    await _setup(hass, _schedule_entry([window]))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == start.isoformat()
+    assert state.attributes["next_transition"] == end.isoformat()
 
 
 @pytest.mark.asyncio

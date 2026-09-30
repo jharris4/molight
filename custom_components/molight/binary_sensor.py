@@ -774,9 +774,17 @@ def _resolve_window(
     if end is not None and end <= start:
         # Overnight window — the end belongs to the next day.
         end = _resolve_edge(hass, window.get("end"), day + timedelta(days=1))
-    if end is None:
+    if end is None or end.timestamp() <= start.timestamp():
+        # A start in the spring-forward gap lands an hour later on the clock,
+        # which can put it after the end: no window that day.
         return None
     return (start, end)
+
+
+# Sun offsets move edges up to 12h into a neighbouring day, so extra days are
+# resolved and values trusted only from yesterday to the day after tomorrow.
+_DAY_OFFSETS = range(-3, 4)
+_TRUSTED_DAYS = (-1, 2)
 
 
 def _merged_window_intervals(
@@ -953,12 +961,13 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
     def _evaluate(self, now: datetime) -> tuple[datetime | None, datetime | None]:
         """Return (active window start, next boundary after now).
 
-        Windows are resolved for yesterday, today, and tomorrow so overnight
-        windows and day-to-day sun drift are handled correctly. Overlapping
-        windows merge into one on-period, so Follow mode never sees a new
-        window start partway through it.
+        Windows are resolved for the days around today, so overnight windows,
+        sun offsets that push a window past the next midnight and day-to-day
+        sun drift are handled correctly. Overlapping windows merge into one
+        on-period, so Follow mode never sees a new window start partway
+        through it.
         """
-        merged = _merged_window_intervals(self.hass, self._windows, now, (-1, 0, 1))
+        merged = _merged_window_intervals(self.hass, self._windows, now, _DAY_OFFSETS)
         active_start = next(
             (start for start, end in merged if start <= now < end), None
         )
@@ -967,7 +976,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
 
     def _inverted_window_start(self, now: datetime) -> datetime | str:
         """Return when the current gap between configured windows began."""
-        merged = _merged_window_intervals(self.hass, self._windows, now, (-2, -1, 0, 1))
+        merged = _merged_window_intervals(self.hass, self._windows, now, _DAY_OFFSETS)
         ended = [end for _start, end in merged if end <= now]
         # With no resolvable boundaries (for example, a sun-only window during
         # polar day/night), inversion is continuously on. Use a stable marker
@@ -1008,10 +1017,6 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
-# Sun offsets move edges up to 12h into a neighbouring day, so extra days are
-# resolved and values trusted only from yesterday to the day after tomorrow.
-_COMBINED_DAY_OFFSETS = range(-3, 4)
-_COMBINED_TRUSTED_DAYS = (-1, 2)
 # current_window_start for an on-period with no known start (an inverted empty
 # combination): stable, so Follow mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
@@ -1330,7 +1335,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
     ) -> _Timeline:
         if node.kind == "time":
             merged = _merged_window_intervals(
-                self.hass, node.windows, now, _COMBINED_DAY_OFFSETS
+                self.hass, node.windows, now, _DAY_OFFSETS
             )
             timeline = _Timeline.from_intervals(
                 [(start.timestamp(), end.timestamp()) for start, end in merged], *known
@@ -1371,7 +1376,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
         today = dt_util.as_local(now).date()
         known_from, known_until = (
             dt_util.start_of_local_day(today + timedelta(days=days)).timestamp()
-            for days in _COMBINED_TRUSTED_DAYS
+            for days in _TRUSTED_DAYS
         )
         timeline = self._timeline(self._root, now, (known_from, known_until))
         value = timeline.value_at(ts)
