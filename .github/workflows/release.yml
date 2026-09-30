@@ -48,13 +48,22 @@ jobs:
   suites:
     # The tagged commit normally already passed these on push, but a tag cut
     # from a commit that never went through a push run would otherwise skip them.
-    name: Live E2E (${{ matrix.suite }})
+    name: Live E2E (${{ matrix.ha.label }}, ${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser]
+        ha:
+          # Empty: the pinned image from tests/e2e/env.sh.
+          - label: HA current
+            slug: current
+            image: ""
+          # The minimum release hacs.json declares.
+          - label: HA floor
+            slug: floor
+            image: floor
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
@@ -67,6 +76,8 @@ jobs:
         run: npm ci
       - name: Run the ${{ matrix.suite }} suite
         run: npm run test:e2e:${{ matrix.suite }}
+        env:
+          MOLIGHT_E2E_HA_IMAGE: ${{ matrix.ha.image }}
       - name: Make the retained artifacts readable
         # A job that hits its timeout is cancelled, not failed.
         if: failure() || cancelled()
@@ -76,7 +87,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: molight-e2e-failure-${{ matrix.suite }}
+          name: molight-e2e-failure-${{ matrix.ha.slug }}-${{ matrix.suite }}
           path: |
             ${{ env.MOLIGHT_E2E_RUN_ROOT }}
             tests/e2e/artifacts/browser

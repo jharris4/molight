@@ -120,7 +120,7 @@ jobs:
           retention-days: 7
 
   compatibility:
-    name: Live E2E (${{ matrix.ha.label }}, ${{ matrix.suite }})
+    name: Live E2E (${{ matrix.ref && format('{0}, ', matrix.ref) }}${{ matrix.ha.label }}, ${{ matrix.suite }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -128,11 +128,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Schedules run on main, so the nightly run also checks out develop to
+        # catch a break on the floor release before it reaches a release.
+        ref: ${{ github.event_name == 'schedule' && fromJSON('["main", "develop"]') || fromJSON('[""]') }}
         suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser]
         ha:
           - label: HA floor
             slug: floor
-            image: ghcr.io/home-assistant/home-assistant:2026.1.0
+            # The minimum release hacs.json declares; see tests/e2e/env.sh.
+            image: floor
             experimental: false
           - label: HA current
             slug: current
@@ -147,6 +151,8 @@ jobs:
             experimental: true
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.ref }}
       - uses: actions/setup-node@v4
         if: matrix.suite == 'browser'
         with:
@@ -167,7 +173,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: molight-e2e-failure-${{ matrix.ha.slug }}-${{ matrix.suite }}
+          name: molight-e2e-failure-${{ matrix.ref || github.ref_name }}-${{ matrix.ha.slug }}-${{ matrix.suite }}
           path: |
             ${{ env.MOLIGHT_E2E_RUN_ROOT }}
             tests/e2e/artifacts/browser

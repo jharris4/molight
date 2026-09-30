@@ -7,6 +7,12 @@ export MOLIGHT_E2E_PLAYWRIGHT_VERSION
 # The Home Assistant release of the e2e image. CI checks it is the one the
 # pinned test dependencies install, so both layers test the same release.
 MOLIGHT_E2E_HA_VERSION=2026.8.2
+# "floor" picks the minimum release hacs.json declares.
+if [ "${MOLIGHT_E2E_HA_IMAGE:-}" = floor ]; then
+    MOLIGHT_E2E_HA_VERSION="$(sed -n 's/.*"homeassistant": *"\([^"]*\)".*/\1/p' hacs.json)"
+    : "${MOLIGHT_E2E_HA_VERSION:?could not read homeassistant from hacs.json}"
+    MOLIGHT_E2E_HA_IMAGE=""
+fi
 export MOLIGHT_E2E_HA_IMAGE="${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:$MOLIGHT_E2E_HA_VERSION}"
 
 # Check every boot's logs. The runner cannot reach the container's output,

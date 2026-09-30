@@ -611,6 +611,7 @@ apart. Override it to exercise another release:
 
 ```bash
 MOLIGHT_E2E_HA_IMAGE=ghcr.io/home-assistant/home-assistant:stable npm run test:e2e
+MOLIGHT_E2E_HA_IMAGE=floor npm run test:e2e   # the minimum release hacs.json declares
 ```
 
 Some races only show on slow hardware: a busy CI runner caught two that a fast
@@ -626,11 +627,13 @@ disposable test account, so remove it after debugging.
 CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
-minimum-supported/current matrix plus an advisory floating `stable` canary.
-Release tags write their release notes only after every suite passes. Every
-CI job uploads the retained run directory (HA config and Compose logs) as a
-workflow artifact when it fails; locally, `MOLIGHT_E2E_RUN_ROOT` sets the
-directory that each run creates its own run directory in.
+minimum-supported/current matrix plus an advisory floating `stable` canary;
+the nightly run covers both `main` and `develop`. Release tags run every
+suite on the current and minimum-supported images, and write their release
+notes only after all of them pass. Every CI job uploads the retained run
+directory (HA config and Compose logs) as a workflow artifact when it fails;
+locally, `MOLIGHT_E2E_RUN_ROOT` sets the directory that each run creates its
+own run directory in.
 
 ## Design notes
 
