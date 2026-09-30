@@ -2263,11 +2263,17 @@ class MoLightConfigFlow(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered illuminance sensor."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return await self._finish_discovery(_illuminance_payload, user_input)
+            errors = _validate_illuminance_band(user_input)
+            if not errors:
+                return await self._finish_discovery(_illuminance_payload, user_input)
         return self.async_show_form(
             step_id="discover_illuminance_defaults",
-            data_schema=vol.Schema(_illuminance_option_fields()),
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(_illuminance_option_fields()), user_input or {}
+            ),
+            errors=errors,
         )
 
     async def async_step_discover_light(

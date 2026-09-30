@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Discovering illuminance sensors now rejects a hysteresis at or above the
+  threshold, as creating one by hand already did. Previously the sensors
+  were created and, after their first bright reading, never reported dark.
 - A schedule window that sun offsets push past the following midnight is
   found again after a restart, and a window whose start falls in the
   spring-forward clock change is skipped that night when the shifted start

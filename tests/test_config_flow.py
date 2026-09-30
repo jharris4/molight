@@ -3214,6 +3214,27 @@ async def test_discover_illuminance_creates_with_defaults(
 
 
 @pytest.mark.asyncio
+async def test_discover_illuminance_rejects_hysteresis_at_threshold(
+    hass: HomeAssistant,
+) -> None:
+    """Discovery defaults enforce the same hysteresis < threshold rule."""
+    hass.states.async_set("sensor.office_lux", "42", {"device_class": "illuminance"})
+    result = await _reach_discovery_select(hass, "discover_illuminance")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["sensor.office_lux"]}
+    )
+    submitted = {CONF_ILLUMINANCE_THRESHOLD: 10.0, CONF_ILLUMINANCE_HYSTERESIS: 10.0}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], submitted
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_illuminance_defaults"
+    assert result["errors"] == {CONF_ILLUMINANCE_HYSTERESIS: "hysteresis_too_large"}
+    assert _suggested_values(result["data_schema"]) == submitted
+    assert not hass.config_entries.async_entries(DOMAIN)
+
+
+@pytest.mark.asyncio
 async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None:
     """Light discovery wraps real lights (stored as a single-item list)."""
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
