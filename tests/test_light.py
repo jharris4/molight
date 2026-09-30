@@ -1389,36 +1389,22 @@ _STAMPED = {
     "last_color_change_physical": "2026-07-01T08:07:00+00:00",
     "last_color_change_virtual": "2026-07-01T08:08:00+00:00",
 }
-_LEGACY = "2026-07-01T07:00:00+00:00"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("restored", "expected"),
-    [
-        (_STAMPED, _STAMPED),
-        # Restores from before the physical/virtual split.
-        (
-            {"last_brightness_change": _LEGACY},
-            {"last_brightness_change_physical": _LEGACY},
-        ),
-        ({**_STAMPED, "last_brightness_change": _LEGACY}, _STAMPED),
-    ],
-    ids=["current", "legacy", "current_over_legacy"],
-)
 async def test_light_restore_keeps_valid_timestamps(
-    hass: HomeAssistant, light_entry: MockConfigEntry, restored, expected
+    hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Every restored attribution and change timestamp survives a restart."""
-    mock_restore_cache(hass, [State("light.test_light", "off", restored)])
+    mock_restore_cache(hass, [State("light.test_light", "off", _STAMPED)])
 
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
     state = hass.states.get("light.test_light")
-    for attr in _STAMPED:
-        assert state.attributes[attr] == expected.get(attr), attr
+    for attr, value in _STAMPED.items():
+        assert state.attributes[attr] == value, attr
 
 
 # ---------------------------------------------------------------------------

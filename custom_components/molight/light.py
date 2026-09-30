@@ -805,10 +805,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._schedule_window_applied = last.attributes.get("schedule_window_start")
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
             for attr, field in (
-                # Fall back to the pre-rename attribute name for restores
-                # from before the physical/virtual split.
                 ("last_brightness_change_physical", "_last_brightness_change_physical"),
-                ("last_brightness_change", "_last_brightness_change_physical"),
                 ("last_brightness_change_virtual", "_last_brightness_change_virtual"),
                 ("last_color_change_physical", "_last_color_change_physical"),
                 ("last_color_change_virtual", "_last_color_change_virtual"),
