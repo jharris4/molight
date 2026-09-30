@@ -192,10 +192,11 @@ def main() -> None:
         f"  git commit -am 'release {version}'\n"
         f"  git push\n"
         f"  git tag v{version} && git push origin v{version}\n\n"
-        f"The tag runs .github/workflows/release.yml, which checks the tag, the\n"
-        f"manifest and changelog, runs every live E2E suite, and prints the\n"
-        f"release notes in its job summary. Paste those into the\n"
-        f"GitHub release body, which is what HACS shows users in its update dialog."
+        f"The tag runs .github/workflows/release.yml, which checks the tag is on\n"
+        f"main and matches the manifest and changelog, runs lint, the unit tests,\n"
+        f"validation and every live E2E suite, and then prints the release notes\n"
+        f"in the summary of its Release notes job. Paste those into the GitHub\n"
+        f"release body, which is what HACS shows users in its update dialog."
     )
     subprocess.run(
         ["git", "diff", "--stat"], cwd=ROOT, check=False, stderr=subprocess.DEVNULL
