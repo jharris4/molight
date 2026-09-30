@@ -444,6 +444,137 @@ async def test_hold_blocks_follow_window_end_release_applies_it(
     assert _state(hass).attributes["schedule_window_start"] is None
 
 
+async def _hold_through_window_end(hass: HomeAssistant) -> None:
+    """Light lit by a follow window whose end the Auto-off switch held."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(HOLD, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+        ),
+    )
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    await _switch(hass, on=False)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["schedule_window_start"] == MARKER
+
+
+async def _assert_on_period_survives_a_hold_cycle(hass: HomeAssistant) -> None:
+    """A manual on-period outside the window is not taken for the window."""
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(HOLD, "on")
+    await settle(hass)
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("off_via", ["virtual", "physical"])
+async def test_manual_off_after_held_window_end_drops_the_window(
+    hass: HomeAssistant, off_via: str
+) -> None:
+    """Turned off by hand after a held window end, the light owes it nothing."""
+    await _hold_through_window_end(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+
+    if off_via == "virtual":
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["schedule_window_start"] is None
+
+    await _switch(hass, on=True)
+    assert _state(hass).attributes["schedule_window_start"] is None
+    await _assert_on_period_survives_a_hold_cycle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_manual_on_again_before_release_runs_a_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Off and on again by hand while still held: release starts a timer."""
+    await _hold_through_window_end(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+
+    calls = record_service_calls(hass)
+    await _switch(hass, on=True)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_window_end_while_held_with_light_off_drops_the_window(
+    hass: HomeAssistant,
+) -> None:
+    """A hold defers a window end only for a light that is still on."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(HOLD, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+        ),
+    )
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes["schedule_window_start"] == MARKER  # mid-window
+
+    await _switch(hass, on=False)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).attributes["schedule_window_start"] is None
+
+    await _switch(hass, on=True)
+    await _assert_on_period_survives_a_hold_cycle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_release_with_light_off_drops_a_window_that_ended_unseen(
+    hass: HomeAssistant,
+) -> None:
+    """Turned off while the schedule was unreadable, the release drops the window."""
+    await _hold_through_window_end(hass)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes["schedule_window_start"] == MARKER  # no proof
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+
+    await _switch(hass, on=True)
+    assert _state(hass).attributes["schedule_window_start"] is None
+    await _assert_on_period_survives_a_hold_cycle(hass)
+
+
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_release_inside_follow_window_stays_scheduled(

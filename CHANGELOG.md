@@ -80,6 +80,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   midnight as a new window starting: a light turned off manually comes back
   on. Previously the running light ignored the new window, but turned on at
   the next restart or options edit, even after a manual off that day.
+- A follow-mode light turned off manually after its window ended while
+  auto-off was held no longer remembers that window. Previously, when it was
+  turned on again later, the next hold release or restart turned it off.
 
 ## [1.7.0] - 2026-08-27
 

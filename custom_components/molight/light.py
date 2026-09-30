@@ -1924,7 +1924,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         otherwise a fresh full timer starts.
         """
         if not self._attr_is_on:
-            return  # lights-off transitions were never suppressed
+            # Lights-off transitions were never suppressed.
+            self._forget_ended_follow_window()
+            return
 
         if self._schedule_end_off_pending:
             self._finish_schedule_end_off()
@@ -2077,7 +2079,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._apply_window_start(marker)
             elif replay:
                 pass  # still outside the window: a manual on stands
-            elif self._held:
+            elif self._held and self._attr_is_on:
                 # Auto-off held — keep the window marker so releasing the
                 # hold applies this off boundary.
                 pass
@@ -2176,6 +2178,23 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.hass.async_create_task(self._auto_lights_on(force_selection=True))
         self.async_write_ha_state()
         return True
+
+    def _forget_ended_follow_window(self) -> None:
+        """Drop the marker of a window that ended, once the lights are off.
+
+        A hold keeps the marker past the window end to turn the lights off on
+        release; with the lights off nothing is left to apply, and a later
+        on-period must not be taken for that window.
+        """
+        if (
+            self._schedule_window_applied is None
+            or self._schedule_mode != SCHEDULE_MODE_FOLLOW
+            or not self._schedule_entity
+        ):
+            return
+        state = self.hass.states.get(self._schedule_entity)
+        if state is not None and state.state == "off":
+            self._schedule_window_applied = None
 
     def _apply_window_start(self, marker: str | None) -> None:
         """Enter the SCHEDULED state and turn the lights on (follow mode)."""
@@ -2619,6 +2638,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
+        self._forget_ended_follow_window()
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
