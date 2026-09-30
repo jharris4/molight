@@ -116,6 +116,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   midnight as a new window starting: a light turned off manually comes back
   on. Previously the running light ignored the new window, but turned on at
   the next restart or options edit, even after a manual off that day.
+- Unticking every light in a sensor's bulk assignment, or every entry in a
+  discovery checklist, now stands as an empty selection. Previously the
+  form refilled it from its default, so the sensor stayed on those lights.
+- A time-window schedule keeps its window marker while its on-period runs
+  on, also across a restart. Previously windows chained around the clock
+  got a later merged start at each boundary, which re-triggered follow mode
+  and re-lit a light turned off manually.
 - A follow-mode light turned off manually after its window ended while
   auto-off was held no longer remembers that window, also when the manual
   off came while the schedule was unavailable. Previously, when it was
