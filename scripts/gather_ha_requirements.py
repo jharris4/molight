@@ -3,7 +3,7 @@
 
 Walks the manifest.json dependency closure of the given integration domains
 (default: default_config) and prints each integration's pinned `requirements`,
-one per line — suitable for `pip install -r`. Pre-installing these avoids
+one per line, suitable for `pip install -r`. Pre-installing these avoids
 HA stalling or crashing on runtime pip installs inside the devcontainer.
 """
 

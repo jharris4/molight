@@ -7,7 +7,7 @@ logger:
 # Test fixtures for MoLight development
 # -------------------------------------------------------------------
 
-# Input booleans — backing state for template lights and motion sensors
+# Input booleans: backing state for template lights and motion sensors
 input_boolean:
   # Lights
   light_living_room:
@@ -105,7 +105,7 @@ input_boolean:
   schedule:
     name: "Schedule"
 
-# Input number — backing state for illuminance sensor
+# Input number: backing state for illuminance sensor
 input_number:
   illuminance_living_room:
     name: "Living Room Illuminance"

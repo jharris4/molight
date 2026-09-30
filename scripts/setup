@@ -3,7 +3,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 # Prefer IPv4: this container has no working IPv6 egress, and pip/Python
-# (unlike curl) don't do Happy Eyeballs — they block on the dead IPv6 route
+# (unlike curl) don't do Happy Eyeballs; they block on the dead IPv6 route
 # until it times out on every connection, throttling downloads to a crawl.
 # Making getaddrinfo return IPv4 first avoids the stall.
 GAI_RULE='precedence ::ffff:0:0/96  100'
