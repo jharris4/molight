@@ -445,20 +445,21 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
 
 @pytest.mark.asyncio
 async def test_external_light_adoption(
-    hass: HomeAssistant, light_entry: MockConfigEntry
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """An externally switched real light is adopted and released."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
+    freezer.tick(timedelta(seconds=90))
     hass.states.async_set("light.living_room", "on")
     await _settle(hass)
 
     state = hass.states.get("light.test_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    assert state.attributes["last_on_physical"] is not None
+    assert state.attributes["last_on_physical"] == datetime.now(UTC).isoformat()
 
     hass.states.async_set("light.living_room", "off")
     await _settle(hass)
@@ -507,8 +508,14 @@ async def test_illuminance_dark_resumes_remaining_time(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
+    # T0+58: still inside the original on-period.
+    freezer.tick(timedelta(seconds=28))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert hass.states.get("light.kitchen_light").state == "on"
+
     # T0+61: the original 60s on-period is exhausted.
-    freezer.tick(timedelta(seconds=31))
+    freezer.tick(timedelta(seconds=3))
     async_fire_time_changed(hass)
     await _settle(hass)
 
@@ -536,7 +543,8 @@ async def test_brightness_change_resets_countdown(
     await _settle(hass)
 
     state = hass.states.get("light.test_light")
-    assert state.attributes["last_brightness_change_physical"] is not None
+    dimmed = datetime.now(UTC).isoformat()
+    assert state.attributes["last_brightness_change_physical"] == dimmed
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
     # 55s after the dim (105s after turn-on): the original timer would have
@@ -597,7 +605,7 @@ async def test_brightness_change_while_occupied_records_without_timer(
 
 @pytest.mark.asyncio
 async def test_brightness_zero_treated_as_off(
-    hass: HomeAssistant, light_entry: MockConfigEntry
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """Brightness 0 with state still 'on' is treated as the light being off."""
     light_entry.add_to_hass(hass)
@@ -608,23 +616,26 @@ async def test_brightness_zero_treated_as_off(
     await _settle(hass)
     assert hass.states.get("light.test_light").state == "on"
 
+    freezer.tick(timedelta(seconds=10))
     hass.states.async_set("light.living_room", "on", {"brightness": 0})
     await _settle(hass)
 
     state = hass.states.get("light.test_light")
+    dimmed = datetime.now(UTC).isoformat()
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
-    assert state.attributes["last_brightness_change_physical"] is not None
+    assert state.attributes["last_brightness_change_physical"] == dimmed
 
     # 0 → non-zero is a turn-on in disguise: back to ACTIVE with physical
     # attribution.
+    freezer.tick(timedelta(seconds=10))
     hass.states.async_set("light.living_room", "on", {"brightness": 150})
     await _settle(hass)
 
     state = hass.states.get("light.test_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    assert state.attributes["last_on_physical"] is not None
+    assert state.attributes["last_on_physical"] == datetime.now(UTC).isoformat()
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ door/occupancy implementations.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
@@ -77,12 +77,13 @@ async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
+    freezer.tick(timedelta(seconds=90))
     hass.states.async_set(DOOR, "on")  # opened
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    assert state.attributes["last_on_door"] is not None
+    assert state.attributes["last_on_door"] == datetime.now(UTC).isoformat()
 
     # The normal light_timeout applies even while the door stays open.
     freezer.tick(timedelta(seconds=61))

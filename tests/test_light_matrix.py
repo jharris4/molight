@@ -456,6 +456,162 @@ async def test_dark_edge_resume_survives_restart(hass: HomeAssistant, freezer) -
     assert _state(hass).attributes["bright_forced_off"] is False
 
 
+@pytest.mark.asyncio
+async def test_dark_edge_resume_is_anchored_to_the_occupancy_turn_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A sensor with no latest_occupied_time resumes from when it lit the room."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+
+    hass.states.async_set(OCC, "on")  # T0: a raw motion sensor
+    await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _cross_bright_then_dark(hass, freezer)  # off at T0+20, dark at T0+30
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=28))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"  # T0+58
+    freezer.tick(timedelta(seconds=3))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"  # T0+61
+
+
+# ---------------------------------------------------------------------------
+# Turn-on attribution: each trigger stamps its own timestamp, and only that
+# ---------------------------------------------------------------------------
+
+DOOR = "binary_sensor.door"
+LAST_ON_KEYS = (
+    "last_on_physical",
+    "last_on_virtual",
+    "last_on_occupancy",
+    "last_on_illuminance",
+    "last_on_door",
+)
+
+
+async def _turn_on_by(hass: HomeAssistant, trigger: str) -> None:
+    if trigger == "physical":
+        hass.states.async_set(REAL, "on")
+    elif trigger == "virtual":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+        )
+    elif trigger == "occupancy":
+        hass.states.async_set(OCC, "on")
+    else:
+        hass.states.async_set(DOOR, "on")
+    await settle(hass)
+
+
+def _assert_only_stamped(hass: HomeAssistant, stamped: dict[str, datetime]) -> None:
+    attrs = _state(hass).attributes
+    expected = dict.fromkeys(LAST_ON_KEYS) | {
+        key: when.isoformat() for key, when in stamped.items()
+    }
+    assert {key: attrs[key] for key in LAST_ON_KEYS} == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["physical", "virtual", "occupancy", "door"])
+async def test_turn_on_stamps_its_trigger(
+    hass: HomeAssistant, freezer, trigger: str
+) -> None:
+    """A turn-on records when it happened, under its own trigger only."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, door=DOOR))
+    _assert_only_stamped(hass, {})
+
+    freezer.tick(timedelta(seconds=90))
+    lit = datetime.now(UTC)
+    await _turn_on_by(hass, trigger)
+    assert _state(hass).state == "on"
+    _assert_only_stamped(hass, {f"last_on_{trigger}": lit})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("standing", ["occupancy", "door"])
+async def test_dark_edge_with_presence_stamps_illuminance(
+    hass: HomeAssistant, freezer, standing: str
+) -> None:
+    """Presence found at the dark edge is a turn-on caused by going dark."""
+    hass.states.async_set(ILLUM, "on")  # bright
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    entry = make_light_entry(
+        occupancy=OCC, door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
+    )
+    await setup_entries(hass, entry)
+    await _turn_on_by(hass, standing)  # gated: it is bright
+    assert _state(hass).state == "off"
+    _assert_only_stamped(hass, {})
+
+    freezer.tick(timedelta(seconds=90))
+    lit = datetime.now(UTC)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    _assert_only_stamped(hass, {"last_on_illuminance": lit})
+
+
+@pytest.mark.asyncio
+async def test_dark_edge_resume_stamps_illuminance(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A resumed on-period keeps its first turn-on and adds the dark edge."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    await setup_entries(hass, make_light_entry(illuminance=ILLUM))
+    first = datetime.now(UTC)
+    await _turn_on_by(hass, "virtual")
+
+    await _cross_bright_then_dark(hass, freezer)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    _assert_only_stamped(
+        hass, {"last_on_virtual": first, "last_on_illuminance": datetime.now(UTC)}
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("standing", ["occupancy", "door"])
+async def test_gate_window_start_stamps_the_standing_presence(
+    hass: HomeAssistant, freezer, standing: str
+) -> None:
+    """Presence found when a gate window starts is stamped at the start."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    entry = make_light_entry(
+        occupancy=OCC,
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, entry)
+    await _turn_on_by(hass, standing)  # gated: outside the window
+    assert _state(hass).state == "off"
+    _assert_only_stamped(hass, {})
+
+    freezer.tick(timedelta(seconds=90))
+    lit = datetime.now(UTC)
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    _assert_only_stamped(hass, {f"last_on_{standing}": lit})
+
+
 # ---------------------------------------------------------------------------
 # SCHEDULED (follow-mode window) isolation
 # ---------------------------------------------------------------------------
