@@ -169,10 +169,12 @@ Holding auto-off
 Schedule handling (when a schedule entity is configured), per schedule_mode:
   • follow — lights turn ON at window start (state SCHEDULED, no timer) and
     OFF at window end. Boundaries are edge-triggered: manual changes between
-    them stand. schedule_window_start records the window whose start we
-    applied; it persists across restarts so a boundary missed while HA was
-    down is applied exactly once at startup, while a manual off mid-window
-    is respected. Occupancy/illuminance are ignored while SCHEDULED.
+    them stand. A marker that changes while the schedule stays on (an all-day
+    window at midnight) is a window start. schedule_window_start records the
+    window whose start we applied; it persists across restarts so a boundary
+    missed while HA was down is applied exactly once at startup, while a
+    manual off mid-window is respected. Occupancy/illuminance are ignored
+    while SCHEDULED.
   • gate — occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy.
@@ -1374,7 +1376,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             )
             return
         if same_state:
-            return  # attribute-only change (battery, ...)
+            # Attribute-only change (battery, ...). Touching windows are the
+            # exception: the schedule stays on while a new window starts.
+            if self._is_new_follow_window(entity_id, old_state, new_state):
+                self._on_schedule_change(new_state)
+            return
         # A recovery from unavailable/unknown (or a first sighting) that
         # matches the last known value is a replay, not an observed edge.
         # Every role but maintain and keep-on acts on edges, so they skip
@@ -1434,6 +1440,21 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id in self._hold_entities:
             self._hold_states[entity_id] = new_state.state == "on"
             self._refresh_hold()
+
+    def _is_new_follow_window(
+        self, entity_id: str, old_state: State, new_state: State
+    ) -> bool:
+        """Return True when a follow schedule that stays on moved its marker."""
+        if (
+            entity_id != self._schedule_entity
+            or self._schedule_mode != SCHEDULE_MODE_FOLLOW
+            or new_state.state != "on"
+        ):
+            return False
+        marker = new_state.attributes.get("current_window_start")
+        return bool(marker) and marker != old_state.attributes.get(
+            "current_window_start"
+        )
 
     def _on_light_state_change(self, state: str, brightness: int | None = None) -> None:
         """Handle a real light being turned on/off externally."""

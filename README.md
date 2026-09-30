@@ -291,7 +291,7 @@ WARN       auto-off imminent — grace period before the lights go off
 - `OCCUPIED` + occupancy clears → `COUNTDOWN`; the timer is anchored to the sensor's `latest_occupied_time`, so each sensor's hold time is respected: the lights go off at `latest_occupied_time + turn-off timeout` — i.e. the wall-clock wait after the sensor clears is `turn-off timeout − occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it)
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)
 - any state + all real lights turned off externally → `IDLE`
-- follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer
+- follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends. Boundaries are edge-triggered, so manual changes mid-window stand — including turning the light back on, which rejoins the window instead of starting a timer. An all-day (00:00 → 00:00) schedule starts a new window every midnight without turning `off` in between, so a light turned off manually comes back on at midnight
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window. The current state is exposed as the `molight_state` attribute.
 

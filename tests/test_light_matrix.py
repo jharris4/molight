@@ -540,6 +540,113 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
 
+NEXT_MARKER = "2026-07-03T21:00:00+00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_marker_change_relights_after_manual_off(
+    hass: HomeAssistant,
+) -> None:
+    """A new marker on a schedule that stays on is the next window starting."""
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(hass, entry)
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": NEXT_MARKER})
+    await settle(hass)
+
+    state = _state(hass)
+    assert light_targets(calls, "turn_on") == [[REAL]]
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == NEXT_MARKER
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_marker_change_keeps_a_lit_light_scheduled(
+    hass: HomeAssistant,
+) -> None:
+    """A light still on takes the new marker and is sent no command."""
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": NEXT_MARKER})
+    await settle(hass)
+
+    state = _state(hass)
+    assert light_targets(calls, "turn_on") == []
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["schedule_window_start"] == NEXT_MARKER
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "attrs",
+    [
+        pytest.param(
+            {"current_window_start": MARKER, "next_transition": NEXT_MARKER},
+            id="other-attribute",
+        ),
+        pytest.param({}, id="marker-removed"),
+    ],
+)
+async def test_follow_attribute_change_without_new_marker_keeps_manual_off(
+    hass: HomeAssistant, attrs: dict
+) -> None:
+    """Only a new marker starts a window while the schedule stays on."""
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(hass, entry)
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+
+    hass.states.async_set(SCHED, "on", attrs)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["schedule_window_start"] == MARKER
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+)
+async def test_gate_marker_change_keeps_manual_off(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """A gate window's marker moving is no window start to re-evaluate."""
+    entry = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=mode)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await setup_entries(hass, entry)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+
+    hass.states.async_set(SCHED, "on", {"current_window_start": NEXT_MARKER})
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
 # ---------------------------------------------------------------------------
 # Gate-mode schedule boundaries x machine state
 # ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ from custom_components.molight.const import (
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
 )
-from tests.conftest import make_light_entry, restart_entries, setup_entries
+from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -228,6 +228,45 @@ async def test_full_day_window_is_one_window_per_day(
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T00:00:00+00:00"
     assert state.attributes["next_transition"] == "2026-07-03T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_follow_light_takes_each_day_of_a_full_day_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A light turned off by hand comes back on when the next day's window starts."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    light = make_light_entry(
+        name="Desk Lamp",
+        schedule="binary_sensor.night_schedule",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    schedule = _schedule_entry([{"start": "00:00", "end": "00:00"}])
+    await setup_entries(hass, schedule, light)
+    state = hass.states.get("light.desk_lamp")
+    assert state.state == "on"
+    assert state.attributes["schedule_window_start"] == "2026-07-02T00:00:00+00:00"
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    freezer.move_to("2026-07-03 00:00:02+00:00")
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert hass.states.get("binary_sensor.night_schedule").state == "on"
+    state = hass.states.get("light.desk_lamp")
+    assert state.state == "on"
+    assert state.attributes["schedule_window_start"] == "2026-07-03T00:00:00+00:00"
+
+    # Runtime and reload agree: a manual off in the new window stands.
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    assert await hass.config_entries.async_reload(light.entry_id)
+    await settle(hass)
+    assert hass.states.get("light.desk_lamp").state == "off"
 
 
 @pytest.mark.asyncio

@@ -76,6 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schedule was turned back on when the room went from bright to dark within
   the turn-off timeout. The new `bright_forced_off` attribute carries this
   across a restart.
+- A follow-mode light on an all-day (00:00 → 00:00) schedule now takes each
+  midnight as a new window starting: a light turned off manually comes back
+  on. Previously the running light ignored the new window, but turned on at
+  the next restart or options edit, even after a manual off that day.
 
 ## [1.7.0] - 2026-08-27
 
