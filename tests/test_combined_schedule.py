@@ -897,6 +897,53 @@ async def test_dst_gap_edges_order_by_instant_and_marker_is_local(
 
 
 @pytest.mark.asyncio
+async def test_dst_fold_edges_fire_once_at_their_first_occurrence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """On 2026-11-01 in New York, 01:00 to 02:00 happens twice. Edges in that
+    hour take their daylight-time occurrence, so an input ending and another
+    starting at 01:30 hand over once, and the repeated hour is quiet."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-11-01 01:00:00+00:00")  # 21:00 EDT the evening before
+    await _setup(
+        hass,
+        _time_schedule("Late", "22:00", "01:30"),
+        _time_schedule("Fold", "01:30", "01:45"),
+        _combined("Either", ["binary_sensor.late", "binary_sensor.fold"]),
+    )
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] == "2026-10-31T22:00:00-04:00"
+
+    await _move_to(hass, freezer, "2026-11-01 02:00:02+00:00")
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-10-31T22:00:00-04:00"
+    assert state.attributes["next_transition"] == "2026-11-01T01:45:00-04:00"
+
+    await _move_to(hass, freezer, "2026-11-01 05:30:02+00:00")  # 01:30 EDT
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-10-31T22:00:00-04:00"
+
+    await _move_to(hass, freezer, "2026-11-01 05:45:02+00:00")  # 01:45 EDT
+    state = hass.states.get("binary_sensor.either")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] == "2026-11-01T22:00:00-05:00"
+
+    # The same wall times again, now in standard time.
+    for when in (
+        "2026-11-01 06:30:02+00:00",
+        "2026-11-01 06:45:02+00:00",
+        "2026-11-01 07:00:02+00:00",
+    ):
+        await _move_to(hass, freezer, when)
+        state = hass.states.get("binary_sensor.either")
+        assert state.state == "off"
+        assert state.attributes["next_transition"] == "2026-11-01T22:00:00-05:00"
+
+
+@pytest.mark.asyncio
 async def test_editing_a_nested_input_rebuilds_the_outer_combination(
     hass: HomeAssistant, freezer
 ) -> None:

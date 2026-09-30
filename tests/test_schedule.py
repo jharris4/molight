@@ -967,6 +967,78 @@ async def test_spring_forward_gap_edge_does_not_shadow_real_next_edge(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("window", "on_at", "marker", "next_while_on", "off_at", "next_after"),
+    [
+        (
+            {"start": "01:30", "end": "01:45"},
+            "2026-11-01 05:30:02+00:00",
+            "2026-11-01T01:30:00-04:00",
+            "2026-11-01T01:45:00-04:00",
+            "2026-11-01 05:45:02+00:00",
+            "2026-11-02T01:30:00-05:00",
+        ),
+        (
+            {"start": "22:00", "end": "01:30"},
+            "2026-11-01 02:00:02+00:00",
+            "2026-10-31T22:00:00-04:00",
+            "2026-11-01T01:30:00-04:00",
+            "2026-11-01 05:30:02+00:00",
+            "2026-11-01T22:00:00-05:00",
+        ),
+    ],
+    ids=["window inside the repeated hour", "overnight window ending in it"],
+)
+async def test_fall_back_edges_fire_once_at_their_first_occurrence(
+    hass: HomeAssistant,
+    freezer,
+    window: dict,
+    on_at: str,
+    marker: str,
+    next_while_on: str,
+    off_at: str,
+    next_after: str,
+) -> None:
+    """On 2026-11-01 in New York, 01:00 to 02:00 happens twice. An edge in
+    that hour fires at its daylight-time occurrence, and the repeated hour
+    neither ends the window early nor starts it a second time."""
+    await hass.config.async_set_time_zone("America/New_York")
+    freezer.move_to("2026-11-01 01:00:00+00:00")  # 21:00 EDT the evening before
+    await _setup(hass, _schedule_entry([window]))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] == marker
+
+    freezer.move_to(on_at)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+    assert state.attributes["next_transition"] == next_while_on
+
+    freezer.move_to(off_at)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] == next_after
+
+    # The same wall times again, now in standard time.
+    for when in (
+        "2026-11-01 06:30:02+00:00",
+        "2026-11-01 06:45:02+00:00",
+        "2026-11-01 07:00:02+00:00",
+    ):
+        freezer.move_to(when)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        state = hass.states.get("binary_sensor.night_schedule")
+        assert state.state == "off"
+        assert state.attributes["next_transition"] == next_after
+
+
+@pytest.mark.asyncio
 async def test_window_collapsed_by_the_spring_forward_gap_is_skipped(
     hass: HomeAssistant, freezer
 ) -> None:
