@@ -99,12 +99,8 @@ Turn-on attribution
     last_on_illuminance: an illuminance→dark change triggered the lights.
     last_on_door:        a door sensor opening triggered the lights.
 
-  All are exposed as extra state attributes (ISO strings or null).
-  In the absence of an occupancy sensor, the illuminance-dark countdown is
-  computed from the most recent of the physical/virtual/occupancy/door
-  timestamps (last_on_illuminance is deliberately excluded: a previous dark
-  re-activation is not fresh human activity, so repeated dark/bright cycles
-  can't extend the on-period forever).
+  All are exposed as extra state attributes (ISO strings or null). They
+  decide whether a manual off still stands, not how long an on-period lasts.
 
   Brightness changes are tracked the same way: last_brightness_change_physical
   records external changes on the real lights (and restarts a running
@@ -159,10 +155,15 @@ Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
   - Occupancy only turns lights ON when illuminance is OFF (dark), in both modes.
   - Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
-    else if brightness forced the lights off and that on-period has time left
-    (countdown > 0), enter COUNTDOWN with adjusted timer. An on-period ended
-    any other way (manual off, timer, schedule) is never resumed, nor is one
-    the user turned off while brightness had it off.
+    else if brightness forced the lights off and that on-period has time left,
+    enter COUNTDOWN for the rest of it. It lasts until the later of
+    bright_resume_until, recorded at the forced off, and a timeout after
+    latest_occupied_time. The record is when the interrupted countdown would
+    have ended, or a timeout from the forced off for a light presence was
+    holding (whoever held it was there until then at least); a warning stage
+    or a standby rest leaves none. An on-period ended any other way (manual
+    off, timer, schedule) is never resumed, nor is one the user turned off
+    while brightness had it off.
   - Illuminance OFF→ON (dark→bright):
       control:  go IDLE, turn lights off.
       gate:     no effect; bright never turns lights off. Use when the lux
@@ -237,7 +238,7 @@ import contextlib
 import logging
 from collections import deque
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.light import (
@@ -730,6 +731,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # True while the light is off because brightness forced it off: only
         # such an on-period is resumed when it turns dark again.
         self._bright_forced_off: bool = False
+        # How long that on-period would have lasted at least; None when
+        # only presence history can tell.
+        self._bright_resume_until: datetime | None = None
         # Effective hold: companion switch off OR any keep-on entity on.
         self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
@@ -741,6 +745,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False
         self._timer_unsub: CALLBACK_TYPE | None = None
+        # When the armed timer fires, None while none is armed.
+        self._timer_ends: datetime | None = None
         # Context ids of our own light service calls: while a command settles,
         # only a write under one of them can be its echo.
         self._self_context_ids: deque[str] = deque(maxlen=16)
@@ -908,8 +914,8 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
                     and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
                 )
-            # Restore turn-on attribution so the illuminance re-activation
-            # countdown keeps working across a restart.
+            # Restore turn-on attribution: a manual off only stands until a
+            # later turn-on.
             for source in ("physical", "virtual", "occupancy", "illuminance", "door"):
                 raw = last.attributes.get(f"last_on_{source}")
                 if raw:
@@ -917,6 +923,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
             self._schedule_window_applied = last.attributes.get("schedule_window_start")
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
+            if self._bright_forced_off:
+                with contextlib.suppress(ValueError, TypeError):
+                    self._bright_resume_until = datetime.fromisoformat(
+                        last.attributes.get("bright_resume_until")
+                    )
             with contextlib.suppress(ValueError, TypeError):
                 self._last_manual_off = datetime.fromisoformat(
                     last.attributes.get("last_off_manual")
@@ -1541,7 +1552,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         """
         await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
         # Also ends an on-period that brightness had cut short.
-        self._bright_forced_off = False
+        self._clear_bright_forced_off()
         self._go_idle(manual=True)
 
     # ------------------------------------------------------------------
@@ -2298,14 +2309,18 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle()
             return
+        resting = self._machine_state == STATE_STANDBY and self._standby_applies()
         if (
             self._is_illuminance_bright()
             and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
         ):
+            if not (resting or self._maintain_active() or self._door_holds()):
+                # Darkness resumes the fresh timer this release would start.
+                self._start_timer()
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle(bright_forced=True)
             return
-        if self._machine_state == STATE_STANDBY and self._standby_applies():
+        if resting:
             return  # resting at standby has no timer to resume
 
         # Occupancy adoption is gated exactly like every other adoption path
@@ -2350,6 +2365,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             and self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
             and not self._held
         ):
+            # Darkness resumes what these settings would have run.
+            if self._maintain_active() or self._door_holds():
+                self._machine_state = STATE_OCCUPIED
+            else:
+                self._start_timer(self._compute_occupancy_countdown())
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle(bright_forced=True)
             return
@@ -3001,44 +3021,22 @@ class VirtualLight(LightEntity, RestoreEntity):
                     lots.append(datetime.fromisoformat(lot_str))
         return lots
 
-    def _most_recent_on_time(self) -> datetime | None:
-        """Return the latest recorded turn-on timestamp across all sources.
-
-        Illuminance is excluded because it is only relevant for gating, not
-        attribution.
-        """
-        candidates = [
-            t
-            for t in (
-                self._last_on_physical,
-                self._last_on_virtual,
-                self._last_on_occupancy,
-                self._last_on_door,
-                self._standby_timeout_started,
-            )
-            if t is not None
-        ]
-        return max(candidates) if candidates else None
-
     def _compute_illuminance_countdown(self) -> int:
-        """Countdown (seconds) to use when illuminance going dark re-activates lights.
+        """Seconds left of the on-period that brightness cut short.
 
-        When an occupancy entity is configured, delegates to the occupancy-based
-        countdown which is already anchored to latest_occupied_time.
-
-        Otherwise, subtracts elapsed time since the light was last on from
-        light_timeout, so the re-activation uses only the remaining portion of
-        the original on-period. With no on-period history at all there is
-        nothing to resume: a long-empty (or never-lit) room is not re-lit.
+        It lasts until the later of the end recorded when brightness forced
+        the light off and a timeout after the room was last occupied; neither
+        means there is nothing to resume.
         """
-        if self._occupancy_entity and self._occupancy_lots():
-            return self._compute_occupancy_countdown()
-
-        last_on = self._most_recent_on_time()
-        if last_on is not None:
-            elapsed = (datetime.now(UTC) - last_on).total_seconds()
-            return max(0, int(self._light_timeout - elapsed))
-        return 0
+        ends = [
+            lot + timedelta(seconds=self._light_timeout)
+            for lot in self._occupancy_lots()
+        ]
+        if self._bright_resume_until is not None:
+            ends.append(self._bright_resume_until)
+        if not ends:
+            return 0
+        return max(0, int((max(ends) - datetime.now(UTC)).total_seconds()))
 
     def _transition_on(self) -> None:
         """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
@@ -3047,7 +3045,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
-        self._bright_forced_off = False
+        self._clear_bright_forced_off()
         # Turning the light back on after a manual off rejoins standby.
         self._standby_suppressed = False
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
@@ -3094,6 +3092,15 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _go_idle(self, *, bright_forced: bool = False, manual: bool = False) -> None:
         """Cancel any timer and move to IDLE."""
+        resume_until = None
+        if bright_forced and not self._in_warning():
+            # A countdown resumes until it would have ended; whoever held the
+            # light was there until now, so it lasts a timeout at least.
+            resume_until = self._timer_ends
+            if resume_until is None and self._machine_state == STATE_OCCUPIED:
+                resume_until = datetime.now(UTC) + timedelta(
+                    seconds=self._light_timeout
+                )
         self._cancel_timer()
         self._command_generation += 1
         if manual:
@@ -3104,6 +3111,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._machine_state != STATE_IDLE:
             # Why the on-period ended; an off while idle ends none.
             self._bright_forced_off = bright_forced
+            self._bright_resume_until = resume_until
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
         self._occupancy_lit_lights = False
@@ -3126,14 +3134,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             # Auto-off held: the state machine transitions normally but no
             # timer is armed; releasing the hold starts a fresh one.
             return
-        self._timer_unsub = async_call_later(
-            self.hass,
-            duration if duration is not None else self._light_timeout,
-            self._timer_expired,
-        )
+        if duration is None:
+            duration = self._light_timeout
+        self._timer_ends = datetime.now(UTC) + timedelta(seconds=duration)
+        self._timer_unsub = async_call_later(self.hass, duration, self._timer_expired)
 
     async def _timer_expired(self, _now: datetime) -> None:
         self._timer_unsub = None
+        self._timer_ends = None
         if self._held:
             return  # engaged in the same loop iteration the timer fired
         state = self._machine_state
@@ -3151,6 +3159,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._timer_unsub is not None:
             self._timer_unsub()
             self._timer_unsub = None
+        self._timer_ends = None
+
+    def _clear_bright_forced_off(self) -> None:
+        """Forget an on-period that brightness cut short: it is over."""
+        self._bright_forced_off = False
+        self._bright_resume_until = None
 
     # ------------------------------------------------------------------
     # Effect / warn warning sequence
@@ -3402,7 +3416,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
         if on:
-            self._bright_forced_off = False
+            self._clear_bright_forced_off()
         context = Context()
         self._self_context_ids.append(context.id)
         if not on or manual:
@@ -3575,6 +3589,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             "pre_warn_color": self._pre_warn_color,
             "schedule_window_start": self._schedule_window_applied,
             "bright_forced_off": self._bright_forced_off,
+            "bright_resume_until": _fmt(self._bright_resume_until),
         }
         if self._is_scheduled_light:
             attributes[ATTR_ACTIVE_SETTINGS] = (

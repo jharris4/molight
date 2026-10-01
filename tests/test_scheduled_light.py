@@ -650,6 +650,121 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("end_action", "lit_by", "outside_visit", "resumed_for"),
+    [
+        # Keep leaves the inside countdown running: 300 s from the turn-on.
+        pytest.param(SCHEDULE_END_ACTION_KEEP, "hand", None, 190, id="keep-countdown"),
+        # Inside presence held it and outside watches nothing: a fresh timeout.
+        pytest.param(SCHEDULE_END_ACTION_KEEP, "presence", None, 20, id="keep-held"),
+        pytest.param(SCHEDULE_END_ACTION_SWITCH, "hand", None, 20, id="switch-fresh"),
+        # Switch counts from the outside sensor's last visit, 15 s before.
+        pytest.param(SCHEDULE_END_ACTION_SWITCH, "hand", 15, 5, id="switch-history"),
+    ],
+)
+async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
+    hass: HomeAssistant,
+    freezer,
+    end_action: str,
+    lit_by: str,
+    outside_visit: int | None,
+    resumed_for: int,
+) -> None:
+    """Going dark resumes the countdown the end boundary would have left."""
+    inside_occupancy = "binary_sensor.inside_occupancy"
+    outside_occupancy = "binary_sensor.outside_occupancy"
+    illuminance = "binary_sensor.outside_illuminance"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(inside_occupancy, "off")
+    hass.states.async_set(illuminance, "on")
+    outside = {
+        CONF_LIGHT_TIMEOUT: 30,
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+    }
+    if outside_visit is not None:
+        outside[CONF_OCCUPANCY_ENTITY] = outside_occupancy
+    entry = make_scheduled_light_entry(
+        schedule_end_action=end_action,
+        outside=outside,
+        inside={CONF_LIGHT_TIMEOUT: 300, CONF_OCCUPANCY_ENTITY: inside_occupancy},
+    )
+    await setup_entries(hass, entry)
+    if lit_by == "presence":
+        hass.states.async_set(inside_occupancy, "on")
+    else:
+        await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    freezer.tick(timedelta(seconds=100))
+    if outside_visit is not None:
+        visit = datetime.now(UTC) - timedelta(seconds=outside_visit)
+        hass.states.async_set(
+            outside_occupancy, "off", {"latest_occupied_time": visit.isoformat()}
+        )
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes["bright_forced_off"] is True
+
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(illuminance, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
+    freezer.tick(timedelta(seconds=resumed_for - 1))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Presence the outside settings watch gets its light back when dark."""
+    maintain = "binary_sensor.outside_maintain"
+    illuminance = "binary_sensor.outside_illuminance"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(maintain, "on")
+    hass.states.async_set(illuminance, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+        },
+        inside={CONF_LIGHT_TIMEOUT: 300},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=100))
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(illuminance, "off")
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
     hass: HomeAssistant, freezer
 ) -> None:

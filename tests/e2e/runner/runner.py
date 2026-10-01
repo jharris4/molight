@@ -4912,8 +4912,8 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     )
     assert_entry_loaded(client, sensor_entry_id)
 
-    # Without an occupancy input the remainder is anchored to the light's own
-    # last turn-on: a never-lit room stays dark, a recently lit one resumes.
+    # Without an occupancy input the remainder is what the interrupted
+    # countdown had left: a never-lit room stays dark, a lit one resumes.
     light_entry_id = create_dusk_light(client, occupancy=False)
     assert_entry_loaded(client, light_entry_id)
     client.wait_state(DUSK_LIGHT, lambda state: state["state"] == "off", "off")

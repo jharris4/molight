@@ -1085,27 +1085,33 @@ async def test_schedule_end_keep_gives_standby_the_outside_timeout(
     assert hass.states.get(VIRTUAL).state == "off"
 
 
+async def _member_reports_off(hass: HomeAssistant) -> None:
+    """Report the member off under MoLight's last command context."""
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(REAL, "off", context=context)
+    await settle(hass)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
 )
+@pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
 async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
-    hass: HomeAssistant, freezer, end_action: str
+    hass: HomeAssistant, freezer, end_action: str, restart: bool
 ) -> None:
     """The fresh outside timeout is an on-period that going dark resumes."""
     illuminance = "binary_sensor.yard_bright"
     hass.states.async_set(illuminance, "off")
-    await _setup_porch(
-        hass,
-        _porch(
-            end_action=end_action,
-            outside={
-                CONF_LIGHT_TIMEOUT: 60,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
-                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
-            },
-        ),
+    entry = _porch(
+        end_action=end_action,
+        outside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+        },
     )
+    await _setup_porch(hass, entry)
     await _echo_standby(hass)
     await _set(hass, SCHEDULE, "off")
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
@@ -1113,6 +1119,10 @@ async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
     await _tick(hass, freezer, 2)
     await _set(hass, illuminance, "on")
     assert hass.states.get(VIRTUAL).state == "off"
+    await _member_reports_off(hass)
+    if restart:
+        await restart_entries(hass, entry)
+        assert _attrs(hass)["bright_forced_off"] is True
     await _tick(hass, freezer, 2)
     await _set(hass, illuminance, "off")
 
@@ -1125,6 +1135,132 @@ async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
     assert hass.states.get(VIRTUAL).state == "on"
     await _tick(hass, freezer, 3)
     assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_timeout_from_standby_resumes_despite_an_old_visit(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An hour-old outside visit does not end the timeout the boundary began."""
+    yard = "binary_sensor.yard_occupancy"
+    illuminance = "binary_sensor.yard_bright"
+    visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    hass.states.async_set(yard, "off", {"latest_occupied_time": visit})
+    hass.states.async_set(illuminance, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            end_action=SCHEDULE_END_ACTION_KEEP,
+            outside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_OCCUPANCY_ENTITY: yard,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            },
+        ),
+    )
+    await _echo_standby(hass)
+    await _set(hass, SCHEDULE, "off")
+
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+    await _member_reports_off(hass)
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "off")
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 54)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await _tick(hass, freezer, 3)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_hold_release_after_a_keep_end_starts_a_timeout_darkness_resumes(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A hold outlasting the boundary's timeout releases into a fresh one."""
+    hold = "input_boolean.guests"
+    illuminance = "binary_sensor.yard_bright"
+    hass.states.async_set(hold, "on")
+    hass.states.async_set(illuminance, "off")
+    settings = {
+        CONF_LIGHT_TIMEOUT: 60,
+        CONF_HOLD_ENTITIES: [hold],
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+    }
+    await _setup_porch(
+        hass,
+        _porch(end_action=SCHEDULE_END_ACTION_KEEP, inside=settings, outside=settings),
+    )
+    await _echo_standby(hass)
+    await _set(hass, SCHEDULE, "off")
+    await _tick(hass, freezer, 3600)
+    await _set(hass, hold, "off")
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+    await _member_reports_off(hass)
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "off")
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 54)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await _tick(hass, freezer, 3)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_maintain_countdown_cut_short_by_brightness_resumes_when_dark(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A maintain sensor's countdown resumes raised, and still ends at standby."""
+    maintain = "binary_sensor.porch_maintain"
+    illuminance = "binary_sensor.porch_bright"
+    hass.states.async_set(maintain, "off")
+    hass.states.async_set(illuminance, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_OCCUPANCY_ENTITY: None,
+                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            }
+        ),
+    )
+    await _echo_standby(hass)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    await _set(hass, maintain, "on")
+    await _tick(hass, freezer, 300)
+    left = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
+    await _set(hass, maintain, "off", latest_occupied_time=left)
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+    await _member_reports_off(hass)
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "off")
+
+    # 46 s of the countdown are left, at the auto-on level.
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    assert _attrs(hass)["brightness"] == BOOST
+    await _tick(hass, freezer, 45)
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 2)
+    _assert_standby(hass)
 
 
 @pytest.mark.asyncio

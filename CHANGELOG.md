@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   off still lights it. The new `last_off_manual` attribute records that off;
   a member light that reports in, or comes back from `unavailable`, while the
   light is off is not counted as one.
+- Going dark after brightness turned a light off brings it back until its
+  countdown would have ended, also when that countdown had been restarted by
+  a dim or recolour at the wall, a released keep-on entity or Auto-off
+  switch, or a standby light's *Keep state* schedule end. An old visit in
+  the occupancy history no longer cancels it, and the new
+  `bright_resume_until` attribute keeps it through a restart.
+- A maintain occupancy sensor's `latest_occupied_time` counts toward that
+  remaining time like an occupancy sensor's, and a light that presence was
+  holding comes back within one timeout of brightness turning it off.
 
 ## [1.8.0] - 2026-09-30
 

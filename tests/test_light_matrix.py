@@ -30,6 +30,7 @@ from custom_components.molight.const import (
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_WARN,
 )
 from tests.conftest import (
     light_targets,
@@ -235,6 +236,39 @@ async def _cross_bright_then_dark(hass: HomeAssistant, freezer) -> None:
     await settle(hass)
 
 
+async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
+def _real_light_reports(hass: HomeAssistant) -> None:
+    """Have the real light report each command MoLight sends it."""
+
+    @callback
+    def _report(event) -> None:
+        data = event.data["service_data"]
+        if event.data["domain"] != "light" or data.get("entity_id") != [REAL]:
+            return
+        if event.data["service"] == "turn_off":
+            hass.states.async_set(REAL, "off", context=event.context)
+            return
+        attrs = {"brightness": data["brightness"]} if "brightness" in data else {}
+        hass.states.async_set(REAL, "on", attrs, context=event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _report)
+
+
+async def _assert_resumed_for(hass: HomeAssistant, freezer, seconds: int) -> None:
+    """The light is counting down and turns off after exactly this long."""
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, seconds - 1)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
 @pytest.mark.parametrize("off_via", ["virtual", "physical"])
@@ -332,10 +366,11 @@ async def test_dark_edge_does_not_relight_after_gate_window_end(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("held_for", [0, 3600])
 async def test_dark_edge_resumes_after_bright_off_at_hold_release(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, held_for: int
 ) -> None:
-    """A bright off applied when a hold releases is resumed like any other."""
+    """A release into brightness resumes the timeout it would have started."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set("input_boolean.hold", "off")
     entry = make_light_entry(illuminance=ILLUM, hold_entities=["input_boolean.hold"])
@@ -349,6 +384,7 @@ async def test_dark_edge_resumes_after_bright_off_at_hold_release(
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).state == "on"  # held
+    await _tick(hass, freezer, held_for)
     hass.states.async_set("input_boolean.hold", "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
@@ -357,7 +393,7 @@ async def test_dark_edge_resumes_after_bright_off_at_hold_release(
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
-    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _assert_resumed_for(hass, freezer, 50)
 
 
 @pytest.mark.asyncio
@@ -438,20 +474,42 @@ async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_without_a_turn_on_time_resumes_nothing(
-    hass: HomeAssistant,
+async def test_dark_edge_resumes_the_timeout_of_a_light_adopted_at_startup(
+    hass: HomeAssistant, freezer
 ) -> None:
-    """A light adopted already on at startup has no on-period to resume."""
+    """A light found on at startup runs a timeout, which going dark resumes."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "on")
+    _real_light_reports(hass)
     await setup_entries(hass, make_light_entry(illuminance=ILLUM))
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    await _cross_bright_then_dark(hass, freezer)
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+async def test_dark_edge_after_a_bright_off_during_the_warning_resumes_nothing(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warning stage is no countdown: the on-period was already over."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    entry = make_light_entry(illuminance=ILLUM, warn_timeout=30, warn_brightness=50)
+    await setup_entries(hass, entry)
+    await _turn_on_by(hass, "virtual")
+    await _tick(hass, freezer, 61)
+    assert _state(hass).attributes["molight_state"] == STATE_WARN
 
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).attributes["bright_forced_off"] is True
+    assert _state(hass).attributes["bright_resume_until"] is None
+    freezer.tick(timedelta(seconds=5))
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
+    assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
 
@@ -466,49 +524,252 @@ async def test_dark_edge_resume_survives_restart(hass: HomeAssistant, freezer) -
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
+    ends = (datetime.now(UTC) + timedelta(seconds=60)).isoformat()
     freezer.tick(timedelta(seconds=20))
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).attributes["bright_forced_off"] is True
+    assert _state(hass).attributes["bright_resume_until"] == ends
 
     await restart_entries(hass, entry)
     assert _state(hass).attributes["bright_forced_off"] is True
+    assert _state(hass).attributes["bright_resume_until"] == ends
 
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
-    assert _state(hass).state == "on"
-    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
     assert _state(hass).attributes["bright_forced_off"] is False
+    assert _state(hass).attributes["bright_resume_until"] is None
+    await _assert_resumed_for(hass, freezer, 30)
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_resume_is_anchored_to_the_occupancy_turn_on(
+async def test_dark_edge_resumes_the_countdown_a_raw_sensors_clear_started(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A sensor with no latest_occupied_time resumes from when it lit the room."""
+    """A sensor with no latest_occupied_time still resumes its countdown."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
 
-    hass.states.async_set(OCC, "on")  # T0: a raw motion sensor
+    hass.states.async_set(OCC, "on")  # a raw motion sensor
     await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(OCC, "off")  # T0: a 60 s countdown
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _cross_bright_then_dark(hass, freezer)  # off at T0+10, dark at T0+20
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["dim", "recolor"])
+async def test_dark_edge_resumes_a_timeout_restarted_at_the_wall(
+    hass: HomeAssistant, freezer, change: str
+) -> None:
+    """A dim or recolor at the wall restarts the timeout going dark resumes."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    await setup_entries(hass, make_light_entry(illuminance=ILLUM))
+
+    hass.states.async_set(REAL, "on", {"brightness": 200, "hs_color": (30, 80)})
+    await settle(hass)
+    await _tick(hass, freezer, 55)
+    changed = {"brightness": 150} if change == "dim" else {"hs_color": (200, 80)}
+    hass.states.async_set(
+        REAL, "on", {"brightness": 200, "hs_color": (30, 80)} | changed
+    )  # T0: a fresh 60 s timeout
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    await _cross_bright_then_dark(hass, freezer)  # off at T0+10, dark at T0+20
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hold", ["keep_on_entity", "auto_off_switch"])
+@pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
+async def test_dark_edge_resumes_the_timeout_a_hold_release_started(
+    hass: HomeAssistant, freezer, hold: str, restart: bool
+) -> None:
+    """Releasing a long hold starts a fresh timeout, which going dark resumes."""
+
+    async def _hold(held: bool) -> None:
+        if hold == "keep_on_entity":
+            hass.states.async_set(HOLD, "on" if held else "off")
+        else:
+            await hass.services.async_call(
+                "switch", "turn_off" if held else "turn_on", {"entity_id": SWITCH}
+            )
+        await settle(hass)
+
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(HOLD, "off")
+    _real_light_reports(hass)
+    entry = make_light_entry(illuminance=ILLUM, hold_entities=[HOLD])
+    await setup_entries(hass, entry)
+    await _turn_on_by(hass, "virtual")
+    await _hold(True)
+    await _tick(hass, freezer, 3600)
+    assert _state(hass).state == "on"
+    await _hold(False)  # T0: a fresh 60 s timeout
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    if restart:
+        await restart_entries(hass, entry)
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+async def test_dark_edge_resumes_a_maintain_sensors_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The countdown a maintain sensor's clear started is resumed like any."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(MAINT, "off")
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    await setup_entries(hass, make_light_entry(maintain=MAINT, illuminance=ILLUM))
+    await _turn_on_by(hass, "virtual")
+    hass.states.async_set(MAINT, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    await _tick(hass, freezer, 300)
+    left = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
+    hass.states.async_set(MAINT, "off", {"latest_occupied_time": left})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _cross_bright_then_dark(hass, freezer)  # 30 s after they left
+    await _assert_resumed_for(hass, freezer, 30)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sensor", ["occupancy", "maintain"])
+@pytest.mark.parametrize("away", [10, 100], ids=["just_left", "long_gone"])
+async def test_dark_edge_after_the_room_emptied_while_bright(
+    hass: HomeAssistant, freezer, sensor: str, away: int
+) -> None:
+    """Presence held the light with no countdown: when they left decides."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    entry = make_light_entry(illuminance=ILLUM, **{sensor: OCC})
+    await setup_entries(hass, entry)
+    if sensor == "maintain":
+        await _turn_on_by(hass, "virtual")
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    await _tick(hass, freezer, 300)
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    freezer.tick(timedelta(seconds=10))
+    left = datetime.now(UTC).isoformat()
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
+    await settle(hass)
+    freezer.tick(timedelta(seconds=away))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+
+    if away < 60:
+        await _assert_resumed_for(hass, freezer, 60 - away)
+    else:
+        assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sensor", ["occupancy", "maintain", "door"])
+async def test_dark_edge_resumes_a_held_light_for_a_timeout_from_the_bright_off(
+    hass: HomeAssistant, freezer, sensor: str
+) -> None:
+    """A sensor that cannot date the departure: they were there at the off."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    mode = {"door_mode": DOOR_MODE_OPEN_CLOSE} if sensor == "door" else {}
+    entry = make_light_entry(illuminance=ILLUM, **{sensor: OCC}, **mode)
+    await setup_entries(hass, entry)
+    if sensor == "maintain":
+        await _turn_on_by(hass, "virtual")
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    await _tick(hass, freezer, 300)
+    hass.states.async_set(ILLUM, "on")  # T0
+    await settle(hass)
+    assert _state(hass).state == "off"
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set(OCC, "off")
     await settle(hass)
-    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
-
-    await _cross_bright_then_dark(hass, freezer)  # off at T0+20, dark at T0+30
-    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
-
-    freezer.tick(timedelta(seconds=28))
-    async_fire_time_changed(hass)
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(ILLUM, "off")
     await settle(hass)
-    assert _state(hass).state == "on"  # T0+58
-    freezer.tick(timedelta(seconds=3))
-    async_fire_time_changed(hass)
+
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+async def test_dark_edge_resumes_a_manual_timeout_despite_an_old_visit(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An old visit does not end the countdown of a light turned on since."""
+    visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": visit})
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    await _turn_on_by(hass, "virtual")
+
+    await _cross_bright_then_dark(hass, freezer)
+    await _assert_resumed_for(hass, freezer, 40)
+
+
+@pytest.mark.asyncio
+async def test_dark_edge_resume_lasts_until_a_timeout_after_a_later_visit(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Someone passing through while it was bright extends the resume."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    _real_light_reports(hass)
+    await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
+    await _turn_on_by(hass, "virtual")  # its timeout ends in 60 s
+
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(ILLUM, "on")
     await settle(hass)
-    assert _state(hass).state == "off"  # T0+61
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(OCC, "on")  # gated: it is bright
+    await settle(hass)
+    assert _state(hass).state == "off"
+    freezer.tick(timedelta(seconds=20))
+    left = datetime.now(UTC).isoformat()
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+
+    await _assert_resumed_for(hass, freezer, 55)
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +778,8 @@ async def test_dark_edge_resume_is_anchored_to_the_occupancy_turn_on(
 
 DOOR = "binary_sensor.door"
 MAINT = "binary_sensor.maint"
+HOLD = "input_boolean.hold"
+SWITCH = "switch.matrix_light_auto_off"
 LAST_ON_KEYS = (
     "last_on_physical",
     "last_on_virtual",

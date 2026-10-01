@@ -8,7 +8,7 @@ re-evaluates the configured rules and otherwise starts a fresh full timer.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant, State
@@ -46,6 +46,7 @@ SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
 HOLD = "input_boolean.guest_mode"
 HOLD2 = "input_boolean.party_mode"
+MAINT = "binary_sensor.maint"
 VIRTUAL = "light.matrix_light"
 SWITCH = "switch.matrix_light_auto_off"
 MARKER = "2026-07-02T21:00:00+00:00"
@@ -412,6 +413,42 @@ async def test_hold_blocks_bright_force_off_release_applies_it(
     assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_release_into_brightness_while_maintained_resumes_until_they_left(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Presence holding the released light decides what going dark resumes."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(MAINT, "off")
+    entry = make_light_entry(
+        maintain=MAINT, illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_CONTROL
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    hass.states.async_set(MAINT, "on")
+    await settle(hass)
+    await _switch(hass, on=False)
+    hass.states.async_set(ILLUM, "on")  # bright
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    await _switch(hass, on=True)
+    assert _state(hass).state == "off"
+    await _tick(hass, freezer, 30)
+    left = datetime.now(UTC).isoformat()
+    hass.states.async_set(MAINT, "off", {"latest_occupied_time": left})
+    await _tick(hass, freezer, 50)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+
+    # 80 s after the release, 50 s after they left.
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 9)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio
