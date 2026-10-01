@@ -249,6 +249,24 @@ async def test_occupancy_raises_standby_and_the_timeout_returns_to_it(
 
 
 @pytest.mark.asyncio
+async def test_occupancy_without_an_auto_on_brightness_holds_standby_as_it_is(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A blank auto-on brightness names no level to rise to."""
+    calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_BRIGHTNESS: None}))
+    await _echo_standby(hass)
+
+    await _set(hass, OCCUPANCY, "on")
+
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert "brightness" not in _light_calls(calls, "turn_on")[-1]
+    assert _attrs(hass)["brightness"] == STANDBY
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_warning_stages_lead_into_standby(hass: HomeAssistant, freezer) -> None:
     """Effect and warn still run, and their last step is standby."""
     calls = await _setup_porch(

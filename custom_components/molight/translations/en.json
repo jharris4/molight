@@ -845,7 +845,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
@@ -1353,7 +1353,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
