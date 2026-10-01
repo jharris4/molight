@@ -1054,6 +1054,7 @@
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
+      "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its options.",
       "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}.",

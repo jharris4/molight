@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   windows.
 - Disabling a Virtual Light's Auto-off switch while it is off releases the
   hold straight away, instead of only after the next reload or restart.
+- Discovery skips a pick that another MoLight entity started wrapping while
+  its forms were open, and says how many it skipped.
 
 ## [1.8.0] - 2026-09-30
 

@@ -2187,6 +2187,7 @@ class MoLightConfigFlow(
                 self._discovery = {
                     "candidates": filtered,
                     "preselect_all": user_input.get(CONF_PRESELECT_ALL, True),
+                    "scan": (domain, device_classes, used_key),
                 }
                 return await select_step()
             errors["base"] = "no_filter_matches"
@@ -2310,8 +2311,11 @@ class MoLightConfigFlow(
         a failure is surfaced instead of only reaching the log.
         """
         disc = self._discovery
-        selected = disc["selected"]
         candidates = disc["candidates"]
+        # Another flow may have wrapped a pick while this one was open.
+        eligible = _discovery_candidates(self.hass, *disc["scan"])
+        selected = [e for e in disc["selected"] if e in eligible]
+        skipped = len(disc["selected"]) - len(selected)
         prefix, suffix, target = disc["prefix"], disc["suffix"], disc["target"]
         # Drop cleared optional fields so they stay absent from the entry
         # rather than being stored as None.
@@ -2349,6 +2353,14 @@ class MoLightConfigFlow(
                 )
             else:
                 created += 1
+        if skipped:
+            return self.async_abort(
+                reason="discovery_done_skipped",
+                description_placeholders={
+                    "count": str(created),
+                    "skipped": str(skipped),
+                },
+            )
         return self.async_abort(
             reason="discovery_done",
             description_placeholders={"count": str(created)},

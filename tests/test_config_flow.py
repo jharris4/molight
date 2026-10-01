@@ -6403,6 +6403,77 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     assert "binary_sensor.porch_pir" not in wrapped
 
 
+_DISCOVERY_KINDS = {
+    "occupancy": (
+        "binary_sensor",
+        {"device_class": "motion"},
+        CONF_OCCUPANCY_SENSOR,
+        {SECTION_ADVANCED: {}},
+    ),
+    "illuminance": (
+        "sensor",
+        {"device_class": "illuminance"},
+        CONF_ILLUMINANCE_SENSOR,
+        {},
+    ),
+    "light": ("light", {}, CONF_LIGHTS, EMPTY_LIGHT_SECTIONS),
+}
+
+
+_DISCOVERY_WRAPPERS = {
+    "occupancy": {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+        CONF_NAME: "Desk Occupancy",
+        CONF_OCCUPANCY_TIMEOUT: 30,
+    },
+    "illuminance": {CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE, CONF_NAME: "Desk Lux"},
+    "light": {
+        CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+        CONF_NAME: "Desk Wrapper",
+        CONF_LIGHT_TIMEOUT: 60,
+    },
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", list(_DISCOVERY_KINDS))
+async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
+    hass: HomeAssistant, kind: str
+) -> None:
+    """A pick another flow wrapped meanwhile is skipped, and the summary says so."""
+    domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
+    picks = [f"{domain}.desk", f"{domain}.hall"]
+    for entity_id in picks:
+        hass.states.async_set(entity_id, "off", attrs)
+    result = await _reach_discovery_select(hass, f"discover_{kind}")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: picks}
+    )
+    assert result["step_id"] == f"discover_{kind}_defaults"
+
+    wrapper = dict(_DISCOVERY_WRAPPERS[kind])
+    wrapper[key] = [picks[0]] if key == CONF_LIGHTS else picks[0]
+    MockConfigEntry(domain=DOMAIN, data=wrapper).add_to_hass(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], dict(defaults)
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "discovery_done_skipped"
+    assert result["description_placeholders"] == {"count": "1", "skipped": "1"}
+    wrapped = [
+        source
+        for e in hass.config_entries.async_entries(DOMAIN)
+        for source in (
+            molight_config(e).get(key)
+            if key == CONF_LIGHTS
+            else [molight_config(e).get(key)]
+        )
+    ]
+    assert sorted(wrapped) == picks
+
+
 # ---------------------------------------------------------------------------
 # Validation error paths: re-rendered forms, foreign entities, eligibility
 # ---------------------------------------------------------------------------

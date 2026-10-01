@@ -88,7 +88,7 @@ An optional **prefix**/**suffix** distinguishes the virtual entities from the re
 - **Entity ID** (default): only the entity ID gets the affix, as the slug of the composed name (`v_` on a sensor named "Hallway Motion" → `binary_sensor.v_hallway_motion`); the friendly name stays identical to the source.
 - **Name**: the friendly name gets the affix, and the entity ID derives from the composed name.
 
-A final form then lets you adjust the default settings applied to every pick; for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**. Discovery creates regular Virtual Lights; eligible gated lights can then be promoted through **Convert virtual lights**.
+A final form then lets you adjust the default settings applied to every pick; for discovered lights that includes the occupancy/illuminance/schedule references. A pick that stopped being a candidate while the forms were open (wrapped from another tab, disabled or removed) is skipped, and the summary says how many. Each created entity can still be edited individually afterwards via **Configure**. Discovery creates regular Virtual Lights; eligible gated lights can then be promoted through **Convert virtual lights**.
 
 ### Bulk assignment
 
