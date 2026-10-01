@@ -3578,6 +3578,7 @@ class VirtualLight(LightEntity, RestoreEntity):
     async def _set_lights(
         self,
         on: bool,
+        *,
         brightness: int | None = None,
         transition: float | None = None,
         color: dict | None = None,
@@ -3697,7 +3698,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 blocking=True,
                 context=context,
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Turn-on selections are an enhancement; a missing select, a
             # renamed option or a failing integration must never leave the
             # room dark, or the light reporting on with nothing lit.

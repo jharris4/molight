@@ -51,6 +51,8 @@ ignore = [
     "PLR0912", # too-many-branches
     "PLR0913", # too-many-arguments
     "PLR0915", # too-many-statements
+    # LICENSE.md covers the repo; no per-file headers
+    "CPY001", # missing-copyright-notice
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -62,6 +64,7 @@ ignore = [
     "SLF001",  # tests may poke at private state
     "ARG001",  # fixtures often take unused arguments
     "FBT",     # boolean literals in test calls are fine
+    "PLR0917", # parametrized tests and fixture helpers take many inputs
 ]
 "tests/e2e/runner/**" = [
     "EM",      # assertion failures include the live response inline

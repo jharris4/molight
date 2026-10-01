@@ -4,4 +4,4 @@
 # see the pytest matrix in .github/workflows/ci.yml.
 pytest-homeassistant-custom-component==0.13.367
 # Pinned: `select = ["ALL"]` means new ruff releases can add rules and break CI
-ruff==0.15.20
+ruff==0.16.10
