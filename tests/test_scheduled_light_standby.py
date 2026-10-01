@@ -398,6 +398,48 @@ async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("presence", ["maintain", "door"])
+@pytest.mark.parametrize("source", ["physical", "virtual"])
+async def test_raising_standby_by_hand_is_held_by_presence_already_there(
+    hass: HomeAssistant, freezer, presence: str, source: str
+) -> None:
+    """Maintain or an open door that left standby alone holds a manual raise."""
+    sensor = "binary_sensor.presence"
+    illuminance = "binary_sensor.porch_bright"
+    # Bright in gate mode keeps the open door from raising standby itself.
+    hass.states.async_set(illuminance, "on")
+    hass.states.async_set(sensor, "on")
+    inside = (
+        {CONF_MAINTAIN_OCCUPANCY_ENTITY: sensor}
+        if presence == "maintain"
+        else {
+            CONF_DOOR_ENTITY: sensor,
+            CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        }
+    )
+    await _setup_porch(hass, _porch(inside=inside))
+    await _echo_standby(hass)
+    _assert_standby(hass)
+
+    if source == "physical":
+        await _set(hass, REAL, "on", brightness=200)
+    else:
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+        )
+        await settle(hass)
+    await _tick(hass, freezer, 31)
+
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["brightness"] == 200
+    await _set(hass, sensor, "off")
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_ends(
     hass: HomeAssistant, freezer
 ) -> None:

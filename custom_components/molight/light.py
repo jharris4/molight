@@ -1748,8 +1748,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._warning_active = False
             self._pre_warn_brightness = None
             self._pre_warn_color = None
-            self._machine_state = STATE_ACTIVE
-            self._start_timer()
+            if self._maintain_active() or self._occupancy_holds() or self._door_holds():
+                # Presence that left standby alone holds the raised light,
+                # as it does a raise through this entity.
+                self._machine_state = STATE_OCCUPIED
+                self._cancel_timer()
+            else:
+                self._machine_state = STATE_ACTIVE
+                self._start_timer()
         self.async_write_ha_state()
 
     def _all_lights_off(self) -> bool:
