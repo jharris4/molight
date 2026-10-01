@@ -854,6 +854,36 @@ async def test_schedule_end_turn_off_turns_standby_off(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("end_action", "watched", "state"),
+    [
+        (SCHEDULE_END_ACTION_TURN_OFF, True, STATE_IDLE),
+        (SCHEDULE_END_ACTION_KEEP, True, STATE_OCCUPIED),
+        (SCHEDULE_END_ACTION_SWITCH, True, STATE_OCCUPIED),
+        (SCHEDULE_END_ACTION_KEEP, False, STATE_COUNTDOWN),
+        (SCHEDULE_END_ACTION_SWITCH, False, STATE_ACTIVE),
+    ],
+)
+async def test_schedule_end_hands_over_a_light_raised_by_presence(
+    hass: HomeAssistant, freezer, end_action: str, watched: bool, state: str
+) -> None:
+    """Presence outlasts the end only where the outside settings still see it."""
+    outside = {CONF_LIGHT_TIMEOUT: 60}
+    if watched:
+        outside[CONF_OCCUPANCY_ENTITY] = OCCUPANCY
+    await _setup_porch(hass, _porch(end_action=end_action, outside=outside))
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+    await _set(hass, SCHEDULE, "off")
+
+    assert _attrs(hass)["molight_state"] == state
+    if not watched:
+        await _tick(hass, freezer, 61)
+        assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_keep_gives_standby_the_outside_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
