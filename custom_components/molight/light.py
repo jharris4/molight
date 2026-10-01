@@ -757,9 +757,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # turn-on selection can tell that it was overtaken; an automatic
         # turn-on defers to a manual one still waiting instead.
         self._command_generation = 0
-        self._manual_on_pending = 0
-        # Contexts of the select calls that turn-ons are waiting for.
-        self._selecting_context_ids: set[str] = set()
+        # Turn-ons waiting for their selection, by the context of the select
+        # call: the command generation each was issued at and, for an
+        # automatic one, its level generation.
+        self._waiting_turn_ons: dict[str, tuple[int, int | None]] = {}
         # Counts automatic turn-ons at the auto-on or standby level, so one
         # that waited for its selection yields to the level chosen since.
         self._auto_level_generation = 0
@@ -1609,7 +1610,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._reconcile_recovered_member()
                 return  # echo of our own service call; call sites manage state
             # A member our own select call changed was not changed at the wall.
-            claim = event.context.id not in self._selecting_context_ids
+            claim = event.context.id not in self._waiting_turn_ons
             if same_state:
                 if new_state.state == "on":
                     self._on_light_attrs_change(old_state, new_state, claim=claim)
@@ -2098,7 +2099,28 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _is_lit(self) -> bool:
         """On, or about to be: a turn-on may still be waiting for its selection."""
-        return self._attr_is_on or self._machine_state != STATE_IDLE
+        return (
+            self._attr_is_on
+            or self._machine_state != STATE_IDLE
+            or self._turn_on_waiting()
+        )
+
+    def _overtaken(self, generation: int, auto_level: int | None) -> bool:
+        """Return True when a newer command replaced one issued at these counts."""
+        return generation != self._command_generation or (
+            auto_level is not None and auto_level != self._auto_level_generation
+        )
+
+    def _turn_on_waiting(self, *, manual: bool = False) -> bool:
+        """Return True while a turn-on nothing overtook waits for its selection.
+
+        With manual, only one the user made through this entity counts.
+        """
+        return any(
+            not self._overtaken(generation, auto_level)
+            for generation, auto_level in self._waiting_turn_ons.values()
+            if auto_level is None or not manual
+        )
 
     def _member_is_lit(self, entity_id: str) -> bool | None:
         """Whether a real light is on (brightness 0 is off), None if unknown."""
@@ -2467,7 +2489,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if not self._attr_is_on:
                     self._forget_ended_follow_window()
                     self.async_write_ha_state()
-            elif self._held and self._attr_is_on:
+            elif self._held and self._is_lit():
                 # Auto-off held: keep the window marker so releasing the
                 # hold applies this off boundary.
                 pass
@@ -2488,7 +2510,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return  # still outside the window: nothing ended
             if (
                 self._schedule_mode == SCHEDULE_MODE_GATE
-                and self._machine_state != STATE_IDLE
+                and self._is_lit()
                 and not self._held
             ):
                 self.hass.async_create_task(self._auto_lights_off())
@@ -3454,19 +3476,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._auto_level_generation += 1
         auto_level_generation = self._auto_level_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
-            if not manual and self._manual_on_pending:
+            if not manual and self._turn_on_waiting(manual=True):
                 self._occupancy_lit_lights = False  # the user's on-period
                 return False
-            self._manual_on_pending += manual
-            self._selecting_context_ids.add(context.id)
+            waiting = (generation, None if manual else auto_level_generation)
+            self._waiting_turn_ons[context.id] = waiting
             try:
                 await self._apply_turn_on_selection(context)
             finally:
-                self._manual_on_pending -= manual
-                self._selecting_context_ids.discard(context.id)
-            if generation != self._command_generation or (
-                not manual and auto_level_generation != self._auto_level_generation
-            ):
+                del self._waiting_turn_ons[context.id]
+            if self._overtaken(*waiting):
                 # An off, a newer manual command, a newer automatic level or
                 # a change at the wall landed while the select call was
                 # awaited; it stands.

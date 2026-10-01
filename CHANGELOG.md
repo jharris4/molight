@@ -73,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   turn-on (occupancy, a door, a schedule start, standby) is still waiting on
   a slow select keeps the level set at the wall, instead of being overwritten
   by the automatic level when the select call finishes.
+- A schedule end also takes over a manual turn-on still waiting on a slow
+  select, as it does an automatic one: *Turn off*, or a regular light's
+  turn-off gate window ending, stops it lighting the room afterwards, *Switch
+  state* recalculates it, and a keep-on hold keeps the end for it. An
+  automatic turn-on no longer waits for a manual one that was turned off
+  again before its select call finished, which left the room dark.
 
 ## [1.8.0] - 2026-09-30
 
