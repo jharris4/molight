@@ -232,9 +232,10 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
-        # A cycle's anchor and its clear's classification describe one
-        # source; an options edit that switches the source leaves them
-        # behind. A save that predates the source record is trusted.
+        # A cycle's anchor, its clear's classification and an occupied
+        # dropout describe one source; an options edit that switches the
+        # source leaves them behind. A save that predates the source record
+        # is trusted.
         extra = await self.async_get_last_extra_data()
         saved_source = extra.as_dict().get("source") if extra is not None else None
         same_source = saved_source in (None, self._source_sensor)
@@ -262,7 +263,9 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
             )
         )
         self.async_on_remove(self._cancel_unavailable_timer)
-        self._seed_state(restored_on=last is not None and last.state == "on")
+        self._seed_state(
+            restored_on=same_source and last is not None and last.state == "on"
+        )
 
     def _seed_state(self, *, restored_on: bool) -> None:
         state = self.hass.states.get(self._source_sensor)

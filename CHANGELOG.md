@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timeout that change restarted.
 - A real light that loads late now fills in the colour of the turn-on it
   missed reporting.
+- Changing an occupied Virtual Occupancy Sensor's source to a sensor that is
+  `unavailable` no longer keeps it `on` with the old source's presence.
 
 ## [1.8.0] - 2026-09-30
 

@@ -137,6 +137,8 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 
 Classification needs a real on-time. `last_on_time` survives restarts, but if motion began while HA was down there is nothing to restore: the source's `last_changed` is then just the restart moment, so the cycle in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
 
+Changing the source sensor leaves the old source's presence behind: the sensor follows the new source from its first valid reading, and a new source that is `unavailable` at the time does not keep it `on`.
+
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
 ### Virtual Combined Occupancy Binary Sensor

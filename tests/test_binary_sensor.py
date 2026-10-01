@@ -2279,6 +2279,46 @@ async def test_occupancy_source_swap_drops_the_old_sources_anchor(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("new_source", ["unavailable", "unknown", "missing"])
+@pytest.mark.parametrize("unavailable_timeout", [0, 60])
+async def test_occupancy_source_swap_leaves_the_old_sources_presence_behind(
+    hass: HomeAssistant, freezer, new_source: str, unavailable_timeout: int
+) -> None:
+    """Switching an occupied sensor to a source with no reading yet does not
+    carry the old source's presence as a dropout of the new one."""
+    hass.set_state(CoreState.running)
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    if new_source != "missing":
+        hass.states.async_set("binary_sensor.presence", new_source)
+    entry = _grace_occupancy_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.boot_occupancy").state == "on"
+
+    await _edit_options(
+        hass,
+        entry,
+        **{
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.presence",
+            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: unavailable_timeout,
+        },
+    )
+    await settle(hass)
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_unavailable"] is False
+
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.boot_occupancy").state == "off"
+    hass.states.async_set("binary_sensor.presence", "on")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.boot_occupancy").state == "on"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("via", ["reload", "restart", "source_swap"])
 async def test_occupancy_false_clear_survives_a_reload(
     hass: HomeAssistant, freezer, via: str
