@@ -2179,6 +2179,59 @@ async def test_standby_during_a_waiting_raise_keeps_standby(
 
 
 @pytest.mark.asyncio
+async def test_wall_turn_on_during_a_waiting_standby_keeps_its_level(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A standby still waiting for its selection does not undo a turn-on at
+    the wall, which runs the timeout back to standby."""
+    select = _ParkedSelect(hass, park=1)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE), schedule="off")
+    hass.states.async_set(SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await _drain(hass)
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == 200
+    select.release.set()
+    await settle(hass)
+
+    assert _light_calls(calls, "turn_on") == []
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == 200
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["brightness", "color"])
+async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
+    hass: HomeAssistant, change: str
+) -> None:
+    """A dim or recolour at the wall while standby is re-sent to a member
+    that came back is not undone by that re-send."""
+    select = _ParkedSelect(hass, park=2)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE))
+    await _echo_standby(hass)
+    await _set(hass, REAL, "unavailable")
+    hass.states.async_set(REAL, "on", {"brightness": STANDBY})
+    await asyncio.wait_for(select.started.wait(), 2)
+    sent = len(_light_calls(calls, "turn_on"))
+
+    level = 200 if change == "brightness" else STANDBY
+    changed = {} if change == "brightness" else {"hs_color": (200.0, 50.0)}
+    hass.states.async_set(REAL, "on", {"brightness": level, **changed})
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    assert len(_light_calls(calls, "turn_on")) == sent
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == level
+    assert _attrs(hass)["last_color_change_physical" if changed else "brightness"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["startup", "boundary", "restored"])
 @pytest.mark.parametrize("occupied", [False, True], ids=["clear", "occupied"])
 @pytest.mark.parametrize("door_open", [False, True], ids=["closed", "open"])

@@ -758,6 +758,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # turn-on defers to a manual one still waiting instead.
         self._command_generation = 0
         self._manual_on_pending = 0
+        # Contexts of the select calls that turn-ons are waiting for.
+        self._selecting_context_ids: set[str] = set()
         # Counts automatic turn-ons at the auto-on or standby level, so one
         # that waited for its selection yields to the level chosen since.
         self._auto_level_generation = 0
@@ -1606,9 +1608,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
                     self._reconcile_recovered_member()
                 return  # echo of our own service call; call sites manage state
+            # A member our own select call changed was not changed at the wall.
+            claim = event.context.id not in self._selecting_context_ids
             if same_state:
                 if new_state.state == "on":
-                    self._on_light_attrs_change(old_state, new_state)
+                    self._on_light_attrs_change(old_state, new_state, claim=claim)
                 return
             if resend and self._reconcile_recovered_member():
                 return
@@ -1639,6 +1643,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 new_state.attributes.get("brightness"),
                 # A member reporting in while the light is off was not turned off.
                 manual=not (member_recovered and self._machine_state == STATE_IDLE),
+                claim=claim,
             )
             return
         if same_state:
@@ -1748,9 +1753,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
 
     def _on_light_state_change(
-        self, state: str, brightness: int | None = None, *, manual: bool = True
+        self,
+        state: str,
+        brightness: int | None = None,
+        *,
+        manual: bool = True,
+        claim: bool = True,
     ) -> None:
-        """Handle a real light being turned on/off externally."""
+        """Handle a real light being turned on/off externally.
+
+        claim is False for a turn-on our own select call caused.
+        """
         if state == "on" and brightness == 0:
             # "On" at brightness 0 is an off in disguise, matching the dimming
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
@@ -1764,18 +1777,21 @@ class VirtualLight(LightEntity, RestoreEntity):
             # later dims (which _on_light_brightness_change handles).
             if brightness:
                 self._attr_brightness = brightness
-            self._last_on_physical = datetime.now(UTC)
-            self._claim_on_period()
+            if claim:
+                self._last_on_physical = datetime.now(UTC)
+                self._claim_on_period()
             self._transition_on()
         elif self._all_lights_off():
             self._go_idle(manual=manual)
 
-    def _on_light_attrs_change(self, old_state: State, new_state: State) -> None:
+    def _on_light_attrs_change(
+        self, old_state: State, new_state: State, *, claim: bool = True
+    ) -> None:
         """Handle an external brightness/color change on an on real light.
 
         Dimming or recoloring is human activity: record it and restart any
         running countdown with the full timeout. Brightness 0 means off in
-        disguise.
+        disguise. claim is False for a change our own select call caused.
         """
         old_b = old_state.attributes.get("brightness")
         new_b = new_state.attributes.get("brightness")
@@ -1811,11 +1827,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # ACTIVE/timer or rejoining an active follow window). A
                 # color-only change on a light we consider off is just
                 # mirrored.
-                self._on_light_state_change("on")
+                self._on_light_state_change("on", claim=claim)
             self.async_write_ha_state()
             return
 
-        self._claim_on_period()
+        if claim:
+            self._claim_on_period()
         if self._machine_state in (
             STATE_ACTIVE,
             STATE_COUNTDOWN,
@@ -1854,10 +1871,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         """Make the on-period the user's after a change at the wall.
 
         As a change made through this entity does: a false detection no
-        longer cuts it short, and a manual off's standby pause ends.
+        longer cuts it short, a manual off's standby pause ends, and an
+        automatic turn-on still waiting for its selection yields to it.
         """
         self._occupancy_lit_lights = False
         self._standby_suppressed = False
+        self._auto_level_generation += 1
 
     def _all_lights_off(self) -> bool:
         """Return True when every real light is off (brightness 0 is off)."""
@@ -3057,14 +3076,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._clear_bright_forced_off()
         # Turning the light back on after a manual off rejoins standby.
         self._standby_suppressed = False
+        # Set before the hold checks: activation-only gate modes only gate turning
+        # an off light on, so occupancy may hold this turn-on outside it.
+        self._attr_is_on = True
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             # Already managed by occupancy / schedule window; publish the
             # rejoined standby, which a restart would otherwise lose.
             self.async_write_ha_state()
             return
-        # Set before the hold checks: activation-only gate modes only gate turning
-        # an off light on, so occupancy may hold this turn-on outside it.
-        self._attr_is_on = True
 
         # Turned back on during an active follow-mode window (after a manual
         # off): rejoin the window instead of running the auto-off timer, so
@@ -3419,7 +3438,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         as the user's command lights the room with the user's settings. An
         automatic turn-on at the auto-on or standby level (auto_level) also
         overtakes an older automatic one still waiting, so the level chosen
-        last is the one the lights end at.
+        last is the one the lights end at; so does a change at the wall.
         """
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
@@ -3439,15 +3458,18 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = False  # the user's on-period
                 return False
             self._manual_on_pending += manual
+            self._selecting_context_ids.add(context.id)
             try:
                 await self._apply_turn_on_selection(context)
             finally:
                 self._manual_on_pending -= manual
+                self._selecting_context_ids.discard(context.id)
             if generation != self._command_generation or (
                 not manual and auto_level_generation != self._auto_level_generation
             ):
-                # An off, a newer manual command or a newer automatic level
-                # landed while the select call was awaited; it stands.
+                # An off, a newer manual command, a newer automatic level or
+                # a change at the wall landed while the select call was
+                # awaited; it stands.
                 return False
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:
