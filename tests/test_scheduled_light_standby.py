@@ -619,11 +619,13 @@ async def test_turning_the_light_back_on_rejoins_standby(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("presence", ["occupancy", "door"])
 @pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
+@pytest.mark.parametrize("how", ["turn_on", "dim_at_wall", "recolor_at_wall"])
 async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
-    hass: HomeAssistant, freezer, presence: str, restart: bool
+    hass: HomeAssistant, freezer, presence: str, restart: bool, how: str
 ) -> None:
     """A manual on while presence holds the raised light rejoins standby too,
-    and says so at once, so a restart before they leave keeps it."""
+    as does a dim or recolour at the wall, and says so at once, so a restart
+    before they leave keeps it."""
     door = "binary_sensor.porch_door"
     hass.states.async_set(door, "off")
     entry = _porch(
@@ -643,10 +645,15 @@ async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
     await settle(hass)
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
 
-    await hass.services.async_call(
-        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
-    )
-    await settle(hass)
+    if how == "turn_on":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+        )
+        await settle(hass)
+    elif how == "dim_at_wall":
+        await _set(hass, REAL, "on", brightness=200)
+    else:
+        await _set(hass, REAL, "on", brightness=BOOST, hs_color=(200.0, 50.0))
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
     if restart:
         await restart_entries(hass, entry)
@@ -772,6 +779,41 @@ async def test_false_detection_does_not_cut_a_manual_raise_short(
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     await _tick(hass, freezer, 26)
     assert _attrs(hass)["brightness"] == 200
+    await _tick(hass, freezer, 3)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["brightness", "color"])
+async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
+    hass: HomeAssistant, freezer, change: str
+) -> None:
+    """Dimming or recolouring a light that occupancy raised from standby makes
+    the raise the user's: false motion no longer drops it back quickly."""
+    visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    await _setup_porch(hass, _porch())
+    await _echo_standby(hass)
+    await _set(hass, OCCUPANCY, "on", latest_occupied_time=visit)
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(REAL, "on", {"brightness": BOOST}, context=context)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+    await _tick(hass, freezer, 2)
+    level = 200 if change == "brightness" else BOOST
+    changed = {} if change == "brightness" else {"hs_color": (200.0, 50.0)}
+    await _set(hass, REAL, "on", brightness=level, **changed)
+    await _set(
+        hass,
+        OCCUPANCY,
+        "off",
+        latest_occupied_time=visit,
+        last_clear_false_detection=True,
+    )
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 28)
+    assert _attrs(hass)["brightness"] == level
     await _tick(hass, freezer, 3)
     _assert_standby(hass)
 

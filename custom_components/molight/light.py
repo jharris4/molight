@@ -1764,9 +1764,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             # later dims (which _on_light_brightness_change handles).
             if brightness:
                 self._attr_brightness = brightness
-            if self._machine_state == STATE_IDLE:
-                self._last_on_physical = datetime.now(UTC)
-                self._occupancy_lit_lights = False  # the user owns this on-period
+            self._last_on_physical = datetime.now(UTC)
+            self._claim_on_period()
             self._transition_on()
         elif self._all_lights_off():
             self._go_idle(manual=manual)
@@ -1816,6 +1815,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.async_write_ha_state()
             return
 
+        self._claim_on_period()
         if self._machine_state in (
             STATE_ACTIVE,
             STATE_COUNTDOWN,
@@ -1849,6 +1849,15 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._machine_state = STATE_ACTIVE
                 self._start_timer()
         self.async_write_ha_state()
+
+    def _claim_on_period(self) -> None:
+        """Make the on-period the user's after a change at the wall.
+
+        As a change made through this entity does: a false detection no
+        longer cuts it short, and a manual off's standby pause ends.
+        """
+        self._occupancy_lit_lights = False
+        self._standby_suppressed = False
 
     def _all_lights_off(self) -> bool:
         """Return True when every real light is off (brightness 0 is off)."""

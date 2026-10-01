@@ -64,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
+- Dimming, recolouring or turning on a real light at the wall while motion
+  has the light on makes the on-period yours, as the same change through the
+  virtual light does: a false detection no longer turns it off after the
+  short delay, and a Virtual Scheduled Light that was turned off by hand
+  rejoins standby.
 
 ## [1.8.0] - 2026-09-30
 
