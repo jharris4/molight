@@ -287,6 +287,7 @@ from .const import (
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
+    ATTR_ACTIVE_SETTINGS_WINDOW,
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
@@ -642,6 +643,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
         self._inside_schedule = False
         self._restored_inside_schedule: bool | None = None
+        # The settings schedule's window marker, last known and as restored:
+        # a different one after a restart means a boundary was crossed.
+        self._settings_window_start: str | None = None
+        self._restored_window_start: str | None = None
         # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
         # Persisted as a state attribute so a restart cannot lose the pending
         # boundary; returning inside the schedule cancels it.
@@ -869,6 +874,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._standby_suppressed = bool(
                         last.attributes.get(ATTR_STANDBY_SUPPRESSED)
                     )
+                    self._restored_window_start = last.attributes.get(
+                        ATTR_ACTIVE_SETTINGS_WINDOW
+                    )
+                    self._settings_window_start = self._restored_window_start
                 # A boundary off deferred under a previous configuration no
                 # longer applies once the end action is anything but "turn off".
                 # It deliberately survives a schedule swap, unlike the
@@ -1012,7 +1021,14 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = self._restored_inside_schedule
         else:
             inside = False
-        if not (inside and self._restored_inside_schedule is True):
+        marker = (
+            schedule.attributes.get("current_window_start")
+            if schedule is not None and schedule.state == "on"
+            else None
+        )
+        if not (inside and self._restored_inside_schedule is True) or (
+            marker is not None and marker != self._restored_window_start
+        ):
             # A boundary was crossed (or nothing was restored): a manual off
             # and a resting standby belonged to the previous window.
             self._standby_suppressed = False
@@ -1045,6 +1061,13 @@ class VirtualLight(LightEntity, RestoreEntity):
             if inside
             else self._outside_schedule_settings
         )
+
+    def _settings_window(self) -> str | None:
+        """Window marker of the settings schedule, the last known if unreadable."""
+        state = self.hass.states.get(self._settings_schedule_entity or "")
+        if state is not None and state.state in ("on", "off"):
+            self._settings_window_start = state.attributes.get("current_window_start")
+        return self._settings_window_start
 
     def _switch_scheduled_settings(self, inside: bool) -> None:
         """Select and reconcile a Virtual Scheduled Light settings mapping."""
@@ -3389,4 +3412,5 @@ class VirtualLight(LightEntity, RestoreEntity):
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = self._schedule_end_off_pending
             attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
             attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity
+            attributes[ATTR_ACTIVE_SETTINGS_WINDOW] = self._settings_window()
         return attributes

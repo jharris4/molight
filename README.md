@@ -273,6 +273,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | `bright_forced_off` | Whether the light is off because brightness forced it off; only then can going dark resume the on-period |
 | `active_settings` / `active_settings_schedule` / `schedule_end_off_pending` | Virtual Scheduled Light only: which settings profile is live, the schedule it was derived from, and whether an end-boundary off is waiting on an auto-off hold to release (see [Virtual Scheduled Light](#virtual-scheduled-light)) |
 | `standby_suppressed` | Virtual Scheduled Light only: whether a manual off has turned [standby](#standby) off until the next schedule boundary |
+| `active_settings_window_start` | Virtual Scheduled Light only: the schedule window the inside settings are running in, so a restart in a later window is treated as a boundary |
 
 #### State machine
 
@@ -423,7 +424,7 @@ The inside-schedule settings have one extra, collapsed section: **Standby**. Set
 - **Illuminance:** in `gate` mode, brightness only blocks the rise above standby. In `control` mode, it also keeps standby off: bright turns the light off, and going dark inside the window brings standby back (or the auto-on level, if someone is present).
 - **Holding auto-off:** a hold keeps the light at its current level. Releasing it starts a fresh timeout, which ends at standby; a light already resting at standby simply stays there.
 - **The end boundary:** standby has no timeout of its own, so **At schedule end** decides. *Turn off* turns it off. *Keep state* starts the outside settings' turn-off timeout from the boundary: with a 5-minute outside timeout and a window ending at 07:30, a light at standby turns off at 07:35. *Switch state* recalculates from the outside occupancy history, so if the last motion was at 03:00 the light turns off at 07:30. Under every action, a light that someone's presence is holding at the auto-on level stays on until they leave.
-- **Restarts and reboots:** a light resting at standby before a restart goes back to standby (an edited standby level applies then), a manual off inside the same window is respected, and a member that comes back from `unavailable` is sent the standby settings again.
+- **Restarts and reboots:** a light resting at standby before a restart goes back to standby (an edited standby level applies then), a manual off inside the same window is respected (a restart in a later window brings standby back), and a member that comes back from `unavailable` is sent the standby settings again.
 
 Converting a Virtual Scheduled Light to a gated Virtual Light drops its standby settings, since a Virtual Light has no standby.
 

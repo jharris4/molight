@@ -26,6 +26,7 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
+    ATTR_ACTIVE_SETTINGS_WINDOW,
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
@@ -35,20 +36,27 @@ from custom_components.molight.const import (
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_TIMEOUT,
+    CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
+    CONF_SCHEDULE_INPUTS,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
+    CONF_TIME_WINDOWS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_TIMEOUT,
+    DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
+    ENTITY_TYPE_COMBINED_SCHEDULE,
+    ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_END_ACTION_KEEP,
@@ -686,6 +694,69 @@ async def test_restart_keeps_a_manual_off_within_the_same_window(
 
     assert hass.states.get(VIRTUAL).state == "off"
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
+@pytest.mark.parametrize(
+    ("downtime", "suppressed"),
+    [(timedelta(hours=1), True), (timedelta(days=1), False)],
+    ids=["same_window", "later_window"],
+)
+async def test_restart_keeps_a_manual_off_only_within_its_window(
+    hass: HomeAssistant,
+    freezer,
+    combined: bool,
+    downtime: timedelta,
+    suppressed: bool,
+) -> None:
+    """Downtime that spans into a later window brings standby back."""
+    freezer.move_to("2026-03-02 22:00:00-08:00")
+    schedules = [
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                CONF_NAME: "Night" if combined else "Settings Schedule",
+                CONF_TIME_WINDOWS: [
+                    {"start": {"time": "21:00"}, "end": {"time": "07:00"}}
+                ],
+            },
+        )
+    ]
+    if combined:
+        schedules.append(
+            MockConfigEntry(
+                domain=DOMAIN,
+                data={
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+                    CONF_NAME: "Settings Schedule",
+                    CONF_SCHEDULE_INPUTS: ["binary_sensor.night"],
+                },
+            )
+        )
+    entry = _porch()
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    await setup_entries(hass, *schedules, entry)
+    await settle(hass)
+    _assert_standby(hass)
+    window = _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW]
+    assert window == hass.states.get(SCHEDULE).attributes["current_window_start"]
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+    freezer.tick(downtime)
+    await restart_entries(hass, *schedules, entry)
+    await settle(hass)
+
+    assert hass.states.get(SCHEDULE).state == "on"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is suppressed
+    assert (_attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window) is suppressed
+    assert _attrs(hass)["molight_state"] == (
+        STATE_IDLE if suppressed else STATE_STANDBY
+    )
 
 
 @pytest.mark.asyncio

@@ -343,6 +343,9 @@ ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
 # The schedule entity active_settings was last derived from; a missed
 # boundary is only caught up at startup when it is still the same schedule.
 ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
+# That schedule's window marker while its inside settings are active, so a
+# restart can tell the window it left from a later one.
+ATTR_ACTIVE_SETTINGS_WINDOW = "active_settings_window_start"
 SCHEDULE_END_ACTION_KEEP = "keep"
 SCHEDULE_END_ACTION_SWITCH = "switch"
 SCHEDULE_END_ACTION_TURN_OFF = "turn_off"
