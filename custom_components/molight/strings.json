@@ -33,7 +33,7 @@
       },
       "convert_to_regular": {
         "title": "Convert scheduled lights",
-        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule profile becomes the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings will be discarded.",
+        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule profile becomes the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings and any standby level will be discarded.",
         "data": {
           "convert_lights": "Scheduled lights"
         },
@@ -50,7 +50,7 @@
       },
       "confirm_convert_to_regular": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. Each inside-schedule profile will become the regular light settings; every outside-schedule profile will be permanently discarded.",
+        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. Each inside-schedule profile will become the regular light settings, without any standby level; every outside-schedule profile will be permanently discarded.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
@@ -834,6 +834,22 @@
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
             }
+          },
+          "standby": {
+            "name": "Standby",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. Leave the brightness blank for no standby.",
+            "data": {
+              "standby_brightness": "Standby brightness",
+              "standby_color_mode": "Standby color mode",
+              "standby_color_temp": "Standby color temperature",
+              "standby_rgb_color": "Standby color"
+            },
+            "data_description": {
+              "standby_brightness": "Optional. Setting it turns standby on. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
+              "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
+              "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
+            }
           }
         }
       },
@@ -1031,7 +1047,9 @@
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
-      "confirmation_required": "Confirm the conversion to continue."
+      "confirmation_required": "Confirm the conversion to continue.",
+      "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on."
     },
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -1323,6 +1341,22 @@
               "warn_color_temp": "Optional. White color temperature (Kelvin) during the grace period, for lights that support it; blank keeps the color the lights already had.",
               "warn_rgb_color": "Optional. Color during the grace period; blank keeps the color the lights already had.",
               "warn_transition": "Optional. Fade time into the warning brightness; must fit within the grace period."
+            }
+          },
+          "standby": {
+            "name": "Standby",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. Leave the brightness blank for no standby.",
+            "data": {
+              "standby_brightness": "Standby brightness",
+              "standby_color_mode": "Standby color mode",
+              "standby_color_temp": "Standby color temperature",
+              "standby_rgb_color": "Standby color"
+            },
+            "data_description": {
+              "standby_brightness": "Optional. Setting it turns standby on. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
+              "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
+              "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
             }
           }
         }
@@ -1739,7 +1773,9 @@
       "button_click_conflict": "The same button click is bound to more than one action.",
       "double_click_unsupported": "A selected double-click button never reports double clicks (its event entity advertises no double-click event type).",
       "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
-      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color."
+      "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
+      "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on."
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",

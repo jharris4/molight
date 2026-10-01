@@ -83,6 +83,9 @@ from .const import (
     CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_COLOR_TEMP,
+    CONF_STANDBY_RGB_COLOR,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
@@ -143,6 +146,7 @@ from .const import (
     SCHEDULE_MODE_GATE_SWITCH,
     SCHEDULE_MODES,
     SCHEDULE_OPERATORS,
+    STANDBY_KEYS,
     SUN_EVENTS,
 )
 from .helpers import (
@@ -227,6 +231,7 @@ _COLOR_MODE_SELECTOR = selector.SelectSelector(
 CONF_AUTO_ON_COLOR_MODE = "auto_on_color_mode"
 CONF_EFFECT_COLOR_MODE = "effect_color_mode"
 CONF_WARN_COLOR_MODE = "warn_color_mode"
+CONF_STANDBY_COLOR_MODE = "standby_color_mode"
 CONF_PRESET_1_COLOR_MODE = "preset_1_color_mode"
 CONF_PRESET_2_COLOR_MODE = "preset_2_color_mode"
 
@@ -235,6 +240,7 @@ _LIGHT_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = (
     (CONF_AUTO_ON_COLOR_MODE, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR),
     (CONF_EFFECT_COLOR_MODE, CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR),
     (CONF_WARN_COLOR_MODE, CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR),
+    (CONF_STANDBY_COLOR_MODE, CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR),
 )
 _PRESET_COLOR_MODE_KEYS: dict[str, tuple[str, ...]] = {
     REMOTE_ACTION_PRESET_1: (CONF_PRESET_1_COLOR_MODE,),
@@ -267,6 +273,7 @@ _REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
 
 SECTION_BEHAVIOR = "behavior"
 SECTION_WARNING = "warning"
+SECTION_STANDBY = "standby"
 SECTION_SENSORS = "sensors"
 SECTION_ADVANCED = "advanced"
 
@@ -297,6 +304,13 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_WARN_COLOR_TEMP,
         CONF_WARN_RGB_COLOR,
         CONF_WARN_TRANSITION,
+    ),
+    # Only a scheduled light's inside-schedule form shows this section.
+    SECTION_STANDBY: (
+        CONF_STANDBY_BRIGHTNESS,
+        CONF_STANDBY_COLOR_MODE,
+        CONF_STANDBY_COLOR_TEMP,
+        CONF_STANDBY_RGB_COLOR,
     ),
     SECTION_SENSORS: (
         CONF_OCCUPANCY_ENTITY,
@@ -1052,9 +1066,16 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
         (CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR, "auto_on_color_conflict"),
         (CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR, "effect_color_conflict"),
         (CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR, "warn_color_conflict"),
+        (CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR, "standby_color_conflict"),
     ):
         if user_input.get(temp_key) and user_input.get(rgb_key):
             return {"base": error}
+    if (
+        user_input.get(CONF_STANDBY_COLOR_TEMP)
+        or user_input.get(CONF_STANDBY_RGB_COLOR)
+    ) and not user_input.get(CONF_STANDBY_BRIGHTNESS):
+        # The brightness is what turns standby on.
+        return {"base": "standby_color_requires_brightness"}
     effect_color = user_input.get(CONF_EFFECT_COLOR_TEMP) or user_input.get(
         CONF_EFFECT_RGB_COLOR
     )
@@ -1112,6 +1133,7 @@ def _validate_brightness_support(
         CONF_AUTO_ON_BRIGHTNESS,
         CONF_EFFECT_BRIGHTNESS,
         CONF_WARN_BRIGHTNESS,
+        CONF_STANDBY_BRIGHTNESS,
     )
     if not any(user_input.get(key) for key in keys):
         return {}
@@ -1134,6 +1156,7 @@ def _validate_color_support(
         CONF_AUTO_ON_COLOR_TEMP,
         CONF_EFFECT_COLOR_TEMP,
         CONF_WARN_COLOR_TEMP,
+        CONF_STANDBY_COLOR_TEMP,
     )
     if (
         any(user_input.get(key) for key in temp_keys)
@@ -1144,6 +1167,7 @@ def _validate_color_support(
         CONF_AUTO_ON_RGB_COLOR,
         CONF_EFFECT_RGB_COLOR,
         CONF_WARN_RGB_COLOR,
+        CONF_STANDBY_RGB_COLOR,
     )
     if (
         any(user_input.get(key) for key in rgb_keys)
@@ -1272,6 +1296,7 @@ def _light_option_fields(
     *,
     with_entity_id: bool = False,
     with_schedule: bool = True,
+    with_standby: bool = False,
     legacy_schedule: str | None = None,
     hold_exclusions: Sequence[str] = (),
 ) -> dict:
@@ -1280,7 +1305,8 @@ def _light_option_fields(
     Only the turn-off timeout stays top-level; everything else is grouped:
     turn-on/off behavior and the off-warning stages collapsed (defaults are
     fine to start with), the sensor wiring expanded since it is the point of
-    a virtual light. Each mode dropdown sits next to its entity picker.
+    a virtual light. Each mode dropdown sits next to its entity picker. The
+    standby section is for a scheduled light's inside-schedule settings.
     """
     sensor_fields: dict = {
         vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
@@ -1401,6 +1427,18 @@ def _light_option_fields(
             {"collapsed": True},
         ),
     }
+    if with_standby:
+        fields[vol.Required(SECTION_STANDBY)] = section(
+            vol.Schema(
+                {
+                    vol.Optional(CONF_STANDBY_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
+                    vol.Optional(CONF_STANDBY_COLOR_MODE): _COLOR_MODE_SELECTOR,
+                    vol.Optional(CONF_STANDBY_COLOR_TEMP): _COLOR_TEMP_SELECTOR,
+                    vol.Optional(CONF_STANDBY_RGB_COLOR): _RGB_COLOR_SELECTOR,
+                }
+            ),
+            {"collapsed": True},
+        )
     if with_entity_id:
         fields.update(_entity_id_section())
     return fields
@@ -1832,6 +1870,7 @@ class _ScheduledLightSettingsSteps:
                     _light_option_fields(
                         self.hass,
                         with_schedule=False,
+                        with_standby=side == CONF_INSIDE_SCHEDULE_SETTINGS,
                         hold_exclusions=_picker_exclusions(
                             self._hold_exclusions(),
                             (previous or {}).get(CONF_HOLD_ENTITIES),
@@ -2615,11 +2654,14 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_regular_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map a scheduled light's inside profile back to a gated light."""
+        """Map a scheduled light's inside profile back to a gated light.
+
+        A gated light has no standby, so the inside profile's is dropped.
+        """
         inside = {
             key: value
             for key, value in cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS, {}).items()
-            if key not in _LIGHT_ENTRY_KEYS
+            if key not in _LIGHT_ENTRY_KEYS and key not in STANDBY_KEYS
         }
         return {
             **inside,

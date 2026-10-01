@@ -24,10 +24,12 @@ from custom_components.molight.config_flow import (
     COLOR_MODE_TEMP,
     CONF_AUTO_ON_COLOR_MODE,
     CONF_EFFECT_COLOR_MODE,
+    CONF_STANDBY_COLOR_MODE,
     CONF_WARN_COLOR_MODE,
     SECTION_ADVANCED,
     SECTION_BEHAVIOR,
     SECTION_SENSORS,
+    SECTION_STANDBY,
     SECTION_WARNING,
     MoLightConfigFlow,
     _validate_turn_on_selection,
@@ -90,6 +92,9 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_COLOR_TEMP,
+    CONF_STANDBY_RGB_COLOR,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -121,6 +126,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE_SWITCH,
     SCHEDULE_OPERATOR_ALL,
     SCHEDULE_OPERATOR_ANY,
+    STANDBY_KEYS,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import settle, setup_entries
@@ -134,6 +140,8 @@ if TYPE_CHECKING:
 # per-field defaults. Spread one of these first so explicit sections override.
 EMPTY_LIGHT_SECTIONS = {SECTION_SENSORS: {}, SECTION_BEHAVIOR: {}, SECTION_WARNING: {}}
 EMPTY_LIGHT_CREATE_SECTIONS = {**EMPTY_LIGHT_SECTIONS, SECTION_ADVANCED: {}}
+# A scheduled light's inside-schedule form adds the standby section.
+EMPTY_INSIDE_LIGHT_SECTIONS = {**EMPTY_LIGHT_SECTIONS, SECTION_STANDBY: {}}
 
 
 async def _start_create(hass: HomeAssistant) -> dict:
@@ -968,7 +976,7 @@ async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            **EMPTY_LIGHT_SECTIONS,
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_LIGHT_TIMEOUT: 60,
             SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.night_occupancy"},
             SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 20},
@@ -1028,7 +1036,7 @@ async def test_scheduled_light_turn_on_selection_for_each_side(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            **EMPTY_LIGHT_SECTIONS,
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_LIGHT_TIMEOUT: 300,
             SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
         },
@@ -1098,7 +1106,7 @@ async def test_scheduled_light_options_edit_both_settings(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            **EMPTY_LIGHT_SECTIONS,
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_LIGHT_TIMEOUT: 45,
             SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 15},
         },
@@ -1189,12 +1197,14 @@ async def test_scheduled_light_validates_each_side_timeout(
     assert result["step_id"] == "scheduled_light_inside"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], too_short
+        result["flow_id"], {**too_short, SECTION_STANDBY: {}}
     )
     assert result["step_id"] == "scheduled_light_inside"
     assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
 
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], valid)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**valid, SECTION_STANDBY: {}}
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -1271,7 +1281,7 @@ async def test_scheduled_light_derived_id_collision_can_go_back(
     }
     result = await hass.config_entries.flow.async_configure(result["flow_id"], outside)
     inside = {
-        **EMPTY_LIGHT_SECTIONS,
+        **EMPTY_INSIDE_LIGHT_SECTIONS,
         CONF_LIGHT_TIMEOUT: 60,
         SECTION_BEHAVIOR: {CONF_AUTO_ON_BRIGHTNESS: 20},
     }
@@ -1347,7 +1357,9 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], settings)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**settings, SECTION_STANDBY: {}}
+    )
     assert result["step_id"] == "scheduled_light_selection"
     suggested = _suggested_values(result["data_schema"])
     assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
@@ -1446,7 +1458,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
 
     # Inside: clear the target; no selection page, and its values are dropped.
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
@@ -1486,7 +1498,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
         result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Dusk"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
@@ -1532,7 +1544,7 @@ async def test_scheduled_light_options_inside_selection_page(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            **EMPTY_LIGHT_SECTIONS,
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
             CONF_LIGHT_TIMEOUT: 60,
             SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.mode"},
         },
@@ -1639,7 +1651,7 @@ async def test_scheduled_light_explicit_entity_id_conflict(
     # ... but is taken by someone else before the last form is submitted.
     hass.states.async_set("light.racy", "off")
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "scheduled_light"
@@ -1665,7 +1677,7 @@ async def test_scheduled_light_explicit_entity_id_conflict(
     )
     assert _suggested_values(result["data_schema"])[CONF_LIGHT_TIMEOUT] == 60
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ENTITY_ID] == "free"
@@ -5105,9 +5117,9 @@ async def test_options_form_opened_before_a_conversion_is_refused(
     if direction == "convert_to_regular":
         # The scheduled form only saves after both side pages.
         assert result["step_id"] == "scheduled_light_outside"
-        for _ in range(2):
+        for sections in (EMPTY_LIGHT_SECTIONS, EMPTY_INSIDE_LIGHT_SECTIONS):
             result = await hass.config_entries.options.async_configure(
-                result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 45}
+                result["flow_id"], {**sections, CONF_LIGHT_TIMEOUT: 45}
             )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "entry_converted"
@@ -6881,7 +6893,10 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], side if scheduled else {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        result["flow_id"],
+        {**side, SECTION_STANDBY: {}}
+        if scheduled
+        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_member_cycle"
@@ -7252,6 +7267,8 @@ async def test_light_settings_forms_share_validators(
         if form.endswith("options")
         else hass.config_entries.flow.async_configure
     )
+    if form == "scheduled_options":
+        submitted[SECTION_STANDBY] = {}  # it reaches the inside form
     result = await configure(result["flow_id"], submitted)
 
     if form == "discovery" and case in _PICK_CASES:
@@ -7367,7 +7384,7 @@ async def test_scheduled_light_inside_page_rejects_timeout_raised_meanwhile(
         CONF_LIGHT_TIMEOUT: 60,
         SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
     }
-    inside = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+    inside = {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
@@ -7527,7 +7544,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
         if scheduled
         else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
     )
@@ -7538,3 +7555,189 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
     if scheduled:
         settings = settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert CONF_OCCUPANCY_ENTITY not in settings
+
+
+async def _reach_scheduled_light_inside(hass: HomeAssistant) -> dict:
+    """Create a scheduled light up to its inside-schedule form."""
+    await _setup_night_schedule(hass)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Porch",
+            CONF_LIGHTS: ["light.porch"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert SECTION_STANDBY not in {str(key) for key in result["data_schema"].schema}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 30}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    return result
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_inside_form_stores_standby(
+    hass: HomeAssistant,
+) -> None:
+    """Only the inside-schedule form offers standby; its values are stored flat."""
+    result = await _reach_scheduled_light_inside(hass)
+    assert SECTION_STANDBY in {str(key) for key in result["data_schema"].schema}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 30,
+            SECTION_STANDBY: {
+                CONF_STANDBY_BRIGHTNESS: 1,
+                CONF_STANDBY_COLOR_MODE: COLOR_MODE_TEMP,
+                CONF_STANDBY_COLOR_TEMP: 2222,
+                CONF_STANDBY_RGB_COLOR: [255, 0, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    inside = result["data"][CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert inside[CONF_STANDBY_BRIGHTNESS] == 1
+    assert inside[CONF_STANDBY_COLOR_TEMP] == 2222
+    assert CONF_STANDBY_RGB_COLOR not in inside
+    assert CONF_STANDBY_COLOR_MODE not in inside
+    assert not set(STANDBY_KEYS) & set(result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("standby", "error"),
+    [
+        ({CONF_STANDBY_COLOR_TEMP: 2222}, "standby_color_requires_brightness"),
+        (
+            {
+                CONF_STANDBY_BRIGHTNESS: 1,
+                CONF_STANDBY_COLOR_TEMP: 2222,
+                CONF_STANDBY_RGB_COLOR: [255, 0, 0],
+            },
+            "standby_color_conflict",
+        ),
+    ],
+)
+async def test_scheduled_light_standby_validation(
+    hass: HomeAssistant, standby: dict, error: str
+) -> None:
+    """A standby color needs the brightness that enables standby, and one color."""
+    result = await _reach_scheduled_light_inside(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 30,
+            SECTION_STANDBY: standby,
+        },
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert result["errors"] == {"base": error}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_standby_needs_a_dimmable_light(
+    hass: HomeAssistant,
+) -> None:
+    """A standby level is refused when no member can dim."""
+    hass.states.async_set("light.porch", "off", {"supported_color_modes": ["onoff"]})
+    result = await _reach_scheduled_light_inside(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 30,
+            SECTION_STANDBY: {CONF_STANDBY_BRIGHTNESS: 1},
+        },
+    )
+    assert result["errors"] == {"base": "brightness_unsupported"}
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_prefill_and_clear_standby(
+    hass: HomeAssistant,
+) -> None:
+    """Editing shows the stored standby, and blanking it turns standby off."""
+    await _setup_night_schedule(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_scheduled_light_entry("Porch", "porch").data,
+            CONF_INSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 5,
+                CONF_STANDBY_RGB_COLOR: [255, 120, 0],
+            },
+        },
+    )
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Porch",
+            CONF_LIGHTS: ["light.porch_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert _suggested_values(result["data_schema"])[SECTION_STANDBY] == {
+        CONF_STANDBY_BRIGHTNESS: 5,
+        CONF_STANDBY_COLOR_MODE: COLOR_MODE_RGB,
+        CONF_STANDBY_RGB_COLOR: [255, 120, 0],
+    }
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_STANDBY: {
+                CONF_STANDBY_COLOR_MODE: COLOR_MODE_NONE,
+                CONF_STANDBY_RGB_COLOR: [255, 120, 0],
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    inside = molight_config(entry)[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert not set(STANDBY_KEYS) & set(inside)
+
+
+@pytest.mark.asyncio
+async def test_conversion_to_gated_drops_standby(hass: HomeAssistant) -> None:
+    """A gated light has no standby, so conversion leaves none behind."""
+    await _setup_night_schedule(hass)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_scheduled_light_entry("Porch", "porch").data,
+            CONF_INSIDE_SCHEDULE_SETTINGS: {
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_AUTO_ON_BRIGHTNESS: 100,
+                CONF_STANDBY_BRIGHTNESS: 1,
+                CONF_STANDBY_COLOR_TEMP: 2222,
+            },
+        },
+    )
+    await setup_entries(hass, entry)
+
+    await _convert(hass, "convert_to_regular", "light.porch")
+    cfg = molight_config(entry)
+    assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert cfg[CONF_AUTO_ON_BRIGHTNESS] == 100
+    assert not set(STANDBY_KEYS) & set(cfg)

@@ -109,7 +109,7 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 **Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
 - **Gated → scheduled**: available for Virtual Lights with any gate behavior and a schedule sensor. Each light retains its own schedule. Its current settings become the inside-schedule profile; the outside profile keeps its timing, appearance, warnings, turn-on selection, and keep-on entities but starts without occupancy, maintain, illuminance, or door inputs. Turn-off, switch-state, and keep-state gates map to the same-named schedule-end actions. This creates a useful starting profile rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
-- **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile is permanently discarded after an explicit confirmation warning.
+- **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile and any [standby](#standby) settings are permanently discarded after an explicit confirmation warning.
 
 Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting a settings policy.
 
@@ -259,7 +259,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 
 | Attribute | Description |
 |---|---|
-| `molight_state` | Current state-machine state, as a lowercase value: `idle`, `active`, `occupied`, `countdown`, `scheduled`, `effect`, `warn` |
+| `molight_state` | Current state-machine state, as a lowercase value: `idle`, `active`, `occupied`, `countdown`, `scheduled`, `standby`, `effect`, `warn` |
 | `auto_off_held` | Whether auto-off is currently held (Auto-off switch off or a keep-on entity on) |
 | `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
@@ -272,6 +272,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
 | `bright_forced_off` | Whether the light is off because brightness forced it off; only then can going dark resume the on-period |
 | `active_settings` / `active_settings_schedule` / `schedule_end_off_pending` | Virtual Scheduled Light only: which settings profile is live, the schedule it was derived from, and whether an end-boundary off is waiting on an auto-off hold to release (see [Virtual Scheduled Light](#virtual-scheduled-light)) |
+| `standby_suppressed` | Virtual Scheduled Light only: whether a manual off has turned [standby](#standby) off until the next schedule boundary |
 
 #### State machine
 
@@ -281,6 +282,7 @@ ACTIVE     lights on, timer running (manual/external turn-on, no occupancy)
 OCCUPIED   lights on, occupancy active, timer suspended
 COUNTDOWN  occupancy cleared, timer ticking toward lights-off
 SCHEDULED  lights on inside a follow-mode window, no timer
+STANDBY    lights at a Virtual Scheduled Light's standby level, no timer
 EFFECT     auto-off imminent, showing the brief effect/blink warning stage
 WARN       auto-off imminent, grace period before the lights go off
 ```
@@ -389,7 +391,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 ### Virtual Scheduled Light
 
-A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen MoLight schedule (a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor) selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
+A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen MoLight schedule (a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor) selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection. The inside-schedule settings can also rest at a [standby](#standby) level instead of turning off.
 
 Creation uses three main forms:
 
@@ -410,6 +412,20 @@ Crossing the schedule boundary in either direction switches which settings are u
 The `active_settings` attribute reports `outside_schedule` or `inside_schedule`; `schedule_end_off_pending` reports whether an end-boundary off is waiting for an Auto-off/keep-on hold to release (changing **At schedule end** away from *Turn off* drops a waiting boundary; changing the schedule does not, because the off was already observed and still applies when the hold releases); `active_settings_schedule` records the schedule those came from, so a missed end boundary is only caught up after a restart when the same schedule is still selected. On restart, a valid schedule state wins. On a first start with no usable state, outside-schedule settings are used. While that same schedule is unavailable or unknown, its last restored choice is kept; after changing to an unavailable schedule, outside-schedule settings are used until it reports a valid state. If the schedule entry is deleted, the reference is removed, outside-schedule settings are used, and the light remains manually usable until a new schedule is chosen in **Configure**.
 
 This settings selector does not include a separate follow mode. Create it through the normal **Add entry** flow or promote an existing gated light through **Convert virtual lights**. Bulk discovery and bulk sensor assignment do not directly create or modify Virtual Scheduled Lights.
+
+#### Standby
+
+The inside-schedule settings have one extra, collapsed section: **Standby**. Setting a **standby brightness** (and optionally a standby colour temperature or colour) makes the light rest at that level instead of turning off while the inside settings are active. Take a porch with a dusk-to-dawn schedule, standby at 1%, auto-on at 100%, a 30 s timeout, and **At schedule end** set to *Turn off*: it glows at 1% all night, comes up to 100% when someone walks up, drops back to 1% 30 s after they leave, and turns off at dawn.
+
+- **Coming on:** an off light comes on at standby when the inside settings take over (the schedule starting, or startup inside it), with the auto-on fade and the turn-on selection. A light that is already on keeps its level, and its running timer ends at standby.
+- **Rising and falling:** occupancy and the door raise the light to the auto-on brightness and colour like any automatic turn-on (the maintain sensor only holds a raised light). When the timer runs out, the effect and warn stages run as usual, and their last step drops to standby with the auto-off fade instead of turning off. A false detection drops back to standby after the short false-detection delay.
+- **Manual control:** a manual off turns standby off until the next schedule boundary, so occupancy then ends its visits in off. Turning the light back on, by hand or at the wall, rejoins standby. Dimming or recolouring a light at standby runs the normal timeout back to standby; the configured standby level is the only level the light rests at.
+- **Illuminance:** in `gate` mode, brightness only blocks the rise above standby. In `control` mode, it also keeps standby off: bright turns the light off, and going dark inside the window brings standby back (or the auto-on level, if someone is present).
+- **Holding auto-off:** a hold keeps the light at its current level. Releasing it starts a fresh timeout, which ends at standby; a light already resting at standby simply stays there.
+- **The end boundary:** standby has no timeout of its own, so **At schedule end** decides. *Turn off* turns it off. *Keep state* starts the outside settings' turn-off timeout from the boundary: with a 5-minute outside timeout and a window ending at 07:30, a light at standby turns off at 07:35. *Switch state* recalculates from the outside occupancy history, so if the last motion was at 03:00 the light turns off at 07:30. Under every action, a light that someone's presence is holding at the auto-on level stays on until they leave.
+- **Restarts and reboots:** a light resting at standby before a restart goes back to standby (an edited standby level applies then), a manual off inside the same window is respected, and a member that comes back from `unavailable` is sent the standby settings again.
+
+Converting a Virtual Scheduled Light to a gated Virtual Light drops its standby settings, since a Virtual Light has no standby.
 
 ### Virtual Remote
 

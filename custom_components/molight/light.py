@@ -12,6 +12,7 @@ State machine
   OCCUPIED   lights on, occupancy active, timer suspended
   COUNTDOWN  occupancy just cleared, timer ticking toward lights-off
   SCHEDULED  lights on inside a follow-mode schedule window, no timer
+  STANDBY    lights at a scheduled light's standby level, no timer
   EFFECT     auto-off imminent, showing the brief effect/blink warning stage
   WARN       auto-off imminent, grace period before the lights go off
 
@@ -66,6 +67,23 @@ Effect/warn warning
 
   any + light turned off externally
        → IDLE
+
+Standby (Virtual Scheduled Light inside-schedule settings only)
+  A standby brightness (and optional color) makes the light rest there
+  instead of turning off while the inside settings are active:
+  - An off light comes on at standby when the inside settings take over, at
+    startup, or when illuminance in control mode turns dark (control mode
+    keeps standby off while bright; gate mode never touches it).
+  - Occupancy and the door raise it to the auto-on level like any turn-on
+    (the maintain entity only holds a raised light); when the timer expires,
+    the effect/warn stages run and the last step drops to standby, not off.
+  - An external dim or a manual turn-on from standby runs a timer that ends
+    back at standby. A manual off cancels standby until the next schedule
+    boundary; turning the light back on rejoins it.
+  - Leaving the inside settings while at standby hands the light to the end
+    action: turn off, switch (recalculated), or keep (a fresh timeout).
+  - A restart puts a light that was at standby back there, and a member
+    back from unavailable is re-sent the standby settings.
 
 Turn-on attribution
   Five timestamps record the last time the virtual light was activated and why:
@@ -270,6 +288,7 @@ from .const import (
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_SCHEDULE_END_OFF_PENDING,
+    ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_COLOR_TEMP,
@@ -297,6 +316,9 @@ from .const import (
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_COLOR_TEMP,
+    CONF_STANDBY_RGB_COLOR,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
@@ -334,6 +356,7 @@ from .const import (
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_STANDBY,
     STATE_WARN,
 )
 from .helpers import (
@@ -627,6 +650,11 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Home Assistant was down. The restored active side proves whether the
         # configured schedule actually crossed from inside to outside.
         self._schedule_end_switch_pending = False
+        # A manual off cancels standby until the next schedule boundary.
+        self._standby_suppressed = False
+        # Whether the light was resting at standby before a restart, so the
+        # seed puts it back there instead of adopting it with a timer.
+        self._restored_standby = False
         # Every settings mapping this light may run under (both sides of a
         # scheduled light, or the regular light's own config), so the entity
         # references of all of them can be subscribed to up front.
@@ -738,6 +766,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._auto_on_color = _opt_color(
             cfg, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR
         )
+        # Level an expired timer drops to instead of off; None disables
+        # standby. Only a scheduled light's inside settings can set it.
+        standby_pct = cfg.get(CONF_STANDBY_BRIGHTNESS)
+        self._standby_brightness = (
+            round(percentage_to_ranged_value((1, 255), int(standby_pct)))
+            if standby_pct
+            else None
+        )
+        self._standby_color = _opt_color(
+            cfg, CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR
+        )
         self._turn_on_select_entity = cfg.get(CONF_TURN_ON_SELECT_ENTITY)
         self._turn_on_select_option = cfg.get(CONF_TURN_ON_SELECT_OPTION)
         self._turn_on_select_source_entity = cfg.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
@@ -819,6 +858,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                         self._restored_inside_schedule = (
                             active == ACTIVE_SETTINGS_INSIDE
                         )
+                    # Only meaningful while still inside; see
+                    # _select_initial_settings.
+                    self._restored_standby = (
+                        last.attributes.get("molight_state") == STATE_STANDBY
+                    )
+                    self._standby_suppressed = bool(
+                        last.attributes.get(ATTR_STANDBY_SUPPRESSED)
+                    )
                 # A boundary off deferred under a previous configuration no
                 # longer applies once the end action is anything but "turn off".
                 # It deliberately survives a schedule swap, unlike the
@@ -962,6 +1009,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             inside = self._restored_inside_schedule
         else:
             inside = False
+        if not (inside and self._restored_inside_schedule is True):
+            # A boundary was crossed (or nothing was restored): a manual off
+            # and a resting standby belonged to the previous window.
+            self._standby_suppressed = False
+            self._restored_standby = False
         if inside:
             self._schedule_end_off_pending = False
             self._schedule_end_switch_pending = False
@@ -996,6 +1048,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         if not self._is_scheduled_light or inside == self._inside_schedule:
             return
         leaving_inside = self._inside_schedule and not inside
+        # A manual off only cancels standby until the next boundary.
+        self._standby_suppressed = False
         if inside:
             # A held end boundary no longer applies once the same schedule
             # window becomes active again.
@@ -1071,6 +1125,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._in_warning():
                 self._machine_state = STATE_ACTIVE
                 self._resume_lights()
+            elif self._machine_state == STATE_STANDBY:
+                self._machine_state = STATE_ACTIVE
             self.async_write_ha_state()
             return
 
@@ -1085,16 +1141,21 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._switch_running_state()
             return
 
+        if self._machine_state == STATE_STANDBY and not self._standby_applies():
+            # Standby has no end of its own: the new settings' timeout ends it.
+            self._machine_state = STATE_ACTIVE
+            self._start_timer()
+
         if not lit:
-            if self._is_illuminance_bright():
-                self.async_write_ha_state()
-                return
-            if self._occupancy_active():
+            dark = not self._is_illuminance_bright()
+            if dark and self._occupancy_active():
                 self._on_occupancy_change(occupied=True)
-            elif self._door_holds():
+            elif dark and self._door_holds():
                 # Not _door_open: in plain open mode the door is momentary,
                 # and a profile switch is not an opening.
                 self._on_door_change(True)
+            elif self._can_rest_at_standby():
+                self._enter_standby(self._auto_on_transition, selection=True)
             else:
                 self.async_write_ha_state()
             return
@@ -1219,7 +1280,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._pre_warn_brightness = None
                 self._pre_warn_color = None
 
-        if self._follow_schedule_seed():
+        if self._standby_seed() or self._follow_schedule_seed():
             return
 
         # Occupancy only takes over when it's dark (or no illuminance is
@@ -1249,6 +1310,37 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._start_timer()
 
         self.async_write_ha_state()
+
+    def _standby_seed(self) -> bool:
+        """Apply standby at startup. Returns True if handled.
+
+        A light that was resting at standby goes back there, re-sent so an
+        edited standby level applies; any other lit light is adopted as usual
+        and its timer ends at standby. An off light comes on at standby
+        unless occupancy already lights it at the auto-on level.
+        """
+        if not self._standby_applies():
+            return False
+        if self._attr_is_on:
+            if not self._restored_standby:
+                return False
+            if not self._can_rest_at_standby() and not self._held:
+                # Bright in control mode: standby waits for darkness.
+                self.hass.async_create_task(self._auto_lights_off())
+                self._go_idle(bright_forced=True)
+            elif self._occupancy_holds() or self._door_holds():
+                # Presence arrived while Home Assistant was down: boost.
+                self._machine_state = STATE_STANDBY
+                self._adopt_active_occupancy()
+            else:
+                self._enter_standby()
+            return True
+        if not self._can_rest_at_standby() or (
+            self._occupancy_active() and not self._is_illuminance_bright()
+        ):
+            return False
+        self._enter_standby(self._auto_on_transition, selection=True)
+        return True
 
     def _follow_schedule_seed(self) -> bool:
         """Apply follow-mode schedule state at startup. Returns True if handled.
@@ -1406,7 +1498,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                 and old_state is not None
                 and (member_seen or not old_state.attributes.get(ATTR_RESTORED))
             )
-            if member_rebooted and self._reconcile_recovered_member():
+            # Standby was sent while this member was still loading, so its
+            # first state is not a manual off either.
+            if (
+                member_rebooted
+                or (member_recovered and self._machine_state == STATE_STANDBY)
+            ) and self._reconcile_recovered_member():
                 return
             if (
                 member_recovered
@@ -1598,10 +1695,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             STATE_COUNTDOWN,
             STATE_EFFECT,
             STATE_WARN,
+            STATE_STANDBY,
         ):
             # An external dim or recolor during the warning sequence is a
             # re-trigger like any other: honour the new brightness/color and
-            # restart the full timer.
+            # restart the full timer. Off standby it runs a timer that ends
+            # back at standby.
             if self._in_warning():
                 # The re-trigger brought only one of brightness and color:
                 # restore the other to its pre-warning value so the stage
@@ -2077,6 +2176,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self.hass.async_create_task(self._auto_lights_off())
             self._go_idle(bright_forced=True)
             return
+        if self._machine_state == STATE_STANDBY and self._standby_applies():
+            return  # resting at standby has no timer to resume
 
         # Occupancy adoption is gated exactly like every other adoption path
         # (_occupancy_holds); the maintain entity and an open_close door are
@@ -2258,8 +2359,14 @@ class VirtualLight(LightEntity, RestoreEntity):
         A rebooted (or reloaded) member reports whatever it booted into, which
         is not human activity: the schedule decides on/off and its settings
         are re-sent. Returns False when there is no valid follow schedule to
-        follow, or a hold would suppress the off.
+        follow, or a hold would suppress the off. A light resting at standby
+        is re-sent its standby settings the same way.
         """
+        if self._machine_state == STATE_STANDBY:
+            self._enter_standby(
+                self._auto_on_transition, selection=True, force_selection=True
+            )
+            return True
         if self._schedule_mode != SCHEDULE_MODE_FOLLOW or not self._schedule_entity:
             return False
         sched = self.hass.states.get(self._schedule_entity)
@@ -2331,6 +2438,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # on; window start re-evaluates occupancy.
                 return
             was_warning = self._in_warning()
+            was_standby = self._machine_state == STATE_STANDBY
             self._last_on_occupancy = datetime.now(UTC)
             self._machine_state = STATE_OCCUPIED
             self._cancel_timer()
@@ -2338,7 +2446,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Occupancy returned mid-warning: undo the effect/warn stage so
                 # the light looks exactly as it did while the timer was running.
                 self._resume_lights()
-            elif not self._attr_is_on:
+            elif not self._attr_is_on or was_standby:
+                # Lit from standby counts as lit by occupancy: a false
+                # detection drops back to standby quickly.
                 self._occupancy_lit_lights = True
                 self.hass.async_create_task(self._auto_lights_on())
             self.async_write_ha_state()
@@ -2458,12 +2568,16 @@ class VirtualLight(LightEntity, RestoreEntity):
         the lights are already on (ACTIVE/COUNTDOWN/EFFECT/WARN) with
         occupancy active. Not a turn-on: attribution and the occupancy-lit
         flag are left untouched, so the user still owns a manual on-period.
+        A light resting at standby is brought up to the auto-on level.
         """
         was_warning = self._in_warning()
+        was_standby = self._machine_state == STATE_STANDBY
         self._machine_state = STATE_OCCUPIED
         self._cancel_timer()
         if was_warning:
             self._resume_lights()
+        elif was_standby:
+            self.hass.async_create_task(self._auto_lights_on())
         self.async_write_ha_state()
 
     def _maintain_active(self) -> bool:
@@ -2532,6 +2646,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             if self._gate_schedule_inactive():
                 return  # outside a gate-mode schedule window
             was_warning = self._in_warning()
+            was_standby = self._machine_state == STATE_STANDBY
             self._last_on_door = datetime.now(UTC)
             # An open_close door holds the light (no timer) like the maintain
             # entity; an already-occupied/maintained room holds it too. Only a
@@ -2549,7 +2664,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Opening mid-warning is a re-trigger: undo the effect/warn
                 # stage so the light looks as it did before the warning.
                 self._resume_lights()
-            elif not self._attr_is_on:
+            elif not self._attr_is_on or was_standby:
                 self._occupancy_lit_lights = False  # the door owns this period
                 self.hass.async_create_task(self._auto_lights_on())
             if not holds:
@@ -2558,7 +2673,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         else:
             if self._door_mode != DOOR_MODE_OPEN_CLOSE:
                 return  # open mode: closing is ignored
-            if self._machine_state == STATE_IDLE:
+            if self._machine_state in (STATE_IDLE, STATE_STANDBY):
                 return
             if self._occupancy_holds() or self._maintain_active():
                 return  # presence still holds the lights on
@@ -2632,6 +2747,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = occ_active
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
+            elif self._can_rest_at_standby():
+                # Control mode kept standby off while bright.
+                self._enter_standby(self._auto_on_transition, selection=True)
             elif self._bright_forced_off:
                 countdown = self._compute_illuminance_countdown()
                 if countdown > 0:
@@ -2744,6 +2862,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         self._bright_forced_off = False
+        # Turning the light back on after a manual off rejoins standby.
+        self._standby_suppressed = False
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             return  # already managed by occupancy / schedule window
         # Set before the hold checks: activation-only gate modes only gate turning
@@ -2789,6 +2909,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._command_generation += 1
         if manual:
             self._last_manual_off = datetime.now(UTC)
+            # Standby stays off until the next schedule boundary.
+            self._standby_suppressed = self._standby_brightness is not None
         if self._machine_state != STATE_IDLE:
             # Why the on-period ended; an off while idle ends none.
             self._bright_forced_off = bright_forced
@@ -2831,11 +2953,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         elif state == STATE_EFFECT:
             self._enter_warn()
         elif state == STATE_WARN:
-            # Task + synchronous _go_idle (the idiom used everywhere else):
-            # awaiting the service call first would let a re-trigger landing
-            # mid-await be stomped back to IDLE when the await returns.
-            self.hass.async_create_task(self._auto_lights_off())
-            self._go_idle()
+            self._finish_auto_off()
         # any other state: the machine moved on in the same loop iteration the
         # timer fired, so there is nothing to do.
 
@@ -2907,8 +3025,63 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._start_timer(self._warn_timeout)
             self.async_write_ha_state()
             return
+        self._finish_auto_off()
+
+    def _finish_auto_off(self) -> None:
+        """End an expired on-period: rest at standby, or turn off."""
+        if self._standby_applies():
+            self._enter_standby(self._auto_off_transition)
+            return
+        # Task + synchronous _go_idle (the idiom used everywhere else):
+        # awaiting the service call first would let a re-trigger landing
+        # mid-await be stomped back to IDLE when the await returns.
         self.hass.async_create_task(self._auto_lights_off())
         self._go_idle()
+
+    def _standby_applies(self) -> bool:
+        """Return True when the active settings rest at standby, not off."""
+        return self._standby_brightness is not None and not self._standby_suppressed
+
+    def _can_rest_at_standby(self) -> bool:
+        """Return True when an off light should come on at standby now.
+
+        Bright in illuminance control mode makes standby wait for darkness;
+        gate mode only gates turn-ons above standby.
+        """
+        return self._standby_applies() and not (
+            self._illuminance_mode == ILLUMINANCE_MODE_CONTROL
+            and self._is_illuminance_bright()
+        )
+
+    def _enter_standby(
+        self,
+        transition: float | None = None,
+        *,
+        selection: bool = False,
+        force_selection: bool = False,
+    ) -> None:
+        """Rest at the standby level: lights on, no timer.
+
+        Callers pass the fade: auto-on when coming on from off (with the
+        turn-on selection), auto-off when dropping from a higher level.
+        """
+        self._cancel_timer()
+        self._machine_state = STATE_STANDBY
+        self._warning_active = False
+        self._pre_warn_brightness = None
+        self._pre_warn_color = None
+        self._occupancy_lit_lights = False
+        self.hass.async_create_task(
+            self._set_lights(
+                True,
+                brightness=self._standby_brightness,
+                transition=transition,
+                color=self._standby_color,
+                apply_turn_on_selection=selection,
+                force_selection=force_selection,
+            )
+        )
+        self.async_write_ha_state()
 
     def _resume_lights(self) -> None:
         """Restore the pre-warning brightness and color after a re-trigger.
@@ -3200,5 +3373,6 @@ class VirtualLight(LightEntity, RestoreEntity):
                 else ACTIVE_SETTINGS_OUTSIDE
             )
             attributes[ATTR_SCHEDULE_END_OFF_PENDING] = self._schedule_end_off_pending
+            attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
             attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity
         return attributes

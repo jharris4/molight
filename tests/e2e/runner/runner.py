@@ -69,6 +69,7 @@ FOLLOW_LIGHT = "light.e2e_follow"
 CYCLE_SCHEDULE = "binary_sensor.e2e_cycle_schedule"
 CYCLE_LIGHT = "light.e2e_cycle"
 END_HOLD_LIGHT = "light.e2e_end_hold"
+END_STANDBY_LIGHT = "light.e2e_end_standby"
 END_HOLD_SWITCH = "switch.e2e_end_hold_auto_off"
 END_SWITCH_LIGHT = "light.e2e_end_switch"
 END_ILLUMINANCE = "binary_sensor.e2e_end_illuminance"
@@ -155,6 +156,8 @@ COMBINED_SCHEDULE_RESTART_SNAPSHOT = Path(
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
+# A scheduled light's inside-schedule form adds the standby section.
+EMPTY_INSIDE_LIGHT_SECTIONS = {**EMPTY_LIGHT_SECTIONS, "standby": {}}
 
 
 def pct(percent: int) -> int:
@@ -692,7 +695,7 @@ def run_cold_illuminance_scenario(client: HomeAssistantClient) -> None:
 def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
     """Build one profile with deliberately distinct illuminance/door modes."""
     return {
-        **EMPTY_LIGHT_SECTIONS,
+        **(EMPTY_INSIDE_LIGHT_SECTIONS if inside else EMPTY_LIGHT_SECTIONS),
         "light_timeout": 30,
         "sensors": {
             "occupancy_entity": VIRTUAL_OCCUPANCY,
@@ -2196,7 +2199,7 @@ def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str
     result = client.continue_flow(
         result,
         {
-            **EMPTY_LIGHT_SECTIONS,
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
             "light_timeout": 30,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
@@ -5264,7 +5267,7 @@ def create_two_profile_light(
     expect_step(result, "scheduled_light_outside")
     result = client.continue_flow(result, {**EMPTY_LIGHT_SECTIONS, **outside})
     expect_step(result, "scheduled_light_inside")
-    result = client.continue_flow(result, {**EMPTY_LIGHT_SECTIONS, **inside})
+    result = client.continue_flow(result, {**EMPTY_INSIDE_LIGHT_SECTIONS, **inside})
     return finish_creation(result, name)
 
 
@@ -5360,6 +5363,75 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             )
     remove_entry_and_entity(client, hold_entry_id, END_HOLD_LIGHT)
 
+    # Standby: the inside profile rests at 20 % instead of turning off.
+    standby_entry_id = create_two_profile_light(
+        client,
+        "E2E End Standby",
+        "e2e_end_standby",
+        RAW_MULTI_RGB,
+        END_SCHEDULE,
+        "turn_off",
+        {"light_timeout": 30},
+        {
+            "light_timeout": 3,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 100},
+            "standby": {"standby_brightness": 20},
+        },
+    )
+    assert_entry_loaded(client, standby_entry_id)
+
+    def at_standby() -> None:
+        wait_machine_state(client, "standby", END_STANDBY_LIGHT)
+        client.wait_state(
+            RAW_MULTI_RGB,
+            lambda state: (
+                state["state"] == "on" and state["attributes"].get("brightness") == 51
+            ),
+            "resting at the 20 % standby level",
+            timeout=10,
+        )
+
+    set_end_schedule(client, True)
+    at_standby()
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["attributes"].get("brightness") == 255,
+        "raised to the auto-on level",
+    )
+    set_timer_motion(client, False)
+    at_standby()
+
+    # A manual off holds until the next boundary: the next visit ends in off.
+    client.call_service("light", "turn_off", {"entity_id": END_STANDBY_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        END_STANDBY_LIGHT,
+        lambda state: state["attributes"].get("standby_suppressed") is True,
+        "standby suppressed by the manual off",
+    )
+    set_timer_motion(client, True)
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    set_timer_motion(client, False)
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "off, not standby, after the manual off",
+        timeout=10,
+    )
+
+    # The next window starts at standby again, and turn_off ends it.
+    set_end_schedule(client, False)
+    wait_end_light(client, END_STANDBY_LIGHT, PROFILE_OUTSIDE)
+    set_end_schedule(client, True)
+    at_standby()
+    set_end_schedule(client, False)
+    client.wait_state(
+        RAW_MULTI_RGB, lambda state: state["state"] == "off", "off at the end"
+    )
+    remove_entry_and_entity(client, standby_entry_id, END_STANDBY_LIGHT)
+
     # switch: bright control illuminance outside forces off; outside occupancy adopts.
     illuminance_entry_id = create_entry(
         client,
@@ -5440,7 +5512,9 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, switch_entry_id, END_SWITCH_LIGHT)
     remove_entry_and_entity(client, illuminance_entry_id, END_ILLUMINANCE)
     remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
-    print("PASS: held turn_off boundaries and switch forced-off/adopt branches")
+    print(
+        "PASS: held turn_off boundaries, standby, and switch forced-off/adopt branches"
+    )
 
 
 def run_end_restart_prepare() -> None:

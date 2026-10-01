@@ -191,6 +191,22 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # filters/converts color parameters per real light.
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
+# A Virtual Scheduled Light's inside-schedule settings can rest at a standby
+# level instead of turning off: an off light comes on at it when those
+# settings take over, and an expired timer drops back to it rather than off.
+# The brightness (percent, 1-100) enables standby; the optional color is one
+# of a color temperature or an [r, g, b], like the auto-on color.
+CONF_STANDBY_BRIGHTNESS = "standby_brightness"
+CONF_STANDBY_COLOR_TEMP = "standby_color_temp"
+CONF_STANDBY_RGB_COLOR = "standby_rgb_color"
+STANDBY_KEYS = (
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_COLOR_TEMP,
+    CONF_STANDBY_RGB_COLOR,
+)
+# State attribute: a manual off cancels standby until the next schedule
+# boundary. Persisted so a restart inside the same window keeps it.
+ATTR_STANDBY_SUPPRESSED = "standby_suppressed"
 # Optional select entity and option applied immediately before MoLight turns an
 # off Virtual Light on. This is intentionally generic rather than WLED-specific:
 # WLED presets are exposed as select entities, and the same mechanism works for
@@ -463,5 +479,6 @@ STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied
 STATE_OCCUPIED = "occupied"  # lights on, occupancy active, no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
+STATE_STANDBY = "standby"  # lights at the standby level, no timer
 STATE_EFFECT = "effect"  # auto-off imminent, brief effect/blink stage
 STATE_WARN = "warn"  # auto-off imminent, grace period before lights-off

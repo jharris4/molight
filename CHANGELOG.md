@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Standby for Virtual Scheduled Lights**: the inside-schedule settings can
+  rest at a low brightness and colour instead of turning off. A dusk-to-dawn
+  porch can glow at 1%, come up to 100% when someone walks up, drop back to 1%
+  once they leave, and turn off when the schedule ends. A manual off turns
+  standby off until the next schedule boundary.
+
 ## [1.8.0] - 2026-09-30
 
 This release adds the **Virtual Combined Schedule Sensor**, so one light can
