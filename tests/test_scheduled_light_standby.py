@@ -2233,6 +2233,43 @@ async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
 
 
 @pytest.mark.asyncio
+async def test_wall_turn_on_during_a_waiting_manual_on_keeps_its_level(
+    hass: HomeAssistant, freezer
+) -> None:
+    """After a manual off, a turn-on at the wall overtakes a manual turn-on
+    still waiting for its selection: the wall level stands, standby is
+    rejoined, and the timeout ends back at it."""
+    select = _ParkedSelect(hass, park=2)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE))
+    await _echo_standby(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _set(hass, REAL, "off")
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 100}, blocking=True
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await _drain(hass)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    to_real = [c for c in _light_calls(calls, "turn_on") if c["entity_id"] == [REAL]]
+    assert [c["brightness"] for c in to_real] == [STANDBY]
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("reported", ["by_the_device", "under_the_select_call"])
 async def test_selection_lighting_the_light_does_not_take_standby_over(
     hass: HomeAssistant, reported: str

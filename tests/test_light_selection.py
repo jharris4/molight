@@ -771,16 +771,8 @@ async def test_wall_turn_on_during_a_waiting_follow_window_start_stands(
     assert state.attributes["brightness"] == 200
 
 
-@pytest.mark.asyncio
-async def test_wall_turn_on_during_a_waiting_manual_on_does_not_drop_it(
-    hass: HomeAssistant,
-) -> None:
-    """Only an automatic turn-on yields to the wall; the user's own is sent."""
-    select = _SlowSelect(hass)
-    hass.states.async_set("light.ambient", "off")
-    await setup_entries(hass, _selection_entry())
-    calls = _light_calls(hass)
-
+async def _begin_manual_turn_on(hass: HomeAssistant, select: _SlowSelect):
+    """Turn the virtual light on at 200; return once the select call waits."""
     turn_on = hass.async_create_task(
         hass.services.async_call(
             "light",
@@ -790,7 +782,94 @@ async def test_wall_turn_on_during_a_waiting_manual_on_does_not_drop_it(
         )
     )
     await asyncio.wait_for(select.started.wait(), 2)
+    return turn_on
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wall", ["turn_on", "dim_from_0"])
+async def test_wall_change_during_a_waiting_manual_on_keeps_its_level(
+    hass: HomeAssistant, freezer, wall: str
+) -> None:
+    """A turn-on or dim at the wall is the later action: it overtakes a manual
+    turn-on still waiting for its selection, as it does an automatic one."""
+    select = _SlowSelect(hass)
+    dark = ("on", {"brightness": 0}) if wall == "dim_from_0" else ("off", {})
+    hass.states.async_set("light.ambient", *dark)
+    await setup_entries(hass, _selection_entry())
+    calls = _light_calls(hass)
+    turn_on = await _begin_manual_turn_on(hass, select)
+
     hass.states.async_set("light.ambient", "on", {"brightness": 100})
+    await _drain(hass)
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 100
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 100
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["last_on_physical"] is not None
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert calls == [("turn_off", None)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_wall_turn_on_during_a_waiting_manual_on_rejoins_the_window(
+    hass: HomeAssistant,
+) -> None:
+    """Inside a follow window the wall turn-on that overtook the manual one
+    rejoins the window, at the level set at the wall."""
+    select = _SlowSelect(hass)
+    select.release.set()  # the window's own start goes straight through
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched", schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    select.started.clear()
+    select.release.clear()
+    calls = _light_calls(hass)
+    turn_on = await _begin_manual_turn_on(hass, select)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 100})
+    await _drain(hass)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.attributes["molight_state"] == "scheduled"
+    assert state.attributes["brightness"] == 100
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("member", ["unavailable", "restored"])
+async def test_member_reporting_in_lit_during_a_waiting_manual_on_is_no_wall_change(
+    hass: HomeAssistant, member: str
+) -> None:
+    """A real light that loads already lit while a manual turn-on waits was
+    not turned on at the wall: the user's turn-on is still sent."""
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, "manual", member=member)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 77})
     await _drain(hass)
     select.release.set()
     await turn_on
@@ -800,6 +879,8 @@ async def test_wall_turn_on_during_a_waiting_manual_on_does_not_drop_it(
     assert calls == [("turn_on", 200)]
     assert state.state == "on"
     assert state.attributes["brightness"] == 200
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["last_on_physical"] is None
 
 
 @pytest.mark.asyncio

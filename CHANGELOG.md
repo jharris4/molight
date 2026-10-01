@@ -69,10 +69,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   virtual light does: a false detection no longer turns it off after the
   short delay, and a Virtual Scheduled Light that was turned off by hand
   rejoins standby.
-- A real light turned on, dimmed or recoloured at the wall while an automatic
-  turn-on (occupancy, a door, a schedule start, standby) is still waiting on
-  a slow select keeps the level set at the wall, instead of being overwritten
-  by the automatic level when the select call finishes.
+- A real light turned on, dimmed or recoloured at the wall while a turn-on is
+  still waiting on a slow select keeps the level set at the wall, instead of
+  being overwritten when the select call finishes. This holds for an
+  automatic turn-on (occupancy, a door, a schedule start, standby) and for
+  one made through the virtual light.
 - A schedule end also takes over a manual turn-on still waiting on a slow
   select, as it does an automatic one: *Turn off*, or a regular light's
   turn-off gate window ending, stops it lighting the room afterwards, *Switch
