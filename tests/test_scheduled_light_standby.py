@@ -470,6 +470,41 @@ async def test_raising_standby_by_hand_is_held_by_presence_already_there(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["physical", "virtual"])
+async def test_false_detection_does_not_cut_a_manual_raise_short(
+    hass: HomeAssistant, freezer, source: str
+) -> None:
+    """False motion against an old visit leaves a raise by hand its timeout."""
+    visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    await _setup_porch(hass, _porch())
+    await _echo_standby(hass)
+    if source == "physical":
+        await _set(hass, REAL, "on", brightness=200)
+    else:
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+        )
+        await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+    await _tick(hass, freezer, 2)
+    await _set(hass, OCCUPANCY, "on", latest_occupied_time=visit)
+    await _set(
+        hass,
+        OCCUPANCY,
+        "off",
+        latest_occupied_time=visit,
+        last_clear_false_detection=True,
+    )
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 26)
+    assert _attrs(hass)["brightness"] == 200
+    await _tick(hass, freezer, 3)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_ends(
     hass: HomeAssistant, freezer
 ) -> None:

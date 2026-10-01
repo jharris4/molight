@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   back on when it gets dark.
 - A follow-mode real light returning from `unavailable` gets its turn-on
   selection again even when it comes back at the level last sent.
+- False detections: a light dimmed or recoloured at the wall keeps the full
+  timeout that change restarted.
 
 ## [1.8.0] - 2026-09-30
 

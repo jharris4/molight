@@ -1435,6 +1435,45 @@ async def test_false_clear_keeps_the_timeout_of_the_users_turn_on(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["brightness", "color"])
+async def test_false_clear_keeps_the_timeout_of_a_change_at_the_wall(
+    hass: HomeAssistant, freezer, change: str
+) -> None:
+    """A dim or recolor at the wall restarts the timeout; false motion keeps it."""
+    old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    attrs = {"brightness": 100, "hs_color": (10.0, 50.0)}
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": old})
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    hass.states.async_set(REAL, "on", attrs)  # T0
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=40))
+    changed = {"brightness": 200} if change == "brightness" else {"hs_color": (200, 50)}
+    hass.states.async_set(REAL, "on", attrs | changed)  # T0+40: a fresh 60 s
+    await settle(hass)
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set(OCC, "on", {"latest_occupied_time": old})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    hass.states.async_set(
+        OCC, "off", {"latest_occupied_time": old, "last_clear_false_detection": True}
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    freezer.tick(timedelta(seconds=57))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"  # T0+99
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"  # T0+101
+
+
+@pytest.mark.asyncio
 async def test_occupancy_clear_is_noop_when_not_occupied(
     hass: HomeAssistant, freezer
 ) -> None:

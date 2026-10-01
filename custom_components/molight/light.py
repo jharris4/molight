@@ -2853,7 +2853,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         A false detection leaves latest_occupied_time at an earlier visit,
         which must not cut short a light the user turned on since then: the
         countdown never ends before a full timeout after the latest manual,
-        physical or door turn-on, or a schedule end's fresh timeout.
+        physical or door turn-on, a dim or recolor at the wall (which also
+        restarts a running timer), or a schedule end's fresh timeout.
         """
         countdown = self._compute_occupancy_countdown()
         user_ons = [
@@ -2862,6 +2863,8 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_physical,
                 self._last_on_virtual,
                 self._last_on_door,
+                self._last_brightness_change_physical,
+                self._last_color_change_physical,
                 self._standby_timeout_started,
             )
             if t is not None
