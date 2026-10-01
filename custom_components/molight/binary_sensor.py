@@ -41,6 +41,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_call_later,
+    async_track_entity_registry_updated_event,
     async_track_point_in_time,
     async_track_state_change_event,
 )
@@ -1290,6 +1291,8 @@ class _ScheduleTree:
         self.hass = hass
         self.configs: dict[str, dict] = {}
         self.disabled: dict[str, ConfigEntryDisabler | None] = {}
+        # Each MoLight input entity, and whether its registry entry is disabled.
+        self.entities: dict[str, bool] = {}
         self.source_entities: set[str] = set()
         self.plain_schedules: set[str] = set()
 
@@ -1319,7 +1322,7 @@ class _ScheduleTree:
             if reg_entry is not None and reg_entry.config_entry_id is not None
             else None
         )
-        if entry is None or entry.domain != DOMAIN:
+        if reg_entry is None or entry is None or entry.domain != DOMAIN:
             return _ScheduleNode("unknown")
         cfg = molight_config(entry)
         entity_type = cfg[CONF_ENTITY_TYPE]
@@ -1334,7 +1337,8 @@ class _ScheduleTree:
             return _ScheduleNode("unknown")
         self.configs.setdefault(entry.entry_id, cfg)
         self.disabled[entry.entry_id] = entry.disabled_by
-        if entry.disabled_by is not None:
+        self.entities[entity_id] = reg_entry.disabled
+        if entry.disabled_by is not None or reg_entry.disabled:
             return _ScheduleNode("unknown")
         if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE:
             return self.combined(entry.entry_id, cfg, path)
@@ -1375,6 +1379,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
         self._plain_schedules: list[str] = []
         self._input_configs: dict[str, dict] = {}
         self._input_disabled: dict[str, ConfigEntryDisabler | None] = {}
+        self._input_entities: dict[str, bool] = {}
         self._reload_scheduled = False
         self._current_window_start: str | None = None
         self._next_transition: datetime | None = None
@@ -1398,6 +1403,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
             if entry_id != self._entry_id
         }
         self._input_disabled = tree.disabled
+        self._input_entities = tree.entities
 
         # An unavailable state is saved without attributes or on/off value,
         # so both are also kept as extra data; the state serves older saves.
@@ -1421,6 +1427,15 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
             self.async_on_remove(
                 async_dispatcher_connect(
                     self.hass, SIGNAL_CONFIG_ENTRY_CHANGED, self._handle_entry_change
+                )
+            )
+        # Disabling an input's entity leaves its entry enabled.
+        if self._input_entities:
+            self.async_on_remove(
+                async_track_entity_registry_updated_event(
+                    self.hass,
+                    sorted(self._input_entities),
+                    self._handle_registry_change,
                 )
             )
 
@@ -1460,6 +1475,19 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
                 entry.disabled_by != self._input_disabled[entry.entry_id]
                 or molight_config(entry) != self._input_configs[entry.entry_id]
             )
+        ):
+            self._reload_scheduled = True
+            self.hass.config_entries.async_schedule_reload(self._entry_id)
+
+    @callback
+    def _handle_registry_change(
+        self, event: Event[er.EventEntityRegistryUpdatedData]
+    ) -> None:
+        entity_id = event.data["entity_id"]
+        reg_entry = er.async_get(self.hass).async_get(entity_id)
+        disabled = reg_entry is not None and reg_entry.disabled
+        if not self._reload_scheduled and disabled != self._input_entities.get(
+            entity_id, disabled
         ):
             self._reload_scheduled = True
             self.hass.config_entries.async_schedule_reload(self._entry_id)

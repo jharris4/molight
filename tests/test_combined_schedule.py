@@ -10,6 +10,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
 from homeassistant.core import CoreState, State
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
@@ -371,6 +372,45 @@ async def test_disabled_input_is_unknown(hass: HomeAssistant, freezer) -> None:
 
     await hass.config_entries.async_set_disabled_by(morning.entry_id, None)
     await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["time", "mirror", "combined"])
+async def test_disabled_input_entity_is_unknown(
+    hass: HomeAssistant, freezer, kind: str
+) -> None:
+    """Disabling an input's entity, not its entry, counts it as unknown too,
+    and enabling it again brings it back."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.door", "on")
+    entries = {
+        "time": [_time_schedule("Morning", "06:00", "08:00")],
+        "mirror": [_mirror_schedule("Morning", "binary_sensor.door")],
+        "combined": [
+            _time_schedule("Early", "06:00", "08:00"),
+            _combined("Morning", ["binary_sensor.early"]),
+        ],
+    }[kind]
+    await _setup(hass, *entries, _combined("Bedside", ["binary_sensor.morning"]))
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+    registry = er.async_get(hass)
+    registry.async_update_entity(
+        "binary_sensor.morning", disabled_by=er.RegistryEntryDisabler.USER
+    )
+    await settle(hass)
+    assert hass.states.get("binary_sensor.morning") is None
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
+
+    registry.async_update_entity("binary_sensor.morning", disabled_by=None)
+    await settle(hass)
+    # HA reloads the input's entry to add the entity back after a delay.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.morning").state == "on"
     assert hass.states.get("binary_sensor.bedside").state == "on"
 
 

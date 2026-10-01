@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Virtual Combined Occupancy Sensor keeps its last clear's false-detection
   flag through a reload or restart, so the lights it cleared still get the
   quick false-detection off.
+- A Virtual Combined Schedule Sensor treats an input whose entity (not just
+  its entry) is disabled as `unavailable`, instead of still following its
+  windows.
 
 ## [1.8.0] - 2026-09-30
 
