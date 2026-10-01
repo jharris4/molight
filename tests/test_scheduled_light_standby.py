@@ -1471,6 +1471,33 @@ async def test_rebooted_member_is_sent_standby_again(hass: HomeAssistant) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("placeholder", [{}, {"restored": True}], ids=["back", "new"])
+async def test_member_reporting_in_off_while_raised_is_sent_the_raise(
+    hass: HomeAssistant, freezer, placeholder: dict
+) -> None:
+    """A member reporting in as off while occupancy has the light raised is
+    sent the raised level again; standby is not paused, so the light drops
+    back to standby once the room clears."""
+    calls = await _setup_porch(hass, _porch())
+    await _echo_standby(hass)
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    await _set(hass, REAL, "unavailable", **placeholder)
+    sent = len(_light_calls(calls, "turn_on"))
+
+    await _set(hass, REAL, "off")
+
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    assert _attrs(hass)["last_off_manual"] is None
+    assert len(_light_calls(calls, "turn_on")) == sent + 1
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == BOOST
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "acknowledged", [True, False], ids=["acknowledged", "unanswered_command"]
 )

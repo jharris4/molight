@@ -104,6 +104,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   turn-on is still waiting on a slow select no longer cancels that turn-on
   and leaves the room dark, and is no longer recorded as a manual off, which
   also paused standby until the next schedule boundary.
+- A real light that loads, or comes back from `unavailable`, as off while the
+  light is on is sent the light's settings and turn-on selection again. It
+  was recorded as a manual off: the light went off, standby paused until the
+  next schedule boundary, and presence still there did not light it after a
+  restart.
 - A turn-on select on the same device as a real light (a WLED preset that
   includes "on") no longer has that light's own report, arriving while the
   select call is still in progress, taken for a turn-on at the wall, which

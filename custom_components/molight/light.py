@@ -1666,24 +1666,30 @@ class VirtualLight(LightEntity, RestoreEntity):
             resend = member_rebooted or (
                 member_recovered and self._machine_state == STATE_STANDBY
             )
+            own_context = event.context.id in self._self_context_ids
+            lit = (
+                new_state.state == "on" and new_state.attributes.get("brightness") != 0
+            )
             if self._is_own_echo(
-                entity_id,
-                old_state,
-                new_state,
-                own_context=event.context.id in self._self_context_ids,
+                entity_id, old_state, new_state, own_context=own_context
             ):
                 # A member back at the level an unanswered command asked for
                 # may still have lost its selection: re-send like any other.
                 if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
                     self._reconcile_recovered_member()
+                elif (
+                    member_recovered
+                    and not lit
+                    and not own_context
+                    and self._machine_state != STATE_IDLE
+                ):
+                    # A late reply on at brightness 0 is still dark.
+                    self._resend_on_settings()
                 return  # echo of our own service call; call sites manage state
             # A member our own select call changed was not changed at the wall.
             claim = not (
                 event.context.id in self._waiting_turn_ons
                 or self._selecting_on_device_of(entity_id)
-            )
-            lit = (
-                new_state.state == "on" and new_state.attributes.get("brightness") != 0
             )
             if not claim and lit and self._turn_on_waiting():
                 # Lit by the selection of a turn-on about to be sent, which
@@ -1699,6 +1705,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             if member_recovered and not lit and self._turn_on_waiting():
                 # Reporting in dark while a turn-on waits for its selection
                 # is no off: the turn-on is about to light this member.
+                return
+            if member_recovered and not lit and self._machine_state != STATE_IDLE:
+                # Nor while the light is on: the member missed its command.
+                self._resend_on_settings()
                 return
             if (
                 member_recovered
@@ -1720,8 +1730,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._on_light_state_change(
                 new_state.state,
                 new_state.attributes.get("brightness"),
-                # A member reporting in while the light is off was not turned off.
-                manual=not (member_recovered and self._machine_state == STATE_IDLE),
+                # A member reporting in was not turned off.
+                manual=not member_recovered,
                 claim=claim,
             )
             return
@@ -2700,6 +2710,25 @@ class VirtualLight(LightEntity, RestoreEntity):
         self.hass.async_create_task(self._auto_lights_on(force_selection=True))
         self.async_write_ha_state()
         return True
+
+    def _resend_on_settings(self) -> None:
+        """Send the light's current settings again, with its turn-on selection.
+
+        Every member gets them, so one reporting in while the select call
+        runs is lit too. A stage that blinks the lights off has none to send.
+        """
+        if self._machine_state == STATE_EFFECT and not self._effect_brightness:
+            return
+        self.hass.async_create_task(
+            self._set_lights(
+                True,
+                brightness=self._attr_brightness,
+                transition=self._auto_on_transition,
+                color=self._current_color(),
+                apply_turn_on_selection=True,
+                force_selection=True,
+            )
+        )
 
     def _forget_ended_follow_window(self) -> None:
         """Drop the marker of a window that ended, once the lights are off.

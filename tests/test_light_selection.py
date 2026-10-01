@@ -23,6 +23,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE_SWITCH,
 )
 from tests.conftest import (
+    light_targets,
     make_light_entry,
     record_service_calls,
     settle,
@@ -1372,6 +1373,76 @@ async def test_member_reporting_in_off_during_the_wait_gets_the_turn_on(
     assert calls == [("turn_on", _LEVEL[trigger])]
     assert state.state == "on"
     assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["molight_state"] == (
+        "occupied" if trigger == "occupancy" else "active"
+    )
+    assert state.attributes["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+async def test_members_reporting_in_off_after_the_turn_on_get_it_again(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """Members reporting in as off after the turn-on was sent missed it, or
+    lost their preset: the selection is applied again and the settings are
+    re-sent to every member, so one reporting in while that select call runs
+    is lit too."""
+    members = ["light.ambient", "light.ambient_2"]
+    selected: list[str] = []
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+        if len(selected) == 2:
+            started.set()
+            await release.wait()
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("binary_sensor.occ", "off")
+    for member in members:
+        hass.states.async_set(member, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            name="Selection Light",
+            lights=members,
+            occupancy="binary_sensor.occ",
+            auto_on_brightness=40,
+            turn_on_select_entity="select.ambient_theme",
+            turn_on_select_option="Cozy",
+        ),
+    )
+    if trigger == "manual":
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    else:
+        hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+    for member in members:
+        hass.states.async_set(member, "on", {"brightness": _LEVEL[trigger]})
+    await settle(hass)
+    calls = record_service_calls(hass)
+
+    for member in members:
+        hass.states.async_set(member, "unavailable")
+        await _drain(hass)
+        hass.states.async_set(member, "off")
+        await asyncio.wait_for(started.wait(), 2)
+        await _drain(hass)
+    release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert selected == ["Cozy", "Cozy"]
+    assert light_targets(calls, "turn_on") == [members]
+    assert light_targets(calls, "turn_off") == []
+    assert state.state == "on"
     assert state.attributes["molight_state"] == (
         "occupied" if trigger == "occupancy" else "active"
     )

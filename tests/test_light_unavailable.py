@@ -46,9 +46,11 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
+    STATE_WARN,
 )
 from tests.conftest import (
     make_light_entry,
@@ -63,6 +65,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 OCC = "binary_sensor.occ"
+DOOR = "binary_sensor.door"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
@@ -210,22 +213,156 @@ async def test_real_light_recovery_mirrors_color(hass: HomeAssistant) -> None:
     assert tuple(state.attributes["hs_color"]) == (120.0, 60.0)
 
 
-@pytest.mark.asyncio
-async def test_real_light_recovers_directly_to_off(hass: HomeAssistant) -> None:
-    """unavailable → off counts as a real off and releases the virtual light."""
-    await setup_entries(hass, make_light_entry())
+_NOT_LOADED = [None, "unavailable", "unknown", "restored"]
+_LEVEL = {"occupancy": 102, "manual": 200, "door": 102}
 
-    hass.states.async_set(REAL, "on")
+
+async def _light_up(
+    hass: HomeAssistant, trigger: str, member: str | None, **kwargs
+) -> list[dict]:
+    """Light the room by trigger while the real light has not reported yet."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    if member == "restored":
+        hass.states.async_set(REAL, "unavailable", {ATTR_RESTORED: True})
+    elif member:
+        hass.states.async_set(REAL, member)
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, door=DOOR, auto_on_brightness=40, **kwargs),
+    )
     await settle(hass)
-    hass.states.async_set(REAL, "unavailable")
+    calls = _record_calls(hass)
+    if trigger == "manual":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+        )
+    else:
+        hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "on")
     await settle(hass)
     assert _state(hass).state == "on"
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["occupancy", "manual", "door"])
+@pytest.mark.parametrize("member", _NOT_LOADED)
+@pytest.mark.parametrize("report", [{}, {"brightness": 0}], ids=["off", "on_at_0"])
+async def test_real_light_reporting_in_off_while_on_is_sent_its_settings(
+    hass: HomeAssistant, freezer, trigger: str, member: str | None, report: dict
+) -> None:
+    """A real light that loads, or comes back, as off while the light is on
+    missed its command: it is sent the light's settings again, nothing is
+    recorded as a manual off, and the running timer carries on."""
+    calls = await _light_up(hass, trigger, member)
+    calls.clear()
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+
+    hass.states.async_set(REAL, "on" if report else "off", report)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == (
+        STATE_OCCUPIED if trigger == "occupancy" else STATE_ACTIVE
+    )
+    assert state.attributes["last_off_manual"] is None
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [_LEVEL[trigger]]
+    if trigger == "occupancy":
+        return
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("member", _NOT_LOADED)
+async def test_real_light_reporting_in_off_while_off_sends_nothing(
+    hass: HomeAssistant, member: str | None
+) -> None:
+    """A real light reporting in as off while the light is off changes nothing."""
+    hass.states.async_set(OCC, "off")
+    if member == "restored":
+        hass.states.async_set(REAL, "unavailable", {ATTR_RESTORED: True})
+    elif member:
+        hass.states.async_set(REAL, member)
+    await setup_entries(hass, make_light_entry(occupancy=OCC))
+    await settle(hass)
+    calls = _record_calls(hass)
 
     hass.states.async_set(REAL, "off")
     await settle(hass)
+
     state = _state(hass)
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["last_off_manual"] is None
+    assert [c for c in calls if c["domain"] == "light"] == []
+
+
+@pytest.mark.asyncio
+async def test_one_of_two_real_lights_reporting_in_off_is_relit(
+    hass: HomeAssistant,
+) -> None:
+    """A member rebooting dark beside one still on gets the settings again."""
+    calls = _record_calls(hass)
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
+    hass.states.async_set(REAL, "on", {"brightness": 150})
+    hass.states.async_set(REAL2, "on", {"brightness": 150})
+    await settle(hass)
+
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    on_calls = _real_calls(calls, "turn_on")
+    assert len(on_calls) == 1
+    assert set(on_calls[0]["entity_id"]) == {REAL, REAL2}
+    assert on_calls[0]["brightness"] == 150
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("effect_brightness", "sent"), [(30, 76), (0, None)], ids=["dim", "blink_off"]
+)
+async def test_real_light_reporting_in_off_mid_warning_gets_the_stage(
+    hass: HomeAssistant, freezer, effect_brightness: int, sent: int | None
+) -> None:
+    """Mid-warning the stage's settings are sent again, and the warning runs
+    on; a stage that blinks the lights off has nothing to send."""
+    calls = await _light_up(
+        hass,
+        "manual",
+        "off",
+        effect_timeout=20,
+        effect_brightness=effect_brightness,
+        warn_timeout=20,
+    )
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+    hass.states.async_set(REAL, "unavailable")
+    await settle(hass)
+    calls.clear()
+
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_EFFECT
+    assert _state(hass).attributes["last_off_manual"] is None
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == (
+        [sent] if sent else []
+    )
+    freezer.tick(timedelta(seconds=20))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_WARN
 
 
 @pytest.mark.asyncio
@@ -1913,7 +2050,9 @@ async def test_follow_one_of_two_members_recovering_dark_relights_all(
 async def test_follow_member_recovery_with_schedule_unavailable_falls_through(
     hass: HomeAssistant,
 ) -> None:
-    """With no valid schedule to follow, a recovery keeps the old rules."""
+    """With no valid schedule to follow, a member recovering dark is sent the
+    light's settings again, as for any light that is on."""
+    calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(
         hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
@@ -1925,12 +2064,15 @@ async def test_follow_member_recovery_with_schedule_unavailable_falls_through(
     hass.states.async_set(SCHED, "unavailable")
     hass.states.async_set(REAL, "unavailable")
     await settle(hass)
+    calls.clear()
     hass.states.async_set(REAL, "off")
     await settle(hass)
 
     state = _state(hass)
-    assert state.state == "off"
-    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_SCHEDULED
+    assert state.attributes["last_off_manual"] is None
+    assert len(_real_calls(calls, "turn_on")) == 1
 
 
 @pytest.mark.asyncio

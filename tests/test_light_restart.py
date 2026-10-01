@@ -358,6 +358,39 @@ async def test_member_first_seen_off_is_not_a_manual_off(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("late", ["placeholder", "missing", "rebooted"])
+async def test_member_reporting_in_off_over_presence_is_lit_across_a_restart(
+    hass: HomeAssistant, freezer, late: str
+) -> None:
+    """Occupancy lights the room while the member is still loading (or
+    reboots); the member then reporting in as off is no manual off, so the
+    presence still there lights the room after a restart."""
+    hass.states.async_set(OCC, "on")
+    if late == "placeholder":
+        hass.states.async_set(REAL, "unavailable", {"restored": True})
+    elif late == "rebooted":
+        hass.states.async_set(REAL, "on")
+    entry = make_light_entry(occupancy=OCC)
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    if late == "rebooted":
+        hass.states.async_set(REAL, "unavailable")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["last_off_manual"] is None
+
+    freezer.tick(timedelta(seconds=10))
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
 async def test_restart_lights_a_light_turned_on_again_after_its_manual_off(
     hass: HomeAssistant, freezer
 ) -> None:
