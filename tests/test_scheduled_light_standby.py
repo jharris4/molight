@@ -1678,3 +1678,87 @@ async def test_standby_during_a_waiting_raise_keeps_standby(
         STANDBY,
         STANDBY,
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["startup", "boundary", "restored"])
+@pytest.mark.parametrize("occupied", [False, True], ids=["clear", "occupied"])
+@pytest.mark.parametrize("door_open", [False, True], ids=["closed", "open"])
+@pytest.mark.parametrize("maintained", [False, True], ids=["unheld", "maintained"])
+@pytest.mark.parametrize("bright", [False, True], ids=["dark", "bright"])
+@pytest.mark.parametrize("control", [False, True], ids=["gate", "control"])
+@pytest.mark.parametrize("held", [False, True], ids=["auto_off", "keep_on"])
+async def test_what_the_inside_settings_come_on_at(
+    hass: HomeAssistant,
+    route: str,
+    occupied: bool,
+    door_open: bool,
+    maintained: bool,
+    bright: bool,
+    control: bool,
+    held: bool,
+) -> None:
+    """Startup, the start boundary and a restart at standby agree on the level.
+
+    Bright blocks a rise, and in control mode keeps standby off unless a hold
+    keeps a restored level; occupancy or an open door raise a dark light; the
+    maintain sensor alone never does.
+    """
+    door = "binary_sensor.front_door"
+    maintain = "binary_sensor.porch_maintain"
+    illuminance = "binary_sensor.porch_bright"
+    hold = "input_boolean.guests"
+    restored = route == "restored"
+    hass.states.async_set(REAL, "on" if restored else "off", {"brightness": STANDBY})
+    hass.states.async_set(SCHEDULE, "off" if route == "boundary" else "on")
+    for entity_id, on in (
+        (OCCUPANCY, occupied),
+        (door, door_open),
+        (maintain, maintained),
+        (illuminance, bright),
+        (hold, held),
+    ):
+        hass.states.async_set(entity_id, "on" if on else "off")
+    if restored:
+        mock_restore_cache(
+            hass,
+            [
+                State(
+                    VIRTUAL,
+                    "on",
+                    {
+                        ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                        ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                        "molight_state": STATE_STANDBY,
+                        "brightness": STANDBY,
+                    },
+                )
+            ],
+        )
+    await setup_entries(
+        hass,
+        _porch(
+            inside={
+                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: (
+                    ILLUMINANCE_MODE_CONTROL if control else ILLUMINANCE_MODE_GATE
+                ),
+                CONF_HOLD_ENTITIES: [hold],
+            }
+        ),
+    )
+    await settle(hass)
+    if route == "boundary":
+        await _set(hass, SCHEDULE, "on")
+
+    if bright and control and not (restored and held):
+        assert _attrs(hass)["molight_state"] == STATE_IDLE
+        assert hass.states.get(VIRTUAL).state == "off"
+    elif not bright and (occupied or door_open):
+        assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+        assert _attrs(hass)["brightness"] == BOOST
+    else:
+        _assert_standby(hass)
