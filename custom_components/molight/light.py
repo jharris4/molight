@@ -2310,9 +2310,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         mode, turns the lights off now; an active follow
         window or active occupancy (gated like any adoption: suppressed when
         bright or outside a gate window) keeps them on without a timer;
-        otherwise a fresh full timer starts.
+        otherwise a fresh full timer starts. A turn-on still waiting for its
+        selection counts as on.
         """
-        if not self._attr_is_on:
+        if not self._is_lit():
             # Lights-off transitions were never suppressed.
             self._forget_ended_follow_window()
             return

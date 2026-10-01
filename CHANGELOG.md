@@ -79,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   state* recalculates it, and a keep-on hold keeps the end for it. An
   automatic turn-on no longer waits for a manual one that was turned off
   again before its select call finished, which left the room dark.
+- Releasing a keep-on hold while a turn-on is still waiting on a slow select
+  applies what the hold was keeping from that light: a *Turn off* schedule
+  end it had deferred now turns the light off instead of being lost, and a
+  light with no timer running gets its normal timeout instead of staying on.
 
 ## [1.8.0] - 2026-09-30
 

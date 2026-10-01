@@ -1745,6 +1745,69 @@ async def test_held_schedule_end_off_waits_for_a_manual_turn_on_still_waiting(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("lit_by", ["occupancy", "hand"])
+@pytest.mark.parametrize("released", ["waiting", "sent"])
+async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
+    hass: HomeAssistant, freezer, lit_by: str, released: str
+) -> None:
+    """Releasing the hold applies a deferred Turn off end to a turn-on still
+    waiting for its selection, as it does once the turn-on was sent."""
+    select = _SlowSelect(hass)
+    occupancy = "binary_sensor.inside_occupancy"
+    hold = "input_boolean.keep_on"
+    hass.states.async_set("select.light_mode", "Night", {"options": ["Night"]})
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(occupancy, "off")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside={CONF_LIGHT_TIMEOUT: 5, CONF_HOLD_ENTITIES: [hold]},
+        inside={
+            CONF_LIGHT_TIMEOUT: 600,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
+            CONF_TURN_ON_SELECT_OPTION: "Night",
+        },
+    )
+    await setup_entries(hass, entry)
+    calls = record_service_calls(hass)
+
+    if lit_by == "occupancy":
+        hass.states.async_set(occupancy, "on")
+    else:
+        hass.async_create_task(
+            hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+        )
+    await asyncio.wait_for(select.started.wait(), 2)
+    hass.states.async_set(SCHEDULE, "off")
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+    if released == "waiting":
+        hass.states.async_set(hold, "off")
+        for _ in range(4):
+            await asyncio.sleep(0)
+    select.release.set()
+    await settle(hass)
+    if released == "sent":
+        assert hass.states.get(VIRTUAL).state == "on"
+        hass.states.async_set(hold, "off")
+        await settle(hass)
+
+    for _ in range(2):
+        state = hass.states.get(VIRTUAL)
+        assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
+        assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+        assert state.attributes["auto_off_held"] is False
+        freezer.tick(timedelta(seconds=120))
+        async_fire_time_changed(hass)
+        await settle(hass)
+    if released == "waiting":
+        assert [REAL] not in light_targets(calls, "turn_on")
+
+
+@pytest.mark.asyncio
 async def test_options_reload_uses_current_schedule_side(
     hass: HomeAssistant, freezer
 ) -> None:

@@ -1008,6 +1008,44 @@ async def test_occupancy_after_an_overtaken_manual_on_still_lights_the_room(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["door", "occupancy"])
+async def test_hold_released_during_slow_selection_still_starts_the_timeout(
+    hass: HomeAssistant, freezer, trigger: str
+) -> None:
+    """A hold released while a turn-on waits for its selection leaves the
+    light its normal timeout, not on with no timer."""
+    select = _SlowSelect(hass)
+    sensor = f"binary_sensor.{trigger}"
+    hass.states.async_set(sensor, "off")
+    hass.states.async_set("input_boolean.hold", "on")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(hold_entities=["input_boolean.hold"], **{trigger: sensor}),
+    )
+    calls = _light_calls(hass)
+
+    hass.states.async_set(sensor, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    if trigger == "occupancy":
+        # They left again before the light came on: a countdown, held.
+        hass.states.async_set(sensor, "off")
+        await _drain(hass)
+    hass.states.async_set("input_boolean.hold", "off")
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+    assert calls == [("turn_on", None)]
+    assert hass.states.get("light.selection_light").state == "on"
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert calls == [("turn_on", None), ("turn_off", None)]
+    assert hass.states.get("light.selection_light").state == "off"
+
+
+@pytest.mark.asyncio
 async def test_uninterrupted_slow_selection_still_turns_on(
     hass: HomeAssistant,
 ) -> None:
