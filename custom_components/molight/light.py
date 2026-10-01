@@ -2832,6 +2832,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self.async_write_ha_state()
             elif self._can_rest_at_standby():
                 # Control mode kept standby off while bright.
+                self._last_on_illuminance = datetime.now(UTC)
                 self._enter_standby(self._auto_on_transition, selection=True)
 
     def _compute_occupancy_countdown(self) -> int:

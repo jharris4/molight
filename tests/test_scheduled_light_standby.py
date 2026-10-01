@@ -623,9 +623,11 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
     )
     await _set(hass, SCHEDULE, "on")
     assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["last_on_illuminance"] is None
 
     await _set(hass, illuminance, "off")
     _assert_standby(hass)
+    assert _attrs(hass)["last_on_illuminance"] is not None
 
     await _set(hass, illuminance, "on")
     assert hass.states.get(VIRTUAL).state == "off"
