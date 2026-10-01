@@ -520,6 +520,48 @@ async def test_turning_the_light_back_on_rejoins_standby(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("presence", ["occupancy", "door"])
+@pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
+async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
+    hass: HomeAssistant, freezer, presence: str, restart: bool
+) -> None:
+    """A manual on while presence holds the raised light rejoins standby too,
+    and says so at once, so a restart before they leave keeps it."""
+    door = "binary_sensor.porch_door"
+    hass.states.async_set(door, "off")
+    entry = _porch(
+        inside={CONF_DOOR_ENTITY: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    )
+    await _setup_porch(hass, entry)
+    await _echo_standby(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    sensor = OCCUPANCY if presence == "occupancy" else door
+    await _set(hass, sensor, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(REAL, "on", {"brightness": BOOST}, context=context)
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    if restart:
+        await restart_entries(hass, entry)
+        await settle(hass)
+        assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+
+    await _set(hass, sensor, "off")
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:

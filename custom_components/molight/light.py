@@ -2945,7 +2945,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # Turning the light back on after a manual off rejoins standby.
         self._standby_suppressed = False
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
-            return  # already managed by occupancy / schedule window
+            # Already managed by occupancy / schedule window; publish the
+            # rejoined standby, which a restart would otherwise lose.
+            self.async_write_ha_state()
+            return
         # Set before the hold checks: activation-only gate modes only gate turning
         # an off light on, so occupancy may hold this turn-on outside it.
         self._attr_is_on = True
