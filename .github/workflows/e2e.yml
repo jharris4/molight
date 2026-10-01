@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Run the live acceptance suite
         run: npm run test:e2e:core
       - name: Make the retained run directory readable
@@ -35,7 +35,7 @@ jobs:
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-e2e-failure-core
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Run the independent restart scenarios
         run: npm run test:e2e:restarts
       - name: Make the retained run directory readable
@@ -57,7 +57,7 @@ jobs:
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-e2e-failure-restarts
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
@@ -75,7 +75,7 @@ jobs:
       matrix:
         shard: [a, b, c]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Run behaviour scenario shard ${{ matrix.shard }}
         run: npm run test:e2e:scenarios-${{ matrix.shard }}
       - name: Make the retained run directory readable
@@ -83,7 +83,7 @@ jobs:
         run: sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" || true
       - name: Upload failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-e2e-failure-scenarios-${{ matrix.shard }}
           path: ${{ env.MOLIGHT_E2E_RUN_ROOT }}
@@ -97,8 +97,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -112,7 +112,7 @@ jobs:
           sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
       - name: Upload browser failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-browser-e2e-failure
           path: |
@@ -153,10 +153,10 @@ jobs:
             image: ghcr.io/home-assistant/home-assistant:stable
             experimental: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.ref }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: matrix.suite == 'browser'
         with:
           node-version: 22
@@ -174,7 +174,7 @@ jobs:
           sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
       - name: Upload failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-e2e-failure-${{ matrix.ref || 'dispatch' }}-${{ matrix.ha.slug }}-${{ matrix.suite }}
           path: |

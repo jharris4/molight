@@ -16,7 +16,7 @@ jobs:
     name: Release guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Check the tag is on main, and the tag, manifest and changelog agree
@@ -65,8 +65,8 @@ jobs:
             slug: floor
             image: floor
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         if: matrix.suite == 'browser'
         with:
           node-version: 22
@@ -85,7 +85,7 @@ jobs:
           sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
       - name: Upload failure artifacts
         if: failure() || cancelled()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: molight-e2e-failure-${{ matrix.ha.slug }}-${{ matrix.suite }}
           path: |
@@ -102,7 +102,7 @@ jobs:
     needs: [guard, ci, validate, suites]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Put the release notes in the job summary
         run: |
           version="${GITHUB_REF_NAME#v}"
