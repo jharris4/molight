@@ -571,6 +571,52 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("maintained", [True, False], ids=["maintained", "timed"])
+@pytest.mark.parametrize("standby", [True, False], ids=["standby", "no_standby"])
+async def test_raised_period_cut_short_by_brightness_resumes_when_dark(
+    hass: HomeAssistant, freezer, maintained: bool, standby: bool
+) -> None:
+    """Going dark resumes a recent raised period, with or without standby."""
+    maintain = "binary_sensor.porch_maintain"
+    illuminance = "binary_sensor.porch_bright"
+    hass.states.async_set(maintain, "on" if maintained else "off")
+    hass.states.async_set(illuminance, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            inside={
+                CONF_STANDBY_BRIGHTNESS: 20 if standby else None,
+                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            }
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+    await _tick(hass, freezer, 2)
+
+    await _set(hass, illuminance, "off")
+
+    assert _attrs(hass)["brightness"] == BOOST
+    if maintained:
+        assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+        return
+    # The rest of the 30 s period runs out, and ends where the profile rests.
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 27)
+    if standby:
+        _assert_standby(hass)
+    else:
+        assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("warn", [False, True], ids=["plain", "warning"])
 async def test_timeout_while_bright_in_control_mode_ends_in_off(
     hass: HomeAssistant, freezer, warn: bool

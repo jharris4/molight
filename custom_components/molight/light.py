@@ -73,7 +73,8 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
   instead of turning off while the inside settings are active:
   - An off light comes on at standby when the inside settings take over, at
     startup, or when illuminance in control mode turns dark (control mode
-    keeps standby off while bright; gate mode never touches it).
+    keeps standby off while bright; gate mode never touches it). A raised
+    on-period that brightness cut short is resumed first, as without standby.
   - Occupancy and the door raise it to the auto-on level like any turn-on
     (the maintain entity only holds a raised light); when the timer expires,
     the effect/warn stages run and the last step drops to standby, not off.
@@ -2794,23 +2795,25 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = occ_active
                 self.hass.async_create_task(self._auto_lights_on())
                 self.async_write_ha_state()
+            elif (
+                self._bright_forced_off
+                and (countdown := self._compute_illuminance_countdown()) > 0
+            ):
+                # Resumed ahead of standby: its timer ends there anyway.
+                self._last_on_illuminance = datetime.now(UTC)
+                self.hass.async_create_task(self._auto_lights_on())
+                if self._maintain_active():
+                    # Recent history justified the turn-on; the maintain
+                    # entity now holds the re-lit light.
+                    self._machine_state = STATE_OCCUPIED
+                    self._cancel_timer()
+                else:
+                    self._machine_state = STATE_COUNTDOWN
+                    self._start_timer(countdown)
+                self.async_write_ha_state()
             elif self._can_rest_at_standby():
                 # Control mode kept standby off while bright.
                 self._enter_standby(self._auto_on_transition, selection=True)
-            elif self._bright_forced_off:
-                countdown = self._compute_illuminance_countdown()
-                if countdown > 0:
-                    self._last_on_illuminance = datetime.now(UTC)
-                    self.hass.async_create_task(self._auto_lights_on())
-                    if self._maintain_active():
-                        # Recent history justified the turn-on; the maintain
-                        # entity now holds the re-lit light.
-                        self._machine_state = STATE_OCCUPIED
-                        self._cancel_timer()
-                    else:
-                        self._machine_state = STATE_COUNTDOWN
-                        self._start_timer(countdown)
-                    self.async_write_ha_state()
 
     def _compute_occupancy_countdown(self) -> int:
         """Seconds to wait after occupancy clears before turning lights off.
