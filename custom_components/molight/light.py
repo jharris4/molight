@@ -371,7 +371,7 @@ from .helpers import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Coroutine
+    from collections.abc import Callable, Coroutine
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, EventStateChangedData, State
@@ -523,14 +523,14 @@ def _color_toward(
     new: tuple[ColorMode, tuple],
     target: tuple[ColorMode, tuple],
 ) -> bool:
-    """Whether a color moved from old toward target: a fade step, not a recolor."""
+    """Whether a color moved from old toward target: a fade step, not a recolor.
+
+    Members blend along the hue arc, or straight through RGB or CIE xy.
+    """
     if old[0] is new[0] is target[0] is ColorMode.COLOR_TEMP:
         return _toward(old[1], new[1], target[1])
-    (old_h, old_s), (new_h, new_s), (target_h, target_s) = (
-        _as_hs(old),
-        _as_hs(new),
-        _as_hs(target),
-    )
+    old_hs, new_hs, target_hs = _as_hs(old), _as_hs(new), _as_hs(target)
+    (old_h, old_s), (new_h, new_s), (target_h, target_s) = old_hs, new_hs, target_hs
     # The hue is on the short arc from old to target, the saturation between.
     on_arc = (
         abs(
@@ -540,7 +540,60 @@ def _color_toward(
         )
         < HUE_ARC_EPSILON
     )
-    return on_arc and (new_s - old_s) * (target_s - new_s) >= 0
+    if on_arc and (new_s - old_s) * (target_s - new_s) >= 0:
+        return True
+    return any(
+        _on_blend_line(old_hs, new_hs, target_hs, to_point, to_hs)
+        for to_point, to_hs in _BLEND_SPACES
+    )
+
+
+def _rgb_point(hue: float, saturation: float) -> tuple[float, float]:
+    """Return a color's red and green shares, the same at any brightness."""
+    red, green, blue = color_util.color_hs_to_RGB(hue, saturation)
+    total = red + green + blue
+    return (red / total, green / total)
+
+
+def _rgb_point_hs(red: float, green: float) -> tuple[float, float]:
+    return color_util.color_RGB_to_hs(red, green, 1 - red - green)
+
+
+# Where a color sits in each space a member may blend straight through, and
+# back: a blend between far-apart hues passes through paler colors there.
+_BLEND_SPACES = (
+    (_rgb_point, _rgb_point_hs),
+    (color_util.color_hs_to_xy, color_util.color_xy_to_hs),
+)
+
+
+def _on_blend_line(
+    old: tuple[float, float],
+    new: tuple[float, float],
+    target: tuple[float, float],
+    to_point: Callable[[float, float], tuple[float, float]],
+    to_hs: Callable[[float, float], tuple[float, float]],
+) -> bool:
+    """Whether new is on the straight line from old to target, past old."""
+    (old_x, old_y), (new_x, new_y), (target_x, target_y) = (
+        to_point(*old),
+        to_point(*new),
+        to_point(*target),
+    )
+    line_x, line_y = target_x - old_x, target_y - old_y
+    length = line_x**2 + line_y**2
+    if not length:
+        return False
+    along = ((new_x - old_x) * line_x + (new_y - old_y) * line_y) / length
+    if along <= 0:
+        return False  # moved away from the target
+    along = min(along, 1.0)
+    nearest_x, nearest_y = old_x + along * line_x, old_y + along * line_y
+    aside = (new_x - nearest_x) ** 2 + (new_y - nearest_y) ** 2
+    if aside >= along**2 * length:
+        return False  # moved more to the side than toward the target
+    nearest = to_hs(nearest_x, nearest_y)
+    return _colors_close((ColorMode.HS, new), (ColorMode.HS, nearest))
 
 
 @dataclass

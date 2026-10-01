@@ -18,15 +18,25 @@ from homeassistant.util import color as color_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_RGB_COLOR,
+    CONF_LIGHT_TIMEOUT,
+    CONF_OCCUPANCY_ENTITY,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_RGB_COLOR,
+    CONF_WARN_BRIGHTNESS,
+    CONF_WARN_RGB_COLOR,
+    CONF_WARN_TIMEOUT,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
+    STATE_STANDBY,
     STATE_WARN,
 )
-from custom_components.molight.light import _colors_close
+from custom_components.molight.light import _color_toward, _colors_close
 
-from .conftest import make_light_entry, settle
+from .conftest import make_light_entry, make_scheduled_light_entry, settle
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -1345,3 +1355,368 @@ async def test_late_reply_outside_color_tolerance_is_physical(
         assert tuple(_attrs(hass)["hs_color"]) == tuple(reply["hs_color"])
     else:
         assert _attrs(hass)["color_temp_kelvin"] == reply["color_temp_kelvin"]
+
+
+def _rgb_blend(start: tuple, goal: tuple, fraction: float) -> tuple:
+    """A straight line through RGB, reported in 8-bit channels."""
+    channels = zip(
+        color_util.color_hs_to_RGB(*start),
+        color_util.color_hs_to_RGB(*goal),
+        strict=True,
+    )
+    return color_util.color_RGB_to_hs(
+        *(round(a + (b - a) * fraction) for a, b in channels)
+    )
+
+
+def _xy_blend(start: tuple, goal: tuple, fraction: float) -> tuple:
+    """A straight line through CIE xy."""
+    points = zip(
+        color_util.color_hs_to_xy(*start), color_util.color_hs_to_xy(*goal), strict=True
+    )
+    return color_util.color_xy_to_hs(*(a + (b - a) * fraction for a, b in points))
+
+
+def _hue_blend(start: tuple, goal: tuple, fraction: float) -> tuple:
+    """The short way round the hue wheel, the saturation in step."""
+    turn = (goal[0] - start[0] + 180) % 360 - 180
+    return (
+        (start[0] + turn * fraction) % 360,
+        start[1] + (goal[1] - start[1]) * fraction,
+    )
+
+
+BLENDS = {"rgb": _rgb_blend, "xy": _xy_blend, "hue": _hue_blend}
+WARM_WHITE = color_util.color_RGB_to_hs(*color_util.color_temperature_to_rgb(2700))
+RED, ORANGE, YELLOW, GREEN = (0, 100), (30, 100), (60, 100), (120, 100)
+CYAN, BLUE, PURPLE = (180, 100), (240, 100), (280, 100)
+
+
+@pytest.mark.parametrize("blend", BLENDS)
+@pytest.mark.parametrize(
+    ("start", "goal"),
+    [
+        (WARM_WHITE, BLUE),
+        (WARM_WHITE, RED),
+        (RED, CYAN),
+        (BLUE, YELLOW),
+        (BLUE, ORANGE),
+        (PURPLE, GREEN),
+        (ORANGE, PURPLE),
+        (RED, ORANGE),
+        (RED, GREEN),
+        (RED, BLUE),
+        ((0, 80), (30, 80)),
+        ((0, 80), (60, 80)),
+        ((0, 80), (120, 80)),
+        ((0, 80), (240, 80)),
+    ],
+)
+def test_fade_step_counts_however_the_member_blends(
+    blend: str, start: tuple, goal: tuple
+) -> None:
+    """A member cutting across the wheel passes through paler colors; each
+    step is progress, judged from the start and from the step before."""
+    steps = [BLENDS[blend](start, goal, fraction) for fraction in (0.25, 0.5, 0.75)]
+
+    for before, step in zip([start, *steps], steps, strict=False):
+        assert _color_toward(_hs(*start), _hs(*step), _hs(*goal))
+        assert _color_toward(_hs(*before), _hs(*step), _hs(*goal))
+
+
+def test_fade_step_from_a_color_temperature_counts() -> None:
+    """A member leaving its color temperature mode reports the fade in hs."""
+    for blend in BLENDS.values():
+        step = blend(WARM_WHITE, BLUE, 0.5)
+        assert _color_toward(_kelvin(2700), _hs(*step), _hs(*BLUE))
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "target"),
+    [
+        ((100, 80), (95, 80), (240, 80)),  # backs away from the target
+        ((100, 80), (10, 80), (240, 80)),  # an unrelated hue
+        ((240, 80), (240, 10), (240, 80)),  # no fade to be a step of
+        (RED, (300, 50), CYAN),  # beside every way from red to cyan
+        (RED, (300, 30), BLUE),  # paler than any blend through magenta
+        (RED, (80, 100), (40, 100)),  # past the target
+        (_rgb_blend(BLUE, YELLOW, 0.5), (240, 50), YELLOW),  # back toward blue
+    ],
+)
+def test_color_off_the_fade_is_not_a_fade_step(
+    old: tuple, new: tuple, target: tuple
+) -> None:
+    """A color away from the target, or beside the way there, is a recolor."""
+    assert not _color_toward(_hs(*old), _hs(*new), _hs(*target))
+
+
+class _FadingMember:
+    """A member that reports each fade in steps, blending colors its own way."""
+
+    def __init__(self, hass: HomeAssistant, blend: str) -> None:
+        self._hass = hass
+        self._blend = BLENDS[blend]
+        self._commands: list[Event] = []
+        self._brightness = 255
+        self._hs: tuple | None = None
+        hass.bus.async_listen(EVENT_CALL_SERVICE, self._record)
+
+    @callback
+    def _record(self, event: Event) -> None:
+        targets = event.data.get("service_data", {}).get("entity_id", [])
+        if event.data.get("domain") == "light" and MEMBER in targets:
+            self._commands.append(event)
+
+    async def answer(self) -> None:
+        """Report the fade of every command received since the last answer."""
+        commands, self._commands = self._commands, []
+        for command in commands:
+            if command.data["service"] == "turn_off":
+                await _write(self._hass, "off", command.context, **HS_TEMP_CAPS)
+                continue
+            data = command.data["service_data"]
+            was_on = self._hass.states.get(MEMBER).state == "on"
+            start_hs, start_brightness = self._hs, self._brightness
+            goal_hs = self._commanded_hs(data) or start_hs
+            goal_brightness = data.get("brightness", start_brightness)
+            for fraction in (0.25, 0.5, 0.75, 1) if was_on else (1,):
+                self._hs = goal_hs
+                if fraction < 1 and start_hs and goal_hs != start_hs:
+                    self._hs = self._blend(start_hs, goal_hs, fraction)
+                self._brightness = round(
+                    start_brightness + (goal_brightness - start_brightness) * fraction
+                )
+                color = {"color_mode": "hs", "hs_color": self._hs} if self._hs else {}
+                await _write(
+                    self._hass,
+                    "on",
+                    command.context,
+                    brightness=self._brightness,
+                    **color,
+                    **HS_TEMP_CAPS,
+                )
+
+    @staticmethod
+    def _commanded_hs(data: dict) -> tuple | None:
+        if "hs_color" in data:
+            return tuple(data["hs_color"])
+        if "rgb_color" in data:
+            return color_util.color_RGB_to_hs(*data["rgb_color"])
+        return None
+
+
+async def _tick(hass: HomeAssistant, freezer, seconds: float) -> None:
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
+async def _lit_red(hass: HomeAssistant, blend: str, **entry_kwargs) -> _FadingMember:
+    """A light turned on red at 200 whose member has reported it."""
+    entry = make_light_entry(
+        name="Test Light", lights=[MEMBER], timeout=60, **entry_kwargs
+    )
+    await _setup_color(hass, entry)
+    member = _FadingMember(hass, blend)
+    await _virtual(hass, "turn_on", brightness=200, hs_color=list(RED))
+    await member.answer()
+    return member
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+@pytest.mark.parametrize("stage", [STATE_EFFECT, STATE_WARN])
+async def test_stage_color_fade_across_the_wheel_keeps_the_sequence(
+    hass: HomeAssistant, freezer, blend: str, stage: str
+) -> None:
+    """A stage fading from red to cyan is not cancelled by its own fade."""
+    stages = {"effect_timeout": 0, "warn_timeout": 0} | {
+        f"{stage}_timeout": 10,
+        f"{stage}_brightness": 80,
+        f"{stage}_rgb_color": [0, 255, 255],
+        f"{stage}_transition": 4,
+    }
+    member = await _lit_red(hass, blend, **stages)
+
+    await _tick(hass, freezer, 61)
+    await member.answer()
+
+    assert _attrs(hass)["molight_state"] == stage
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == CYAN
+    await _tick(hass, freezer, 11)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+async def test_far_apart_effect_and_warn_colors_still_turn_the_light_off(
+    hass: HomeAssistant, freezer, blend: str
+) -> None:
+    """Blue then yellow: neither stage's fade restarts the timeout, which
+    would otherwise repeat on every sequence and keep the light on."""
+    member = await _lit_red(
+        hass,
+        blend,
+        effect_timeout=5,
+        effect_brightness=80,
+        effect_rgb_color=[0, 0, 255],
+        effect_transition=2,
+        warn_timeout=5,
+        warn_brightness=50,
+        warn_rgb_color=[255, 255, 0],
+        warn_transition=2,
+    )
+
+    seen = set()
+    for _ in range(75):
+        await _tick(hass, freezer, 1)
+        await member.answer()
+        seen.add(_attrs(hass)["molight_state"])
+
+    assert {STATE_EFFECT, STATE_WARN} <= seen
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+async def test_warn_undoing_the_effect_color_keeps_the_sequence(
+    hass: HomeAssistant, freezer, blend: str
+) -> None:
+    """A warn stage with no color fades the effect's cyan back to red."""
+    member = await _lit_red(
+        hass,
+        blend,
+        effect_timeout=5,
+        effect_brightness=80,
+        effect_rgb_color=[0, 255, 255],
+        warn_timeout=10,
+        warn_brightness=50,
+    )
+    await _tick(hass, freezer, 61)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_EFFECT
+
+    await _tick(hass, freezer, 6)
+    await member.answer()
+
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == RED
+    await _tick(hass, freezer, 11)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+async def test_restoring_the_pre_warning_color_is_not_a_recolor(
+    hass: HomeAssistant, freezer, blend: str
+) -> None:
+    """A re-trigger fades the warning's cyan back to red; that is no recolor."""
+    member = await _lit_red(
+        hass, blend, warn_timeout=10, warn_brightness=50, warn_rgb_color=[0, 255, 255]
+    )
+    await _tick(hass, freezer, 61)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+
+    await _virtual(hass, "turn_on")
+    await member.answer()
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["last_brightness_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == RED
+    assert _attrs(hass)["brightness"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+async def test_recolor_beside_a_stage_fade_still_cancels_the_warning(
+    hass: HomeAssistant, freezer, blend: str
+) -> None:
+    """Partway through the fade to cyan, a color off its way is still human."""
+    await _lit_red(
+        hass,
+        blend,
+        warn_timeout=10,
+        warn_brightness=80,
+        warn_rgb_color=[0, 255, 255],
+        warn_transition=4,
+    )
+    contexts = _member_contexts(hass)
+    await _tick(hass, freezer, 61)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    step = {"color_mode": "hs", "hs_color": BLENDS[blend](RED, CYAN, 0.25)}
+    await _write(hass, "on", contexts[-1], brightness=201, **step, **HS_TEMP_CAPS)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+
+    await _write(
+        hass,
+        "on",
+        contexts[-1],
+        brightness=201,
+        color_mode="hs",
+        hs_color=(300, 50),
+        **HS_TEMP_CAPS,
+    )
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["last_color_change_physical"] is not None
+    assert tuple(_attrs(hass)["hs_color"]) == (300, 50)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("blend", BLENDS)
+async def test_standby_and_auto_on_color_fades_are_not_recolors(
+    hass: HomeAssistant, freezer, blend: str
+) -> None:
+    """Standby red, raised to blue, warned in green, back to red at standby:
+    each fade leaves the on-period with whoever had it."""
+    schedule, occupancy = "binary_sensor.settings_schedule", "binary_sensor.motion"
+    entry = make_scheduled_light_entry(
+        name="Test Light",
+        lights=[MEMBER],
+        inside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_AUTO_ON_BRIGHTNESS: 100,
+            CONF_AUTO_ON_RGB_COLOR: [51, 51, 255],
+            CONF_STANDBY_BRIGHTNESS: 20,
+            CONF_STANDBY_RGB_COLOR: [255, 51, 51],
+            CONF_WARN_TIMEOUT: 10,
+            CONF_WARN_BRIGHTNESS: 50,
+            CONF_WARN_RGB_COLOR: [51, 255, 51],
+        },
+    )
+    hass.states.async_set(schedule, "on")
+    hass.states.async_set(occupancy, "off")
+    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    member = _FadingMember(hass, blend)
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
+
+    hass.states.async_set(occupancy, "off")
+    await settle(hass)
+    await _tick(hass, freezer, 31)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert tuple(_attrs(hass)["hs_color"]) == (120, 80)
+
+    await _tick(hass, freezer, 11)
+    await member.answer()
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    assert _attrs(hass)["last_color_change_physical"] is None
+    assert _attrs(hass)["brightness"] == 51
+    assert tuple(_attrs(hass)["hs_color"]) == (0, 80)

@@ -93,6 +93,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of the second replacing the first, and a second toggle turns the
   light off again. A select call that fails in any way, not only with a Home
   Assistant error, still turns the lights on without the selection.
+- A colour fade between far-apart colours (red to cyan, warm white to blue)
+  is no longer taken for a recolour at the wall when a real light reports its
+  colour partway through and blends through paler colours on the way. This
+  covers the effect and warn stages, standby, auto-on colours and the
+  restored pre-warning colour. A warning could cancel itself this way, and
+  far-apart effect and warn colours could keep the light on indefinitely.
 
 ## [1.8.0] - 2026-09-30
 
