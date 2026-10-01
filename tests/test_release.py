@@ -97,6 +97,7 @@ def _commit_and_push(repo: Path) -> None:
     _git(repo, "push", "origin", "main")
 
 
+@pytest.mark.real_clock
 def test_release_preview_and_write(release_repo: Path) -> None:
     """A synchronized main branch previews and applies a forward release."""
     before = _release_files(release_repo)

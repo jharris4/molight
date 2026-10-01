@@ -7614,6 +7614,31 @@ async def test_scheduled_light_inside_form_stores_standby(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("hour", "state"), [(12, "off"), (22, "on")], ids=["outside", "inside"]
+)
+async def test_scheduled_light_created_with_standby_starts_by_its_schedule(
+    hass: HomeAssistant, freezer, hour: int, state: str
+) -> None:
+    """A light created inside its schedule window comes straight on at standby."""
+    freezer.move_to(f"2026-01-14 {hour}:00:00-08:00")
+    result = await _reach_scheduled_light_inside(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 30,
+            SECTION_STANDBY: {CONF_STANDBY_BRIGHTNESS: 1},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    assert hass.states.get("binary_sensor.night_schedule").state == state
+    assert hass.states.get("light.porch").state == state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("standby", "error"),
     [
         ({CONF_STANDBY_COLOR_TEMP: 2222}, "standby_color_requires_brightness"),

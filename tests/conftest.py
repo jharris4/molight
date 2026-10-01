@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 import pytest
+from freezegun import freeze_time
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import callback
 from pytest_homeassistant_custom_component.common import (
@@ -316,6 +317,30 @@ def fail_on_error_log(request: pytest.FixtureRequest):
         pytest.fail(
             "logged errors:\n" + "\n".join(handler.format(r) for r in handler.records)
         )
+
+
+# A Wednesday noon in US/Pacific (the test timezone), away from every schedule
+# boundary and clock change the tests use.
+TEST_NOW = "2026-01-14 12:00:00-08:00"
+
+
+@pytest.fixture(autouse=True)
+def pinned_clock(request: pytest.FixtureRequest):
+    """Start every test at the same instant, whatever the wall clock says.
+
+    A schedule's windows are resolved against the current time, so a test
+    reading the real clock takes a different path by day and by night. A test
+    that asks for the freezer fixture moves the frozen clock on from here;
+    any other test gets a clock that keeps running from here.
+    """
+    if request.node.get_closest_marker("real_clock"):
+        yield
+    elif "freezer" in request.fixturenames:
+        request.getfixturevalue("freezer").move_to(TEST_NOW)
+        yield
+    else:
+        with freeze_time(TEST_NOW, tick=True):
+            yield
 
 
 @pytest.fixture(autouse=True)
