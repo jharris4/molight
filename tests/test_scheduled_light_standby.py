@@ -286,6 +286,55 @@ async def test_false_detection_drops_back_to_standby_quickly(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["gate_lifts", "restart"])
+async def test_false_detection_after_a_late_raise_drops_back_quickly(
+    hass: HomeAssistant, freezer, route: str
+) -> None:
+    """Occupancy that raises standby late still owns the raise it caused."""
+    illuminance = "binary_sensor.porch_bright"
+    entry = _porch(
+        inside={
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        }
+    )
+    if route == "gate_lifts":
+        hass.states.async_set(illuminance, "on")
+        await _setup_porch(hass, entry)
+        await _set(hass, OCCUPANCY, "on")
+        _assert_standby(hass)
+        await _set(hass, illuminance, "off")
+    else:
+        mock_restore_cache(
+            hass,
+            [
+                State(
+                    VIRTUAL,
+                    "on",
+                    {
+                        ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                        ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                        "molight_state": STATE_STANDBY,
+                    },
+                )
+            ],
+        )
+        hass.states.async_set(illuminance, "off")
+        hass.states.async_set(REAL, "on", {"brightness": STANDBY})
+        hass.states.async_set(SCHEDULE, "on")
+        hass.states.async_set(OCCUPANCY, "on")
+        await setup_entries(hass, entry)
+        await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["brightness"] == BOOST
+
+    await _set(hass, OCCUPANCY, "off", last_clear_false_detection=True)
+    await _tick(hass, freezer, 6)
+
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_manual_off_cancels_standby_until_the_next_boundary(
     hass: HomeAssistant, freezer
 ) -> None:

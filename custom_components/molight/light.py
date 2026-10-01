@@ -2602,7 +2602,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         the lights are already on (ACTIVE/COUNTDOWN/EFFECT/WARN) with
         occupancy active. Not a turn-on: attribution and the occupancy-lit
         flag are left untouched, so the user still owns a manual on-period.
-        A light resting at standby is brought up to the auto-on level.
+        A light resting at standby is brought up to the auto-on level, which
+        occupancy then owns like any raise from standby.
         """
         was_warning = self._in_warning()
         was_standby = self._machine_state == STATE_STANDBY
@@ -2611,6 +2612,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if was_warning:
             self._resume_lights()
         elif was_standby:
+            self._occupancy_lit_lights = self._occupancy_active()
             self.hass.async_create_task(self._auto_lights_on())
         self.async_write_ha_state()
 
