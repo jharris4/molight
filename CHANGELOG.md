@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has it raised shows standby rejoined at once, so a restart keeps it.
 - A keep-on entity that is also the illuminance sensor holds the light as it
   gets bright, instead of letting brightness turn it off first.
+- A manual off of a Virtual Scheduled Light ends at the next window when one
+  window starts as another ends, or at midnight for an all-day schedule, so
+  standby comes back as it does after any other boundary.
 
 ## [1.8.0] - 2026-09-30
 

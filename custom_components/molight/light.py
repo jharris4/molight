@@ -450,6 +450,16 @@ ECHO_KELVIN_TOLERANCE = 150
 HUE_ARC_EPSILON = 1e-3  # float drift when summing hue distances along an arc
 
 
+def _window_moved(old_state: State, new_state: State) -> bool:
+    """Return True when a schedule that stays on moved its window marker."""
+    marker = new_state.attributes.get("current_window_start")
+    return (
+        new_state.state == "on"
+        and bool(marker)
+        and marker != old_state.attributes.get("current_window_start")
+    )
+
+
 def _state_color(state: State) -> tuple[ColorMode, tuple] | None:
     """Return the color a real light's state reports, in canonical terms.
 
@@ -1180,17 +1190,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._start_timer()
 
         if not lit:
-            dark = not self._is_illuminance_bright()
-            if dark and self._occupancy_active():
-                self._on_occupancy_change(occupied=True)
-            elif dark and self._door_holds():
-                # Not _door_open: in plain open mode the door is momentary,
-                # and a profile switch is not an opening.
-                self._on_door_change(True)
-            elif self._can_rest_at_standby():
-                self._enter_standby(self._auto_on_transition, selection=True)
-            else:
-                self.async_write_ha_state()
+            self._start_settings_for_off_light()
             return
 
         if self._held and not old_held:
@@ -1223,6 +1223,34 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._machine_state = STATE_COUNTDOWN
             self._start_timer()
         self.async_write_ha_state()
+
+    def _start_settings_for_off_light(self) -> None:
+        """Apply a settings boundary to a light that is off."""
+        dark = not self._is_illuminance_bright()
+        if dark and self._occupancy_active():
+            self._on_occupancy_change(occupied=True)
+        elif dark and self._door_holds():
+            # Not _door_open: in plain open mode the door is momentary,
+            # and a profile switch is not an opening.
+            self._on_door_change(True)
+        elif self._can_rest_at_standby():
+            self._enter_standby(self._auto_on_transition, selection=True)
+        else:
+            self.async_write_ha_state()
+
+    def _on_new_settings_window(self) -> None:
+        """Start a window that touches the last one, as the schedule stays on.
+
+        It is a boundary like any other, without leaving the inside settings.
+        """
+        if not self._inside_schedule:
+            return
+        # A manual off only cancels standby until the next boundary.
+        self._standby_suppressed = False
+        if self._is_lit():
+            self.async_write_ha_state()
+        else:
+            self._start_settings_for_off_light()
 
     def _seed_state(self) -> None:
         """Initialise the machine state from current entity states after startup."""
@@ -1583,6 +1611,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             # exception: the schedule stays on while a new window starts.
             if self._is_new_follow_window(entity_id, old_state, new_state):
                 self._on_schedule_change(new_state)
+            if entity_id == self._settings_schedule_entity and _window_moved(
+                old_state, new_state
+            ):
+                self._on_new_settings_window()
             return
         # A recovery from unavailable/unknown (or a first sighting) that
         # matches the last known value is a replay, not an observed edge.
@@ -1665,15 +1697,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         self, entity_id: str, old_state: State, new_state: State
     ) -> bool:
         """Return True when a follow schedule that stays on moved its marker."""
-        if (
-            entity_id != self._schedule_entity
-            or self._schedule_mode != SCHEDULE_MODE_FOLLOW
-            or new_state.state != "on"
-        ):
-            return False
-        marker = new_state.attributes.get("current_window_start")
-        return bool(marker) and marker != old_state.attributes.get(
-            "current_window_start"
+        return (
+            entity_id == self._schedule_entity
+            and self._schedule_mode == SCHEDULE_MODE_FOLLOW
+            and _window_moved(old_state, new_state)
         )
 
     def _on_light_state_change(self, state: str, brightness: int | None = None) -> None:

@@ -469,6 +469,103 @@ async def test_manual_off_cancels_standby_until_the_next_boundary(
     _assert_standby(hass)
 
 
+def _windows_schedule(name: str, *windows: tuple[str, str]) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: name,
+            CONF_TIME_WINDOWS: [
+                {"start": {"time": start}, "end": {"time": end}}
+                for start, end in windows
+            ],
+        },
+    )
+
+
+async def _manual_off_at_standby(hass: HomeAssistant, *schedules) -> str:
+    """Rest the porch at standby under real schedules, turn it off by hand,
+    and return the settings schedule's window marker."""
+    await setup_entries(hass, *schedules)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    _record_light_contexts(hass)
+    await setup_entries(hass, _porch())
+    await settle(hass)
+    await _echo_standby(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    return hass.states.get(SCHEDULE).attributes["current_window_start"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("windows", ["touching", "all_day"])
+@pytest.mark.parametrize("raised", [False, True], ids=["off", "raised"])
+async def test_a_window_that_touches_the_last_brings_standby_back(
+    hass: HomeAssistant, freezer, windows: str, raised: bool
+) -> None:
+    """A window starting as the last one ends is a boundary, though the
+    schedule stays on, so a manual off cancels standby only until then."""
+    freezer.move_to("2026-01-14 12:00:00-08:00")
+    marker = await _manual_off_at_standby(
+        hass,
+        _windows_schedule("Settings Schedule", ("11:00", "13:00"), ("13:00", "14:00"))
+        if windows == "touching"
+        else _windows_schedule("Settings Schedule", ("00:00", "00:00")),
+    )
+    if raised:
+        await _set(hass, OCCUPANCY, "on")
+        context = hass.data["standby_test_contexts"][-1]
+        hass.states.async_set(REAL, "on", {"brightness": BOOST}, context=context)
+        await settle(hass)
+
+    await _tick(hass, freezer, 3602 if windows == "touching" else 43202)
+    schedule = hass.states.get(SCHEDULE)
+    assert schedule.state == "on"
+    assert schedule.attributes["current_window_start"] != marker
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    if raised:
+        assert _attrs(hass)["brightness"] == BOOST
+        await _set(hass, OCCUPANCY, "off")
+        await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
+async def test_touching_windows_combined_into_one_keep_a_manual_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A Combined Schedule joins touching windows into one, so a manual off
+    keeps standby off across the join, as follow mode stays off."""
+    freezer.move_to("2026-01-14 12:00:00-08:00")
+    marker = await _manual_off_at_standby(
+        hass,
+        _windows_schedule("Late Morning", ("11:00", "13:00")),
+        _windows_schedule("Early Afternoon", ("13:00", "14:00")),
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+                CONF_NAME: "Settings Schedule",
+                CONF_SCHEDULE_INPUTS: [
+                    "binary_sensor.late_morning",
+                    "binary_sensor.early_afternoon",
+                ],
+            },
+        ),
+    )
+
+    await _tick(hass, freezer, 3602)
+    schedule = hass.states.get(SCHEDULE)
+    assert schedule.state == "on"
+    assert schedule.attributes["current_window_start"] == marker
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+
 @pytest.mark.asyncio
 async def test_manual_off_while_bright_cancels_the_raise_it_interrupted(
     hass: HomeAssistant,
