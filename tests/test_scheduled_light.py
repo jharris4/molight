@@ -1509,8 +1509,12 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     if end_action == SCHEDULE_END_ACTION_TURN_OFF:
         assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
         return
-    # The outside profile has no presence sensor, so its own timeout runs.
-    assert (state.state, state.attributes["molight_state"]) == ("on", STATE_COUNTDOWN)
+    # The outside profile has no presence sensor, so its own timeout runs:
+    # recalculated as a fresh one by switch, started for the lost hold by keep.
+    expected = (
+        STATE_ACTIVE if end_action == SCHEDULE_END_ACTION_SWITCH else STATE_COUNTDOWN
+    )
+    assert (state.state, state.attributes["molight_state"]) == ("on", expected)
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)

@@ -1132,7 +1132,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._held = self._compute_held()
         # A turn-on still waiting for its selection is judged as on: the off
         # below overtakes it, and the new profile's rules take it over.
-        lit = self._attr_is_on or self._machine_state != STATE_IDLE
+        lit = self._is_lit()
 
         if (
             leaving_inside
@@ -1159,7 +1159,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if (
             leaving_inside
             and self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH
-            and self._attr_is_on
+            and lit
         ):
             # The outside profile is now fully active. Recalculate an on
             # light's state and deadline from its sensors/history instead of
@@ -1976,6 +1976,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             return expectation
         return replace(expectation, color=(ColorMode.COLOR_TEMP, kelvin))
 
+    def _is_lit(self) -> bool:
+        """On, or about to be: a turn-on may still be waiting for its selection."""
+        return self._attr_is_on or self._machine_state != STATE_IDLE
+
     def _member_is_lit(self, entity_id: str) -> bool | None:
         """Whether a real light is on (brightness 0 is off), None if unknown."""
         state = self.hass.states.get(entity_id)
@@ -2242,8 +2246,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         latest-occupied timestamp, with a fresh full timeout when no usable
         history exists. With no such sensor there is likewise no trustworthy
         departure anchor, so the new settings receive a fresh full timeout.
+        A turn-on still waiting for its selection counts as on.
         """
-        if not self._attr_is_on:
+        if not self._is_lit():
             return
 
         was_warning = self._in_warning()
@@ -2351,7 +2356,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             ):
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle()
-            elif self._schedule_mode == SCHEDULE_MODE_GATE_SWITCH and self._attr_is_on:
+            elif self._schedule_mode == SCHEDULE_MODE_GATE_SWITCH and self._is_lit():
                 self._switch_running_state()
         else:
             if self._machine_state != STATE_IDLE:

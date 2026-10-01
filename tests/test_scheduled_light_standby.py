@@ -717,6 +717,42 @@ async def test_schedule_end_switch_recalculates_standby_from_history(
 
 
 @pytest.mark.asyncio
+async def test_schedule_end_switch_recalculates_a_standby_still_waiting(
+    hass: HomeAssistant,
+) -> None:
+    """A standby waiting for its selection is recalculated like a lit one."""
+    select = _ParkedSelect(hass, park=1)
+    outside_occupancy = "binary_sensor.yard_occupancy"
+    hass.states.async_set(
+        outside_occupancy,
+        "off",
+        {"latest_occupied_time": (datetime.now(UTC) - timedelta(hours=4)).isoformat()},
+    )
+    calls = await _setup_porch(
+        hass,
+        _porch(
+            end_action=SCHEDULE_END_ACTION_SWITCH,
+            inside=_SCENE,
+            outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: outside_occupancy},
+        ),
+        schedule="off",
+    )
+    hass.states.async_set(SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+
+    hass.states.async_set(SCHEDULE, "off")
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    # The outside history is long past its timeout: off, and never lit.
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    assert _light_calls(calls, "turn_on") == []
+
+
+@pytest.mark.asyncio
 async def test_held_schedule_end_off_waits_for_the_hold(hass: HomeAssistant) -> None:
     """A held Turn off leaves standby lit and applies the off on release."""
     await _setup_porch(hass, _porch())

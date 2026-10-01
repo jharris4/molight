@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -12,7 +12,11 @@ from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.molight.const import DOMAIN, SCHEDULE_MODE_FOLLOW
+from custom_components.molight.const import (
+    DOMAIN,
+    SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE_SWITCH,
+)
 from tests.conftest import make_light_entry, settle, setup_entries
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
@@ -664,6 +668,46 @@ async def test_occupancy_on_during_a_waiting_manual_on_defers_to_it(
     await settle(hass)
     assert hass.states.get("light.selection_light").state == "on"
     assert calls == [("turn_on", 200)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_switch_window_end_recalculates_a_waiting_turn_on(
+    hass: HomeAssistant,
+) -> None:
+    """A gate_switch window ending judges a waiting turn-on like an on light."""
+    select = _SlowSelect(hass)
+    visit = (datetime.now(UTC) - timedelta(hours=4)).isoformat()
+    hass.states.async_set("binary_sensor.occ", "off", {"latest_occupied_time": visit})
+    hass.states.async_set("binary_sensor.window", "on")
+    hass.states.async_set("binary_sensor.door", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            occupancy="binary_sensor.occ",
+            door="binary_sensor.door",
+            schedule="binary_sensor.window",
+            schedule_mode=SCHEDULE_MODE_GATE_SWITCH,
+        ),
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.door", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["molight_state"] == "active"
+
+    hass.states.async_set("binary_sensor.window", "off")
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    select.release.set()
+    await settle(hass)
+
+    # The last visit is long past its timeout: off, and never lit.
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
 
 
 @pytest.mark.asyncio

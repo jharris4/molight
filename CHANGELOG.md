@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   once they leave, and turn off when the schedule ends. A manual off turns
   standby off until the next schedule boundary.
 
+### Fixed
+
+- A *Switch state* schedule end also recalculates a turn-on still waiting on
+  a slow select, instead of letting it light the room afterwards.
+
 ## [1.8.0] - 2026-09-30
 
 This release adds the **Virtual Combined Schedule Sensor**, so one light can
