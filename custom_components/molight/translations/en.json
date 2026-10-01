@@ -837,7 +837,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. Leave the brightness blank for no standby.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1049,7 +1049,7 @@
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "confirmation_required": "Confirm the conversion to continue.",
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
-      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on."
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby."
     },
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -1345,7 +1345,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. Leave the brightness blank for no standby.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1775,7 +1775,7 @@
       "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
-      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on."
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby."
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
