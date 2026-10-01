@@ -76,6 +76,13 @@ class AutoOffSwitch(SwitchEntity, RestoreEntity):
         self._attr_is_on = last is None or last.state != STATE_OFF
         self._publish()
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Release the hold when the switch is disabled; a reload keeps it."""
+        await super().async_will_remove_from_hass()
+        if self.registry_entry is not None and self.registry_entry.disabled:
+            self._attr_is_on = True
+            self._publish()
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Re-enable the light's automatic turn-offs."""
         self._attr_is_on = True

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
@@ -34,7 +38,12 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     PLATFORMS_BY_ENTITY_TYPE,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    make_light_entry,
+    make_scheduled_light_entry,
+    settle,
+    setup_entries,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -207,12 +216,23 @@ async def test_auto_off_flag_is_kept_while_unloaded_and_dropped_on_removal(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+@pytest.mark.parametrize("reload", [False, True])
 async def test_disabling_the_auto_off_switch_while_off_releases_the_hold(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer, scheduled: bool, reload: bool
 ) -> None:
-    """A disabled switch is not added and could never turn back on, so the
-    reload its disabling triggers seeds the flag as a restart would."""
-    entry = make_light_entry(name="Kept Light")
+    """A disabled switch is removed and could never turn back on, so its
+    removal releases the hold, and a later reload or restart keeps it released."""
+    entry = (
+        make_scheduled_light_entry(
+            name="Kept Light",
+            inside={CONF_LIGHT_TIMEOUT: 10},
+            outside={CONF_LIGHT_TIMEOUT: 10},
+        )
+        if scheduled
+        else make_light_entry(name="Kept Light", timeout=10)
+    )
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
     hass.states.async_set("light.real_1", "on")
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -224,13 +244,18 @@ async def test_disabling_the_auto_off_switch_while_off_releases_the_hold(
     er.async_get(hass).async_update_entity(
         "switch.kept_light_auto_off", disabled_by=er.RegistryEntryDisabler.USER
     )
-    assert await hass.config_entries.async_reload(entry.entry_id)
     await settle(hass)
+    if reload:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await settle(hass)
 
     assert hass.states.get("switch.kept_light_auto_off") is None
     assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is True
     assert hass.states.get("light.kept_light").attributes["auto_off_held"] is False
-    assert hass.data[DATA_AUTO_OFF_KEPT] == {}
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == "off"
 
 
 @pytest.mark.asyncio
