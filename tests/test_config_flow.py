@@ -7568,7 +7568,7 @@ async def _reach_scheduled_light_inside(hass: HomeAssistant) -> dict:
         result["flow_id"],
         {
             CONF_NAME: "Porch",
-            CONF_LIGHTS: ["light.porch"],
+            CONF_LIGHTS: ["light.porch_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             SECTION_ADVANCED: {},
         },
@@ -7649,7 +7649,9 @@ async def test_scheduled_light_standby_needs_a_dimmable_light(
     hass: HomeAssistant,
 ) -> None:
     """A standby level is refused when no member can dim."""
-    hass.states.async_set("light.porch", "off", {"supported_color_modes": ["onoff"]})
+    hass.states.async_set(
+        "light.porch_real", "off", {"supported_color_modes": ["onoff"]}
+    )
     result = await _reach_scheduled_light_inside(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
