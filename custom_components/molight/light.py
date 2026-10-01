@@ -1343,7 +1343,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         A light that was resting at standby goes back there, re-sent so an
         edited standby level applies; any other lit light is adopted as usual
         and its timer ends at standby. An off light comes on at standby
-        unless occupancy already lights it at the auto-on level.
+        unless occupancy or a held-open door lights it at the auto-on level.
         """
         if not self._standby_applies():
             return False
@@ -1361,10 +1361,15 @@ class VirtualLight(LightEntity, RestoreEntity):
             else:
                 self._enter_standby()
             return True
-        if not self._can_rest_at_standby() or (
-            self._occupancy_active() and not self._is_illuminance_bright()
-        ):
+        if not self._can_rest_at_standby():
             return False
+        if not self._is_illuminance_bright():
+            if self._occupancy_active():
+                return False  # the normal seed raises it
+            if self._door_holds():
+                # No opening edge will come from a door that is already open.
+                self._on_door_change(True)
+                return True
         self._enter_standby(self._auto_on_transition, selection=True)
         return True
 

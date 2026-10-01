@@ -794,6 +794,48 @@ async def test_startup_inside_the_window_lights_standby(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("illuminance", "state", "level"),
+    [
+        (None, STATE_OCCUPIED, BOOST),
+        (ILLUMINANCE_MODE_GATE, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_CONTROL, STATE_IDLE, None),
+    ],
+    ids=["dark", "bright_gate", "bright_control"],
+)
+async def test_startup_with_the_door_already_open_raises_standby(
+    hass: HomeAssistant,
+    freezer,
+    illuminance: str | None,
+    state: str,
+    level: int | None,
+) -> None:
+    """A door open at startup sends no opening edge, so the seed raises the light."""
+    door = "binary_sensor.front_door"
+    lux = "binary_sensor.bright"
+    hass.states.async_set(door, "on")
+    hass.states.async_set(lux, "on")
+    inside = {CONF_DOOR_ENTITY: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    if illuminance:
+        inside |= {CONF_ILLUMINANCE_ENTITY: lux, CONF_ILLUMINANCE_MODE: illuminance}
+    calls = await _setup_porch(hass, _porch(inside=inside))
+
+    assert _attrs(hass)["molight_state"] == state
+    if level is None:
+        assert _light_calls(calls, "turn_on") == []
+        return
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+    if state != STATE_OCCUPIED:
+        return
+    # The open door holds the raised light; closing it starts the timeout.
+    await _tick(hass, freezer, 31)
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    await _set(hass, door, "off")
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_restart_with_presence_raises_a_standby_light(
     hass: HomeAssistant,
 ) -> None:
