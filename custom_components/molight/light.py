@@ -730,6 +730,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         # turn-on defers to a manual one still waiting instead.
         self._command_generation = 0
         self._manual_on_pending = 0
+        # Counts automatic turn-ons at the auto-on or standby level, so one
+        # that waited for its selection yields to the level chosen since.
+        self._auto_level_generation = 0
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -3079,6 +3082,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 color=self._standby_color,
                 apply_turn_on_selection=selection,
                 force_selection=force_selection,
+                auto_level=True,
             )
         )
         self.async_write_ha_state()
@@ -3161,6 +3165,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             color=self._auto_on_color,
             apply_turn_on_selection=True,
             force_selection=force_selection,
+            auto_level=True,
         )
 
     def _auto_lights_off(self) -> Coroutine[Any, Any, bool]:
@@ -3186,13 +3191,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         apply_turn_on_selection: bool = False,
         force_selection: bool = False,
         manual: bool = False,
+        auto_level: bool = False,
     ) -> bool:
         """Command the real lights; False when a newer command overtook it.
 
         Only an off or a newer manual turn-on overtakes a turn-on waiting for
         its selection: a stage the timer reaches meanwhile is simply replaced,
         and an automatic turn-on issued while a manual one waits is dropped,
-        as the user's command lights the room with the user's settings.
+        as the user's command lights the room with the user's settings. An
+        automatic turn-on at the auto-on or standby level (auto_level) also
+        overtakes an older automatic one still waiting, so the level chosen
+        last is the one the lights end at.
         """
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
@@ -3204,6 +3213,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         if not on or manual:
             self._command_generation += 1
         generation = self._command_generation
+        if on and auto_level:
+            self._auto_level_generation += 1
+        auto_level_generation = self._auto_level_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
             if not manual and self._manual_on_pending:
                 self._occupancy_lit_lights = False  # the user's on-period
@@ -3213,9 +3225,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 await self._apply_turn_on_selection(context)
             finally:
                 self._manual_on_pending -= manual
-            if generation != self._command_generation:
-                # An off or a newer manual command landed while the select
-                # call was awaited; it stands.
+            if generation != self._command_generation or (
+                not manual and auto_level_generation != self._auto_level_generation
+            ):
+                # An off, a newer manual command or a newer automatic level
+                # landed while the select call was awaited; it stands.
                 return False
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:

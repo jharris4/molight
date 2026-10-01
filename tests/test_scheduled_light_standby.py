@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -864,3 +865,82 @@ async def test_member_loading_after_startup_gets_standby(hass: HomeAssistant) ->
     _assert_standby(hass)
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
     assert len(_light_calls(calls, "turn_on")) == sent + 1
+
+
+class _ParkedSelect:
+    """A select service whose chosen call blocks until released."""
+
+    def __init__(self, hass: HomeAssistant, *, park: int) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.calls = 0
+        self._park = park
+        hass.states.async_set("select.scene", "Day", {"options": ["Day", "Night"]})
+        hass.services.async_register("select", "select_option", self._select)
+
+    async def _select(self, _call: ServiceCall) -> None:
+        self.calls += 1
+        if self.calls == self._park:
+            self.started.set()
+            await self.release.wait()
+
+
+_SCENE = {
+    CONF_TURN_ON_SELECT_ENTITY: "select.scene",
+    CONF_TURN_ON_SELECT_OPTION: "Night",
+}
+
+
+async def _drain(hass: HomeAssistant) -> None:
+    """Let dispatches run; settle() would wait for the parked select call."""
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_raise_during_a_waiting_standby_keeps_the_raised_level(
+    hass: HomeAssistant,
+) -> None:
+    """A standby still waiting for its selection does not undo a later raise."""
+    select = _ParkedSelect(hass, park=1)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE), schedule="off")
+    hass.states.async_set(SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set(OCCUPANCY, "on")
+    await _drain(hass)
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [BOOST]
+    select.release.set()
+    await settle(hass)
+
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["brightness"] == BOOST
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [BOOST]
+
+
+@pytest.mark.asyncio
+async def test_standby_during_a_waiting_raise_keeps_standby(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A raise still waiting for its selection does not undo a later standby."""
+    select = _ParkedSelect(hass, park=2)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE))
+    # The slow member has not come on yet, so the raise selects again.
+    hass.states.async_set(OCCUPANCY, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set(OCCUPANCY, "off", {"last_clear_false_detection": True})
+    await _drain(hass)
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await _drain(hass)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    select.release.set()
+    await settle(hass)
+
+    _assert_standby(hass)
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [
+        STANDBY,
+        STANDBY,
+    ]
