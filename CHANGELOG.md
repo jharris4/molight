@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missed reporting.
 - Changing an occupied Virtual Occupancy Sensor's source to a sensor that is
   `unavailable` no longer keeps it `on` with the old source's presence.
+- A Virtual Combined Occupancy Sensor keeps its last clear's false-detection
+  flag through a reload or restart, so the lights it cleared still get the
+  quick false-detection off.
 
 ## [1.8.0] - 2026-09-30
 

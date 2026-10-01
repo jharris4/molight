@@ -1317,6 +1317,49 @@ async def test_genuine_combined_cycle_survives_a_reload_with_a_late_maintain(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("via", "kept"),
+    [("reload", True), ("restart", True), ("added", False), ("roles", False)],
+)
+async def test_combined_false_clear_survives_a_reload(
+    hass: HomeAssistant, freezer, via: str, kept: bool
+) -> None:
+    """A combined clear's classification stands across a reload or restart;
+    editing the constituents leaves it behind."""
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.states.async_set("binary_sensor.m3", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+    await _false_cycle(hass, freezer, "binary_sensor.m1", {})
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.attributes["last_clear_false_detection"] is True
+
+    if via == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    elif via == "restart":
+        await restart_entries(hass, entry)
+    else:
+        triggers = ["binary_sensor.m1", "binary_sensor.m3"]
+        maintain = ["binary_sensor.m2"]
+        if via == "roles":
+            triggers, maintain = maintain, ["binary_sensor.m1"]
+        hass.config_entries.async_update_entry(
+            entry,
+            options={
+                CONF_NAME: "Seed Combined",
+                CONF_TRIGGER_SENSORS: triggers,
+                CONF_MAINTAIN_SENSORS: maintain,
+            },
+        )
+    await settle(hass)
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is kept
+    assert state.attributes["false_detection_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_combined_clears_when_last_constituent_drops_out(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -2402,6 +2445,54 @@ async def test_light_false_off_delay_survives_an_occupancy_reload(
     assert await hass.config_entries.async_reload(regular.entry_id)
     await settle(hass)
     hass.states.async_set("binary_sensor.presence", "off")
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_light_false_off_delay_survives_a_combined_occupancy_reload(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The same for a combined sensor's false clear reloaded away."""
+    hass.set_state(CoreState.running)
+    combined = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Combined",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.m1"],
+        },
+    )
+    light = make_light_entry(
+        occupancy="binary_sensor.combined",
+        maintain="binary_sensor.presence",
+        timeout=60,
+        false_off_delay=5,
+    )
+    hass.states.async_set("light.real_1", "off")
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.presence", "off")
+    await setup_entries(hass, combined, light)
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    hass.states.async_set("binary_sensor.presence", "on")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.m1", "off")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.combined").attributes[
+        "last_clear_false_detection"
+    ]
+    assert hass.states.get("light.matrix_light").state == "on"
+
+    assert await hass.config_entries.async_reload(combined.entry_id)
+    await settle(hass)
+    hass.states.async_set(
+        "binary_sensor.presence", "off", {"last_clear_false_detection": True}
+    )
     await settle(hass)
 
     freezer.tick(timedelta(seconds=6))

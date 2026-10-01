@@ -480,19 +480,26 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
+        extra = await self.async_get_last_extra_data()
+        saved = extra.as_dict() if extra is not None else {}
         if last is not None:
             with contextlib.suppress(ValueError, TypeError):
                 self._false_count = int(
                     last.attributes.get("false_detection_count") or 0
                 )
-        if (
-            last is not None
-            and last.state == "on"
-            and (extra := await self.async_get_last_extra_data()) is not None
-        ):
+            # A clear's classification describes these constituents; an edit
+            # leaves it behind. A save that predates the record is trusted.
+            if last.state == "off" and saved.get("constituents") in (
+                None,
+                self._constituents(),
+            ):
+                self._last_clear_false = bool(
+                    last.attributes.get("last_clear_false_detection")
+                )
+        if last is not None and last.state == "on" and extra is not None:
             self._saved_cycle = True
             self._saved_cycle_start_lot = _parse_datetime(
-                extra.as_dict().get("cycle_start_latest_occupied_time")
+                saved.get("cycle_start_latest_occupied_time")
             )
         all_sensors = list(
             dict.fromkeys(self._trigger_sensors + self._maintain_sensors)
@@ -720,12 +727,23 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             for e in sensors
         )
 
+    def _constituents(self) -> dict[str, list[str]]:
+        return {
+            "trigger": sorted(set(self._trigger_sensors)),
+            "maintain": sorted(set(self._maintain_sensors)),
+        }
+
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save the running cycle's anchor, which a reload must not reset."""
+        """Save the running cycle's anchor and the constituents of the clear."""
         anchor = self._cycle_start_lot
         return RestoredExtraData(
-            {"cycle_start_latest_occupied_time": anchor.isoformat() if anchor else None}
+            {
+                "cycle_start_latest_occupied_time": (
+                    anchor.isoformat() if anchor else None
+                ),
+                "constituents": self._constituents(),
+            }
         )
 
     @property
