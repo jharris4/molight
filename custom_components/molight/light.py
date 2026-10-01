@@ -705,6 +705,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.
         self._door_open: bool = False
+        # Whether the door has reported open/closed since startup.
+        self._door_seen: bool = False
         # Last known on/off of each keep-on entity, kept ourselves so an
         # unavailable entity holds its last value instead of reading as off.
         self._hold_states: dict[str, bool] = {}
@@ -717,6 +719,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         # When the user last turned the light off, here or at the wall: a
         # start deferred by an unreadable sensor is not applied over it.
         self._last_manual_off: datetime | None = None
+        # A settings boundary since that off, which ends it like a turn-on.
+        self._manual_off_cleared = False
         # Members that have reported on/off since this light was set up: a
         # placeholder they leave later is a reload, not startup loading.
         self._members_seen: set[str] = set()
@@ -1053,6 +1057,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             # and a resting standby belonged to the previous window.
             self._standby_suppressed = False
             self._restored_standby = False
+        if self._restored_inside_schedule is not None and (
+            inside != self._restored_inside_schedule
+            or (marker is not None and marker != self._restored_window_start)
+        ):
+            self._manual_off_cleared = True
         if inside:
             self._schedule_end_off_pending = False
             self._schedule_end_switch_pending = False
@@ -1096,6 +1105,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         leaving_inside = self._inside_schedule and not inside
         # A manual off only cancels standby until the next boundary.
         self._standby_suppressed = False
+        self._manual_off_cleared = True
         if inside:
             # A held end boundary no longer applies once the same schedule
             # window becomes active again.
@@ -1125,6 +1135,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             and self._door_entity == prev_door_entity
         ):
             self._door_open = door is not None and door.state == "on"
+            self._door_seen = door is not None and door.state in ("on", "off")
         self._hold_states = {}
         for entity_id in self._hold_entities:
             state = self.hass.states.get(entity_id)
@@ -1251,6 +1262,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             return
         # A manual off only cancels standby until the next boundary.
         self._standby_suppressed = False
+        self._manual_off_cleared = True
         if self._is_lit():
             self.async_write_ha_state()
         else:
@@ -1274,6 +1286,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._door_entity:
             door = self.hass.states.get(self._door_entity)
             self._door_open = door is not None and door.state == "on"
+            self._door_seen = door is not None and door.state in ("on", "off")
 
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
@@ -1611,7 +1624,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # like the brightness mirror in _on_light_state_change.
                 self._set_color_state(*color)
             self._on_light_state_change(
-                new_state.state, new_state.attributes.get("brightness")
+                new_state.state,
+                new_state.attributes.get("brightness"),
+                # A member reporting in while the light is off was not turned off.
+                manual=not (member_recovered and self._machine_state == STATE_IDLE),
             )
             return
         if same_state:
@@ -1699,7 +1715,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id == self._door_entity:
             door_was_open = self._door_open
             self._door_open = new_state.state == "on"
-            if not recovered or self._door_open != door_was_open:
+            # An open door first seen since startup may predate a manual off.
+            first_open = self._door_open and recovered and not self._door_seen
+            self._door_seen = True
+            if (not recovered or self._door_open != door_was_open) and not (
+                first_open and self._may_replay_manual_off(new_state, observed=False)
+            ):
                 self._on_door_change(self._door_open)
         if entity_id in self._hold_entities and not holding:
             self._hold_states[entity_id] = False
@@ -1715,14 +1736,16 @@ class VirtualLight(LightEntity, RestoreEntity):
             and _window_moved(old_state, new_state)
         )
 
-    def _on_light_state_change(self, state: str, brightness: int | None = None) -> None:
+    def _on_light_state_change(
+        self, state: str, brightness: int | None = None, *, manual: bool = True
+    ) -> None:
         """Handle a real light being turned on/off externally."""
         if state == "on" and brightness == 0:
             # "On" at brightness 0 is an off in disguise, matching the dimming
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
             # dim is then handled as the turn-on (in _on_light_attrs_change).
             if self._all_lights_off():
-                self._go_idle(manual=True)
+                self._go_idle(manual=manual)
             return
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
@@ -1735,7 +1758,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._occupancy_lit_lights = False  # the user owns this on-period
             self._transition_on()
         elif self._all_lights_off():
-            self._go_idle(manual=True)
+            self._go_idle(manual=manual)
 
     def _on_light_attrs_change(self, old_state: State, new_state: State) -> None:
         """Handle an external brightness/color change on an on real light.
@@ -2638,13 +2661,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         )
 
     def _may_replay_manual_off(self, state: State, *, observed: bool) -> bool:
-        """Return True when occupancy may be the cycle a manual off ended.
+        """Return True when presence may be the visit a manual off ended.
 
-        Only while that off stands within the window (standby suppressed):
-        a cycle the occupancy sensor dates after it may raise the light, and
-        one it cannot date only when its start was observed live.
+        Only while that off stands: a visit the sensor dates after it may
+        light the light, and one it cannot date only when seen to start live.
         """
-        if not self._standby_suppressed or self._is_lit():
+        if self._is_lit() or not self._manual_off_stands():
             return False
         if "last_on_time" not in state.attributes:
             return not observed
@@ -2654,6 +2676,27 @@ class VirtualLight(LightEntity, RestoreEntity):
         except (TypeError, ValueError):
             return True
         return self._last_manual_off is None or started <= self._last_manual_off
+
+    def _manual_off_stands(self) -> bool:
+        """Return True when a manual off is the last thing the light did.
+
+        Standby scopes it to the window; otherwise a recorded turn-on or a
+        settings boundary since the off ends it.
+        """
+        if self._standby_brightness is not None:
+            return self._standby_suppressed
+        if self._last_manual_off is None or self._manual_off_cleared:
+            return False
+        return all(
+            on is None or on <= self._last_manual_off
+            for on in (
+                self._last_on_physical,
+                self._last_on_virtual,
+                self._last_on_occupancy,
+                self._last_on_illuminance,
+                self._last_on_door,
+            )
+        )
 
     def _after_manual_off(self, since: datetime) -> datetime:
         """Push a deferred start's window past the user's last turn-off.
@@ -3055,6 +3098,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._command_generation += 1
         if manual:
             self._last_manual_off = datetime.now(UTC)
+            self._manual_off_cleared = False
             # Standby stays off until the next schedule boundary.
             self._standby_suppressed = self._standby_brightness is not None
         if self._machine_state != STATE_IDLE:

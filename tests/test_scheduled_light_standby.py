@@ -1510,6 +1510,35 @@ async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
 
 
 @pytest.mark.asyncio
+async def test_restart_outside_the_window_keeps_a_manual_off_over_presence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Outside its window a standby light has no standby to suppress, and a
+    manual off over presence still holds across a restart like any light's."""
+    entry = _porch(outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: OCCUPANCY})
+    await _setup_porch(hass, entry, schedule="off")
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    await _tick(hass, freezer, 5)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    await _tick(hass, freezer, 10)
+
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+    await _set(hass, OCCUPANCY, "off")
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
 @pytest.mark.parametrize(
     ("downtime", "suppressed"),

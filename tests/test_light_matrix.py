@@ -707,6 +707,7 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
         occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
     )
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(OCC, "off")
     await setup_entries(hass, entry)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED

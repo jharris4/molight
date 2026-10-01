@@ -50,9 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A manual off of a Virtual Scheduled Light ends at the next window when one
   window starts as another ends, or at midnight for an all-day schedule, so
   standby comes back as it does after any other boundary.
-- A restart no longer turns a Virtual Scheduled Light back on for presence it
-  was turned off by hand during; a visit that began after the off still
-  raises it. The new `last_off_manual` attribute records that off.
+- A restart no longer turns a light back on for presence, or a door left
+  open, that it was turned off by hand during; a visit that began after the
+  off still lights it. The new `last_off_manual` attribute records that off;
+  a member light that reports in, or comes back from `unavailable`, while the
+  light is off is not counted as one.
 
 ## [1.8.0] - 2026-09-30
 

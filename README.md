@@ -266,7 +266,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
 | `last_on_door` | Timestamp of the last turn-on caused by the door opening |
-| `last_off_manual` | Timestamp of the last turn-off by hand, through the virtual light or at the wall; a restart uses it to keep a Virtual Scheduled Light's manual off over presence it already had |
+| `last_off_manual` | Timestamp of the last turn-off by hand, through the virtual light or at the wall; a restart uses it to keep a manual off over presence the light already had |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
 | `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied turn-on selection and where the value came from: the option source entity's ID, or `fixed`. Both start empty after a restart (see [Brightness, color, and fades](#brightness-color-and-fades)) |
@@ -388,6 +388,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 #### Restarts and unavailability
 
 - Real lights already on at startup are adopted (`ACTIVE` with a fresh timer); active occupancy (when dark / in-window) is claimed as `OCCUPIED`.
+- A light whose last change was a manual off stays off over presence it already had, as it would without the restart: occupancy still on lights it only when its sensor dates the visit after the off, as a Virtual Occupancy Sensor does with `last_on_time`. With another kind of sensor, or a visit whose start the sensor did not see, it stays off until the next visit, and a door first seen open after startup does not light it either. Any turn-on since the off ends this, and so does a Virtual Scheduled Light's settings boundary, also one missed while HA was down; with standby, the manual off holds for its window as described under [Standby](#standby).
 - Gate modes keep no window marker, so a gate-mode window that ended while HA was down is not applied at startup, even under **Gate and turn off**: a light still on is adopted like any other, with a fresh timer.
 - Editing a virtual light's options reloads it. If its real lights are on, it adopts them as the startup rules would: an active follow window claims them as `SCHEDULED`, a keep-on hold keeps them on without a timer, and otherwise they get a fresh timer, so a running countdown restarts in full with the new timeout.
 - Follow-mode windows use `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. A restart landing mid effect/warn restores the pre-warning brightness and color.

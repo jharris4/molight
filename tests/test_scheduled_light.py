@@ -19,6 +19,7 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
+    ATTR_ACTIVE_SETTINGS_WINDOW,
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
@@ -2156,6 +2157,64 @@ async def test_restart_missed_switch_with_light_off_seeds_outside_occupancy(
     assert state.state == "on"
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
     assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("was_inside", "schedule", "marker", "lit"),
+    [
+        (False, "off", None, False),
+        (False, "on", "2026-07-02T21:00:00+00:00", True),
+        (True, "on", "2026-07-02T07:00:00+00:00", False),
+        (True, "on", "2026-07-02T21:00:00+00:00", True),
+        (True, "off", None, True),
+    ],
+    ids=["same_outside", "into_window", "same_window", "next_window", "out_of_window"],
+)
+async def test_restart_across_a_boundary_ends_a_manual_off_over_presence(
+    hass: HomeAssistant, was_inside: bool, schedule: str, marker: str | None, lit: bool
+) -> None:
+    """A manual off made during someone's visit holds across a restart only
+    while no settings boundary has passed, as it would without the restart."""
+    occupancy = "binary_sensor.occupancy"
+    now = datetime.now(UTC)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(
+        SCHEDULE, schedule, {"current_window_start": marker} if marker else {}
+    )
+    hass.states.async_set(occupancy, "on")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "off",
+                {
+                    ATTR_ACTIVE_SETTINGS: (
+                        ACTIVE_SETTINGS_INSIDE
+                        if was_inside
+                        else ACTIVE_SETTINGS_OUTSIDE
+                    ),
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    ATTR_ACTIVE_SETTINGS_WINDOW: (
+                        "2026-07-02T07:00:00+00:00" if was_inside else None
+                    ),
+                    "last_on_occupancy": (now - timedelta(minutes=20)).isoformat(),
+                    "last_off_manual": (now - timedelta(minutes=10)).isoformat(),
+                },
+            )
+        ],
+    )
+    settings = {CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy}
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_KEEP, outside=settings, inside=settings
+    )
+    await setup_entries(hass, entry)
+    await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == ("on" if lit else "off")
+    assert state.attributes["molight_state"] == (STATE_OCCUPIED if lit else STATE_IDLE)
 
 
 @pytest.mark.asyncio
