@@ -160,7 +160,8 @@ illuminance_mode:
   - Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
     else if brightness forced the lights off and that on-period has time left
     (countdown > 0), enter COUNTDOWN with adjusted timer. An on-period ended
-    any other way (manual off, timer, schedule) is never resumed.
+    any other way (manual off, timer, schedule) is never resumed, nor is one
+    the user turned off while brightness had it off.
   - Illuminance OFF→ON (dark→bright):
       control:  go IDLE, turn lights off.
       gate:     no effect; bright never turns lights off. Use when the lux
@@ -1489,6 +1490,8 @@ class VirtualLight(LightEntity, RestoreEntity):
         No configured fade, but a caller-supplied transition is forwarded.
         """
         await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
+        # Also ends an on-period that brightness had cut short.
+        self._bright_forced_off = False
         self._go_idle(manual=True)
 
     # ------------------------------------------------------------------

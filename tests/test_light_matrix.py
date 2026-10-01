@@ -412,6 +412,32 @@ async def test_dark_edge_after_the_timeout_resumes_nothing(
 
 
 @pytest.mark.asyncio
+async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A manual off of a light brightness already had off ends that on-period."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    await setup_entries(hass, make_light_entry(illuminance=ILLUM))
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).attributes["bright_forced_off"] is True
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes["bright_forced_off"] is False
+
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
 async def test_dark_edge_without_a_turn_on_time_resumes_nothing(
     hass: HomeAssistant,
 ) -> None:

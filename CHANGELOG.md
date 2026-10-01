@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
+- A manual off while brightness already has the light off stops it coming
+  back on when it gets dark.
 
 ## [1.8.0] - 2026-09-30
 

@@ -361,6 +361,36 @@ async def test_manual_off_cancels_standby_until_the_next_boundary(
 
 
 @pytest.mark.asyncio
+async def test_manual_off_while_bright_cancels_the_raise_it_interrupted(
+    hass: HomeAssistant,
+) -> None:
+    """A manual off of a light brightness had off stays off when it gets dark."""
+    illuminance = "binary_sensor.porch_bright"
+    hass.states.async_set(illuminance, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            inside={
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            }
+        ),
+    )
+    await _set(hass, OCCUPANCY, "on")
+    await _set(hass, OCCUPANCY, "off")
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _set(hass, illuminance, "off")
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+
+@pytest.mark.asyncio
 async def test_turning_the_light_back_on_rejoins_standby(
     hass: HomeAssistant, freezer
 ) -> None:
