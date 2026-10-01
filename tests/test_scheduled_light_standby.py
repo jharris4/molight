@@ -55,6 +55,7 @@ from custom_components.molight.const import (
     CONF_TIME_WINDOWS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
     CONF_WARN_TIMEOUT,
@@ -1109,6 +1110,59 @@ async def test_rebooted_member_at_the_standby_level_is_selected_again(
     _assert_standby(hass)
     assert selected == ["Night", "Night"]
     assert len(_light_calls(calls, "turn_on")) == sent + 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("recovered", "attrs"),
+    [("off", {}), ("on", {"brightness": 200})],
+    ids=["off", "on_at_another_level"],
+)
+async def test_recovered_member_is_selected_before_it_is_commanded(
+    hass: HomeAssistant, recovered: str, attrs: dict
+) -> None:
+    """Recovery finishes the selection, read afresh, before the standby command."""
+    source = "input_select.theme"
+    order: list[tuple[str, str | int]] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        await asyncio.sleep(0)
+        order.append(("select", call.data["option"]))
+
+    @callback
+    def light_command(event: Event) -> None:
+        if event.data["domain"] == "light" and event.data["service"] == "turn_on":
+            order.append(("light", event.data["service_data"]["brightness"]))
+
+    hass.states.async_set(source, "Night")
+    hass.states.async_set("select.scene", "Day", {"options": ["Day", "Night", "Party"]})
+    hass.services.async_register("select", "select_option", select_option)
+    hass.bus.async_listen(EVENT_CALL_SERVICE, light_command)
+    await _setup_porch(
+        hass,
+        _porch(inside={**_SCENE, CONF_TURN_ON_SELECT_SOURCE_ENTITY: source}),
+    )
+    assert order == [("select", "Night"), ("light", STANDBY)]
+    hass.states.async_set(
+        REAL,
+        "on",
+        {
+            "brightness": STANDBY,
+            "color_mode": "color_temp",
+            "color_temp_kelvin": KELVIN,
+        },
+        context=hass.data["standby_test_contexts"][-1],
+    )
+    await settle(hass)
+    order.clear()
+
+    await _set(hass, REAL, "unavailable")
+    await _set(hass, source, "Party")
+    await _set(hass, REAL, recovered, **attrs)
+
+    _assert_standby(hass)
+    assert order == [("select", "Party"), ("light", STANDBY)]
+    assert _attrs(hass)["last_turn_on_selection_option"] == "Party"
 
 
 @pytest.mark.asyncio
