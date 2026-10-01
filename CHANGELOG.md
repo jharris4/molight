@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selection again even when it comes back at the level last sent.
 - False detections: a light dimmed or recoloured at the wall keeps the full
   timeout that change restarted.
+- A real light that loads late now fills in the colour of the turn-on it
+  missed reporting.
 
 ## [1.8.0] - 2026-09-30
 

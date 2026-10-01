@@ -2061,7 +2061,9 @@ class VirtualLight(LightEntity, RestoreEntity):
     ) -> None:
         """Adopt what the members came on at when our command named no value.
 
-        A value named by a command still awaiting its reply is left alone.
+        A value named by a command still awaiting its reply is left alone. A
+        named color we could not report when it was sent (a late member
+        brings its color modes with its reply) is adopted now.
         """
         if not expectation.on:
             return
@@ -2069,7 +2071,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         brightness = color = None
         if all(command.brightness is None for command in commands):
             brightness = self._physical_brightness()
-        if all(command.color is None for command in commands):
+        if all(command.color is None for command in waiting) and (
+            expectation.color is None or self._current_color() is None
+        ):
             color = self._physical_color()
         if brightness is None and color is None:
             return

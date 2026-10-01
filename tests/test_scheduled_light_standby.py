@@ -48,6 +48,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_INPUTS,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
+    CONF_STANDBY_RGB_COLOR,
     CONF_TIME_WINDOWS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
@@ -1417,6 +1418,42 @@ async def test_member_loading_after_startup_gets_standby(hass: HomeAssistant) ->
     _assert_standby(hass)
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
     assert len(_light_calls(calls, "turn_on")) == sent + 1
+
+
+@pytest.mark.asyncio
+async def test_member_loading_after_startup_reports_the_standby_color(
+    hass: HomeAssistant,
+) -> None:
+    """A late member's color modes arrive with its reply; the color follows."""
+    hass.states.async_set(REAL, "unavailable", {"restored": True})
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    _record_light_contexts(hass)
+    await setup_entries(
+        hass,
+        _porch(
+            inside={CONF_STANDBY_COLOR_TEMP: None, CONF_STANDBY_RGB_COLOR: [0, 0, 255]}
+        ),
+    )
+    await settle(hass)
+    assert _attrs(hass).get("hs_color") is None
+
+    hass.states.async_set(
+        REAL,
+        "on",
+        {
+            "brightness": STANDBY,
+            "color_mode": "rgb",
+            "rgb_color": (0, 0, 255),
+            "hs_color": (240.0, 100.0),
+            "supported_color_modes": ["rgb"],
+        },
+        context=hass.data["standby_test_contexts"][-1],
+    )
+    await settle(hass)
+
+    _assert_standby(hass)
+    assert tuple(_attrs(hass)["hs_color"]) == (240.0, 100.0)
 
 
 class _ParkedSelect:

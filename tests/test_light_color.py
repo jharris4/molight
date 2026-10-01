@@ -309,6 +309,50 @@ async def test_auto_on_rgb_color(hass: HomeAssistant) -> None:
     assert tuple(_state(hass).attributes["hs_color"]) == (240.0, 100.0)
 
 
+@pytest.mark.asyncio
+async def test_auto_on_color_is_reported_once_a_late_member_replies(
+    hass: HomeAssistant,
+) -> None:
+    """A member that shows its color modes only with its reply fills the color in."""
+    contexts = []
+
+    @callback
+    def _record(event) -> None:
+        if event.data["domain"] == "light":
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    hass.states.async_set(REAL, "unavailable", {"restored": True})
+    hass.states.async_set(OCC, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC, auto_on_brightness=20, auto_on_rgb_color=[0, 0, 255]
+        ),
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes.get("hs_color") is None
+
+    hass.states.async_set(
+        REAL,
+        "on",
+        {
+            "brightness": 51,
+            "color_mode": "rgb",
+            "rgb_color": (0, 0, 255),
+            "hs_color": (240.0, 100.0),
+            "supported_color_modes": ["rgb"],
+        },
+        context=contexts[-1],
+    )
+    await settle(hass)
+
+    attrs = _state(hass).attributes
+    assert attrs["supported_color_modes"] == [ColorMode.HS]
+    assert tuple(attrs["hs_color"]) == (240.0, 100.0)
+
+
 # ---------------------------------------------------------------------------
 # Effect / warn stage colors
 # ---------------------------------------------------------------------------
