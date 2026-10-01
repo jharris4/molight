@@ -1603,6 +1603,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             "off",
         ):
             self._switch_scheduled_settings(new_state.state == "on")
+        # A keep-on entity engages before its other roles act, so none of them
+        # issues an automatic off it holds; a release is applied after them.
+        holding = entity_id in self._hold_entities and new_state.state == "on"
+        if holding:
+            self._hold_states[entity_id] = True
+            self._refresh_hold()
         if entity_id == self._occupancy_entity:
             occupied = new_state.state == "on"
             replay = recovered and occupied == self._occupancy_last_on
@@ -1651,8 +1657,8 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._door_open = new_state.state == "on"
             if not recovered or self._door_open != door_was_open:
                 self._on_door_change(self._door_open)
-        if entity_id in self._hold_entities:
-            self._hold_states[entity_id] = new_state.state == "on"
+        if entity_id in self._hold_entities and not holding:
+            self._hold_states[entity_id] = False
             self._refresh_hold()
 
     def _is_new_follow_window(

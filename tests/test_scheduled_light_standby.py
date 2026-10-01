@@ -562,6 +562,30 @@ async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
 
 
 @pytest.mark.asyncio
+async def test_bright_sensor_that_is_also_a_hold_keeps_standby(
+    hass: HomeAssistant,
+) -> None:
+    """Going bright holds standby when the illuminance sensor is also a
+    keep-on entity, instead of forcing it off first."""
+    bright = "binary_sensor.porch_bright"
+    hass.states.async_set(bright, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            inside={
+                CONF_ILLUMINANCE_ENTITY: bright,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+                CONF_HOLD_ENTITIES: [bright],
+            }
+        ),
+    )
+    await _echo_standby(hass)
+    await _set(hass, bright, "on")
+    assert _attrs(hass)["auto_off_held"] is True
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:

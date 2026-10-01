@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its forms were open, and says how many it skipped.
 - Turning a Virtual Scheduled Light back on by hand while someone's presence
   has it raised shows standby rejoined at once, so a restart keeps it.
+- A keep-on entity that is also the illuminance sensor holds the light as it
+  gets bright, instead of letting brightness turn it off first.
 
 ## [1.8.0] - 2026-09-30
 

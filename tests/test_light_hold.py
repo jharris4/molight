@@ -415,6 +415,42 @@ async def test_hold_blocks_bright_force_off_release_applies_it(
 
 
 @pytest.mark.asyncio
+async def test_bright_sensor_that_is_also_a_hold_keeps_the_light_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A sensor that is both the illuminance input and a keep-on entity holds
+    the light as it goes bright, and going dark releases it into a timer."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    await setup_entries(
+        hass,
+        make_light_entry(
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_CONTROL,
+            hold_entities=[ILLUM],
+        ),
+    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    calls = record_service_calls(hass)
+
+    hass.states.async_set(ILLUM, "on")  # bright
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["auto_off_held"] is True
+    assert light_targets(calls, "turn_off") == []
+    await _tick(hass, freezer, 3600)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(ILLUM, "off")  # dark again
+    await settle(hass)
+    assert _state(hass).attributes["auto_off_held"] is False
+    await _tick(hass, freezer, 59)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_hold_blocks_follow_window_end_release_applies_it(
     hass: HomeAssistant,
