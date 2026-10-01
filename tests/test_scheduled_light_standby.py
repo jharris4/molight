@@ -480,6 +480,39 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("warn", [False, True], ids=["plain", "warning"])
+async def test_timeout_while_bright_in_control_mode_ends_in_off(
+    hass: HomeAssistant, freezer, warn: bool
+) -> None:
+    """A manual on-period that ends in daylight turns off; dusk brings standby."""
+    illuminance = "binary_sensor.porch_bright"
+    hass.states.async_set(illuminance, "on")
+    inside = {
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+    }
+    if warn:
+        inside |= {CONF_WARN_TIMEOUT: 5, CONF_WARN_BRIGHTNESS: 40}
+    await _setup_porch(hass, _porch(inside=inside))
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    await _tick(hass, freezer, 31)
+    if warn:
+        assert _attrs(hass)["molight_state"] == STATE_WARN
+        await _tick(hass, freezer, 6)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    await _set(hass, illuminance, "off")
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_hold_freezes_the_raised_level_and_release_times_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:

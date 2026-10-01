@@ -3063,7 +3063,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
     def _finish_auto_off(self) -> None:
         """End an expired on-period: rest at standby, or turn off."""
-        if self._standby_applies():
+        if self._can_rest_at_standby():
             self._enter_standby(self._auto_off_transition)
             return
         # Task + synchronous _go_idle (the idiom used everywhere else):
