@@ -913,6 +913,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
             self._schedule_window_applied = last.attributes.get("schedule_window_start")
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
+            with contextlib.suppress(ValueError, TypeError):
+                self._last_manual_off = datetime.fromisoformat(
+                    last.attributes.get("last_off_manual")
+                )
             for attr, field in (
                 ("last_brightness_change_physical", "_last_brightness_change_physical"),
                 ("last_brightness_change_virtual", "_last_brightness_change_virtual"),
@@ -1352,7 +1356,11 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._gate_schedule_inactive()
         ):
             occ_state = self.hass.states.get(self._occupancy_entity)
-            if occ_state and occ_state.state == "on":
+            if (
+                occ_state
+                and occ_state.state == "on"
+                and not self._may_replay_manual_off(occ_state, observed=False)
+            ):
                 self._on_occupancy_change(occupied=True)
                 return
 
@@ -1644,8 +1652,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id == self._occupancy_entity:
             occupied = new_state.state == "on"
             replay = recovered and occupied == self._occupancy_last_on
+            # A first sighting since startup is not an observed edge either.
+            observed = not (recovered and self._occupancy_last_on is None)
             self._occupancy_last_on = occupied
-            if not replay:
+            if not replay and not (
+                occupied and self._may_replay_manual_off(new_state, observed=observed)
+            ):
                 self._on_occupancy_change(occupied)
             elif (
                 self._attr_is_on
@@ -2625,6 +2637,24 @@ class VirtualLight(LightEntity, RestoreEntity):
             and not self._gate_schedule_inactive()
         )
 
+    def _may_replay_manual_off(self, state: State, *, observed: bool) -> bool:
+        """Return True when occupancy may be the cycle a manual off ended.
+
+        Only while that off stands within the window (standby suppressed):
+        a cycle the occupancy sensor dates after it may raise the light, and
+        one it cannot date only when its start was observed live.
+        """
+        if not self._standby_suppressed or self._is_lit():
+            return False
+        if "last_on_time" not in state.attributes:
+            return not observed
+        raw = state.attributes["last_on_time"]
+        try:
+            started = datetime.fromisoformat(raw)
+        except (TypeError, ValueError):
+            return True
+        return self._last_manual_off is None or started <= self._last_manual_off
+
     def _after_manual_off(self, since: datetime) -> datetime:
         """Push a deferred start's window past the user's last turn-off.
 
@@ -3482,6 +3512,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             "last_on_occupancy": _fmt(self._last_on_occupancy),
             "last_on_illuminance": _fmt(self._last_on_illuminance),
             "last_on_door": _fmt(self._last_on_door),
+            "last_off_manual": _fmt(self._last_manual_off),
             "last_brightness_change_physical": _fmt(
                 self._last_brightness_change_physical
             ),

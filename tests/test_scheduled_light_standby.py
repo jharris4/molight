@@ -1429,6 +1429,86 @@ async def test_restart_keeps_a_manual_off_within_the_same_window(
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
 
 
+async def _manual_off_while_occupied(hass: HomeAssistant, entry) -> datetime:
+    """Raise standby with occupancy, turn it off by hand, return when."""
+    await _setup_porch(hass, entry)
+    await _echo_standby(hass)
+    await _set(hass, OCCUPANCY, "on")
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(REAL, "on", {"brightness": BOOST}, context=context)
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(REAL, "off", context=context)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    return datetime.now(UTC)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("started", "raised"),
+    [("none", False), ("unknown", False), ("before", False), ("after", True)],
+)
+async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
+    hass: HomeAssistant, freezer, started: str, raised: bool
+) -> None:
+    """Occupancy still on at a restart only raises a light turned off by hand
+    when its cycle started after that off; when the sensor can't tell, the
+    light stays off."""
+    entry = _porch()
+    off = await _manual_off_while_occupied(hass, entry)
+    await _tick(hass, freezer, 10)
+    if started != "none":
+        times = {
+            "unknown": None,
+            "before": (off - timedelta(seconds=5)).isoformat(),
+            # A cycle the light did not see start, as its own reload missed it.
+            "after": datetime.now(UTC).isoformat(),
+        }
+        hass.states.async_set(OCCUPANCY, "on", {"last_on_time": times[started]})
+
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    if raised:
+        assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+        assert _attrs(hass)["brightness"] == BOOST
+        return
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+    # Their next visit raises it, and still ends in off.
+    await _set(hass, OCCUPANCY, "off")
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("late", ["placeholder", "unknown_start"])
+async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
+    hass: HomeAssistant, late: str
+) -> None:
+    """An occupancy sensor that reports only after startup, or reports a cycle
+    whose start it did not see, does not raise a light turned off by hand."""
+    entry = _porch()
+    await _manual_off_while_occupied(hass, entry)
+    if late == "placeholder":
+        hass.states.async_set(OCCUPANCY, "unavailable", {"restored": True})
+    else:
+        hass.states.async_set(OCCUPANCY, "off", {"last_on_time": None})
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    await _set(hass, OCCUPANCY, "on", last_on_time=None)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
 @pytest.mark.parametrize(
