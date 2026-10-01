@@ -83,6 +83,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applies what the hold was keeping from that light: a *Turn off* schedule
   end it had deferred now turns the light off instead of being lost, and a
   light with no timer running gets its normal timeout instead of staying on.
+- A *Turn off* schedule end crossed while brightness has a Virtual Scheduled
+  Light off ends that on-period, so going dark shortly after no longer brings
+  the light back on under the outside settings. *Keep state* and *Switch
+  state* still resume it.
 
 ## [1.8.0] - 2026-09-30
 

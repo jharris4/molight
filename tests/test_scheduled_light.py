@@ -727,6 +727,81 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("end_action", "resumes"),
+    [
+        (SCHEDULE_END_ACTION_TURN_OFF, False),
+        (SCHEDULE_END_ACTION_KEEP, True),
+        (SCHEDULE_END_ACTION_SWITCH, True),
+    ],
+)
+@pytest.mark.parametrize("crossed", ["live", "while_down"])
+async def test_schedule_end_off_ends_an_on_period_brightness_had_cut_short(
+    hass: HomeAssistant, freezer, end_action: str, resumes: bool, crossed: str
+) -> None:
+    """A Turn off end crossed while brightness has the light off ends that
+    on-period, so going dark does not resume it under the outside settings.
+    Keep state and Switch state carry it past the end."""
+    illuminance = "binary_sensor.illuminance"
+    settings = {
+        CONF_LIGHT_TIMEOUT: 60,
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+    }
+    entry = make_scheduled_light_entry(
+        schedule_end_action=end_action, outside=settings, inside=settings
+    )
+    hass.states.async_set(REAL, "off")
+    if crossed == "live":
+        hass.states.async_set(SCHEDULE, "on")
+        hass.states.async_set(illuminance, "off")
+        await setup_entries(hass, entry)
+        await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+        await settle(hass)
+        freezer.tick(timedelta(seconds=10))
+        hass.states.async_set(illuminance, "on")
+        await settle(hass)
+        state = hass.states.get(VIRTUAL)
+        assert state.state == "off"
+        assert state.attributes["bright_forced_off"] is True
+        freezer.tick(timedelta(seconds=5))
+        hass.states.async_set(SCHEDULE, "off")
+        await settle(hass)
+    else:
+        hass.states.async_set(SCHEDULE, "off")
+        hass.states.async_set(illuminance, "on")
+        until = datetime.now(UTC) + timedelta(seconds=45)
+        mock_restore_cache(
+            hass,
+            [
+                State(
+                    VIRTUAL,
+                    "off",
+                    {
+                        ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                        ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                        "bright_forced_off": True,
+                        "bright_resume_until": until.isoformat(),
+                    },
+                )
+            ],
+        )
+        await setup_entries(hass, entry)
+        await settle(hass)
+
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "off"
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert state.attributes["bright_forced_off"] is resumes
+    assert (state.attributes["bright_resume_until"] is not None) is resumes
+
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set(illuminance, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == ("on" if resumes else "off")
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
     hass: HomeAssistant, freezer
 ) -> None:

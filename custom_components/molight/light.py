@@ -1090,6 +1090,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # crossed no boundary of the newly configured schedule.
             if self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
                 self._schedule_end_off_pending = True
+                self._clear_bright_forced_off()
             elif self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH:
                 self._schedule_end_switch_pending = True
         if not self._settings_schedule_entity:
@@ -1178,6 +1179,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # A turn-on still waiting for its selection is judged as on: the off
         # below overtakes it, and the new profile's rules take it over.
         lit = self._is_lit()
+
+        if leaving_inside and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
+            # Turn off also ends an on-period that brightness had cut short.
+            self._clear_bright_forced_off()
 
         if (
             leaving_inside
