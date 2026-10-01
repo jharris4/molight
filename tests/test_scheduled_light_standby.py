@@ -2232,6 +2232,41 @@ async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("placeholder", [{}, {"restored": True}], ids=["back", "new"])
+@pytest.mark.parametrize("waiting", ["standby", "raise"])
+async def test_member_reporting_in_off_during_a_waiting_turn_on_gets_it(
+    hass: HomeAssistant, placeholder: dict, waiting: str
+) -> None:
+    """A real light that loads, or comes back, as off while standby or a raise
+    waits for its selection was not turned off by hand: standby stays on and
+    the level waited for is sent."""
+    select = _ParkedSelect(hass, park=1 if waiting == "standby" else 2)
+    hass.states.async_set(REAL, "unavailable", placeholder)
+    hass.states.async_set(SCHEDULE, "off" if waiting == "standby" else "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _porch(inside=_SCENE))
+    await settle(hass)
+    hass.states.async_set(SCHEDULE if waiting == "standby" else OCCUPANCY, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set(REAL, "off")
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    level = STANDBY if waiting == "standby" else BOOST
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert _attrs(hass)["molight_state"] == (
+        STATE_STANDBY if waiting == "standby" else STATE_OCCUPIED
+    )
+    assert _attrs(hass)["brightness"] == level
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
+    assert _attrs(hass)["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["startup", "boundary", "restored"])
 @pytest.mark.parametrize("occupied", [False, True], ids=["clear", "occupied"])
 @pytest.mark.parametrize("door_open", [False, True], ids=["closed", "open"])

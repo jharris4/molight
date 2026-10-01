@@ -99,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   covers the effect and warn stages, standby, auto-on colours and the
   restored pre-warning colour. A warning could cancel itself this way, and
   far-apart effect and warn colours could keep the light on indefinitely.
+- A real light that loads, or comes back from `unavailable`, as off while a
+  turn-on is still waiting on a slow select no longer cancels that turn-on
+  and leaves the room dark, and is no longer recorded as a manual off, which
+  also paused standby until the next schedule boundary.
 
 ## [1.8.0] - 2026-09-30
 

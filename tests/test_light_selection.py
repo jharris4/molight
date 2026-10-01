@@ -1060,7 +1060,7 @@ async def test_uninterrupted_slow_selection_still_turns_on(
     assert hass.states.get("light.selection_light").state == "on"
 
 
-_LEVEL = {"manual": 200, "occupancy": 102}
+_LEVEL = {"manual": 200, "occupancy": 102, "door": 102}
 
 
 class _FailingSelect(_SlowSelect):
@@ -1076,17 +1076,36 @@ class _FailingSelect(_SlowSelect):
 
 
 async def _begin_turn_on(
-    hass: HomeAssistant, select: _SlowSelect, trigger: str
+    hass: HomeAssistant,
+    select: _SlowSelect,
+    trigger: str,
+    *,
+    member: str | None = "off",
 ) -> asyncio.Task | None:
-    """Set up, start a turn-on and return once it waits for the select call."""
+    """Set up, start a turn-on and return once it waits for the select call.
+
+    member is the real light's state meanwhile: None for not loaded yet,
+    "restored" for the placeholder Home Assistant writes at boot.
+    """
     hass.states.async_set("binary_sensor.occ", "off")
-    hass.states.async_set("light.ambient", "off")
+    hass.states.async_set("binary_sensor.door", "off")
+    if member == "restored":
+        hass.states.async_set("light.ambient", "unavailable", {"restored": True})
+    elif member:
+        hass.states.async_set("light.ambient", member)
+    sensors = {"door": "binary_sensor.door"} if trigger == "door" else {}
     await setup_entries(
-        hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
+        hass,
+        _selection_entry(
+            occupancy="binary_sensor.occ", auto_on_brightness=40, **sensors
+        ),
     )
     task = None
-    if trigger == "occupancy":
-        hass.states.async_set("binary_sensor.occ", "on")
+    if trigger in ("occupancy", "door"):
+        hass.states.async_set(
+            "binary_sensor.occ" if trigger == "occupancy" else "binary_sensor.door",
+            "on",
+        )
     else:
         task = hass.async_create_task(
             hass.services.async_call(
@@ -1232,3 +1251,80 @@ async def test_member_reporting_off_after_a_waited_turn_on_turns_the_light_off(
     state = hass.states.get("light.selection_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == "idle"
+
+
+_NOT_LOADED = [None, "unavailable", "unknown", "restored"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+@pytest.mark.parametrize("member", _NOT_LOADED)
+@pytest.mark.parametrize("report", [{}, {"brightness": 0}], ids=["off", "on_at_0"])
+async def test_member_reporting_in_off_during_the_wait_gets_the_turn_on(
+    hass: HomeAssistant, trigger: str, member: str | None, report: dict
+) -> None:
+    """A real light that loads, or comes back, as off while a turn-on waits
+    for its selection was not turned off: the turn-on is still sent, and no
+    manual off is recorded."""
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger, member=member)
+
+    hass.states.async_set("light.ambient", "on" if report else "off", report)
+    await _drain(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["molight_state"] == (
+        "occupied" if trigger == "occupancy" else "active"
+    )
+    assert state.attributes["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("member", _NOT_LOADED)
+async def test_member_reporting_in_off_during_a_waiting_window_start_gets_it(
+    hass: HomeAssistant, member: str | None
+) -> None:
+    """A follow window start still waiting for its selection is not ended by
+    a real light that loads as off meanwhile."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.sched", "off")
+    if member:
+        placeholder = {"restored": True} if member == "restored" else {}
+        hass.states.async_set(
+            "light.ambient",
+            "unavailable" if member == "restored" else member,
+            placeholder,
+        )
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched",
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            auto_on_brightness=40,
+        ),
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set("light.ambient", "off")
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls
+    assert set(calls) == {("turn_on", 102)}
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "scheduled"
+    assert state.attributes["last_off_manual"] is None

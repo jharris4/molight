@@ -1684,12 +1684,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return
             if resend and self._reconcile_recovered_member():
                 return
-            if (
-                member_recovered
-                and new_state.state == "on"
-                and new_state.attributes.get("brightness") != 0
-                and self._machine_state != STATE_IDLE
-            ):
+            lit = (
+                new_state.state == "on" and new_state.attributes.get("brightness") != 0
+            )
+            if member_recovered and not lit and self._turn_on_waiting():
+                # Reporting in dark while a turn-on waits for its selection
+                # is no off: the turn-on is about to light this member.
+                return
+            if member_recovered and lit and self._machine_state != STATE_IDLE:
                 # A member reappearing (first sighting, or recovery from
                 # unavailable) while the virtual light is already on is not
                 # human activity: mirror its brightness/color but leave the
