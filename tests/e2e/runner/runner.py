@@ -7311,7 +7311,7 @@ def create_combined_schedule(
     operator: str = "any",
     invert: bool = False,
 ) -> str:
-    """Create a Virtual Combined Schedule through its API flow."""
+    """Create a Virtual Combined Schedule Sensor through its API flow."""
     return create_entry(
         client,
         "combined_schedule",

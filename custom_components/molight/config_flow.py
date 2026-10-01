@@ -3268,7 +3268,7 @@ class MoLightConfigFlow(
     async def async_step_combined_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a Virtual Combined Schedule."""
+        """Configure a Virtual Combined Schedule Sensor."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -3935,7 +3935,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def async_step_combined_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a Virtual Combined Schedule."""
+        """Edit a Virtual Combined Schedule Sensor."""
         errors: dict[str, str] = {}
 
         if user_input is not None:

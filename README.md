@@ -12,7 +12,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Combined Occupancy Sensor](#virtual-combined-occupancy-binary-sensor) | Merges several occupancy sensors with trigger/maintain roles |
 | [Virtual Illuminance Sensor](#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
 | [Virtual Schedule Sensor](#virtual-schedule-binary-sensor) | Reusable schedule signal from a time/sun window or another binary sensor, optionally inverted |
-| [Virtual Combined Schedule](#virtual-combined-schedule) | Combines schedules with any/all logic, e.g. a morning and an evening window for one lamp |
+| [Virtual Combined Schedule Sensor](#virtual-combined-schedule-binary-sensor) | Combines schedules with any/all logic, e.g. a morning and an evening window for one lamp |
 | [Virtual Light](#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
 | [Virtual Scheduled Light](#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it |
 | [Virtual Remote](#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to light actions, with no automations |
@@ -175,8 +175,8 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity 
 
 A Virtual Schedule Sensor provides a reusable on/off schedule signal. Choose its definition when creating or configuring it:
 
-- **Time window**: `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry; to follow several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule](#virtual-combined-schedule).
-- **Binary sensor**: mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. MoLight's own schedules are excluded as sources to prevent chains and cycles; combine them with a Virtual Combined Schedule instead.
+- **Time window**: `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry; to follow several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule Sensor](#virtual-combined-schedule-binary-sensor).
+- **Binary sensor**: mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. MoLight's own schedules are excluded as sources to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead.
 
 **Invert output** is available for both definitions. A time-window schedule is then `on` outside its configured window; a source-backed schedule is `on` while its source is `off`. An unknown, unavailable, or missing source makes the Virtual Schedule Sensor unavailable and is never inverted to `on`.
 
@@ -195,9 +195,9 @@ Attributes: `current_window_start` (identifies the effective `on` period, where 
 
 Source-backed schedules preserve their effective state and window marker across a temporary source outage. Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state. As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
 
-### Virtual Combined Schedule
+### Virtual Combined Schedule Binary Sensor
 
-Combines MoLight schedules into one schedule that any light can use. Inputs can be Virtual Schedule Sensors of either definition or other Virtual Combined Schedules, so mixed logic nests, e.g. *(Morning **any** Evening) **all** Workday*. The flows reject a combined schedule that would include itself, directly or through another.
+Combines MoLight schedules into one schedule that any light can use. Inputs can be Virtual Schedule Sensors of either definition or other Virtual Combined Schedule Sensors, so mixed logic nests, e.g. *(Morning **any** Evening) **all** Workday*. The flows reject a combined schedule that would include itself, directly or through another.
 
 | Config | Description |
 |---|---|
@@ -249,7 +249,7 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Binary Sensor |
 | **Illuminance mode** | Default `control`: dark gates turn-ons AND turning bright forces the lights off. `gate`: dark gates turn-ons only; bright never turns lights off. Use `gate` when the lux sensor can see the controlled lights, which would otherwise oscillate |
-| **Schedule sensor** *(optional)* | A MoLight schedule: a Virtual Schedule Sensor or a Virtual Combined Schedule. The picker offers only MoLight schedules; a legacy non-schedule reference from before this narrowing stays selectable until changed |
+| **Schedule sensor** *(optional)* | A MoLight schedule: a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor. The picker offers only MoLight schedules; a legacy non-schedule reference from before this narrowing stays selectable until changed |
 | **Schedule mode** | Default `follow`: the window turns the lights on at its start and off at its end (porch lights). The three **Gate** modes let occupancy and the door turn the lights on inside the window only, and differ in what the window's end does to a light that is still on (see [Schedule modes](#schedule-modes)) |
 | **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy (see [Door sensor](#door-sensor)) |
 | **Door mode** | Default `open`: opening turns the lights on with the normal timeout; the door is otherwise ignored. `open_close`: the lights stay on while the door is open and start the countdown when it closes |
@@ -389,7 +389,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 ### Virtual Scheduled Light
 
-A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen MoLight schedule (a Virtual Schedule Sensor or a Virtual Combined Schedule) selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
+A Virtual Scheduled Light controls the same kinds of real lights and has the same automation settings as a regular Virtual Light, but stores two complete settings sets. The chosen MoLight schedule (a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor) selects **outside-schedule settings** while it is off and **inside-schedule settings** while it is on. This can change the timeout, occupancy/maintain/illuminance/door/keep-on entities, automatic brightness and color, fades, warnings, and the generic turn-on selection.
 
 Creation uses three main forms:
 
@@ -454,7 +454,7 @@ MoLight writes no debug logs. It logs a warning only when it cannot do what it w
 - `auto_off_held` on the virtual light: whether the Auto-off switch or a keep-on entity is holding automatic turn-offs.
 - `schedule_window_start`, `bright_forced_off` and, on a Virtual Scheduled Light, `active_settings`: the follow-mode window marker, whether brightness forced the light off, and which settings profile is live.
 - `latest_occupied_time`, `last_clear_false_detection` and `last_clear_unavailable` on an occupancy sensor: when the person was last seen, and whether the last clear was a false detection or an unavailable source.
-- `resolved_schedules` on a Virtual Combined Schedule: the plain schedules it was built from.
+- `resolved_schedules` on a Virtual Combined Schedule Sensor: the plain schedules it was built from.
 - A Virtual Remote's **Last Action** sensor: the last binding it ran, and the button and click that fired it. Its logbook history answers "why did that light turn on?".
 
 ## Development

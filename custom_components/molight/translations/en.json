@@ -425,7 +425,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule instead.",
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead.",
           "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
         },
         "sections": {
@@ -497,7 +497,7 @@
         }
       },
       "combined_schedule": {
-        "title": "Virtual Combined Schedule",
+        "title": "Virtual Combined Schedule Sensor",
         "description": "Combines schedules into one. Overlapping or back-to-back windows count as one continuous period.",
         "data": {
           "name": "Name",
@@ -506,7 +506,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedules to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
+          "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedule Sensors to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
           "schedule_operator": "Any: on while at least one schedule is on. All: on only while every schedule is on.",
           "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown or unavailable is never inverted to on."
         },
@@ -994,8 +994,8 @@
       "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy and maintain occupancy sensors.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
-      "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule.",
-      "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule created by MoLight.",
+      "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule Sensor.",
+      "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
       "entity_id_invalid": "That entity ID has no usable characters. Use letters and numbers, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
@@ -1065,7 +1065,7 @@
         "combined_occupancy": "Virtual Combined Occupancy Sensor",
         "illuminance": "Virtual Illuminance Sensor",
         "schedule": "Virtual Schedule Sensor",
-        "combined_schedule": "Virtual Combined Schedule",
+        "combined_schedule": "Virtual Combined Schedule Sensor",
         "light": "Virtual Light",
         "scheduled_light": "Virtual Scheduled Light",
         "remote": "Virtual Remote"
@@ -1410,7 +1410,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule instead.",
+          "schedule_source": "The binary sensor whose on/off state defines this schedule. MoLight schedules are excluded to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead.",
           "schedule_invert": "When enabled, this schedule is on when the source sensor is off. Unknown or unavailable is never inverted to on."
         }
       },
@@ -1460,7 +1460,7 @@
         }
       },
       "combined_schedule": {
-        "title": "Virtual Combined Schedule",
+        "title": "Virtual Combined Schedule Sensor",
         "description": "Combines schedules into one. Overlapping or back-to-back windows count as one continuous period.",
         "data": {
           "name": "Name",
@@ -1469,7 +1469,7 @@
           "schedule_invert": "Invert output"
         },
         "data_description": {
-          "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedules to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
+          "schedule_inputs": "The Virtual Schedule Sensors and Virtual Combined Schedule Sensors to combine. To use another binary sensor (such as a workday sensor), first create a Virtual Schedule Sensor that mirrors it.",
           "schedule_operator": "Any: on while at least one schedule is on. All: on only while every schedule is on.",
           "schedule_invert": "When enabled, this schedule is on while the combination is off. Unknown or unavailable is never inverted to on."
         }
@@ -1713,8 +1713,8 @@
       "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
-      "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule.",
-      "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule created by MoLight.",
+      "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule Sensor.",
+      "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",

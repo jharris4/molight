@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This release adds the **Virtual Combined Schedule**, so one light can follow
-several schedules at once. It also carries a round of fixes for schedules,
-sensors and lights going `unavailable` and coming back, for options edited
-part way through a visit or a schedule window, and for slow bulbs replying
-late.
+This release adds the **Virtual Combined Schedule Sensor**, so one light can
+follow several schedules at once. It also carries a round of fixes for
+schedules, sensors and lights going `unavailable` and coming back, for options
+edited part way through a visit or a schedule window, and for slow bulbs
+replying late.
 
 ### Upgrade notes
 
@@ -25,9 +25,10 @@ late.
 
 ### Added
 
-- **Virtual Combined Schedule**: combines Virtual Schedule Sensors with any/all
-  logic, e.g. a bedside lamp on in the morning and again in the evening.
-  Combined schedules nest, and can be inverted like any other schedule.
+- **Virtual Combined Schedule Sensor**: combines Virtual Schedule Sensors with
+  any/all logic, e.g. a bedside lamp on in the morning and again in the
+  evening. Combined schedules nest, and can be inverted like any other
+  schedule.
 
 ### Changed
 

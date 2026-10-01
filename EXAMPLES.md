@@ -14,7 +14,7 @@ The examples build on each other:
 8. [Hallway night light](#example-8-hallway-night-light-virtual-scheduled-light): different settings inside and outside a schedule
 9. [Pico remote](#example-9-pico-remote-for-the-closet-light-virtual-remote): remote buttons instead of automations
 10. [Bilresa remote](#example-10-bilresa-two-button-remote-single-vs-double-click): single vs. double clicks
-11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule): two windows combined into one schedule
+11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -336,7 +336,7 @@ Single vs. double is read from each button's own advertised events (`multi_press
 
 ---
 
-### Example 11: Bedside lamp, morning and evening (Virtual Combined Schedule)
+### Example 11: Bedside lamp, morning and evening (Virtual Combined Schedule Sensor)
 
 On from 06:30 to 08:00 and again from sunset until 23:00. Each window is its own schedule; a combined schedule joins them, and the lamp follows that.
 
@@ -358,7 +358,7 @@ Window end:
   Time:        23:00
 ```
 
-**2. Virtual Combined Schedule**
+**2. Virtual Combined Schedule Sensor**
 
 ```text
 Name:          Bedside Schedule                # → binary_sensor.bedside_schedule

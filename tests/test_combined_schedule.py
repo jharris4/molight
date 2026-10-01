@@ -1,4 +1,4 @@
-"""Tests for the MoLight Virtual Combined Schedule."""
+"""Tests for the MoLight Virtual Combined Schedule Sensor."""
 
 from __future__ import annotations
 
