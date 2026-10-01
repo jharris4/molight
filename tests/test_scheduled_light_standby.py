@@ -953,6 +953,38 @@ async def test_rebooted_member_is_sent_standby_again(hass: HomeAssistant) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "acknowledged", [True, False], ids=["acknowledged", "unanswered_command"]
+)
+async def test_rebooted_member_at_the_standby_level_is_selected_again(
+    hass: HomeAssistant, freezer, acknowledged: bool
+) -> None:
+    """A member back at the right level may still have lost its selection."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.states.async_set("select.scene", "Day", {"options": ["Day", "Night"]})
+    hass.services.async_register("select", "select_option", select_option)
+    calls = await _setup_porch(
+        hass, _porch(inside={**_SCENE, CONF_STANDBY_COLOR_TEMP: None})
+    )
+    assert selected == ["Night"]
+    if acknowledged:
+        await _echo_standby(hass)
+    sent = len(_light_calls(calls, "turn_on"))
+
+    await _tick(hass, freezer, 5)
+    await _set(hass, REAL, "unavailable")
+    await _set(hass, REAL, "on", brightness=STANDBY)
+
+    _assert_standby(hass)
+    assert selected == ["Night", "Night"]
+    assert len(_light_calls(calls, "turn_on")) == sent + 1
+
+
+@pytest.mark.asyncio
 async def test_restart_puts_a_standby_light_back_at_standby(
     hass: HomeAssistant,
 ) -> None:

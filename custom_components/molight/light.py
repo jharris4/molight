@@ -1516,17 +1516,6 @@ class VirtualLight(LightEntity, RestoreEntity):
             # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
             self._update_capabilities()
-            if self._is_own_echo(
-                entity_id,
-                old_state,
-                new_state,
-                own_context=event.context.id in self._self_context_ids,
-            ):
-                return  # echo of our own service call; call sites manage state
-            if same_state:
-                if new_state.state == "on":
-                    self._on_light_attrs_change(old_state, new_state)
-                return
             member_recovered = old_state is None or old_state.state in (
                 STATE_UNAVAILABLE,
                 STATE_UNKNOWN,
@@ -1542,10 +1531,25 @@ class VirtualLight(LightEntity, RestoreEntity):
             )
             # Standby was sent while this member was still loading, so its
             # first state is not a manual off either.
-            if (
-                member_rebooted
-                or (member_recovered and self._machine_state == STATE_STANDBY)
-            ) and self._reconcile_recovered_member():
+            resend = member_rebooted or (
+                member_recovered and self._machine_state == STATE_STANDBY
+            )
+            if self._is_own_echo(
+                entity_id,
+                old_state,
+                new_state,
+                own_context=event.context.id in self._self_context_ids,
+            ):
+                # A member back at the level an unanswered command asked for
+                # may still have lost its selection: re-send like any other.
+                if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
+                    self._reconcile_recovered_member()
+                return  # echo of our own service call; call sites manage state
+            if same_state:
+                if new_state.state == "on":
+                    self._on_light_attrs_change(old_state, new_state)
+                return
+            if resend and self._reconcile_recovered_member():
                 return
             if (
                 member_recovered

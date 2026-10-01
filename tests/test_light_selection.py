@@ -265,11 +265,15 @@ async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) ->
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_member_reboot_reapplies_selection(hass: HomeAssistant) -> None:
+@pytest.mark.parametrize("delay", [0, 5], ids=["settling", "unanswered_command"])
+async def test_follow_member_reboot_reapplies_selection(
+    hass: HomeAssistant, freezer, delay: int
+) -> None:
     """A member rebooting lit mid-window gets the selection applied again.
 
     The strip booted into its own default preset; re-sending the window's
-    settings includes the selection even though the member is already on.
+    settings includes the selection even though the member is already on,
+    and even when coming back on looks like the late reply to a command.
     """
     selected: list[str] = []
 
@@ -290,6 +294,7 @@ async def test_follow_member_reboot_reapplies_selection(hass: HomeAssistant) -> 
     await settle(hass)
     assert selected == ["Cozy"]
 
+    freezer.tick(timedelta(seconds=delay))
     hass.states.async_set("light.ambient", "unavailable")
     await settle(hass)
     hass.states.async_set("light.ambient", "on")

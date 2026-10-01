@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming
   back on when it gets dark.
+- A follow-mode real light returning from `unavailable` gets its turn-on
+  selection again even when it comes back at the level last sent.
 
 ## [1.8.0] - 2026-09-30
 
