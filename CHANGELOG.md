@@ -11,194 +11,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+This release adds the **Virtual Combined Schedule**, so one light can follow
+several schedules at once. It also carries a round of fixes for schedules,
+sensors and lights going `unavailable` and coming back, for options edited
+part way through a visit or a schedule window, and for slow bulbs replying
+late.
+
+### Upgrade notes
+
+- **No existing entry stops working after upgrading.** A Virtual Light that
+  refers to itself as a member or keep-on entity is now rejected, but only the
+  next time its options are saved.
+
 ### Added
 
-- **Virtual Combined Schedule**: combines schedules with any/all logic, so
-  one light can follow several windows, e.g. a bedside lamp on in the
-  morning and again in the evening. Combined schedules nest, and an
-  unavailable input only matters when it could change the result.
+- **Virtual Combined Schedule**: combines Virtual Schedule Sensors with any/all
+  logic, e.g. a bedside lamp on in the morning and again in the evening.
+  Combined schedules nest, and can be inverted like any other schedule.
+
+### Changed
+
+- An all-day schedule in follow mode re-lights a manually-off light at each
+  midnight, not just at the next restart or options edit.
+- The forms reject an illuminance threshold of 0 and a discovered hysteresis
+  at or above the threshold, and recheck a light's timeout against its
+  sensors when the last page of a multi-page form is saved.
 
 ### Fixed
 
-- Editing a Virtual Occupancy Sensor's options while its source is
-  unavailable, or has been removed, no longer clears occupancy at once. It
-  stays occupied until the *clear after unavailable* timeout runs out,
-  counted from the dropout. Previously a light whose timeout was shorter
-  than that could turn off early.
-- Changing a Virtual Light's turn-on selection entity in its options no
-  longer fills the selection page with the previous entity's fallback and
-  source. Previously, if the new entity was unavailable, the old fallback
-  could be saved for it.
-- A Virtual Light's options no longer accept the light itself, or a
-  Virtual Light that already includes it, as a member, and no longer accept
-  its own light or Auto-off switch as a keep-on entity. Previously each
-  command to such a light set off a burst of nested calls that ended in an
-  error in the log. A reference stored before this check is reported the
-  same way when the options are next edited, and a multi-page edit repeats
-  the check on its last page, in case another light's options were saved
-  in the meantime.
-- An illuminance threshold of 0 is now rejected on every form. Previously
-  it was accepted, and the sensor could never report dark.
-- Discovering illuminance sensors now rejects a hysteresis at or above the
-  threshold, as creating one by hand already did. Previously the sensors
-  were created and, after their first bright reading, never reported dark.
-- A schedule window that sun offsets push past the following midnight is
-  found again after a restart, and a window whose start falls in the
-  spring-forward clock change is skipped that night when the shifted start
-  would pass its end. Previously an inverted schedule counted that as a
-  boundary.
-- A follow-mode light whose schedule is `unavailable` or missing when Home
-  Assistant finishes starting no longer treats that as the window ending.
-  Previously, when the schedule recovered inside the same window, the light
-  turned back on even if it had been turned off manually.
-- A follow-mode real light coming back from `unavailable` is now made to
-  match its schedule instead of being read as a manual change: inside the
-  window it is re-lit with the window's brightness, color and turn-on
-  selection, outside the window it is turned off. Previously a strip that
-  turns its LEDs on at boot ran a full timer after a daytime power cut, and
-  one that boots dark stayed off for the rest of the night. A light that is
-  still loading when Home Assistant starts is not a reboot: its first state
-  is adopted by the startup rules, so a manual off mid-window still stands.
-  Its integration reloading later is one.
-- A turn-on selection whose target select is missing or unavailable is now
-  skipped with a warning. Previously the call was sent anyway, Home
-  Assistant logged it, and `last_turn_on_selection_option` reported a
-  selection that was never applied.
-- A turn-on that names no brightness or color (occupancy with no auto-on
-  brightness, or a plain `light.turn_on`) now reports the brightness and
-  color the real light came on at. Previously the virtual light kept its
-  earlier values, so the warn stage could jump to full brightness and a
-  re-trigger could leave the room at the warn brightness.
-- A real light's reply to one command that arrives after the next command
-  was sent is no longer read as a manual change, unless the next command
-  switched the light the other way and the reply comes more than a few
-  seconds after its own command. Previously a slow bulb reporting the end of
-  its effect-stage fade just after the warn stage began could restart the
-  full timer at every expiry, so the light never turned off.
-- A dim or recolor of a real light within 30 s of a command that changed
-  nothing on it (such as a remote's "on" press while the light is already
-  on) is now recognised as a manual change. Previously the virtual light
-  kept reporting the old brightness and the timer was not restarted.
-- A schedule that goes `unavailable` and comes back with the value it had
-  before (as every MoLight schedule does when its options are edited) is
-  no longer treated as a window starting or ending. Previously a light
-  turned on manually outside the window was turned off, and in the gate
-  modes a light turned off manually in an occupied room was turned back on.
-  Occupancy that started, or a door that opened, while the gate was
-  unreadable is applied when it returns, unless the light was turned off
-  by hand after that.
-- An occupancy sensor that goes `unavailable` and comes back still occupied
-  (as a Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor does
-  when its options are edited) no longer counts as someone entering the
-  room. Previously a light turned off manually in an occupied room was
-  turned back on. A gate that lifted during the outage (the room going
-  dark, a gate window starting, or a scheduled light changing profile) read
-  the sensor as clear, so it is applied when the sensor returns, unless the
-  light was turned off by hand after the gate lifted.
-- Editing the options of a sensor that is part of a Virtual Combined
-  Occupancy Sensor no longer clears the combined sensor while that sensor is
-  the one holding the room occupied. Previously the reload ended occupancy,
-  so lights started their countdown in an occupied room, and a maintain
-  sensor could not start it again. A sensor that does not come back within
-  10 seconds still clears it.
-- Editing the options of a light whose **Auto-off** switch is off no longer
-  applies a turn-off that was waiting for the switch: a follow window that
-  ended, or a scheduled light's *Turn off* at schedule end. Previously the
-  reload turned the light off. Disabling the switch while it is off releases
-  the hold, as a restart does, since a disabled switch cannot be turned on.
-- A schedule that is `unavailable` when Home Assistant restarts, or when its
-  options are edited, keeps its window marker. Previously a source-backed
-  schedule started a new window when its source returned, so a follow-mode
-  light turned off manually mid-window turned back on. Turning *invert* on
-  or off while the source is unavailable starts a new window when it
-  returns instead of reusing the old marker.
-- Illuminance going dark now resumes only an on-period that brightness cut
-  short. Previously a light turned off manually, by its timer or by a
-  schedule was turned back on when the room went from bright to dark within
-  the turn-off timeout. The new `bright_forced_off` attribute carries this
-  across a restart.
-- A follow-mode light on an all-day (00:00 → 00:00) schedule now takes each
-  midnight as a new window starting: a light turned off manually comes back
-  on. Previously the running light ignored the new window, but turned on at
-  the next restart or options edit, even after a manual off that day.
-- Unticking every light in a sensor's bulk assignment, or every entry in a
-  discovery checklist, now stands as an empty selection. Previously the
-  form refilled it from its default, so the sensor stayed on those lights.
-- A time-window schedule keeps its window marker while its on-period runs
-  on, also across a restart. Previously windows chained around the clock
-  got a later merged start at each boundary, which re-triggered follow mode
-  and re-lit a light turned off manually.
-- A follow-mode light turned off manually after its window ended while
-  auto-off was held no longer remembers that window, also when the manual
-  off came while the schedule was unavailable. Previously, when it was
-  turned on again later, the next hold release or restart turned it off.
-- Changing only the color of a real light during the effect or warn stage
-  now restores the brightness the light had before the warning. Previously
-  the light stayed at the stage's brightness for the whole new on-period.
-- A light turned off while its turn-on was still waiting for a slow turn-on
-  selection now stays off. Previously the waiting turn-on was sent
-  afterwards, leaving the light on with no timer to turn it off. A manual
-  turn-on that waits while a warning stage ends, or while occupancy asks for
-  the light too, is still sent with its own brightness and color.
-  Previously it was dropped, so the light finished its warning and turned
-  off, or came on with the automatic settings instead.
-- A false detection over a light turned on manually, at the wall, or by the
-  door now leaves that turn-on its full turn-off timeout. Previously the
-  countdown was taken from the sensor's `latest_occupied_time`, which a
-  false detection does not advance, so a light turned on after an earlier
-  visit could turn off the moment the sensor cleared.
-- A Virtual Scheduled Light whose schedule ends while an automatic turn-on
-  is still waiting for a slow turn-on selection now treats that turn-on as
-  an on light: *Turn off* drops it, and *Keep state* or *Switch state* run
-  the outside profile's timeout once it is sent. Previously the turn-on was
-  sent after the boundary, and the light stayed on with no timer.
-- A light whose entry is unloaded (its options saved, or the entry disabled
-  or removed) while an automatic turn-on is still waiting for a slow
-  turn-on selection no longer sends that turn-on afterwards. Previously the
-  removed entity lit the room once the selection returned.
-- A Virtual Combined Occupancy Sensor now takes over the
-  `latest_occupied_time` its sensors already carry when it is created, and
-  when an options edit adds a sensor with newer history. Previously that
-  earlier visit counted as a detection in the next cycle, so a false
-  detection was reported as genuine and `false_detection_count` did not
-  increase.
-- A Virtual Combined Occupancy Sensor that is reloaded or restarted while
-  occupied now remembers the genuine detection the running cycle already
-  contained. Previously, when the last sensor then cleared without a newer
-  detection, the cycle was reported as a false detection, so lights it had
-  lit turned off after the false-detection delay.
-- A light's **Configure** form that was opened before the light was
-  converted through **Convert virtual lights** can no longer be saved.
-  Previously the stale form replaced the converted profiles with its own
-  settings, so the light ran default settings on both sides of its schedule.
-- A schedule window whose start is a sun event shifted late (a positive
-  offset) and whose end is a sun event shifted early (a negative offset) now
-  resolves. Previously the end was moved forward by one day only, which
-  could still leave it before the start, so the window was dropped and the
-  schedule never turned on.
-- When a maintain occupancy sensor clears, or an `open_close` door closes,
-  occupancy that brightness or a gate-mode window keeps from holding the
-  light no longer holds it: the countdown starts. Previously the light
-  stayed on with no timer until that occupancy sensor next changed.
-- A real light reporting a color part way through a fade the effect or
-  warn stage asked for, or the color temperature it clamped a command to
-  because its own range is narrower than the Virtual Light's, is no longer
-  read as a recolor. Previously such a reply cancelled the warning sequence
-  and restarted the turn-off timeout.
-- A Virtual Light's turn-off timeout is checked against its occupancy and
-  maintain occupancy sensors again when the last page of a multi-page form
-  is saved, or the entity ID menu is confirmed. Previously a sensor's
-  timeout raised while a later page was open, allowed because the unsaved
-  light did not yet depend on it, let the light save a shorter timeout than
-  the sensor's. The same holds for both profiles of a Virtual Scheduled
-  Light and for discovered lights.
-- A Virtual Occupancy Sensor whose source is changed in its options to a
-  sensor that is already on now times the new source's cycle from that
-  sensor's own start. Previously it kept the old source's start, so a long
-  visit could be counted as a false detection. A reload or restart also
-  keeps the classification of the sensor's last clear (false detection or
-  cleared after unavailable) until its next clear, so a light still held by
-  its maintain occupancy sensor keeps its quick false-off.
+- A schedule or occupancy sensor that goes `unavailable` and comes back
+  unchanged, including at startup and whenever its options are edited, is no
+  longer read as a schedule window starting or ending, or as someone arriving
+  or leaving; a light turned off manually stays off.
+- Schedule window markers survive restarts, windows chained around the clock,
+  sun offsets that push an end past midnight or before its start, and the
+  spring-forward clock change.
+- False detections: a combined sensor keeps its cycle's genuine detection
+  across a reload and inherits its constituents' `latest_occupied_time`, and a
+  light turned on by hand or by a door keeps its full timeout.
+- A maintain sensor clearing or a door closing while brightness or a gate-mode
+  schedule window blocks occupancy starts the countdown instead of leaving the
+  light on with no timer.
+- Slow and chatty bulbs: late replies, mid-fade colors and clamped color
+  temperatures are no longer read as manual changes, so a warning no longer
+  restarts the timer. A dim right after a command that changed nothing is
+  read as one.
+- A follow-mode real light returning from `unavailable` is made to match its
+  schedule instead of being read as a manual change.
+- Turn-on selection: a missing target select is skipped with a warning, a
+  turn-on with no brightness or color reports what the light came on at, and a
+  turn-on waiting on a slow select is dropped when the light is turned off,
+  its schedule ends or its entry is unloaded.
+- Illuminance going dark resumes only an on-period that brightness cut short;
+  the new `bright_forced_off` attribute carries this across a restart.
+- Editing a light's options while its Auto-off switch is off no longer applies
+  the turn-off it was holding; disabling the switch while off releases it.
+- Options flows: a changed occupancy source times its cycle from that sensor's
+  own start, a changed turn-on selection entity drops the old fallback, an
+  emptied checklist stays empty, and a stale **Configure** form can't
+  overwrite a converted light.
 
 ## [1.7.0] - 2026-08-27
 
