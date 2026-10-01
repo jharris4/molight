@@ -275,7 +275,6 @@ from homeassistant.core import (
     HomeAssistant,
     callback,
 )
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
@@ -1512,6 +1511,16 @@ class VirtualLight(LightEntity, RestoreEntity):
     # ------------------------------------------------------------------
     # LightEntity API
     # ------------------------------------------------------------------
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when on, or about to be.
+
+        A turn-on waiting for its selection already reports on, so a toggle
+        or a brightness step made meanwhile builds on it. _attr_is_on stays
+        "the real lights were commanded".
+        """
+        return self._attr_is_on or self._turn_on_waiting()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on all real lights and transition the state machine.
@@ -3487,6 +3496,12 @@ class VirtualLight(LightEntity, RestoreEntity):
                 return False
             waiting = (generation, None if manual else auto_level_generation)
             self._waiting_turn_ons[context.id] = waiting
+            # Reported on, at the level asked for, while the select call runs.
+            if brightness is not None:
+                self._attr_brightness = brightness
+            if color:
+                self._adopt_color_data(color)
+            self.async_write_ha_state()
             try:
                 await self._apply_turn_on_selection(context)
             finally:
@@ -3563,9 +3578,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 blocking=True,
                 context=context,
             )
-        except HomeAssistantError:
-            # Turn-on selections are an enhancement; a missing select or a
-            # renamed option must never leave the room dark.
+        except Exception:  # noqa: BLE001
+            # Turn-on selections are an enhancement; a missing select, a
+            # renamed option or a failing integration must never leave the
+            # room dark, or the light reporting on with nothing lit.
             _LOGGER.warning(
                 "Unable to apply turn-on selection option %r using %s; turning on the "
                 "lights without it",

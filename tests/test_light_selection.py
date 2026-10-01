@@ -1058,3 +1058,177 @@ async def test_uninterrupted_slow_selection_still_turns_on(
 
     assert calls == [("turn_on", 102)]
     assert hass.states.get("light.selection_light").state == "on"
+
+
+_LEVEL = {"manual": 200, "occupancy": 102}
+
+
+class _FailingSelect(_SlowSelect):
+    """A select service that blocks until released, then fails."""
+
+    def __init__(self, hass: HomeAssistant, error: Exception) -> None:
+        super().__init__(hass)
+        self._error = error
+
+    async def _select(self, call: ServiceCall) -> None:
+        await super()._select(call)
+        raise self._error
+
+
+async def _begin_turn_on(
+    hass: HomeAssistant, select: _SlowSelect, trigger: str
+) -> asyncio.Task | None:
+    """Set up, start a turn-on and return once it waits for the select call."""
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
+    )
+    task = None
+    if trigger == "occupancy":
+        hass.states.async_set("binary_sensor.occ", "on")
+    else:
+        task = hass.async_create_task(
+            hass.services.async_call(
+                "light",
+                "toggle" if trigger == "toggle" else "turn_on",
+                {"entity_id": "light.selection_light", "brightness": 200},
+                blocking=True,
+            )
+        )
+    await asyncio.wait_for(select.started.wait(), 2)
+    return task
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+async def test_waiting_turn_on_reports_on_at_its_level(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """The virtual light is on, at the level asked for, from the moment it
+    accepts a turn-on, not only once the select call has finished."""
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert calls == []
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize(
+    "error",
+    [HomeAssistantError("device offline"), RuntimeError("boom")],
+    ids=["ha_error", "unexpected_error"],
+)
+async def test_waiting_turn_on_whose_selection_fails_still_lights_the_room(
+    hass: HomeAssistant, caplog, trigger: str, error: Exception
+) -> None:
+    """A select call that fails, however it fails, leaves the light reporting
+    on with the real light turned on."""
+    select = _FailingSelect(hass, error)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+    assert hass.states.get("light.selection_light").state == "on"
+
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert "Unable to apply turn-on selection" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+async def test_waiting_turn_on_cancelled_by_an_off_reports_off(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """A newer off takes back the on that the waiting turn-on reported."""
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+    assert hass.states.get("light.selection_light").state == "on"
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    assert hass.states.get("light.selection_light").state == "off"
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["toggle", "occupancy"])
+async def test_toggle_during_the_wait_turns_the_light_off(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """A toggle while a turn-on waits sees an on light: two quick toggles end
+    off, as does a toggle right after motion lit the room."""
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+
+    toggle = hass.async_create_task(
+        hass.services.async_call(
+            "light", "toggle", {"entity_id": "light.selection_light"}, blocking=True
+        )
+    )
+    await _drain(hass)
+    assert hass.states.get("light.selection_light").state == "off"
+    select.release.set()
+    await toggle
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_off", None)]
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+async def test_member_reporting_off_after_a_waited_turn_on_turns_the_light_off(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """Once the command is sent, the real light's own reports decide again."""
+    select = _SlowSelect(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+    hass.states.async_set("light.ambient", "on", {"brightness": _LEVEL[trigger]})
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+
+    hass.states.async_set("light.ambient", "off")
+    await settle(hass)
+    state = hass.states.get("light.selection_light")
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == "idle"

@@ -87,6 +87,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Light off ends that on-period, so going dark shortly after no longer brings
   the light back on under the outside settings. *Keep state* and *Switch
   state* still resume it.
+- A Virtual Light reports `on`, at the brightness and colour asked for, as
+  soon as it accepts a turn-on, instead of only once a slow turn-on select
+  call has finished. Two quick brightness-up clicks on a remote now add up
+  instead of the second replacing the first, and a second toggle turns the
+  light off again. A select call that fails in any way, not only with a Home
+  Assistant error, still turns the lights on without the selection.
 
 ## [1.8.0] - 2026-09-30
 

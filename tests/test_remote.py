@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -59,8 +60,9 @@ from custom_components.molight.const import (
     STATE_EFFECT,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import settle, setup_entries
+from tests.conftest import make_light_entry, settle, setup_entries
 from tests.test_config_flow import _suggested_values
+from tests.test_light_selection import _SlowSelect
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -263,6 +265,47 @@ async def test_first_sighting_and_unavailable_never_fire(
     _fire(hass, "event.pico_on", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
+    hass: HomeAssistant,
+) -> None:
+    """A second raise click while the first one's turn-on still waits for its
+    selection builds on that click's level instead of replacing it."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("select.scene", "Day")
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_raise", PICO_TYPES)
+    light = make_light_entry(
+        name="Test Light",
+        lights=["light.living_room"],
+        turn_on_select_entity="select.scene",
+        turn_on_select_option="Night",
+    )
+    remote = _remote_entry(**{CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"]})
+    await setup_entries(hass, light, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_raise", "press", PICO_TYPES)
+    await asyncio.wait_for(select.started.wait(), 2)
+    assert _vlight(hass).state == "on"
+    assert _vlight(hass).attributes["brightness"] == 26  # 10 %
+    _fire(hass, "event.pico_raise", "press", PICO_TYPES)
+    for _ in range(4):  # settle() would wait for the select call
+        await asyncio.sleep(0)
+    assert _vlight(hass).attributes["brightness"] == 51  # 20 %
+    select.release.set()
+    await settle(hass)
+
+    assert _vlight(hass).state == "on"
+    assert _vlight(hass).attributes["brightness"] == 51
+    assert [
+        d["service_data"]["brightness"]
+        for d in calls
+        if d["domain"] == "light"
+        and d["service_data"].get("entity_id") == ["light.living_room"]
+    ] == [51]
 
 
 @pytest.mark.asyncio
