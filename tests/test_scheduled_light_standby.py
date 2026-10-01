@@ -717,6 +717,79 @@ async def test_schedule_end_keep_gives_standby_the_outside_timeout(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
+)
+async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
+    hass: HomeAssistant, freezer, end_action: str
+) -> None:
+    """The fresh outside timeout is an on-period that going dark resumes."""
+    illuminance = "binary_sensor.yard_bright"
+    hass.states.async_set(illuminance, "off")
+    await _setup_porch(
+        hass,
+        _porch(
+            end_action=end_action,
+            outside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            },
+        ),
+    )
+    await _echo_standby(hass)
+    await _set(hass, SCHEDULE, "off")
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "on")
+    assert hass.states.get(VIRTUAL).state == "off"
+    await _tick(hass, freezer, 2)
+    await _set(hass, illuminance, "off")
+
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    assert _attrs(hass)["last_on_virtual"] is None
+    assert _attrs(hass)["last_on_physical"] is None
+    # It ends when the timeout the boundary started would have.
+    await _tick(hass, freezer, 54)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await _tick(hass, freezer, 3)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_schedule_end_timeout_from_standby_survives_a_false_detection(
+    hass: HomeAssistant, freezer
+) -> None:
+    """False motion against an old visit does not cut the fresh timeout short."""
+    yard = "binary_sensor.yard_occupancy"
+    visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    hass.states.async_set(yard, "off", {"latest_occupied_time": visit})
+    await _setup_porch(
+        hass,
+        _porch(
+            end_action=SCHEDULE_END_ACTION_KEEP,
+            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
+        ),
+    )
+    await _echo_standby(hass)
+    await _set(hass, SCHEDULE, "off")
+    await _tick(hass, freezer, 2)
+
+    await _set(hass, yard, "on", latest_occupied_time=visit)
+    await _set(
+        hass, yard, "off", latest_occupied_time=visit, last_clear_false_detection=True
+    )
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 56)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await _tick(hass, freezer, 3)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_keep_leaves_a_raised_light_to_its_presence(
     hass: HomeAssistant, freezer
 ) -> None:

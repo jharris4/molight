@@ -745,6 +745,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._last_on_occupancy: datetime | None = None
         self._last_on_illuminance: datetime | None = None
         self._last_on_door: datetime | None = None
+        # When a schedule end last gave a light resting at standby a fresh
+        # timeout: anchors that on-period like a turn-on, without claiming one.
+        self._standby_timeout_started: datetime | None = None
         self._last_brightness_change_physical: datetime | None = None
         self._last_brightness_change_virtual: datetime | None = None
         self._last_color_change_physical: datetime | None = None
@@ -1171,6 +1174,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if self._machine_state == STATE_STANDBY and not self._standby_applies():
             # Standby has no end of its own: the new settings' timeout ends it.
             self._machine_state = STATE_ACTIVE
+            self._standby_timeout_started = datetime.now(UTC)
             self._start_timer()
 
         if not lit:
@@ -2252,6 +2256,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         if not self._is_lit():
             return
 
+        was_standby = self._machine_state == STATE_STANDBY
         was_warning = self._in_warning()
         self._cancel_timer()
         if was_warning:
@@ -2290,6 +2295,9 @@ class VirtualLight(LightEntity, RestoreEntity):
             # decide whether this is immediate or enters a warning sequence.
             self._begin_warning()
         else:
+            if was_standby and not self._occupancy_lots():
+                # A fresh full timeout, not one that history accounts for.
+                self._standby_timeout_started = datetime.now(UTC)
             self._start_timer(duration)
             self.async_write_ha_state()
 
@@ -2838,12 +2846,17 @@ class VirtualLight(LightEntity, RestoreEntity):
         A false detection leaves latest_occupied_time at an earlier visit,
         which must not cut short a light the user turned on since then: the
         countdown never ends before a full timeout after the latest manual,
-        physical or door turn-on.
+        physical or door turn-on, or a schedule end's fresh timeout.
         """
         countdown = self._compute_occupancy_countdown()
         user_ons = [
             t
-            for t in (self._last_on_physical, self._last_on_virtual, self._last_on_door)
+            for t in (
+                self._last_on_physical,
+                self._last_on_virtual,
+                self._last_on_door,
+                self._standby_timeout_started,
+            )
             if t is not None
         ]
         if user_ons:
@@ -2879,6 +2892,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._last_on_virtual,
                 self._last_on_occupancy,
                 self._last_on_door,
+                self._standby_timeout_started,
             )
             if t is not None
         ]
