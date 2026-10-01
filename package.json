@@ -31,7 +31,7 @@
     "release": "python3 scripts/release"
   },
   "devDependencies": {
-    "@devcontainers/cli": "^0.87.0",
-    "@playwright/test": "1.62.0"
+    "@devcontainers/cli": "^0.89.0",
+    "@playwright/test": "1.63.0"
   }
 }
