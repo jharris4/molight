@@ -31,10 +31,12 @@ from custom_components.molight.const import (
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
+    CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_TRANSITION,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_COLOR_TEMP,
     CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
@@ -42,6 +44,7 @@ from custom_components.molight.const import (
     CONF_ILLUMINANCE_MODE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
@@ -53,6 +56,7 @@ from custom_components.molight.const import (
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_COLOR_TEMP,
     CONF_WARN_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
@@ -271,6 +275,91 @@ async def test_warning_stages_lead_into_standby(hass: HomeAssistant, freezer) ->
     # Only the effect blink turned the members off.
     assert len(_light_calls(calls, "turn_off")) == 1
     assert _light_calls(calls, "turn_on")[-1]["brightness"] == STANDBY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stage",
+    [
+        {CONF_WARN_TIMEOUT: 2, CONF_WARN_COLOR_TEMP: 6000},
+        {
+            CONF_EFFECT_TIMEOUT: 2,
+            CONF_EFFECT_BRIGHTNESS: 40,
+            CONF_EFFECT_COLOR_TEMP: 6000,
+        },
+    ],
+    ids=["warn", "effect_only"],
+)
+async def test_standby_without_a_color_restores_the_pre_warning_color(
+    hass: HomeAssistant, freezer, stage: dict
+) -> None:
+    """A colored warning stage must not become the resting appearance."""
+    hass.states.async_set(REAL, "off", {"supported_color_modes": ["color_temp"]})
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    await setup_entries(
+        hass,
+        _porch(
+            inside={
+                CONF_STANDBY_COLOR_TEMP: None,
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                **stage,
+            }
+        ),
+    )
+    await settle(hass)
+    assert "color_temp_kelvin" not in _light_calls(calls, "turn_on")[-1]
+
+    await _set(hass, OCCUPANCY, "on")
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    assert _attrs(hass)["color_temp_kelvin"] == 6000
+    await _tick(hass, freezer, 2)
+
+    _assert_standby(hass)
+    assert _light_calls(calls, "turn_on")[-1]["color_temp_kelvin"] == 3000
+    assert _attrs(hass)["color_temp_kelvin"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_warning_leads_into_an_rgb_standby_on_mixed_members(
+    hass: HomeAssistant, freezer
+) -> None:
+    """One command carries the standby color; each member shows what it can."""
+    white = "light.real_white"
+    hass.states.async_set(REAL, "off", {"supported_color_modes": ["rgb"]})
+    hass.states.async_set(white, "off", {"supported_color_modes": ["color_temp"]})
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    entry = _porch(
+        inside={
+            CONF_STANDBY_COLOR_TEMP: None,
+            CONF_STANDBY_RGB_COLOR: [0, 0, 255],
+            CONF_AUTO_ON_COLOR_TEMP: 3000,
+            CONF_WARN_TIMEOUT: 2,
+            CONF_WARN_COLOR_TEMP: 6000,
+        }
+    )
+    data = {**entry.data, CONF_LIGHTS: [REAL, white]}
+    await setup_entries(hass, MockConfigEntry(domain=DOMAIN, data=data))
+    await settle(hass)
+    assert tuple(_attrs(hass)["hs_color"]) == (240.0, 100.0)
+
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["color_temp_kelvin"] == 3000
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    await _tick(hass, freezer, 2)
+
+    _assert_standby(hass)
+    last = _light_calls(calls, "turn_on")[-1]
+    assert last["entity_id"] == [REAL, white]
+    assert tuple(last["rgb_color"]) == (0, 0, 255)
+    assert "color_temp_kelvin" not in last
+    assert tuple(_attrs(hass)["hs_color"]) == (240.0, 100.0)
 
 
 @pytest.mark.asyncio

@@ -77,7 +77,8 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
     on-period that brightness cut short is resumed first, as without standby.
   - Occupancy and the door raise it to the auto-on level like any turn-on
     (the maintain entity only holds a raised light); when the timer expires,
-    the effect/warn stages run and the last step drops to standby, not off.
+    the effect/warn stages run and the last step drops to standby, not off
+    (at the pre-warning color when standby has no color of its own).
   - An external dim or a manual turn-on from standby runs a timer that ends
     back at standby. A manual off cancels standby until the next schedule
     boundary; turning the light back on rejoins it.
@@ -3143,7 +3144,15 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         Callers pass the fade: auto-on when coming on from off (with the
         turn-on selection), auto-off when dropping from a higher level.
+        Without a standby color, a warning stage's recolor is undone.
         """
+        color = self._standby_color
+        if (
+            color is None
+            and self._in_warning()
+            and self._pre_warn_color != self._current_color()
+        ):
+            color = self._pre_warn_color
         self._cancel_timer()
         self._machine_state = STATE_STANDBY
         self._warning_active = False
@@ -3155,7 +3164,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 True,
                 brightness=self._standby_brightness,
                 transition=transition,
-                color=self._standby_color,
+                color=color,
                 apply_turn_on_selection=selection,
                 force_selection=force_selection,
                 auto_level=True,
