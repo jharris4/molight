@@ -1354,8 +1354,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # Bright in control mode: standby waits for darkness.
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle(bright_forced=True)
-            elif self._occupancy_holds() or self._door_holds():
-                # Presence arrived while Home Assistant was down: boost.
+            elif self._occupancy_holds() or (
+                self._door_holds() and not self._is_illuminance_bright()
+            ):
+                # Presence arrived while Home Assistant was down: boost,
+                # gated by brightness like any other rise.
                 self._machine_state = STATE_STANDBY
                 self._adopt_active_occupancy()
             else:

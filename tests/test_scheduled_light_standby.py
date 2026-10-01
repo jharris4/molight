@@ -866,6 +866,69 @@ async def test_restart_with_presence_raises_a_standby_light(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("illuminance", "bright", "held", "state", "level"),
+    [
+        (ILLUMINANCE_MODE_GATE, False, False, STATE_OCCUPIED, BOOST),
+        (ILLUMINANCE_MODE_GATE, True, False, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_GATE, True, True, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_CONTROL, False, True, STATE_OCCUPIED, BOOST),
+        (ILLUMINANCE_MODE_CONTROL, True, True, STATE_STANDBY, STANDBY),
+    ],
+    ids=["dark", "bright_gate", "bright_gate_held", "dark_held", "bright_control_held"],
+)
+async def test_restart_with_the_door_open_raises_standby_only_when_dark(
+    hass: HomeAssistant,
+    illuminance: str,
+    bright: bool,
+    held: bool,
+    state: str,
+    level: int,
+) -> None:
+    """A door opened while down raises restored standby, unless it is bright."""
+    door = "binary_sensor.front_door"
+    lux = "binary_sensor.bright"
+    hold = "input_boolean.guests"
+    hass.states.async_set(door, "on")
+    hass.states.async_set(lux, "on" if bright else "off")
+    hass.states.async_set(hold, "on" if held else "off")
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    ATTR_ACTIVE_SETTINGS: ACTIVE_SETTINGS_INSIDE,
+                    ATTR_ACTIVE_SETTINGS_SCHEDULE: SCHEDULE,
+                    "molight_state": STATE_STANDBY,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(REAL, "on", {"brightness": STANDBY})
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    await setup_entries(
+        hass,
+        _porch(
+            inside={
+                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+                CONF_ILLUMINANCE_ENTITY: lux,
+                CONF_ILLUMINANCE_MODE: illuminance,
+                CONF_HOLD_ENTITIES: [hold],
+            }
+        ),
+    )
+    await settle(hass)
+
+    assert _attrs(hass)["molight_state"] == state
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+
+
+@pytest.mark.asyncio
 async def test_restart_while_bright_in_control_mode_turns_standby_off(
     hass: HomeAssistant,
 ) -> None:
