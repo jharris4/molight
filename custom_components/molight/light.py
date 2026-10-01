@@ -1677,16 +1677,24 @@ class VirtualLight(LightEntity, RestoreEntity):
                     self._reconcile_recovered_member()
                 return  # echo of our own service call; call sites manage state
             # A member our own select call changed was not changed at the wall.
-            claim = event.context.id not in self._waiting_turn_ons
+            claim = not (
+                event.context.id in self._waiting_turn_ons
+                or self._selecting_on_device_of(entity_id)
+            )
+            lit = (
+                new_state.state == "on" and new_state.attributes.get("brightness") != 0
+            )
+            if not claim and lit and self._turn_on_waiting():
+                # Lit by the selection of a turn-on about to be sent, which
+                # keeps the state it set: only mirror the member.
+                self._mirror_member(new_state)
+                return
             if same_state:
                 if new_state.state == "on":
                     self._on_light_attrs_change(old_state, new_state, claim=claim)
                 return
             if resend and self._reconcile_recovered_member():
                 return
-            lit = (
-                new_state.state == "on" and new_state.attributes.get("brightness") != 0
-            )
             if member_recovered and not lit and self._turn_on_waiting():
                 # Reporting in dark while a turn-on waits for its selection
                 # is no off: the turn-on is about to light this member.
@@ -1698,11 +1706,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # running timer, countdown, or warning sequence untouched;
                 # a bulb that blips off the mesh mid-countdown must not win
                 # itself a fresh full timer.
-                if brightness := new_state.attributes.get("brightness"):
-                    self._attr_brightness = brightness
-                if color := self._member_color(new_state):
-                    self._set_color_state(*color)
-                self.async_write_ha_state()
+                self._mirror_member(new_state)
                 return
             if new_state.state == "on" and (color := self._member_color(new_state)):
                 # Mirror the real light's color on the off→on adoption edge,
@@ -1947,6 +1951,32 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._occupancy_lit_lights = False
         self._standby_suppressed = False
         self._auto_level_generation += 1
+
+    def _mirror_member(self, state: State) -> None:
+        """Report a real light's brightness and color without acting on them."""
+        if brightness := state.attributes.get("brightness"):
+            self._attr_brightness = brightness
+        if color := self._member_color(state):
+            self._set_color_state(*color)
+        self.async_write_ha_state()
+
+    def _selecting_on_device_of(self, entity_id: str) -> bool:
+        """Return True while a select call runs on this member's own device.
+
+        A preset that lights its device's light is reported by a push of the
+        device's, under a context of its own.
+        """
+        if not self._waiting_turn_ons or not self._turn_on_select_entity:
+            return False
+        registry = er.async_get(self.hass)
+        member = registry.async_get(entity_id)
+        target = registry.async_get(self._turn_on_select_entity)
+        return (
+            member is not None
+            and target is not None
+            and member.device_id is not None
+            and member.device_id == target.device_id
+        )
 
     def _all_lights_off(self) -> bool:
         """Return True when every real light is off (brightness 0 is off)."""

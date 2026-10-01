@@ -10,7 +10,11 @@ import pytest
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from homeassistant.helpers import device_registry as dr, entity_registry as er
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.molight.const import (
     DOMAIN,
@@ -18,7 +22,12 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_SWITCH,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    make_light_entry,
+    record_service_calls,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -1328,3 +1337,203 @@ async def test_member_reporting_in_off_during_a_waiting_window_start_gets_it(
     assert state.state == "on"
     assert state.attributes["molight_state"] == "scheduled"
     assert state.attributes["last_off_manual"] is None
+
+
+def _one_device(hass: HomeAssistant, *entity_ids: str) -> None:
+    """Register the entities as one device's, like a WLED light and its presets."""
+    entry = MockConfigEntry(domain="wled")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("wled", entity_ids[0])}
+    )
+    for entity_id in entity_ids:
+        domain, object_id = entity_id.split(".")
+        # A state already there would make the registry pick another id.
+        state = hass.states.get(entity_id)
+        hass.states.async_remove(entity_id)
+        registered = er.async_get(hass).async_get_or_create(
+            domain,
+            "wled",
+            entity_id,
+            suggested_object_id=object_id,
+            device_id=device.id,
+        )
+        assert registered.entity_id == entity_id
+        if state:
+            hass.states.async_set(entity_id, state.state, state.attributes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+async def test_device_push_from_the_selection_is_not_a_wall_turn_on(
+    hass: HomeAssistant, freezer, trigger: str
+) -> None:
+    """A preset that lights its own device's light reports that by a push of
+    the device's, not under the select call: the waiting turn-on is still
+    sent, and the on-period stays with whoever started it."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+
+    # The preset turns the light on, then sets its level.
+    for brightness in (77, 90):
+        hass.states.async_set("light.ambient", "on", {"brightness": brightness})
+        await _drain(hass)
+    assert calls == []
+    select.release.set()
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["last_on_physical"] is None
+    assert state.attributes["last_brightness_change_physical"] is None
+    if trigger != "occupancy":
+        return
+
+    # Still lit by occupancy: a false detection gets the quick off.
+    freezer.tick(timedelta(seconds=2))
+    hass.states.async_set(
+        "binary_sensor.occ", "off", {"last_clear_false_detection": True}
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_device_push_after_the_turn_on_was_cancelled_is_adopted(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A preset that still lights the light after an off cancelled the turn-on
+    leaves a lit room: the light reports it and turns it off on its timeout."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    turn_on = await _begin_turn_on(hass, select, "manual")
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    calls = _light_calls(hass)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 77})
+    await _drain(hass)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["brightness"] == 77
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert calls == [("turn_off", None)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_device_push_from_the_selection_does_not_drop_a_window_start(
+    hass: HomeAssistant,
+) -> None:
+    """A follow window start whose preset lights the light still sends its
+    own level."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.sched", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched",
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            auto_on_brightness=40,
+        ),
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 77})
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 102)]
+    assert state.attributes["molight_state"] == "scheduled"
+    assert state.attributes["brightness"] == 102
+    assert state.attributes["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("layout", ["another_device", "select_without_device"])
+async def test_wall_turn_on_of_a_light_on_another_device_still_overtakes(
+    hass: HomeAssistant, layout: str
+) -> None:
+    """Only the select target's own device speaks for the selection."""
+    if layout == "another_device":
+        _one_device(hass, "select.ambient_theme")
+    _one_device(hass, "light.ambient")
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.occ", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 200})
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_wall_turn_on_of_another_member_during_a_device_selection_overtakes(
+    hass: HomeAssistant,
+) -> None:
+    """A second real light, not on the select target's device, turned on at
+    the wall during the wait is still a change at the wall."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    for entity_id in ("binary_sensor.occ", "light.ambient", "light.lamp"):
+        hass.states.async_set(entity_id, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            name="Selection Light",
+            lights=["light.ambient", "light.lamp"],
+            turn_on_select_entity="select.ambient_theme",
+            turn_on_select_option="Cozy",
+            occupancy="binary_sensor.occ",
+            auto_on_brightness=40,
+        ),
+    )
+    calls = record_service_calls(hass)
+    hass.states.async_set("binary_sensor.occ", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set("light.lamp", "on", {"brightness": 200})
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert [call for call in calls if call["domain"] == "light"] == []
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["last_on_physical"] is not None

@@ -15,6 +15,7 @@ from homeassistant.core import (
     State,
     callback,
 )
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -2229,6 +2230,57 @@ async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
     assert _attrs(hass)["brightness"] == level
     assert _attrs(hass)["last_color_change_physical" if changed else "brightness"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reported", ["by_the_device", "under_the_select_call"])
+async def test_selection_lighting_the_light_does_not_take_standby_over(
+    hass: HomeAssistant, reported: str
+) -> None:
+    """A preset that lights the real light while standby waits for that select
+    call is not a turn-on at the wall, whether the change arrives under the
+    select call or as a push of the device both entities belong to: the
+    light rests at standby, and standby is still sent."""
+    if reported == "by_the_device":
+        wled = MockConfigEntry(domain="wled")
+        wled.add_to_hass(hass)
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=wled.entry_id, identifiers={("wled", "porch")}
+        )
+        for entity_id in ("select.scene", REAL):
+            domain, object_id = entity_id.split(".")
+            registered = er.async_get(hass).async_get_or_create(
+                domain,
+                "wled",
+                entity_id,
+                suggested_object_id=object_id,
+                device_id=device.id,
+            )
+            assert registered.entity_id == entity_id
+    select = _ParkedSelect(hass, park=1)
+    calls = await _setup_porch(hass, _porch(inside=_SCENE), schedule="off")
+    select_calls: list[Context] = []
+
+    @callback
+    def _record(event: Event) -> None:
+        if event.data["domain"] == "select":
+            select_calls.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, _record)
+    hass.states.async_set(SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    context = None if reported == "by_the_device" else select_calls[-1]
+    for brightness in (200, 180):  # on, then the preset's level
+        hass.states.async_set(REAL, "on", {"brightness": brightness}, context=context)
+        await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    _assert_standby(hass)
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [STANDBY]
+    assert _attrs(hass)["last_on_physical"] is None
+    assert _attrs(hass)["last_brightness_change_physical"] is None
 
 
 @pytest.mark.asyncio
