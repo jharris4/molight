@@ -15,6 +15,7 @@ The examples build on each other:
 9. [Pico remote](#example-9-pico-remote-for-the-closet-light-virtual-remote): remote buttons instead of automations
 10. [Bilresa remote](#example-10-bilresa-two-button-remote-single-vs-double-click): single vs. double clicks
 11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
+12. [Porch light with standby](#example-12-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
 
 See the [README](README.md#entity-reference) for the full field reference.
 
@@ -376,6 +377,47 @@ Schedule mode:     follow
 ```
 
 Each window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a source-backed schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
+
+---
+
+### Example 12: Porch light with standby (Virtual Scheduled Light)
+
+Through Example 4's window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
+
+**1. Virtual Scheduled Light** (shared form)
+
+```text
+Name:              Porch                         # → light.porch
+Lights to control: light.porch_real
+Schedule sensor:   binary_sensor.porch_schedule  # from Example 4
+At schedule end:   Turn off using the inside settings, then apply outside settings
+```
+
+**2. Outside-schedule settings** (daytime, schedule *off*)
+
+```text
+Turn-off timeout:  300        # a daytime manual on goes off after 5 minutes
+```
+
+**3. Inside-schedule settings** (night, schedule *on*)
+
+```text
+Turn-off timeout:   30
+Occupancy sensor:   binary_sensor.porch_occupancy
+Auto-on brightness: 100
+
+Standby:                                         # collapsed section; expand it
+  Standby brightness:        1
+  Standby color mode:        Color temperature
+  Standby color temperature: 2200
+```
+
+With no occupancy sensor on the outside side, motion does nothing in the daytime. Things worth knowing:
+
+- Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
+- Switching the porch off by hand turns standby off for the rest of the window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
+- To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby colour without a brightness.
+- See the [README](README.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---
 
