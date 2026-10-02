@@ -1449,8 +1449,8 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
-# current_window_start for an on-period with no known start (an inverted empty
-# combination): stable, so Follow mode applies it only once.
+# current_window_start for an on-period with no known start: stable, so Follow
+# mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
 
 
@@ -1586,8 +1586,11 @@ class _ScheduleTree:
             require_all=cfg.get(CONF_SCHEDULE_OPERATOR, DEFAULT_SCHEDULE_OPERATOR)
             == SCHEDULE_OPERATOR_ALL,
             children=[
-                self._expand(entity_id, path)
+                child
                 for entity_id in cfg.get(CONF_SCHEDULE_INPUTS, [])
+                # An input left with no schedules counts as deleted too.
+                if (child := self._expand(entity_id, path)).kind != "combined"
+                or child.children
             ],
         )
 

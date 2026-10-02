@@ -355,6 +355,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An inverted Virtual Combined Schedule Sensor whose last input is deleted is
   `off`, as the README says, instead of `on` for good. A follow-mode light
   on a "Not Day" combination came on and stayed on when "Day" was deleted.
+  The same holds one level up: an input combination left with no schedules
+  counts as deleted, so "Not Daylight" stays `off` once Daylight's schedules
+  are gone.
 - A Virtual Light can no longer include a Home Assistant light group that
   includes the virtual light, directly or through another Virtual Light. Such
   a light never lit its bulbs, and turning it off called itself until Home
