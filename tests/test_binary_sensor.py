@@ -429,6 +429,40 @@ async def test_late_loading_source_clear_is_not_false_detection(
 
 
 @pytest.mark.asyncio
+async def test_detection_after_a_plain_outage_is_still_classified(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Only the restored placeholder marks a first sighting: a source back
+    from an ordinary outage starts a cycle that can still be flagged false."""
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Outage Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=31))
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.outage_occupancy")
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_false_detection_classification_and_count(
     hass: HomeAssistant, freezer
 ) -> None:
