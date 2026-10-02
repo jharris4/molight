@@ -672,6 +672,28 @@ class _EchoExpectation:
         return "pending" if settling else "contradiction"
 
 
+_MACHINE_STATES = frozenset(
+    {
+        STATE_IDLE,
+        STATE_ACTIVE,
+        STATE_OCCUPIED,
+        STATE_COUNTDOWN,
+        STATE_SCHEDULED,
+        STATE_STANDBY,
+        STATE_EFFECT,
+        STATE_WARN,
+    }
+)
+# What a virtual light can advertise, as a restored state names it.
+_RESTORABLE_COLOR_MODES = (
+    {ColorMode.HS, ColorMode.COLOR_TEMP},
+    {ColorMode.HS},
+    {ColorMode.COLOR_TEMP},
+    {ColorMode.BRIGHTNESS},
+    {ColorMode.ONOFF},
+)
+
+
 class VirtualLight(LightEntity, RestoreEntity):
     """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
@@ -796,6 +818,10 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         self._machine_state: str = STATE_IDLE
         self._attr_is_on = False
+        # Until the light seeds it reports the on/off and machine state it
+        # restored: Home Assistant saves every state as it starts.
+        self._showing_restored = False
+        self._seeded = False
         self._timer_unsub: CALLBACK_TYPE | None = None
         # When the armed timer fires, None while none is armed.
         self._timer_ends: datetime | None = None
@@ -1041,6 +1067,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                     or self._pre_warn_color is not None
                 )
             )
+            self._show_restored(last)
 
         watch = list(self._lights)
         if self._settings_schedule_entity:
@@ -1064,6 +1091,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # remove it a second time (that logs "unknown job listener").
             nonlocal unsub_start
             unsub_start = None
+            self._seeded = True
             self.async_on_remove(
                 async_track_state_change_event(
                     self.hass, watch, self._handle_state_change
@@ -1094,6 +1122,39 @@ class VirtualLight(LightEntity, RestoreEntity):
                     unsub_start()
 
             self.async_on_remove(_cancel_start)
+
+    def _show_restored(self, last: State) -> None:
+        """Report the restored state until the light seeds.
+
+        Home Assistant saves every state as it starts, before the seed, and
+        other entities read this one meanwhile.
+        """
+        if self._restored_inside_schedule:
+            self._inside_schedule = True
+            self._apply_light_settings(self._inside_schedule_settings)
+        # An on light must advertise the color mode it reports; the seed
+        # derives the real capabilities from the members.
+        with contextlib.suppress(ValueError, TypeError):
+            modes = {
+                ColorMode(mode)
+                for mode in last.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ()
+            }
+            if modes in _RESTORABLE_COLOR_MODES:
+                self._attr_supported_color_modes = modes
+        if self._attr_color_mode not in self._attr_supported_color_modes:
+            self._attr_supported_color_modes = {self._attr_color_mode}
+        self._attr_is_on = last.state == "on"
+        machine_state = last.attributes.get("molight_state")
+        if machine_state in _MACHINE_STATES:
+            self._machine_state = machine_state
+        self._showing_restored = True
+
+    def _drop_restored(self) -> None:
+        """Stop reporting the restored on/off and machine state."""
+        if self._showing_restored:
+            self._showing_restored = False
+            self._attr_is_on = False
+            self._machine_state = STATE_IDLE
 
     def _select_initial_settings(self) -> None:
         """Choose a scheduled light's settings once startup state is stable."""
@@ -1162,7 +1223,8 @@ class VirtualLight(LightEntity, RestoreEntity):
     def _settings_window(self) -> str | None:
         """Window marker of the settings schedule, the last known if unreadable."""
         state = self.hass.states.get(self._settings_schedule_entity or "")
-        if state is not None and state.state in ("on", "off"):
+        # Before the seed, the restored marker is the one the light acted on.
+        if self._seeded and state is not None and state.state in ("on", "off"):
             self._settings_window_start = state.attributes.get("current_window_start")
         return self._settings_window_start
 
@@ -1346,6 +1408,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         # a color (mirroring is a no-op outside the supported modes). Also
         # legalises a restored color_mode the members no longer support.
         self._update_capabilities()
+        self._drop_restored()
+        # A command made before the seed is judged again from here.
+        self._cancel_timer()
+        self._machine_state = STATE_IDLE
 
         # Unavailable/unknown/missing keep-on entities count as not holding.
         self._hold_states = {
@@ -1364,11 +1430,12 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._schedule_last_on = self._live_schedule_on()
         self._occupancy_last_on = self._live_occupancy_on()
 
-        # Brightness 0 counts as off, matching _all_lights_off.
+        # Brightness 0 counts as off, matching _all_lights_off. A command made
+        # before the seed counts for a member yet to answer it.
         self._attr_is_on = any(
-            (s := self.hass.states.get(e)) is not None
-            and s.state == "on"
-            and s.attributes.get("brightness") != 0
+            self._member_is_lit(e)
+            if (awaited := self._awaited_power(e)) is None
+            else awaited
             for e in self._lights
         )
         self._members_seen = {
@@ -1583,6 +1650,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         (this is the manual path). A turn-on that also restores the pre-warning
         brightness/color restores it over that same fade.
         """
+        self._drop_restored()
         now = datetime.now(UTC)
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
@@ -1621,6 +1689,7 @@ class VirtualLight(LightEntity, RestoreEntity):
 
         No configured fade, but a caller-supplied transition is forwarded.
         """
+        self._drop_restored()
         await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
         # Also ends an on-period that brightness had cut short.
         self._clear_bright_forced_off()
@@ -2187,6 +2256,17 @@ class VirtualLight(LightEntity, RestoreEntity):
             self._echo_expectations.setdefault(
                 entity_id, deque(maxlen=ECHO_HISTORY)
             ).append(self._member_expectation(entity_id, expectation))
+
+    def _awaited_power(self, entity_id: str) -> bool | None:
+        """Power asked of a member by a command it may still be answering."""
+        expectations = self._echo_expectations.get(entity_id)
+        if not expectations:
+            return None
+        newest = expectations[-1]
+        age = self.hass.loop.time() - newest.issued
+        if age > ECHO_LATE_SECONDS + newest.transition:
+            return None
+        return newest.on
 
     def _member_expectation(
         self, entity_id: str, expectation: _EchoExpectation

@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A virtual light reports the state it had before a restart until Home
+  Assistant has finished starting, instead of `off` and `idle`. A crash or
+  power cut shortly after a restart no longer brings standby back on after a
+  manual off, loses a missed *Turn off* end or forgets that the light was
+  resting at standby, a light that was on no longer flicks off and on at
+  startup, and a virtual light that wraps another one reads its real state.
+- A Virtual Combined Occupancy Sensor that is still waiting for a maintain
+  sensor to load keeps that wait through another restart.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

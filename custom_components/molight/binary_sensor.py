@@ -497,7 +497,12 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self._last_clear_false = bool(
                     last.attributes.get("last_clear_false_detection")
                 )
-        if last is not None and last.state == "on" and extra is not None:
+        # An "on" still waiting to be carried when the state was saved (see
+        # _seed_state) was published as "off"; the save says so itself.
+        restored_on = (last is not None and last.state == "on") or bool(
+            saved.get("carry")
+        )
+        if restored_on and extra is not None:
             self._saved_cycle = True
             self._saved_cycle_start_lot = _parse_datetime(
                 saved.get("cycle_start_latest_occupied_time")
@@ -510,7 +515,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 self.hass, all_sensors, self._handle_occupancy_change
             )
         )
-        self._seed_state(restored_on=last is not None and last.state == "on")
+        self._seed_state(restored_on=restored_on)
 
     def _seed_state(self, *, restored_on: bool) -> None:
         self._absorb_constituent_history()
@@ -736,14 +741,28 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save the running cycle's anchor and the constituents of the clear."""
+        """Save the running cycle's anchor and the constituents of the clear.
+
+        Home Assistant saves as it starts, while a restored "on" may still
+        wait for a maintain sensor to carry it: that wait is saved too.
+        """
+        carry = self._restored_carry and (
+            not self._startup_done or bool(self._unreported_maintain)
+        )
         anchor = self._cycle_start_lot
+        if carry:
+            anchor = (
+                self._saved_cycle_start_lot
+                if self._saved_cycle
+                else self._latest_occupied_time
+            )
         return RestoredExtraData(
             {
                 "cycle_start_latest_occupied_time": (
                     anchor.isoformat() if anchor else None
                 ),
                 "constituents": self._constituents(),
+                "carry": carry,
             }
         )
 

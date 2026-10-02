@@ -31,7 +31,14 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
+from tests.conftest import (
+    crash_entries,
+    finish_startup,
+    make_light_entry,
+    restart_entries,
+    settle,
+    setup_entries,
+)
 
 
 def _occupancy2_entry() -> MockConfigEntry:
@@ -1314,6 +1321,62 @@ async def test_genuine_combined_cycle_survives_a_reload_with_a_late_maintain(
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
     await _false_maintain_clear(hass, lot)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("again", ["stop_during_startup", "crash"])
+async def test_combined_carry_survives_a_second_restart(
+    hass: HomeAssistant, freezer, again: str
+) -> None:
+    """An "on" still waiting for its maintain sensor is saved as waiting: HA
+    restarting again before the sensor loads can still carry it across."""
+    combined = "binary_sensor.seed_combined"
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+    lot = await _genuine_trigger_then_maintain_hold(hass, freezer)
+
+    # The maintain sensor has not loaded yet when the combined one seeds.
+    hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
+    await settle(hass)
+    await restart_entries(hass, entry, started=False)
+    assert hass.states.get(combined).state == "off"  # waiting to carry
+
+    restart = crash_entries if again == "crash" else restart_entries
+    await restart(hass, entry, started=False)
+    assert hass.states.get(combined).state == "off"
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    assert hass.states.get(combined).state == "on"
+    await finish_startup(hass)
+    await _false_maintain_clear(hass, lot)
+
+
+@pytest.mark.asyncio
+async def test_combined_carry_is_not_saved_once_startup_has_settled(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A wait that ended unanswered is over: at a later restart a maintain
+    sensor cannot start occupancy from it."""
+    combined = "binary_sensor.seed_combined"
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    entry = _raw_combined_entry()
+    await setup_entries(hass, entry)
+    await _genuine_trigger_then_maintain_hold(hass, freezer)
+
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set("binary_sensor.m2", "off")  # the room emptied while down
+    await finish_startup(hass)
+    await settle(hass)
+    assert hass.states.get(combined).state == "off"
+
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set("binary_sensor.m2", "on")
+    await settle(hass)
+    await finish_startup(hass)
+    assert hass.states.get(combined).state == "off"
 
 
 @pytest.mark.asyncio
