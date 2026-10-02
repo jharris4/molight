@@ -347,6 +347,41 @@ async def test_standby_without_a_color_restores_the_pre_warning_color(
 
 
 @pytest.mark.asyncio
+async def test_standby_without_a_color_names_none_after_a_colorless_warning(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warning that changed no color leaves none to undo: standby names no
+    color, so each real light keeps its own."""
+    hass.states.async_set(REAL, "off", {"supported_color_modes": ["color_temp"]})
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    await setup_entries(
+        hass,
+        _porch(
+            inside={
+                CONF_STANDBY_COLOR_TEMP: None,
+                CONF_AUTO_ON_COLOR_TEMP: 3000,
+                CONF_WARN_TIMEOUT: 2,
+                CONF_WARN_BRIGHTNESS: 50,
+            }
+        ),
+    )
+    await settle(hass)
+
+    await _set(hass, OCCUPANCY, "on")
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    assert _attrs(hass)["color_temp_kelvin"] == 3000
+    await _tick(hass, freezer, 2)
+
+    _assert_standby(hass)
+    assert "color_temp_kelvin" not in _light_calls(calls, "turn_on")[-1]
+    assert _attrs(hass)["color_temp_kelvin"] == 3000
+
+
+@pytest.mark.asyncio
 async def test_warning_leads_into_an_rgb_standby_on_mixed_members(
     hass: HomeAssistant, freezer
 ) -> None:

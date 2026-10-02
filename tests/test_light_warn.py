@@ -639,6 +639,54 @@ async def test_external_dim_mid_effect_restores_pre_warning_color(
 HS_CAPS = {"supported_color_modes": ["hs"], "color_mode": "hs"}
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "effect_color", [None, [255, 0, 0]], ids=["plain", "recolored"]
+)
+async def test_colorless_warn_stage_names_a_color_only_to_undo_the_effect(
+    hass: HomeAssistant, freezer, effect_color: list[int] | None
+) -> None:
+    """Blank keeps the color the lights already had: two real lights showing
+    different colors keep them through the warn stage. Only after an effect
+    stage recolored them does it name the pre-warning color."""
+    members = ["light.a", "light.b"]
+    lit = {"brightness": 200, **HS_CAPS}
+    hass.states.async_set("light.a", "on", {**lit, "hs_color": (30.0, 80.0)})
+    hass.states.async_set("light.b", "on", {**lit, "hs_color": (240.0, 80.0)})
+    stages = {"warn_timeout": 10, "warn_brightness": 20}
+    if effect_color:
+        stages |= {
+            "effect_timeout": 10,
+            "effect_brightness": 50,
+            "effect_rgb_color": effect_color,
+        }
+    await setup_entries(hass, make_light_entry(lights=members, **stages))
+    calls = _record_service_calls(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    if effect_color:
+        freezer.tick(timedelta(seconds=10))
+        async_fire_time_changed(hass)
+        await settle(hass)
+
+    assert _mstate(hass) == STATE_WARN
+    stage = [
+        d["service_data"]
+        for d in calls
+        if d["domain"] == "light" and d["service"] == "turn_on"
+    ][-1]
+    assert stage["entity_id"] == members
+    assert stage["brightness"] == 51
+    named = {
+        key: stage[key]
+        for key in ("hs_color", "rgb_color", "color_temp_kelvin")
+        if key in stage
+    }
+    assert named == ({"hs_color": [30.0, 80.0]} if effect_color else {})
+
+
 async def _enter_stage_at_200(hass: HomeAssistant, freezer, stage: str) -> list[dict]:
     """Light at 200 in a stage that dims it to 26; returns later calls."""
     entry = make_light_entry(
