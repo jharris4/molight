@@ -416,6 +416,67 @@ async def test_selection_applied_when_target_has_no_current_option(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("options", "fixed", "source", "sent"),
+    [
+        ([" Cozy ", "Cozy"], " Cozy ", None, " Cozy "),
+        ([" Cozy ", "Cozy"], "Cozy", None, "Cozy"),
+        (["Cozy"], "  Cozy  ", None, "Cozy"),
+        (["Cozy "], "Cozy", None, "Cozy "),
+        ([" Cozy ", " Cozy"], "Cozy", None, None),
+        (["Cozy ", "Night"], "Night", "Cozy", "Cozy "),
+    ],
+    ids=[
+        "padded",
+        "plain_beside_padded",
+        "typed_padding",
+        "stored_without_padding",
+        "names_two_options",
+        "source_without_padding",
+    ],
+)
+async def test_selection_prefers_the_exact_option(
+    hass: HomeAssistant,
+    options: list[str],
+    fixed: str,
+    source: str | None,
+    sent: str | None,
+) -> None:
+    """The option sent is the one the target offers, padding and all.
+
+    A value stored as typed while the target was unavailable, or stripped
+    before options kept their padding, still finds its single option.
+    """
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("select.ambient_theme", options[0], {"options": options})
+    if source is not None:
+        hass.states.async_set("input_select.desired_theme", source)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            fixed_option=fixed,
+            source_entity="input_select.desired_theme" if source else None,
+        ),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert selected == ([sent] if sent is not None else [])
+    assert state.attributes["last_turn_on_selection_option"] == sent
+
+
+@pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_window_start_applies_selection_to_a_target_with_no_current_option(
     hass: HomeAssistant,

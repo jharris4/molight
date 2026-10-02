@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
@@ -1723,6 +1723,178 @@ async def test_light_flow_stores_turn_on_selection(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_TURN_ON_SELECT_ENTITY] == "select.wled_preset"
     assert result["data"][CONF_TURN_ON_SELECT_OPTION] == "Christmas"
+
+
+_PRESET = "select.wled_preset"
+
+
+async def _reach_selection(hass: HomeAssistant, flow: str) -> tuple[dict, Any]:
+    """Advance a flow to its turn-on selection step for the preset select.
+
+    Returns that step's result and the flow manager to submit it with.
+    """
+    behavior = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: _PRESET}}
+    manager = hass.config_entries.flow
+    if flow == "create":
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+        )
+        form = {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled"],
+            CONF_LIGHT_TIMEOUT: 300,
+            **behavior,
+        }
+    elif flow == "options":
+        light = _light_entry("WLED", "wled")
+        await setup_entries(hass, light)
+        manager = hass.config_entries.options
+        result = await manager.async_init(light.entry_id)
+        form = {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "WLED",
+            CONF_LIGHTS: ["light.wled_real"],
+            CONF_LIGHT_TIMEOUT: 300,
+            **behavior,
+        }
+    elif flow == "scheduled":
+        await _setup_night_schedule(hass)
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+        )
+        result = await manager.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hallway",
+                CONF_LIGHTS: ["light.hallway"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                SECTION_ADVANCED: {},
+            },
+        )
+        form = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300, **behavior}
+    else:
+        hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+        result = await _reach_discovery_select(hass, "discover_light")
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+        )
+        form = {**EMPTY_LIGHT_SECTIONS, **behavior}
+    result = await manager.async_configure(result["flow_id"], form)
+    assert result["step_id"] in ("light_selection", "scheduled_light_selection")
+    return result, manager
+
+
+async def _stored_option(
+    hass: HomeAssistant, flow: str, result: dict, manager: Any
+) -> str:
+    """Finish the flow and return the fixed option it stored."""
+    if flow == "scheduled":
+        assert result["step_id"] == "scheduled_light_inside"
+        result = await manager.async_configure(
+            result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        )
+        return result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS][
+            CONF_TURN_ON_SELECT_OPTION
+        ]
+    if flow == "discovery":
+        assert result["type"] == FlowResultType.ABORT
+        await hass.async_block_till_done()
+        (created,) = [
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if molight_config(e).get(CONF_LIGHTS) == ["light.desk"]
+        ]
+        return created.data[CONF_TURN_ON_SELECT_OPTION]
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    return result["data"][CONF_TURN_ON_SELECT_OPTION]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options", "scheduled", "discovery"])
+@pytest.mark.parametrize(
+    ("options", "submitted", "stored"),
+    [
+        ([" Cozy "], " Cozy ", " Cozy "),
+        ([" Cozy ", "Cozy"], " Cozy ", " Cozy "),
+        ([" Cozy ", "Cozy"], "Cozy", "Cozy"),
+        ([" Cozy ", "Cozy"], "  Cozy  ", "Cozy"),
+        (["Night "], "Night", "Night "),
+        (["Night "], " Night", "Night "),
+        (None, "  Night ", "  Night "),
+    ],
+    ids=[
+        "padded",
+        "padded_beside_plain",
+        "plain_beside_padded",
+        "typed_padding_beside_padded",
+        "typed_without_padding",
+        "typed_other_padding",
+        "target_unavailable",
+    ],
+)
+async def test_selection_keeps_an_options_own_padding(
+    hass: HomeAssistant,
+    flow: str,
+    options: list[str] | None,
+    submitted: str,
+    stored: str,
+) -> None:
+    """An option the target offers is stored exactly, padding and all.
+
+    Padding typed around an option is dropped when it leaves one option;
+    with the target unavailable the value is stored as typed.
+    """
+    if options is None:
+        hass.states.async_set(_PRESET, "unavailable")
+    else:
+        hass.states.async_set(_PRESET, options[0], {"options": options})
+    result, manager = await _reach_selection(hass, flow)
+
+    result = await manager.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: submitted}
+    )
+
+    assert await _stored_option(hass, flow, result, manager) == stored
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options", "scheduled", "discovery"])
+async def test_selection_rejects_typed_padding_that_names_two_options(
+    hass: HomeAssistant, flow: str
+) -> None:
+    """Typed "Cozy" can't pick between " Cozy " and " Cozy"."""
+    hass.states.async_set(_PRESET, " Cozy ", {"options": [" Cozy ", " Cozy"]})
+    result, manager = await _reach_selection(hass, flow)
+
+    result = await manager.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "turn_on_selection_invalid_option"}
+
+
+@pytest.mark.asyncio
+async def test_selection_source_matching_a_padded_option_is_accepted(
+    hass: HomeAssistant,
+) -> None:
+    """A source offering "Cozy" can drive a target that offers "Cozy "."""
+    hass.states.async_set(_PRESET, "Cozy ", {"options": ["Cozy ", "Night"]})
+    hass.states.async_set("input_select.theme", "Cozy", {"options": ["Cozy"]})
+    result, manager = await _reach_selection(hass, "create")
+
+    result = await manager.async_configure(
+        result["flow_id"],
+        {
+            CONF_TURN_ON_SELECT_OPTION: "Night",
+            CONF_TURN_ON_SELECT_SOURCE_ENTITY: "input_select.theme",
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.asyncio

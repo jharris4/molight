@@ -372,6 +372,7 @@ from .helpers import (
     entity_gone,
     lights_support_brightness,
     lights_support_transition,
+    match_option,
     molight_config,
     run_unless_renamed,
     same_entity,
@@ -4052,11 +4053,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             else None
         )
         for option, source in candidates:
-            if (
-                not isinstance(target_options, (list, tuple))
-                or option in target_options
-            ):
+            if not isinstance(target_options, (list, tuple)):
                 return option, source
+            if (matched := match_option(option, target_options)) is not None:
+                return matched, source
         return None, None
 
     # ------------------------------------------------------------------

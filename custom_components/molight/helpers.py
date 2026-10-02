@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.light import (
     ATTR_SUPPORTED_COLOR_MODES,
@@ -81,6 +81,21 @@ def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> 
         and current is not None
         and (renamed_to(hass, saved) == current)
     )
+
+
+def match_option(value: str, options: Sequence[Any]) -> str | None:
+    """Return the advertised select option a value names, or None.
+
+    An exact match wins, so an option's own padding is kept; padding typed
+    around an option is ignored when that leaves a single option.
+    """
+    if value in options:
+        return value
+    stripped = value.strip()
+    if stripped in options:
+        return stripped
+    found = [o for o in options if isinstance(o, str) and o.strip() == stripped]
+    return found[0] if len(found) == 1 else None
 
 
 def entity_gone(hass: HomeAssistant, entity_id: str) -> bool:

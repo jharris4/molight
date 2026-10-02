@@ -154,6 +154,7 @@ from .helpers import (
     lights_support_color,
     lights_support_color_temp,
     lights_support_transition,
+    match_option,
     molight_config as _molight_cfg,
 )
 from .remote import CLICK_DOUBLE, CLICK_SINGLE, entity_double_click_supported
@@ -929,9 +930,11 @@ def _validate_turn_on_selection(
 ) -> dict[str, str]:
     """Validate and normalize a Virtual Light's optional turn-on selection."""
     entity_id = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
-    option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "").strip()
+    option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "")
     source_entity = user_input.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
 
+    if not option.strip():
+        option = ""
     if not entity_id and not option and not source_entity:
         user_input.pop(CONF_TURN_ON_SELECT_ENTITY, None)
         user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
@@ -946,13 +949,17 @@ def _validate_turn_on_selection(
             )
         }
 
-    user_input[CONF_TURN_ON_SELECT_OPTION] = option
     target_state = hass.states.get(entity_id)
     target_options = (
         target_state.attributes.get(ATTR_OPTIONS) if target_state is not None else None
     )
-    if isinstance(target_options, (list, tuple)) and option not in target_options:
+    if (
+        isinstance(target_options, (list, tuple))
+        and (option := match_option(option, target_options)) is None
+    ):
         return {"base": "turn_on_selection_invalid_option"}
+    # Unverifiable options are stored as typed; each turn-on matches them.
+    user_input[CONF_TURN_ON_SELECT_OPTION] = option
 
     if source_entity:
         source_state = hass.states.get(source_entity)
@@ -964,7 +971,10 @@ def _validate_turn_on_selection(
         if (
             isinstance(target_options, (list, tuple))
             and isinstance(source_options, (list, tuple))
-            and not any(value in target_options for value in source_options)
+            and not any(
+                match_option(str(value), target_options) is not None
+                for value in source_options
+            )
         ):
             return {
                 CONF_TURN_ON_SELECT_SOURCE_ENTITY: (

@@ -177,6 +177,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reading for good, across restarts too. A light gated by a sensor stuck
   bright that way never came on for presence or a door again. A source whose
   entity ID changes, or whose integration reloads, still keeps the reading.
+- A turn-on selection option with leading or trailing spaces (WLED preset
+  names are free text) can be chosen. It was rejected as not offered, or, when
+  the target also offered the option without the spaces, silently replaced by
+  that one. Spaces typed around an option are still ignored when that leaves
+  a single option, also at turn-on for a value entered while the target was
+  unavailable.
 
 ## [1.8.0] - 2026-09-30
 
