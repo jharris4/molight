@@ -24,7 +24,4 @@ fi
 mkdir -p config
 "$PYTHON" -m homeassistant --config "${PWD}/config" --script ensure_config
 
-# Put our custom_components on the Python path so HA finds them
-export PYTHONPATH="${PWD}/custom_components:${PYTHONPATH}"
-
 "$PYTHON" -m homeassistant --config "${PWD}/config" -v
