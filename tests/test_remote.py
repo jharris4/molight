@@ -74,6 +74,10 @@ if TYPE_CHECKING:
 # must never fire. A Lutron Caséta button re-exposed as an event entity (the
 # lutron-caseta-events integration) speaks press/multi_tap.
 PICO_TYPES = ["press", "release"]
+# Hue's default button vocabulary; a Hue tap switch announces only
+# initial_press.
+HUE_TYPES = ["initial_press", "repeat", "short_release", "long_press", "long_release"]
+HUE_TAP_TYPES = ["initial_press"]
 LUTRON_EVENT_TYPES = ["press", "release", "multi_tap", "long_press"]
 BILRESA_TYPES = [
     "initial_press",
@@ -236,6 +240,53 @@ async def test_lutron_event_entity_single_vs_double_click(
 
     _fire(hass, "event.closet_pico_on", "multi_tap", LUTRON_EVENT_TYPES)
     await settle(hass)
+    assert _vlight(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_hue_style_click_fires_on_short_release_only(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A Hue-style button fires on short_release, not on the initial_press
+    that also starts a long press; a tap switch falls back to initial_press."""
+    remote = _remote_entry(
+        **{
+            CONF_TOGGLE_BUTTONS_SINGLE: ["event.hue_1"],
+            CONF_ON_BUTTONS_SINGLE: ["event.hue_tap"],
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.hue_1", HUE_TYPES)
+    _seed(hass, "event.hue_tap", HUE_TAP_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    def _actions() -> list[str]:
+        return [
+            c["service"]
+            for c in calls
+            if c["service_data"].get("entity_id") == ["light.test_light"]
+        ]
+
+    for event_type in ("initial_press", "repeat", "long_press", "long_release"):
+        _fire(hass, "event.hue_1", event_type, HUE_TYPES)
+        await settle(hass)
+    assert _actions() == []
+
+    for event_type in ("initial_press", "short_release"):
+        _fire(hass, "event.hue_1", event_type, HUE_TYPES)
+        await settle(hass)
+    assert _actions() == ["toggle"]
+    assert _vlight(hass).state == "on"
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.test_light"}, blocking=True
+    )
+    await settle(hass)
+    calls.clear()
+    _fire(hass, "event.hue_tap", "initial_press", HUE_TAP_TYPES)
+    await settle(hass)
+    assert _actions() == ["turn_on"]
     assert _vlight(hass).state == "on"
 
 
