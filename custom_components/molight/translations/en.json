@@ -642,7 +642,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "Whatever you choose, the outside settings' sensors are re-checked when the schedule ends. Turn off: an on light goes off. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
+          "schedule_end_action": "When the schedule ends, Keep and Switch re-check the outside settings' sensors, and so does Turn off for a light that is already off. Turn off: an on light goes off and stays off until an outside sensor next changes. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
         },
         "sections": {
           "advanced": {
@@ -1171,7 +1171,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "Whatever you choose, the outside settings' sensors are re-checked when the schedule ends. Turn off: an on light goes off. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
+          "schedule_end_action": "When the schedule ends, Keep and Switch re-check the outside settings' sensors, and so does Turn off for a light that is already off. Turn off: an on light goes off and stays off until an outside sensor next changes. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
         }
       },
       "scheduled_light_outside": {
