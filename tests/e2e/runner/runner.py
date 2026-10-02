@@ -455,6 +455,10 @@ class HomeAssistantClient:
             {"entity_id": entity_id, "new_entity_id": new_entity_id},
         )
 
+    def disable_entity(self, entity_id: str) -> None:
+        """Disable an entity, as the entity settings dialog does."""
+        self.call_service("molight_testbed", "disable_entity", {"entity_id": entity_id})
+
     def fire_event(
         self,
         entity_id: str,
@@ -6068,8 +6072,27 @@ def run_entity_rename_scenarios(client: HomeAssistantClient) -> None:
     )
     client.call_service("switch", "turn_on", {"entity_id": RENAME_HOLD})
     client.wait_state(RENAME_LIGHT, held(False), "released under the new ID")
+
+    # The occupancy sensor is disabled mid-visit: it stops holding the light,
+    # which turns off after its timeout instead of staying on.
+    client.set_state(RAW_MOTION, "on")
+    wait_machine_state(client, "occupied", RENAME_LIGHT)
+    client.disable_entity(RENAME_OCCUPANCY)
+    wait_entity_absent(client, RENAME_OCCUPANCY)
+    wait_machine_state(client, "active", RENAME_LIGHT)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after a timeout once its occupancy sensor was disabled",
+        timeout=15,
+    )
+    state = wait_machine_state(client, "idle", RENAME_LIGHT)
+    if state["attributes"].get("last_off_manual") != turned_off:
+        raise AssertionError(f"The disabled sensor read as a manual off: {state}")
+    client.set_state(RAW_MOTION, "off")
     remove_entry_and_entity(client, light_id, RENAME_LIGHT)
-    remove_entry_and_entity(client, occupancy_id, RENAME_OCCUPANCY)
+    client.remove_entry(occupancy_id)
+    wait_entry_removed(client, occupancy_id, "The disabled occupancy sensor")
     print("PASS: renamed entities were followed without acting on the room")
 
 

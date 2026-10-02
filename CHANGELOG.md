@@ -57,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applied and turn off a light lit by hand, a Virtual Occupancy Sensor lost
   its `latest_occupied_time`, and a schedule that mirrors a sensor dated its
   window anew.
+- An entity a virtual light uses that is deleted or disabled while Home
+  Assistant runs is treated as it would be at startup, instead of keeping its
+  last value until the next restart. A keep-on entity that was on stops
+  holding, an open `open_close` door counts as closed, and an occupancy or
+  maintain sensor that was on counts as clear, so the light gets its timeout
+  instead of staying on indefinitely. A disabled real light no longer stops
+  the virtual light from turning off when the remaining real lights are
+  turned off, and a light whose only lit real light goes reports off.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

@@ -240,6 +240,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from homeassistant.components.light import (
@@ -280,6 +281,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import (
     async_call_later,
+    async_track_entity_registry_updated_event,
     async_track_state_change_event,
 )
 from homeassistant.util import color as color_util
@@ -370,6 +372,7 @@ from .helpers import (
     lights_support_brightness,
     lights_support_transition,
     molight_config,
+    run_unless_renamed,
     same_entity,
     suggested_entity_id,
 )
@@ -1143,6 +1146,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 )
             )
             self.async_on_remove(
+                async_track_entity_registry_updated_event(
+                    self.hass, watch, self._handle_registry_change
+                )
+            )
+            self.async_on_remove(
                 async_dispatcher_connect(
                     self.hass,
                     SIGNAL_AUTO_OFF_TOGGLED.format(self._entry_id),
@@ -1494,7 +1502,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             else None
         )
         self._adopt_members(commanded=commanded)
-        unknown = {e for e in self._lights if self._member_is_lit(e) is None}
+        # A disabled member never reports, so nothing is owed to it.
+        registry = er.async_get(self.hass)
+        unknown = {
+            e
+            for e in self._lights
+            if self._member_is_lit(e) is None
+            and not ((entry := registry.async_get(e)) and entry.disabled)
+        }
         # A missed end is only owed while the light is off: a new on-period
         # supersedes it.
         off = not self._is_lit()
@@ -1788,7 +1803,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         entity_id: str = event.data["entity_id"]
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if new_state is None:
+            # Deleted or disabled, unless it is only being renamed.
+            self.async_on_remove(
+                run_unless_renamed(
+                    self.hass,
+                    entity_id,
+                    partial(self._on_entity_gone, entity_id, old_state),
+                )
+            )
+            return
+        if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
         same_state = old_state is not None and old_state.state == new_state.state
 
@@ -1988,6 +2013,87 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if entity_id in self._hold_entities and not holding:
             self._hold_states[entity_id] = False
             self._refresh_hold()
+
+    def _gone(self, entity_id: str) -> bool:
+        """Return True for an entity that is deleted or disabled.
+
+        It has no state, or only the placeholder its disabled entry left,
+        and can never report one. A registered, enabled entity without a
+        state may yet load.
+        """
+        state = self.hass.states.get(entity_id)
+        if state is not None and not (
+            state.state == STATE_UNAVAILABLE and state.attributes.get(ATTR_RESTORED)
+        ):
+            return False
+        registry_entry = er.async_get(self.hass).async_get(entity_id)
+        if registry_entry is None:
+            return state is None
+        return registry_entry.disabled
+
+    @callback
+    def _handle_registry_change(
+        self, event: Event[er.EventEntityRegistryUpdatedData]
+    ) -> None:
+        """Notice an entity disabled along with its entry.
+
+        Its state is not removed then: the placeholder of the unloaded
+        entry stays, and reads as an outage with no end.
+        """
+        if event.data["action"] == "update" and "old_entity_id" not in event.data:
+            self._on_entity_gone(event.data["entity_id"], None)
+
+    @callback
+    def _on_entity_gone(self, entity_id: str, old_state: State | None) -> None:
+        """Apply the startup rules to an entity deleted or disabled while running.
+
+        Startup counts a missing keep-on entity as not holding, a missing
+        door as closed and missing presence as clear; the entity cannot
+        report any of that itself anymore.
+        """
+        if not self._gone(entity_id):
+            return
+        if entity_id in self._lights:
+            if self._owed is not None and entity_id in self._owed.members:
+                self._settle_owed(entity_id, lit=False)
+            # Only the real light that was lit can have left the light dark;
+            # a stage that blinks them off, or a turn-on on its way, has not.
+            if (
+                old_state is not None
+                and old_state.state == "on"
+                and old_state.attributes.get(ATTR_BRIGHTNESS) != 0
+                and self._machine_state != STATE_IDLE
+                and not self._turn_on_waiting()
+                and self._all_lights_off()
+            ):
+                self._go_idle()
+        if entity_id == self._occupancy_entity:
+            self._occupancy_last_on = None
+        if entity_id == self._door_entity:
+            self._door_open = False
+        if entity_id in (
+            self._occupancy_entity,
+            self._maintain_entity,
+            self._door_entity,
+        ):
+            self._release_presence()
+        if self._hold_states.get(entity_id):
+            self._hold_states[entity_id] = False
+            self._refresh_hold()
+
+    def _release_presence(self) -> None:
+        """Give a light whose presence hold went missing a full timeout.
+
+        Whoever it saw may still be there, so the light is adopted as
+        startup would adopt it, unless other presence still holds it.
+        """
+        if self._machine_state != STATE_OCCUPIED:
+            return
+        if self._occupancy_holds() or self._maintain_active() or self._door_holds():
+            return
+        self._machine_state = STATE_ACTIVE
+        self._start_timer()
+        self.async_write_ha_state()
 
     def _settle_owed(self, entity_id: str, *, lit: bool) -> bool:
         """Settle the saved startup decisions with a member reporting in late.
@@ -2210,10 +2316,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if state is None:
                 # Registered but stateless: an integration that hasn't loaded
                 # (yet); the bulb may still be burning, so don't assume off.
-                # No registry entry either means the member is gone from HA
-                # entirely and can never report again; counting such a ghost
-                # as "maybe on" would pin the virtual light on forever.
-                if er.async_get(self.hass).async_get(entity_id) is not None:
+                # A deleted or disabled member can never report again;
+                # counting such a ghost as "maybe on" would pin the virtual
+                # light on forever.
+                if not self._gone(entity_id):
                     return False
                 continue
             if state.state == "on" and state.attributes.get("brightness") != 0:

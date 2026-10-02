@@ -103,3 +103,13 @@ rename_entity:
       required: true
       selector:
         text: {}
+
+disable_entity:
+  name: Disable an entity
+  description: Disable any registered entity, as the entity settings dialog does.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity: {}

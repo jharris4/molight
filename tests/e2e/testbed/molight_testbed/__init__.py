@@ -28,6 +28,7 @@ from .const import (
     DEFAULT_STATES,
     DOMAIN,
     PLATFORMS,
+    SERVICE_DISABLE_ENTITY,
     SERVICE_FIRE_EVENT,
     SERVICE_RENAME_ENTITY,
     SERVICE_SET_AVAILABLE,
@@ -73,6 +74,7 @@ RENAME_ENTITY_SCHEMA = vol.Schema(
         vol.Required(ATTR_NEW_ENTITY_ID): cv.entity_id,
     }
 )
+DISABLE_ENTITY_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
 FIRE_EVENT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
@@ -221,6 +223,13 @@ async def async_setup_entry(
         )
 
     @callback
+    def _disable_entity(call: ServiceCall) -> None:
+        # Any registered entity, as the entity settings dialog would.
+        er.async_get(hass).async_update_entity(
+            call.data[ATTR_ENTITY_ID], disabled_by=er.RegistryEntryDisabler.USER
+        )
+
+    @callback
     def _fire_event(call: ServiceCall) -> None:
         controller.fire_event(
             call.data[ATTR_ENTITY_ID],
@@ -248,6 +257,9 @@ async def async_setup_entry(
     )
     hass.services.async_register(
         DOMAIN, SERVICE_RENAME_ENTITY, _rename_entity, schema=RENAME_ENTITY_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DISABLE_ENTITY, _disable_entity, schema=DISABLE_ENTITY_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
