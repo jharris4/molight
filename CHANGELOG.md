@@ -183,6 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that one. Spaces typed around an option are still ignored when that leaves
   a single option, also at turn-on for a value entered while the target was
   unavailable.
+- Every create and Configure form rejects a blank Name, which gave an entry
+  with no title and an entity ID such as `light.unknown`. Spaces around a
+  name are dropped.
 
 ## [1.8.0] - 2026-09-30
 

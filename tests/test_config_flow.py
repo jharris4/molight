@@ -53,6 +53,7 @@ from custom_components.molight.const import (
     CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     CONF_CONFIRM_CONVERSION,
     CONF_CONVERT_LIGHTS,
+    CONF_DIM_STEP,
     CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
     CONF_EFFECT_BRIGHTNESS,
@@ -81,6 +82,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
     CONF_SCHEDULE_DEFINITION,
@@ -95,6 +97,7 @@ from custom_components.molight.const import (
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
+    CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     CONF_TURN_ON_SELECT_ENTITY,
@@ -112,9 +115,12 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
+    REMOTE_ACTION_FIELDS,
+    REMOTE_ACTION_ON,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
     SCHEDULE_END_ACTION_KEEP,
@@ -8011,3 +8017,220 @@ async def test_conversion_to_gated_drops_standby(hass: HomeAssistant) -> None:
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
     assert cfg[CONF_AUTO_ON_BRIGHTNESS] == 100
     assert not set(STANDBY_KEYS) & set(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Name: every create and edit form
+# ---------------------------------------------------------------------------
+
+_NAME_FORMS = [
+    "occupancy",
+    "combined_occupancy",
+    "illuminance",
+    "schedule_time",
+    "schedule_source",
+    "combined_schedule",
+    "light",
+    "scheduled_light",
+    "remote",
+]
+_REMOTE_BUTTONS = {
+    **{action: {} for _single, _double, action in REMOTE_ACTION_FIELDS},
+    REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
+}
+
+
+def _form_values(schema) -> dict:
+    """What a form submits untouched: its defaults and suggested values."""
+    out: dict = {}
+    for marker, value in schema.schema.items():
+        if isinstance(value, section):
+            out[marker.schema] = _form_values(value.schema)
+        elif (
+            getattr(marker, "description", None)
+            and "suggested_value" in marker.description
+        ):
+            out[marker.schema] = marker.description["suggested_value"]
+        elif not isinstance(marker.default, vol.Undefined):
+            out[marker.schema] = marker.default()
+    return out
+
+
+def _name_form_entry(form: str) -> MockConfigEntry:
+    """An entry of the type each form edits, named Den."""
+    data: dict[str, Any] = {
+        "occupancy": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+        },
+        "combined_occupancy": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"],
+        },
+        "illuminance": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_THRESHOLD: 25.0,
+        },
+        "schedule_time": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_TIME,
+            "time_windows": [{"start": {"time": "21:00"}, "end": {"time": "07:00"}}],
+        },
+        "schedule_source": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+        },
+        "combined_schedule": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.night_schedule"],
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ALL,
+        },
+        "light": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_LIGHTS: ["light.real_1"],
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+        "scheduled_light": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
+            CONF_LIGHTS: ["light.real_1"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+        },
+        "remote": {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
+            CONF_TARGET_LIGHTS: ["light.real_1"],
+            CONF_DIM_STEP: 10,
+            CONF_ON_BUTTONS_SINGLE: ["event.pico_on"],
+        },
+    }[form]
+    return MockConfigEntry(domain=DOMAIN, title="Den", data={CONF_NAME: "Den", **data})
+
+
+async def _open_name_form(
+    hass: HomeAssistant, form: str, flow: str
+) -> tuple[dict, Any, dict, MockConfigEntry | None]:
+    """Open a form with a Name field.
+
+    Returns its result, the flow manager, valid values for the other fields
+    and, when editing, the entry.
+    """
+    await _setup_night_schedule(hass)
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    entry = _name_form_entry(form)
+    definition = entry.data.get(CONF_SCHEDULE_DEFINITION)
+    if flow == "options":
+        await setup_entries(hass, entry)
+        manager = hass.config_entries.options
+        result = await manager.async_init(entry.entry_id)
+        if result["step_id"] == "schedule":
+            result = await manager.async_configure(
+                result["flow_id"], {CONF_SCHEDULE_DEFINITION: definition}
+            )
+        values = _form_values(result["data_schema"])
+        if form == "remote":
+            values.update(_REMOTE_BUTTONS)
+        return result, manager, values, entry
+    manager = hass.config_entries.flow
+    result = await _start_create(hass)
+    result = await manager.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: entry.data[CONF_ENTITY_TYPE]}
+    )
+    if definition is not None:
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_SCHEDULE_DEFINITION: definition}
+        )
+    values = {
+        "occupancy": {
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion",
+            CONF_OCCUPANCY_TIMEOUT: 60,
+        },
+        "combined_occupancy": {CONF_TRIGGER_SENSORS: ["binary_sensor.occ_a"]},
+        "illuminance": {
+            CONF_ILLUMINANCE_SENSOR: "sensor.hall_lux",
+            CONF_ILLUMINANCE_THRESHOLD: 25.0,
+        },
+        "schedule_time": {"start": {"time": "21:00:00"}, "end": {"time": "07:00:00"}},
+        "schedule_source": {
+            CONF_SCHEDULE_SOURCE: "binary_sensor.house_mode",
+            CONF_SCHEDULE_INVERT: False,
+        },
+        "combined_schedule": {
+            CONF_SCHEDULE_INPUTS: ["binary_sensor.night_schedule"],
+            CONF_SCHEDULE_OPERATOR: SCHEDULE_OPERATOR_ALL,
+            CONF_SCHEDULE_INVERT: False,
+        },
+        "light": {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_LIGHTS: ["light.real_1"],
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+        "scheduled_light": {
+            CONF_LIGHTS: ["light.real_1"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+        },
+        "remote": {
+            CONF_TARGET_LIGHTS: ["light.real_1"],
+            CONF_DIM_STEP: 10,
+            **_REMOTE_BUTTONS,
+        },
+    }[form]
+    if form != "remote":
+        values = {**values, SECTION_ADVANCED: {}}
+    return result, manager, values, None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+@pytest.mark.parametrize("form", _NAME_FORMS)
+@pytest.mark.parametrize("name", ["", "   "], ids=["empty", "blank"])
+async def test_every_form_rejects_a_blank_name(
+    hass: HomeAssistant, flow: str, form: str, name: str
+) -> None:
+    """A blank Name would make an empty title and an ID like light.unknown."""
+    result, manager, values, entry = await _open_name_form(hass, form, flow)
+
+    result = await manager.async_configure(
+        result["flow_id"], {**values, CONF_NAME: name}
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_NAME: "name_required"}
+    if entry is not None:
+        assert entry.title == "Den"
+        assert molight_config(entry)[CONF_NAME] == "Den"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+@pytest.mark.parametrize("form", _NAME_FORMS)
+async def test_every_form_strips_the_name(
+    hass: HomeAssistant, flow: str, form: str
+) -> None:
+    """Spaces around a Name are dropped from the title and the stored name."""
+    result, manager, values, entry = await _open_name_form(hass, form, flow)
+
+    result = await manager.async_configure(
+        result["flow_id"], {**values, CONF_NAME: "  Hall  "}
+    )
+
+    if form == "scheduled_light":
+        # The name is kept for the settings pages that follow.
+        assert result["step_id"] == "scheduled_light_outside"
+        assert result["errors"] in (None, {})
+        result = await manager.async_configure(
+            result["flow_id"], _form_values(result["data_schema"])
+        )
+        result = await manager.async_configure(
+            result["flow_id"], _form_values(result["data_schema"])
+        )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    if entry is None:
+        assert result["title"] == "Hall"
+        assert result["data"][CONF_NAME] == "Hall"
+    else:
+        assert entry.title == "Hall"
+        assert molight_config(entry)[CONF_NAME] == "Hall"
