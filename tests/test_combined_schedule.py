@@ -1431,3 +1431,46 @@ async def test_follow_light_manual_off_stands_through_a_time_zone_change(
     assert hass.states.get("light.desk_lamp").state == "off"
     await _move_to(hass, freezer, "2026-07-02 22:00:02+00:00")
     assert hass.states.get("light.desk_lamp").state == "off"
+
+
+# ---------------------------------------------------------------------------
+# A source-backed input is dated from its window marker, not its last change
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("source_state", "invert"),
+    [("on", False), ("off", True)],
+    ids=["plain", "inverted"],
+)
+async def test_combined_period_starts_when_a_source_backed_input_started(
+    hass: HomeAssistant, freezer, source_state: str, invert: bool
+) -> None:
+    """A mirror set up two hours into its source's on-period dates its window
+    from the source, while its own state is new. The combination, and one
+    nested on it, start with the window, not with the mirror's state."""
+    started = datetime(2026, 7, 2, 18, 0, tzinfo=dt_util.UTC)
+    freezer.move_to(started)
+    hass.states.async_set("binary_sensor.away", source_state)
+    await settle(hass)
+    freezer.move_to(started + timedelta(hours=2))
+    await _setup(
+        hass,
+        _mirror_schedule("Away Mode", "binary_sensor.away", invert=invert),
+        _combined("Away Combined", ["binary_sensor.away_mode"]),
+        _combined(
+            "Away Nested",
+            ["binary_sensor.away_combined"],
+            operator=SCHEDULE_OPERATOR_ALL,
+        ),
+    )
+    mirror = hass.states.get("binary_sensor.away_mode")
+    assert mirror.state == "on"
+    assert mirror.attributes["current_window_start"] == started.isoformat()
+    assert mirror.last_changed == started + timedelta(hours=2)
+    for entity_id in ("binary_sensor.away_combined", "binary_sensor.away_nested"):
+        state = hass.states.get(entity_id)
+        assert state.state == "on"
+        marker = datetime.fromisoformat(state.attributes["current_window_start"])
+        assert marker == started, entity_id
