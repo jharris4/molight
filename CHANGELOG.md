@@ -334,6 +334,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   getting a fresh timer, also after being turned off and on again by hand
   since the end. The held end is kept across a restart and reported in
   `schedule_end_off_pending`, and a window starting again drops it.
+- A *Gate and turn off* window that ends while brightness has the light off
+  ends the on-period brightness cut short. The room going dark in a later
+  window, after someone merely walked past while it was bright, resumed it
+  and lit an empty room.
 
 ## [1.8.0] - 2026-09-30
 

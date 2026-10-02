@@ -165,8 +165,8 @@ illuminance_mode:
     have ended, or a timeout from the forced off for a light presence was
     holding (whoever held it was there until then at least); a warning stage
     or a standby rest leaves none. An on-period ended any other way (manual
-    off, timer, schedule) is never resumed, nor is one the user turned off
-    while brightness had it off.
+    off, timer, schedule) is never resumed, nor is one the user turned off,
+    or whose gate window ended, while brightness had it off.
   - Illuminance OFF→ON (dark→bright):
       control:  go IDLE, turn lights off.
       gate:     no effect; bright never turns lights off. Use when the lux
@@ -3099,6 +3099,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 else:
                     self.hass.async_create_task(self._auto_lights_off())
                     self._go_idle()
+            elif self._schedule_mode == SCHEDULE_MODE_GATE:
+                # Ends an on-period that brightness cut short, too.
+                self._clear_bright_forced_off()
+                self.async_write_ha_state()
             elif self._schedule_mode == SCHEDULE_MODE_GATE_SWITCH and self._is_lit():
                 self._switch_running_state()
         else:

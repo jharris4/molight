@@ -475,6 +475,63 @@ async def test_dark_edge_after_a_manual_off_while_bright_resumes_nothing(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("mode", "ends"),
+    [
+        (SCHEDULE_MODE_GATE, True),
+        (SCHEDULE_MODE_GATE_SWITCH, False),
+        (SCHEDULE_MODE_GATE_KEEP, False),
+    ],
+)
+async def test_gate_window_end_while_bright_off_ends_the_on_period(
+    hass: HomeAssistant, freezer, mode: str, ends: bool
+) -> None:
+    """A Gate and turn off end ends an on-period brightness cut short, so a
+    later dark edge does not light an empty room; Switch and Keep state carry
+    it past the end."""
+    hass.states.async_set(ILLUM, "off")
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            illuminance=ILLUM,
+            schedule=SCHED,
+            schedule_mode=mode,
+            timeout=300,
+        ),
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(ILLUM, "on")  # brightness forces it off
+    await settle(hass)
+    hass.states.async_set(
+        OCC, "off", {"latest_occupied_time": datetime.now(UTC).isoformat()}
+    )
+    await settle(hass)
+    assert _state(hass).attributes["bright_forced_off"] is True
+
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).attributes["bright_forced_off"] is not ends
+
+    # The next window, still bright: someone walks past, and then dusk comes.
+    freezer.tick(timedelta(hours=20))
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(
+        OCC, "off", {"latest_occupied_time": datetime.now(UTC).isoformat()}
+    )
+    await settle(hass)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == ("off" if ends else "on")
+
+
+@pytest.mark.asyncio
 async def test_dark_edge_resumes_the_timeout_of_a_light_adopted_at_startup(
     hass: HomeAssistant, freezer
 ) -> None:
