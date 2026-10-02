@@ -921,6 +921,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Brightness, fade and color of the stage shown last: an automatic
         # turn-on that waited for its selection into a stage sends these.
         self._stage_look: tuple[int, float | None, dict | None] | None = None
+        # The lights were last sent a look while a select call still ran; its
+        # preset may land on top, so the look is sent again once it ends.
+        self._resend_after_select = False
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1939,6 +1942,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # keeps the state it set: only mirror the member.
                 self._mirror_member(new_state)
                 return
+            if not claim and self._resend_after_select:
+                # Changed by the selection of a turn-on a newer command
+                # replaced: that command is sent again when the call ends.
+                return
             if same_state:
                 if new_state.state == "on":
                     self._on_light_attrs_change(old_state, new_state, claim=claim)
@@ -2336,6 +2343,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._occupancy_lit_lights = False
         self._standby_suppressed = False
         self._command_generation += 1
+        self._resend_after_select = False  # what the wall set stands
 
     def _restore_untouched(self, touched: str) -> None:
         """Undo the warning on the real lights a change at the wall left alone.
@@ -3770,6 +3778,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 )
         self._cancel_timer()
         self._command_generation += 1
+        self._resend_after_select = False
         if manual:
             self._last_manual_off = datetime.now(UTC)
             self._manual_off_cleared = False
@@ -3995,6 +4004,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         context = Context()
         self._self_context_ids.append(context.id)
         self._expect_echo(bool(brightness), brightness or None, color, transition)
+        self._resend_after_select = bool(self._waiting_turn_ons)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
         )
@@ -4127,12 +4137,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self.async_write_ha_state()
             try:
                 await self._apply_turn_on_selection(context)
+                # What the call changed in its last moments is still on its
+                # way to our listener: let it arrive as the call's doing.
+                await asyncio.sleep(0)
             finally:
                 del self._waiting_turn_ons[context.id]
             if self._overtaken(waiting):
                 # An off, a newer manual command, a newer automatic level or
                 # a change at the wall landed while the select call was
                 # awaited; it stands.
+                await self._resend_look_after_select()
                 return False
             if not manual and self._in_warning() and self._stage_look is not None:
                 # The light is at a stage, maybe reached during the wait: the
@@ -4160,6 +4174,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if adopt:
                 self._adopt_color_data(color)
         self._expect_echo(on, brightness, color, transition, members)
+        if members is None:
+            self._resend_after_select = on and bool(self._waiting_turn_ons)
         # Set before the call: a member may answer inside it.
         self._attr_is_on = on
         await self.hass.services.async_call(
@@ -4171,6 +4187,22 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
         self.async_write_ha_state()
         return True
+
+    async def _resend_look_after_select(self) -> None:
+        """Send the newest look again, now that the last select call ended.
+
+        A turn-on replaced while its select call ran sends nothing itself,
+        but its preset may have landed on top of the command that replaced
+        it: the real lights end at the look sent last, not the preset's.
+        """
+        if not self._resend_after_select or self._waiting_turn_ons:
+            return
+        if self._in_warning() and self._stage_look is not None:
+            await self._set_stage_lights(*self._stage_look)
+            return
+        await self._set_lights(
+            True, brightness=self._attr_brightness, color=self._current_color()
+        )
 
     async def _apply_turn_on_selection(self, context: Context) -> None:
         """Apply the configured select option before an off-to-on command."""

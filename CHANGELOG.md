@@ -95,6 +95,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the others too. Turning one light back on during a blink-off effect left
   the rest off for the whole new on-period, and dimming or recolouring one
   during a stage left the rest at the stage's brightness and colour.
+- A command sent while a replaced turn-on's select call is still in progress
+  is no longer undone by the preset. A real light that came back from
+  `unavailable` was being re-sent its settings and preset when the light
+  dropped to standby, or was given a new brightness: the preset then set its
+  own brightness on the device, which stayed there, and the virtual light
+  took it for a dim at the wall, left standby and restarted its timer. The
+  newest command is now sent again when the select call finishes.
+- A preset that lights its own device's light in the last moment of the
+  select call is no longer taken for a turn-on at the wall when the light's
+  report reaches MoLight just after the call has returned.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

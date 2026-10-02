@@ -9176,8 +9176,65 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     ):
         raise AssertionError(f"The re-send disturbed the warning: {warned}")
     park_light_off(client, PARK_LIGHT, *members)
-    remove_entry_and_entity(client, entry_id, PARK_LIGHT)
     checkpoint("a warning that began during a recovery re-send stayed on the lights")
+
+    # The strip drops out and comes back off; its re-send waits for the select
+    # call when a new level through the light replaces it. The preset then
+    # sets the strip's own level, on top: the new level is sent again.
+    client.call_service(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
+    )
+    for member in members:
+        wait_member(client, member, 200)
+    wait_machine_state(client, "active", PARK_LIGHT)
+    client.park_select(TARGET_SELECT, True)
+    client.set_available(RAW_MULTI_DIMMER, False)
+    client.wait_state(
+        RAW_MULTI_DIMMER, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.set_state(RAW_MULTI_DIMMER, "off")
+    client.set_available(RAW_MULTI_DIMMER, True)
+    wait_parked_calls(client, 1)
+    stamps = wall_stamps(client.state(PARK_LIGHT))
+    client.call_service(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
+    )
+    for member in members:
+        wait_member(client, member, 100)
+    (commands,) = member_commands(client, RAW_MULTI_DIMMER)
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 90})
+    wait_member(client, RAW_MULTI_DIMMER, 90)
+
+    def at_the_new_level(state: dict[str, Any]) -> bool:
+        return (
+            state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("brightness") == 100
+            and wall_stamps(state) == stamps
+        )
+
+    assert_state_stays(
+        client,
+        PARK_LIGHT,
+        at_the_new_level,
+        "active at 100: the preset's level is no dim at the wall",
+        duration=1,
+    )
+    release_select(client)
+    state = wait_member(client, RAW_MULTI_DIMMER, 100)
+    if state["attributes"]["testbed_commands"] != commands + 1:
+        raise AssertionError(f"The new level was not sent again once: {state}")
+    assert_state_stays(
+        client,
+        PARK_LIGHT,
+        at_the_new_level,
+        "active at 100 after the select call finished",
+        duration=1,
+    )
+    park_light_off(client, PARK_LIGHT, *members)
+    remove_entry_and_entity(client, entry_id, PARK_LIGHT)
+    checkpoint(
+        "a level sent during a replaced re-send's select call outlasted its preset"
+    )
 
     # A scheduled light switches settings while the preset of the settings it
     # left is still being applied: that select call keeps speaking for its
@@ -9233,8 +9290,8 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         "select", "select_option", {"entity_id": TARGET_SELECT, "option": option_before}
     )
     print(
-        "PASS: offs, newer turn-ons, wall changes, a warning and a settings switch "
-        "during a select call"
+        "PASS: offs, newer turn-ons, wall changes, a warning, a new level and a "
+        "settings switch during a select call"
     )
 
 

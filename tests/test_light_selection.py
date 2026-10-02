@@ -17,7 +17,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_LIGHT_TIMEOUT,
+    CONF_OCCUPANCY_ENTITY,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
@@ -36,6 +38,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import FadingLight, RealSelect, add_real
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -2622,7 +2625,8 @@ async def test_resend_started_in_a_stage_yields_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
     """A warning that ends at standby while a re-send waits leaves the lights
-    at standby: the level chosen last stands."""
+    at standby: the level chosen last stands, and is sent again once the
+    select call ends, in case its preset landed on top."""
     select = _SlowSelect(hass)
     select.release.set()
     hass.states.async_set(_SCHEDULE, "on")
@@ -2673,6 +2677,358 @@ async def test_resend_started_in_a_stage_yields_to_standby(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert commands == [{"service": "turn_on", "brightness": 51}]
+    assert commands == [{"service": "turn_on", "brightness": 51}] * 2
     assert state.attributes["molight_state"] == "standby"
     assert state.attributes["brightness"] == 51
+
+
+# ---------------------------------------------------------------------------
+# A command sent while a replaced turn-on's select call still runs
+#
+# The preset of that call lands on its device's light afterwards, on top of
+# the command. These use a real light and select on one device.
+# ---------------------------------------------------------------------------
+
+PRESET_LEVEL = 128
+WALL_STAMPS = (
+    "last_on_physical",
+    "last_brightness_change_physical",
+    "last_color_change_physical",
+    "last_off_manual",
+)
+
+
+class _PresetSelect(RealSelect):
+    """A registered select whose options are presets of its device's light.
+
+    A select call waits until released, then sets the light's level, which
+    the light reports itself, as a WLED preset does.
+    """
+
+    def __init__(self, light: FadingLight) -> None:
+        super().__init__("ambient_theme")
+        self._light = light
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.release.set()
+
+    async def async_select_option(self, option: str) -> None:
+        self.started.set()
+        await self.release.wait()
+        await super().async_select_option(option)
+        if self._light.available:
+            self._light.wall(brightness=PRESET_LEVEL)
+
+
+async def _preset_strip(
+    hass: HomeAssistant, *, on: bool = False
+) -> tuple[FadingLight, _PresetSelect]:
+    """Add a light and its preset select, registered as one device."""
+    hass.states.async_remove("select.ambient_theme")
+    light = FadingLight("ambient", on=on, brightness=200)
+    select = _PresetSelect(light)
+    await add_real(hass, light, select)
+    entry = MockConfigEntry(domain="wled")
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={("wled", "strip")}
+    )
+    for entity_id in ("light.ambient", "select.ambient_theme"):
+        er.async_get(hass).async_update_entity(entity_id, device_id=device.id)
+    return light, select
+
+
+async def _park_real_resend(
+    hass: HomeAssistant, light: FadingLight, select: _PresetSelect, *, on: bool = False
+) -> None:
+    """The strip drops out and comes back; its re-send waits for the select."""
+    select.started.clear()
+    select.release.clear()
+    light.wall(on=on, available=False)
+    await _drain(hass)
+    light.wall(on=on, available=True)
+    await asyncio.wait_for(select.started.wait(), 2)
+
+
+def _wall_stamps(hass: HomeAssistant) -> dict:
+    attrs = hass.states.get("light.selection_light").attributes
+    return {name: attrs[name] for name in WALL_STAMPS if attrs[name] is not None}
+
+
+async def _land_preset(hass: HomeAssistant, select: _PresetSelect) -> None:
+    """Let the select call finish: its preset sets the strip's level."""
+    select.release.set()
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warning ends at standby while a re-send's select call still runs.
+    The preset then sets the strip to its own level: standby is sent again,
+    and the preset is no dim at the wall that would leave standby."""
+    light, select = await _preset_strip(hass)
+    hass.states.async_set(_SCHEDULE, "on")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={
+                **_PRESET,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_WARN_TIMEOUT: 5,
+                CONF_WARN_BRIGHTNESS: 40,
+            },
+        ),
+    )
+    await settle(hass)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.selection_light", "brightness": 200},
+        blocking=True,
+    )
+    await settle(hass)
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+    assert _molight_state(hass) == "warn"
+    before = _wall_stamps(hass)
+    await _park_real_resend(hass, light, select)
+
+    await _pass(hass, freezer, 6)
+    assert _molight_state(hass) == "standby"
+    assert light.brightness == 51
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert light.brightness == 51
+    assert state.attributes["molight_state"] == "standby"
+    assert state.attributes["brightness"] == 51
+    assert _wall_stamps(hass) == before
+
+
+async def _lit_pair(
+    hass: HomeAssistant, **kwargs: Any
+) -> tuple[FadingLight, FadingLight, _PresetSelect]:
+    """A light over the preset strip and a second real light, both at 200."""
+    light, select = await _preset_strip(hass, on=True)
+    other = FadingLight("other", on=True, brightness=200)
+    await add_real(hass, other)
+    entry = make_light_entry(
+        name="Selection Light",
+        lights=["light.ambient", "light.other"],
+        turn_on_select_entity="select.ambient_theme",
+        turn_on_select_option="Cozy",
+        **kwargs,
+    )
+    await setup_entries(hass, entry)
+    assert _molight_state(hass) == "active"
+    return light, other, select
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("command", ["level", "restore", "stage", "blink"])
+async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
+    hass: HomeAssistant, freezer, command: str
+) -> None:
+    """The strip's re-send waits for its select call when a turn-on through
+    the light replaces it: a new level, or the pre-warning one restored. A
+    stage the timer then reaches is sent during the call too, and may blink
+    the lights off. Whichever was sent last is what the strip shows once the
+    preset has landed."""
+    stage = {"warn_timeout": 8, "warn_brightness": 20}
+    if command == "blink":
+        stage = {"effect_timeout": 8, "effect_brightness": 0}
+    light, other, select = await _lit_pair(hass, timeout=5, **stage)
+    if command == "restore":
+        await _pass(hass, freezer, 6)
+        await settle(hass)
+        assert _molight_state(hass) == "warn"
+    before = _wall_stamps(hass)
+    await _park_real_resend(hass, light, select)
+
+    data = {} if command == "restore" else {"brightness": 100}
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light", **data}
+    )
+    await _drain(hass)
+    level = 200 if command == "restore" else 100
+    assert (light.brightness, other.brightness) == (level, level)
+    machine_state = "active"
+    if command in ("stage", "blink"):
+        await _pass(hass, freezer, 6)
+        machine_state = "warn" if command == "stage" else "effect"
+    assert _molight_state(hass) == machine_state
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["molight_state"] == machine_state
+    assert _wall_stamps(hass) == before
+    if command == "blink":
+        assert (light.is_on, other.is_on, state.state) == (False, False, "on")
+        return
+    if command == "stage":
+        level = 51
+    assert (light.brightness, other.brightness) == (level, level)
+    assert state.attributes["brightness"] == level
+
+    # The strip dimmed at the wall afterwards is a person again.
+    light.wall(brightness=77)
+    await settle(hass)
+    assert "last_brightness_change_physical" in _wall_stamps(hass)
+    assert hass.states.get("light.selection_light").attributes["brightness"] == 77
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_raise_sent_during_a_replaced_standby_select_outlasts_its_preset(
+    hass: HomeAssistant,
+) -> None:
+    """The strip reboots lit at standby, so standby and its preset are sent
+    again. Someone walks in while that select call runs: the raise is sent
+    at once, replaces it, and is what the strip shows after the preset."""
+    light, select = await _preset_strip(hass)
+    hass.states.async_set(_SCHEDULE, "on")
+    hass.states.async_set("binary_sensor.occ", "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={
+                **_PRESET,
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.occ",
+                CONF_AUTO_ON_BRIGHTNESS: 80,
+                CONF_STANDBY_BRIGHTNESS: 20,
+            },
+        ),
+    )
+    await settle(hass)
+    assert _molight_state(hass) == "standby"
+    assert light.brightness == 51
+    await _park_real_resend(hass, light, select, on=True)
+
+    hass.states.async_set("binary_sensor.occ", "on")
+    await _drain(hass)
+    assert _molight_state(hass) == "occupied"
+    assert light.brightness == 204
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert light.brightness == 204
+    assert state.attributes["molight_state"] == "occupied"
+    assert state.attributes["brightness"] == 204
+    assert _wall_stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first", [None, "level"], ids=["alone", "after_a_level"])
+async def test_wall_change_during_a_replaced_select_call_is_not_sent_again(
+    hass: HomeAssistant, first: str | None
+) -> None:
+    """The other real light dimmed at the wall replaces the re-send too, also
+    after a new level did. Real lights are not kept in step, so nothing is
+    sent after the preset."""
+    light, other, select = await _lit_pair(hass)
+    await _park_real_resend(hass, light, select)
+    if first:
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 100},
+        )
+        await _drain(hass)
+    commands = record_service_calls(hass)
+
+    other.wall(brightness=150)
+    await _drain(hass)
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert light_targets(commands, "turn_on") == []
+    assert other.brightness == 150
+    assert state.attributes["last_brightness_change_physical"] is not None
+
+
+@pytest.mark.asyncio
+async def test_stage_after_a_wall_change_during_a_select_call_is_sent_again(
+    hass: HomeAssistant, freezer
+) -> None:
+    """What the wall set stands, but a stage the timer reaches afterwards,
+    still during the call, is the light's own command again."""
+    light, other, select = await _lit_pair(
+        hass, timeout=5, warn_timeout=8, warn_brightness=20
+    )
+    await _park_real_resend(hass, light, select)
+    other.wall(brightness=150)
+    await _drain(hass)
+
+    await _pass(hass, freezer, 6)
+    assert _molight_state(hass) == "warn"
+    await _land_preset(hass, select)
+
+    assert (light.brightness, other.brightness) == (51, 51)
+    assert _molight_state(hass) == "warn"
+
+
+@pytest.mark.asyncio
+async def test_off_at_the_wall_after_a_command_during_a_select_call_stands(
+    hass: HomeAssistant,
+) -> None:
+    """A new level replaces the re-send, then both real lights are switched
+    off at the wall: the level is not sent again over that. The preset still
+    lights the strip, which the light reports as any lit room."""
+    light, other, select = await _lit_pair(hass)
+    await _park_real_resend(hass, light, select)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light", "brightness": 100}
+    )
+    await _drain(hass)
+    commands = record_service_calls(hass)
+
+    for member in (light, other):
+        member.wall(on=False)
+    await _drain(hass)
+    assert hass.states.get("light.selection_light").state == "off"
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert light_targets(commands, "turn_on") == []
+    assert not other.is_on
+    assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
+    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+async def test_preset_landing_as_the_select_call_returns_is_no_wall_turn_on(
+    hass: HomeAssistant, trigger: str
+) -> None:
+    """A preset that lights the strip in the last moment of the select call:
+    the strip's report reaches the light just after the call has returned,
+    and is still the call's doing."""
+    light, _ = await _preset_strip(hass)
+    hass.states.async_set("binary_sensor.occ", "off")
+    await setup_entries(
+        hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
+    )
+
+    if trigger == "manual":
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    else:
+        hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert light.brightness == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+    assert _wall_stamps(hass) == {}

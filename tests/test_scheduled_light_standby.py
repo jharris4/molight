@@ -2200,7 +2200,8 @@ async def _drain(hass: HomeAssistant) -> None:
 async def test_raise_during_a_waiting_standby_keeps_the_raised_level(
     hass: HomeAssistant,
 ) -> None:
-    """A standby still waiting for its selection does not undo a later raise."""
+    """A standby still waiting for its selection does not undo a later raise,
+    which is sent again once that select call ends."""
     select = _ParkedSelect(hass, park=1)
     calls = await _setup_porch(hass, _porch(inside=_SCENE), schedule="off")
     hass.states.async_set(SCHEDULE, "on")
@@ -2214,14 +2215,15 @@ async def test_raise_during_a_waiting_standby_keeps_the_raised_level(
 
     assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
     assert _attrs(hass)["brightness"] == BOOST
-    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [BOOST]
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [BOOST] * 2
 
 
 @pytest.mark.asyncio
 async def test_standby_during_a_waiting_raise_keeps_standby(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A raise still waiting for its selection does not undo a later standby."""
+    """A raise still waiting for its selection does not undo a later standby,
+    which is sent again once that select call ends."""
     select = _ParkedSelect(hass, park=2)
     calls = await _setup_porch(hass, _porch(inside=_SCENE))
     # The slow member has not come on yet, so the raise selects again.
@@ -2239,10 +2241,8 @@ async def test_standby_during_a_waiting_raise_keeps_standby(
     await settle(hass)
 
     _assert_standby(hass)
-    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [
-        STANDBY,
-        STANDBY,
-    ]
+    # At startup, when the raise's quick off dropped back, and after the call.
+    assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [STANDBY] * 3
 
 
 @pytest.mark.asyncio
