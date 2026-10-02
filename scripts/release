@@ -15,7 +15,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,7 +29,7 @@ REMOTE = "origin"
 
 def _today() -> str:
     """Return today's local date as YYYY-MM-DD."""
-    return datetime.now(tz=UTC).astimezone().date().isoformat()
+    return datetime.now().astimezone().date().isoformat()
 
 
 def fail(msg: str) -> None:
