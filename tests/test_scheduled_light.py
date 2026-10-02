@@ -1383,6 +1383,37 @@ async def test_schedule_change_applies_selected_illuminance_mode(
 
 
 @pytest.mark.asyncio
+async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
+    hass: HomeAssistant,
+) -> None:
+    """A newly selected gate-mode sensor reading bright only gates an off
+    light, so the new side's active occupancy holds an on one."""
+    occupancy = "binary_sensor.inside_occupancy"
+    illuminance = "binary_sensor.inside_illuminance"
+    hass.states.async_set(REAL, "on")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(occupancy, "on")
+    hass.states.async_set(illuminance, "on")
+    entry = make_scheduled_light_entry(
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        },
+    )
+    await setup_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_ACTIVE
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
 async def test_schedule_change_bright_sensor_leaves_off_light_off(
     hass: HomeAssistant,
 ) -> None:

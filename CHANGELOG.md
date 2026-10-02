@@ -320,6 +320,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now what is sent, and after a warning that occupancy ended meanwhile, the
   restored brightness and colour. An automatic turn-on that waits into a
   warning does the same; a manual turn-on still wins over the stage.
+- In illuminance *Gate* mode, brightness only stops an off light turning on.
+  When the lux sensor saw the lamp, someone moving again during the countdown
+  was ignored as "bright", and the light went off over them and came back on
+  once the room read dark; occupancy did not cancel a warning either. An on
+  light is now held and re-triggered by occupancy and the door as in the
+  dark: on a turn-on by hand or at the wall, a hold's release, a door or
+  maintain sensor clearing, at startup and at a *Gate and switch state* end.
+  Raising standby still waits for the dark.
 
 ## [1.8.0] - 2026-09-30
 

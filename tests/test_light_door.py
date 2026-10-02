@@ -922,6 +922,36 @@ async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
 
 
 @pytest.mark.asyncio
+async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_mode(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Bright in gate mode does not keep occupancy from holding an on light,
+    so the door closing over it starts no countdown."""
+    hass.states.async_set(ILLUM, "on")  # bright
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(DOOR, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            occupancy=OCC,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            timeout=10,
+        ),
+    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await _tick(hass, freezer, 3600)
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("gate", ["bright", "schedule"])
 async def test_open_close_close_ignores_gated_occupancy(
@@ -937,10 +967,9 @@ async def test_open_close_close_ignores_gated_occupancy(
             door_mode=DOOR_MODE_OPEN_CLOSE,
             occupancy=OCC,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
             timeout=10,
         )
-        hass.states.async_set(ILLUM, "on")  # bright
+        hass.states.async_set(ILLUM, "on")  # bright, in control mode
     else:
         entry = make_light_entry(
             door=DOOR,

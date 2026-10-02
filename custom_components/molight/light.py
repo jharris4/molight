@@ -155,6 +155,8 @@ Maintain occupancy (when a maintain occupancy entity is configured)
 Illuminance handling (when an illuminance entity is configured), per
 illuminance_mode:
   - Occupancy only turns lights ON when illuminance is OFF (dark), in both modes.
+    In gate mode bright only gates turning an off light on (or a rise from
+    standby): occupancy and the door hold and re-trigger an on light as usual.
   - Illuminance ON→OFF (bright→dark): if currently occupied, enter OCCUPIED;
     else if brightness forced the lights off and that on-period has time left,
     enter COUNTDOWN for the rest of it. It lasts until the later of
@@ -1650,11 +1652,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._standby_seed() or self._follow_schedule_seed():
             return
 
-        # Occupancy only takes over when it's dark (or no illuminance is
-        # configured) and inside any gate-mode schedule window.
+        # Occupancy only takes over when brightness and any gate-mode schedule
+        # window allow it.
         if (
             self._occupancy_entity
-            and not self._is_illuminance_bright()
+            and not self._bright_gates_presence()
             and not self._gate_schedule_inactive()
         ):
             occ_state = self.hass.states.get(self._occupancy_entity)
@@ -1699,9 +1701,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # Bright in control mode: standby waits for darkness.
                 self.hass.async_create_task(self._auto_lights_off())
                 self._go_idle(bright_forced=True)
-            elif self._occupancy_holds() or (
-                self._door_holds() and not self._is_illuminance_bright()
-            ):
+            elif (
+                self._occupancy_holds() or self._door_holds()
+            ) and not self._is_illuminance_bright():
                 # Presence arrived while Home Assistant was down: boost,
                 # gated by brightness like any other rise.
                 self._machine_state = STATE_STANDBY
@@ -2323,13 +2325,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._warning_active = False
             self._pre_warn_brightness = None
             self._pre_warn_color = None
+            self._machine_state = STATE_ACTIVE
             if self._maintain_active() or self._occupancy_holds() or self._door_holds():
                 # Presence that left standby alone holds the raised light,
                 # as it does a raise through this entity.
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
             else:
-                self._machine_state = STATE_ACTIVE
                 self._start_timer()
         self.async_write_ha_state()
 
@@ -2794,6 +2796,18 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         state = self.hass.states.get(self._illuminance_entity)
         return state is not None and state.state == "on"
 
+    def _bright_gates_presence(self) -> bool:
+        """Return True when brightness keeps occupancy or a door from acting.
+
+        In gate mode it only stops an off light turning on or rising from
+        standby: an on light is held and re-triggered as usual.
+        """
+        return self._is_illuminance_bright() and (
+            self._illuminance_mode != ILLUMINANCE_MODE_GATE
+            or not self._attr_is_on
+            or self._machine_state == STATE_STANDBY
+        )
+
     def _gate_schedule_inactive(self) -> bool:
         """Return True when a gate-mode schedule forbids activating lights.
 
@@ -2870,8 +2884,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         Automatic turn-offs suppressed while held are applied from current
         conditions: a follow/hard-gate window that ended, or bright in control
         mode, turns the lights off now; an active follow
-        window or active occupancy (gated like any adoption: suppressed when
-        bright or outside a gate window) keeps them on without a timer;
+        window or active occupancy (gated like any adoption: suppressed
+        outside a gate window) keeps them on without a timer;
         otherwise a fresh full timer starts. A turn-on still waiting for its
         selection counts as on.
         """
@@ -3223,7 +3237,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if occupied:
-            if self._is_illuminance_bright():
+            if self._bright_gates_presence():
                 # Bright enough: suppress lights; when illuminance turns off we
                 # re-evaluate occupancy from the sensor's current state.
                 return
@@ -3310,15 +3324,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _occupancy_holds(self) -> bool:
         """Return True when active occupancy may hold an on light as OCCUPIED.
 
-        Adoption is gated exactly like a turn-on (bright or outside a
-        gate-mode window suppress it), unlike the maintain entity, which is
-        never gated. Without adoption, a light turned on while occupancy is
-        already active would run a timer that expires despite presence, and
-        the steady-on sensor produces no event that could ever rescue it.
+        Adoption is gated like a turn-on (bright or outside a gate-mode
+        window suppress it, though bright in gate mode only for a light off
+        or at standby), unlike the maintain entity, which is never gated.
+        Without adoption, a light turned on while occupancy is already active
+        would run a timer that expires despite presence, and the steady-on
+        sensor produces no event that could ever rescue it.
         """
         return (
             self._occupancy_active()
-            and not self._is_illuminance_bright()
+            and not self._bright_gates_presence()
             and not self._gate_schedule_inactive()
         )
 
@@ -3502,7 +3517,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if is_open:
-            if self._is_illuminance_bright():
+            if self._bright_gates_presence():
                 return  # dark-gated, like occupancy
             if self._gate_schedule_inactive():
                 return  # outside a gate-mode schedule window
@@ -3740,6 +3755,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._apply_window_start(sched.attributes.get("current_window_start"))
             return
 
+        if self._machine_state == STATE_STANDBY:
+            self._machine_state = STATE_ACTIVE  # raised by hand, so on above standby
         # Turned on while the maintain entity, an open_close door, or the
         # regular occupancy entity (when not gated by bright/window) is
         # already holding presence: hold the light immediately instead of

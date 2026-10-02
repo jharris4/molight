@@ -83,7 +83,7 @@
           "illuminance_mode": "Illuminance mode"
         },
         "data_description": {
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate."
+          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate."
         }
       },
       "assign_schedule": {
@@ -262,7 +262,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
@@ -554,7 +554,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
@@ -683,7 +683,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
@@ -773,7 +773,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
@@ -1195,7 +1195,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
@@ -1285,7 +1285,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
@@ -1543,7 +1543,7 @@
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only blocks turn-ons; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",

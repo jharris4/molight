@@ -747,27 +747,31 @@ async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("presence", ["maintain", "door"])
+@pytest.mark.parametrize("presence", ["maintain", "door", "occupancy"])
 @pytest.mark.parametrize("source", ["physical", "virtual"])
 async def test_raising_standby_by_hand_is_held_by_presence_already_there(
     hass: HomeAssistant, freezer, presence: str, source: str
 ) -> None:
-    """Maintain or an open door that left standby alone holds a manual raise."""
+    """Maintain, an open door or occupancy that left standby alone holds a
+    manual raise."""
     sensor = "binary_sensor.presence"
     illuminance = "binary_sensor.porch_bright"
-    # Bright in gate mode keeps the open door from raising standby itself.
+    # Bright in gate mode keeps the door or occupancy from raising standby.
     hass.states.async_set(illuminance, "on")
     hass.states.async_set(sensor, "on")
-    inside = (
-        {CONF_MAINTAIN_OCCUPANCY_ENTITY: sensor}
-        if presence == "maintain"
-        else {
+    gate = {
+        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+    }
+    inside = {
+        "maintain": {CONF_MAINTAIN_OCCUPANCY_ENTITY: sensor},
+        "door": {
             CONF_DOOR_ENTITY: sensor,
             CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
-            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
-        }
-    )
+            **gate,
+        },
+        "occupancy": {CONF_OCCUPANCY_ENTITY: sensor, **gate},
+    }[presence]
     await _setup_porch(hass, _porch(inside=inside))
     await _echo_standby(hass)
     _assert_standby(hass)

@@ -357,36 +357,30 @@ async def test_release_while_occupied_stays_occupied(
 
 
 @pytest.mark.asyncio
-async def test_release_while_occupied_but_bright_gated_runs_timer(
+async def test_release_while_occupied_and_bright_in_gate_mode_stays_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy adoption at release is gated like any other adoption: bright
-    (gate mode, so no forced off) means the released light runs a fresh timer
-    instead of being held OCCUPIED, exactly what a turn-on under the same
-    conditions does."""
+    """Bright in gate mode only stops an off light turning on, so occupancy
+    holds the on light through the hold and its release, with no timer."""
     hass.states.async_set(OCC, "off")
-    hass.states.async_set(ILLUM, "on")  # bright
+    hass.states.async_set(ILLUM, "off")
     await setup_entries(
         hass,
         make_light_entry(
             occupancy=OCC, illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_GATE
         ),
     )
-
-    # Manual on is never gated; occupancy arriving while bright is.
-    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
-    await settle(hass)
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    hass.states.async_set(ILLUM, "on")  # the lamp makes the room bright
+    await settle(hass)
 
     await _switch(hass, on=False)
     await _switch(hass, on=True)
 
-    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
-    await _tick(hass, freezer, 61)
-    assert _state(hass).state == "off"
-    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await _tick(hass, freezer, 3600)
+    assert _state(hass).state == "on"
 
 
 @pytest.mark.asyncio
