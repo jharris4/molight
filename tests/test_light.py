@@ -1440,7 +1440,7 @@ def _warn_light_entry(
         data[CONF_OCCUPANCY_ENTITY] = occupancy
     if hold_entities:
         data[CONF_HOLD_ENTITIES] = hold_entities
-    return MockConfigEntry(domain=DOMAIN, data=data)
+    return light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 
 def _record_service_calls(hass: HomeAssistant) -> list[dict]:

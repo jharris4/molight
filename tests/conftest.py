@@ -442,6 +442,16 @@ def virtual_light_behavior_variant(request, hass: HomeAssistant):
         )
     yield variant
     _LIGHT_BEHAVIOR_VARIANT.reset(token)
+    if variant != "regular":
+        regular = [
+            entry.title
+            for entry in hass.config_entries.async_entries(DOMAIN)
+            if entry.data.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT
+        ]
+        assert not regular, (
+            f"a {variant} test set up a regular Virtual Light {regular}; "
+            "build its entry through light_behavior_entry"
+        )
 
 
 @pytest.fixture
