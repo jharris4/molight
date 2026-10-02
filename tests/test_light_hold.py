@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import restore_state
 from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
@@ -20,10 +21,14 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    ATTR_SCHEDULE_END_OFF_PENDING,
+    CONF_ENTITY_TYPE,
+    CONF_SCHEDULE_MODE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -31,9 +36,11 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
 )
 from tests.conftest import (
+    crash_entries,
     light_targets,
     make_light_entry,
     record_service_calls,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -694,6 +701,188 @@ async def test_hold_blocks_gate_window_end_release_applies_it(
     assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+async def _hold(hass: HomeAssistant, hold: str, *, on: bool) -> None:
+    if hold == "switch":
+        await _switch(hass, on=not on)
+    else:
+        hass.states.async_set(HOLD, "on" if on else "off")
+        await settle(hass)
+
+
+async def _hold_through_gate_end(hass: HomeAssistant, hold: str):
+    """A light turned on by hand in a Gate and turn off window that ended
+    while held."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(HOLD, "off")
+    entry = make_light_entry(
+        schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, hold_entities=[HOLD]
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _hold(hass, hold, on=True)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+    return entry
+
+
+async def _assert_fresh_timer_on_release(hass: HomeAssistant, freezer, hold: str):
+    calls = record_service_calls(hass)
+    await _hold(hass, hold, on=False)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    await _tick(hass, freezer, 59)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("hold", ["switch", "keep_on"])
+async def test_release_outside_a_gate_window_runs_a_fresh_timer(
+    hass: HomeAssistant, freezer, hold: str
+) -> None:
+    """Turned on by hand outside a Gate and turn off window: no window ended
+    while held, so the release starts a fresh full timer."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(HOLD, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, hold_entities=[HOLD]
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _hold(hass, hold, on=True)
+    await _tick(hass, freezer, 120)
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+    await _assert_fresh_timer_on_release(hass, freezer, hold)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("hold", ["switch", "keep_on"])
+async def test_release_applies_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
+    """A Gate and turn off end a hold kept from a light turned on by hand is
+    applied when the hold releases."""
+    await _hold_through_gate_end(hass, hold)
+    calls = record_service_calls(hass)
+    await _hold(hass, hold, on=False)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_manual_off_and_on_after_a_held_gate_end_runs_a_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Off and on again by hand while still held: the end is spent."""
+    await _hold_through_gate_end(hass, "switch")
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _assert_fresh_timer_on_release(hass, freezer, "switch")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_gate_window_start_drops_a_held_gate_end(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A window starting again while held ends the owed off."""
+    await _hold_through_gate_end(hass, "switch")
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+    await _assert_fresh_timer_on_release(hass, freezer, "switch")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("hold", ["switch", "keep_on"])
+async def test_restart_keeps_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
+    """A held Gate and turn off end survives a restart under the hold."""
+    entry = await _hold_through_gate_end(hass, hold)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    calls = record_service_calls(hass)
+    await _hold(hass, hold, on=False)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_restart_after_the_hold_released_applies_a_held_gate_end(
+    hass: HomeAssistant,
+) -> None:
+    """A keep-on entity released while Home Assistant was down: startup
+    applies the owed off."""
+    entry = await _hold_through_gate_end(hass, "keep_on")
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    await restore_state.async_get(hass).async_dump_states()
+    hass.states.async_set(HOLD, "off")
+    calls = record_service_calls(hass)
+    await crash_entries(hass, entry)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_restart_into_a_new_gate_window_drops_a_held_gate_end(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A window that started while Home Assistant was down ends the owed off."""
+    entry = await _hold_through_gate_end(hass, "switch")
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    await restore_state.async_get(hass).async_dump_states()
+    hass.states.async_set(SCHED, "on")
+    await crash_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+    await _assert_fresh_timer_on_release(hass, freezer, "switch")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_options_edit_to_another_gate_mode_drops_a_held_gate_end(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Only Gate and turn off owes an end its off."""
+    entry = await _hold_through_gate_end(hass, "switch")
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(
+        entry, options={**options, CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE_KEEP}
+    )
+    await settle(hass)
+    assert ATTR_SCHEDULE_END_OFF_PENDING not in _state(hass).attributes
+    await _assert_fresh_timer_on_release(hass, freezer, "switch")
 
 
 @pytest.mark.asyncio

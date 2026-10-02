@@ -183,10 +183,11 @@ Holding auto-off
 
   When the last hold releases, the light re-evaluates its rules from current
   conditions: a follow-mode or hard-gate window that ended while held turns it
-  off now (the window marker/pending boundary is kept while held for exactly
-  this), as does being bright in illuminance control mode; active
-  occupancy keeps it on (OCCUPIED); an active follow window keeps it
-  SCHEDULED; otherwise a fresh full timer starts (ACTIVE).
+  off now (the follow window marker, or schedule_end_off_pending, is kept
+  while held for exactly this; any off drops it), as does being bright in
+  illuminance control mode; active occupancy keeps it on (OCCUPIED); an
+  active follow window keeps it SCHEDULED; otherwise a fresh full timer
+  starts (ACTIVE), also outside a window that did not end while held.
 
   A keep-on entity going unavailable/unknown holds its last known value, as
   everywhere else in the integration; at startup an unavailable keep-on
@@ -1105,6 +1106,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._schedule_window_applied = last.attributes.get(
                     "schedule_window_start"
                 )
+            if not self._is_scheduled_light:
+                # A held Gate and turn off end, kept for the hold's release.
+                self._schedule_end_off_pending = (
+                    self._schedule_mode == SCHEDULE_MODE_GATE
+                    and bool(self._schedule_entity)
+                    and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
+                )
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
             if self._bright_forced_off:
                 with contextlib.suppress(ValueError, TypeError):
@@ -1536,6 +1544,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
+        if self._schedule_last_on and not self._is_scheduled_light:
+            self._schedule_end_off_pending = False  # a window started since
         self._occupancy_last_on = self._live_occupancy_on()
         self._seed_from_members(commanded=True)
 
@@ -2881,12 +2891,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _resume_after_hold_release(self) -> None:
         """Return to normal behaviour when the last hold releases.
 
-        Automatic turn-offs suppressed while held are applied from current
-        conditions: a follow/hard-gate window that ended, or bright in control
-        mode, turns the lights off now; an active follow
-        window or active occupancy (gated like any adoption: suppressed
-        outside a gate window) keeps them on without a timer;
-        otherwise a fresh full timer starts. A turn-on still waiting for its
+        Automatic turn-offs suppressed while held are applied: a follow or
+        hard-gate window that ended while held, or bright in control mode,
+        turns the lights off now; an active follow window or active occupancy
+        (gated like any adoption: suppressed outside a gate window) keeps them
+        on without a timer; otherwise a fresh full timer starts, also outside
+        a window that did not end while held. A turn-on still waiting for its
         selection counts as on.
         """
         if not self._is_lit():
@@ -2932,10 +2942,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._go_idle()
             return
 
-        if self._hard_gate_schedule_inactive():
-            self.hass.async_create_task(self._auto_lights_off())
-            self._go_idle()
-            return
         resting = self._machine_state == STATE_STANDBY and self._standby_applies()
         if (
             self._is_illuminance_bright()
@@ -3085,22 +3091,27 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if new_state.state != "on":
             if replay:
                 return  # still outside the window: nothing ended
-            if (
-                self._schedule_mode == SCHEDULE_MODE_GATE
-                and self._is_lit()
-                and not self._held
-            ):
-                self.hass.async_create_task(self._auto_lights_off())
-                self._go_idle()
+            if self._schedule_mode == SCHEDULE_MODE_GATE and self._is_lit():
+                if self._held:
+                    # Applied when the hold releases.
+                    self._schedule_end_off_pending = True
+                    self.async_write_ha_state()
+                else:
+                    self.hass.async_create_task(self._auto_lights_off())
+                    self._go_idle()
             elif self._schedule_mode == SCHEDULE_MODE_GATE_SWITCH and self._is_lit():
                 self._switch_running_state()
         else:
+            # A held end no longer applies once a window starts again.
+            self._schedule_end_off_pending = False
             if self._machine_state != STATE_IDLE:
                 # Lights already on: the window opening lifts the gate that
                 # kept already-active occupancy (or an open door) from holding
                 # them.
                 if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
+                else:
+                    self.async_write_ha_state()
                 return
             if self._is_illuminance_bright():
                 return  # dark-gated, like any automatic turn-on
@@ -3774,12 +3785,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self.async_write_ha_state()
 
     def _finish_schedule_end_off(self) -> None:
-        """Apply a scheduled light's end-boundary off now.
+        """Apply a held end-boundary off now.
 
-        Fades the lights off with the profile being left and goes idle, which
-        also clears the pending flag.
+        A scheduled light fades off with the profile being left, a Gate and
+        turn off light with its own fade; going idle clears the pending flag.
         """
-        self.hass.async_create_task(self._scheduled_end_lights_off())
+        self.hass.async_create_task(
+            self._scheduled_end_lights_off()
+            if self._is_scheduled_light
+            else self._auto_lights_off()
+        )
         self._go_idle()
 
     def _go_idle(self, *, bright_forced: bool = False, manual: bool = False) -> None:
@@ -4354,15 +4369,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             "bright_forced_off": self._bright_forced_off,
             "bright_resume_until": _fmt(self._bright_resume_until),
         }
+        end_off = self._schedule_end_off_pending or bool(owed and owed.end_off)
+        if self._schedule_mode == SCHEDULE_MODE_GATE and self._schedule_entity:
+            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = end_off
         if self._is_scheduled_light:
             attributes[ATTR_ACTIVE_SETTINGS] = (
                 ACTIVE_SETTINGS_INSIDE
                 if self._inside_schedule
                 else ACTIVE_SETTINGS_OUTSIDE
             )
-            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = (
-                self._schedule_end_off_pending or bool(owed and owed.end_off)
-            )
+            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = end_off
             attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
             attributes[ATTR_MANUAL_OFF_CLEARED] = self._manual_off_cleared
             attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity

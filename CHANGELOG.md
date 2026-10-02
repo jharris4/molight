@@ -328,6 +328,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dark: on a turn-on by hand or at the wall, a hold's release, a door or
   maintain sensor clearing, at startup and at a *Gate and switch state* end.
   Raising standby still waits for the dark.
+- Releasing an Auto-off or keep-on hold on a light under *Gate and turn off*
+  turns it off only when a window ended while it was held. A light turned on
+  by hand outside the window was turned off at once on release instead of
+  getting a fresh timer, also after being turned off and on again by hand
+  since the end. The held end is kept across a restart and reported in
+  `schedule_end_off_pending`, and a window starting again drops it.
 
 ## [1.8.0] - 2026-09-30
 
