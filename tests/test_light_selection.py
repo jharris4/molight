@@ -38,7 +38,7 @@ from tests.conftest import (
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 if TYPE_CHECKING:
-    from homeassistant.core import Event, HomeAssistant, ServiceCall
+    from homeassistant.core import Context, Event, HomeAssistant, ServiceCall
 
 
 @pytest.fixture(autouse=True)
@@ -2045,6 +2045,101 @@ async def test_wall_turn_on_of_another_member_during_a_device_selection_overtake
     state = hass.states.get("light.selection_light")
     assert [call for call in calls if call["domain"] == "light"] == []
     assert state.attributes["brightness"] == 200
+    assert state.attributes["last_on_physical"] is not None
+
+
+def _registered(hass: HomeAssistant, *entity_ids: str) -> None:
+    """Register the entities with no device, like a template select or a group."""
+    for entity_id in entity_ids:
+        domain, object_id = entity_id.split(".")
+        state = hass.states.get(entity_id)
+        hass.states.async_remove(entity_id)
+        registered = er.async_get(hass).async_get_or_create(
+            domain, "template", entity_id, suggested_object_id=object_id
+        )
+        assert registered.entity_id == entity_id
+        assert registered.device_id is None
+        if state:
+            hass.states.async_set(entity_id, state.state, state.attributes)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "layout", ["neither_has_a_device", "light_without_device", "neither_registered"]
+)
+async def test_wall_turn_on_of_a_light_without_a_device_still_overtakes(
+    hass: HomeAssistant, layout: str
+) -> None:
+    """Having no device is not having the same device: a template select and
+    a light group speak for nothing but themselves."""
+    if layout == "neither_has_a_device":
+        _registered(hass, "select.ambient_theme", "light.ambient")
+    elif layout == "light_without_device":
+        _one_device(hass, "select.ambient_theme")
+        _registered(hass, "light.ambient")
+    select = _SlowSelect(hass)
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.occ", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 200})
+    await _drain(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("earlier_call", [False, True], ids=["no_call", "call_done"])
+async def test_wall_turn_on_on_the_select_device_with_no_call_running_is_claimed(
+    hass: HomeAssistant, earlier_call: bool
+) -> None:
+    """Sharing the select entity's device only matters while a select call
+    runs: before any, and once it has finished, a turn-on of that light is a
+    turn-on at the wall."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    select.release.set()
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+    contexts: list[Context] = []
+
+    @callback
+    def record_context(event: Event) -> None:
+        if event.data["service_data"]["entity_id"] == ["light.ambient"]:
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_context)
+    if earlier_call:
+        for service, reply in (("turn_on", "on"), ("turn_off", "off")):
+            await hass.services.async_call(
+                "light", service, {"entity_id": "light.selection_light"}, blocking=True
+            )
+            await settle(hass)
+            hass.states.async_set("light.ambient", reply, context=contexts[-1])
+            await settle(hass)
+        assert select.started.is_set()
+    state = hass.states.get("light.selection_light")
+    assert state.state == "off"
+    assert state.attributes["last_on_physical"] is None
+    calls = _light_calls(hass)
+
+    hass.states.async_set("light.ambient", "on", {"brightness": 150})
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert state.state == "on"
+    assert state.attributes["brightness"] == 150
     assert state.attributes["last_on_physical"] is not None
 
 
