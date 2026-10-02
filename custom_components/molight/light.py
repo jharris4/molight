@@ -369,6 +369,7 @@ from .const import (
 )
 from .helpers import (
     RenamableRestoreEntity,
+    entity_gone,
     lights_support_brightness,
     lights_support_transition,
     molight_config,
@@ -2014,23 +2015,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._hold_states[entity_id] = False
             self._refresh_hold()
 
-    def _gone(self, entity_id: str) -> bool:
-        """Return True for an entity that is deleted or disabled.
-
-        It has no state, or only the placeholder its disabled entry left,
-        and can never report one. A registered, enabled entity without a
-        state may yet load.
-        """
-        state = self.hass.states.get(entity_id)
-        if state is not None and not (
-            state.state == STATE_UNAVAILABLE and state.attributes.get(ATTR_RESTORED)
-        ):
-            return False
-        registry_entry = er.async_get(self.hass).async_get(entity_id)
-        if registry_entry is None:
-            return state is None
-        return registry_entry.disabled
-
     @callback
     def _handle_registry_change(
         self, event: Event[er.EventEntityRegistryUpdatedData]
@@ -2051,7 +2035,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         door as closed and missing presence as clear; the entity cannot
         report any of that itself anymore.
         """
-        if not self._gone(entity_id):
+        if not entity_gone(self.hass, entity_id):
             return
         if entity_id in self._lights:
             if self._owed is not None and entity_id in self._owed.members:
@@ -2319,7 +2303,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # A deleted or disabled member can never report again;
                 # counting such a ghost as "maybe on" would pin the virtual
                 # light on forever.
-                if not self._gone(entity_id):
+                if not entity_gone(self.hass, entity_id):
                     return False
                 continue
             if state.state == "on" and state.attributes.get("brightness") != 0:

@@ -11,7 +11,11 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntityFeature,
 )
-from homeassistant.const import ATTR_SUPPORTED_FEATURES
+from homeassistant.const import (
+    ATTR_RESTORED,
+    ATTR_SUPPORTED_FEATURES,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er, restore_state
 from homeassistant.helpers.entity import async_generate_entity_id
@@ -77,6 +81,24 @@ def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> 
         and current is not None
         and (renamed_to(hass, saved) == current)
     )
+
+
+def entity_gone(hass: HomeAssistant, entity_id: str) -> bool:
+    """Return True for an entity that is deleted or disabled.
+
+    It has no state, or only the placeholder its disabled entry left,
+    and can never report one. A registered, enabled entity without a
+    state may yet load.
+    """
+    state = hass.states.get(entity_id)
+    if state is not None and not (
+        state.state == STATE_UNAVAILABLE and state.attributes.get(ATTR_RESTORED)
+    ):
+        return False
+    registry_entry = er.async_get(hass).async_get(entity_id)
+    if registry_entry is None:
+        return state is None
+    return registry_entry.disabled
 
 
 @callback

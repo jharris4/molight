@@ -172,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Virtual Illuminance Sensor treats a `nan` or `inf` reading as no reading
   and holds its last value, instead of reading `nan` as dark and `inf` as
   bright.
+- A Virtual Illuminance Sensor whose source is deleted or disabled, also
+  along with its integration, is `unavailable` instead of keeping its last
+  reading for good, across restarts too. A light gated by a sensor stuck
+  bright that way never came on for presence or a door again. A source whose
+  entity ID changes, or whose integration reloads, still keeps the reading.
 
 ## [1.8.0] - 2026-09-30
 

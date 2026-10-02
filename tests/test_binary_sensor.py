@@ -5,8 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from homeassistant.config_entries import ConfigEntry, ConfigEntryDisabler
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
 from homeassistant.core import CoreState, HomeAssistant, State, callback
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -30,6 +32,8 @@ from custom_components.molight.const import (
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    ILLUMINANCE_MODE_CONTROL,
+    ILLUMINANCE_MODE_GATE,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
@@ -40,6 +44,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealLux, add_real, add_real_with_entry, rename
 
 
 def _occupancy2_entry() -> MockConfigEntry:
@@ -1018,8 +1023,138 @@ async def test_illuminance_restore_checks_the_saved_source(
     mock_restore_cache_with_extra_data(
         hass, [(State("binary_sensor.swapped_lux", "on"), extra)]
     )
+    # Registered and still loading, so not gone.
+    er.async_get(hass).async_get_or_create(
+        "sensor", "test", "old_lux", suggested_object_id="old_lux"
+    )
     await setup_entries(hass, _lux_entry())
     assert hass.states.get("binary_sensor.swapped_lux").state == expected
+
+
+LUX = "sensor.lux"
+LUX_GONE = ["deleted", "disabled", "unregistered", "entry_disabled"]
+
+
+async def _provide_lux(hass: HomeAssistant, how: str, lux: float) -> ConfigEntry | None:
+    """Add sensor.lux as a bare state, or registered from its own entry."""
+    if how == "unregistered":
+        hass.states.async_set(LUX, str(lux))
+        return None
+    return await add_real_with_entry(hass, lambda: RealLux("lux", lux))
+
+
+async def _remove_lux(
+    hass: HomeAssistant, how: str, source: ConfigEntry | None
+) -> None:
+    """Make sensor.lux leave Home Assistant for good."""
+    registry = er.async_get(hass)
+    if how == "deleted":
+        registry.async_remove(LUX)
+    elif how == "disabled":
+        registry.async_update_entity(LUX, disabled_by=er.RegistryEntryDisabler.USER)
+    elif how == "entry_disabled":
+        await hass.config_entries.async_set_disabled_by(
+            source.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        hass.states.async_remove(LUX)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", LUX_GONE)
+@pytest.mark.parametrize("lux", [100, 8, 0])
+async def test_illuminance_source_that_goes_missing_drops_its_reading(
+    hass: HomeAssistant, how: str, lux: float
+) -> None:
+    """A deleted or disabled source can never report again: unavailable, not held.
+
+    A source that comes back reports on the bare threshold, as a new one does.
+    """
+    source = await _provide_lux(hass, how, lux)
+    entry = _lux_entry(LUX)
+    await setup_entries(hass, entry)
+    assert hass.states.get("binary_sensor.swapped_lux").state == (
+        "on" if lux >= 10 else "off"
+    )
+
+    await _remove_lux(hass, how, source)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
+    # Nor does a reload or restart bring the reading back.
+    await restart_entries(hass, entry)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
+
+    # 12 lx is inside the band, where a held dark would have stayed off.
+    hass.states.async_set(LUX, "12")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_source_whose_entry_reloads_keeps_its_reading(
+    hass: HomeAssistant,
+) -> None:
+    """An entry reloading leaves the same placeholder for a moment: an outage."""
+    source = await _provide_lux(hass, "entry_disabled", 100)
+    await setup_entries(hass, _lux_entry(LUX))
+
+    await hass.config_entries.async_unload(source.entry_id)
+    await settle(hass)
+    assert hass.states.get(LUX).state == "unavailable"
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+    await hass.config_entries.async_setup(source.entry_id)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_renamed_source_keeps_its_reading(
+    hass: HomeAssistant,
+) -> None:
+    """A source whose entity ID changes is followed, not dropped."""
+    lux = RealLux("lux", 100)
+    await add_real(hass, lux)
+    entry = _lux_entry(LUX)
+    await setup_entries(hass, entry)
+
+    await rename(hass, LUX, "sensor.hall_lux")
+    assert molight_config(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+    # Still on the bright side of the band, so the hold carried over.
+    lux.set(8)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", LUX_GONE)
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+async def test_light_gated_by_a_sensor_whose_source_went_missing_comes_on(
+    hass: HomeAssistant, how: str, mode: str
+) -> None:
+    """The light no longer reads bright from a reading that can never change."""
+    source = await _provide_lux(hass, how, 500)
+    hass.states.async_set("light.real_1", "off")
+    hass.states.async_set("binary_sensor.occ", "off")
+    await setup_entries(
+        hass,
+        _lux_entry(LUX),
+        make_light_entry(
+            occupancy="binary_sensor.occ",
+            illuminance="binary_sensor.swapped_lux",
+            illuminance_mode=mode,
+        ),
+    )
+    hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").state == "off"
+    hass.states.async_set("binary_sensor.occ", "off")
+    await settle(hass)
+
+    await _remove_lux(hass, how, source)
+    hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").state == "on"
 
 
 @pytest.mark.asyncio
@@ -2219,18 +2354,34 @@ async def test_occupancy_restores_latest_occupied_time(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["loading", "deleted", "disabled"])
 async def test_illuminance_restores_state(
-    hass: HomeAssistant, illuminance_entry: MockConfigEntry
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, source: str
 ) -> None:
-    """A restored 'bright' reading survives a restart with the source missing."""
+    """A restored 'bright' reading survives a restart with the source missing.
+
+    Once Home Assistant has started, a source that is not registered, or is
+    disabled, can never report: its reading is dropped.
+    """
     mock_restore_cache(hass, [State("binary_sensor.test_illuminance", "on")])
+    if source != "deleted":
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "test",
+            "lux_1",
+            suggested_object_id="lux_1",
+            disabled_by=er.RegistryEntryDisabler.USER if source == "disabled" else None,
+        )
 
-    illuminance_entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(illuminance_entry.entry_id)
-    await hass.async_block_till_done()
-
-    # sensor.lux_1 does not exist yet; the restored value must hold.
+    hass.set_state(CoreState.starting)
+    await setup_entries(hass, illuminance_entry)
+    # sensor.lux_1 may just not have loaded yet; the restored value must hold.
     assert hass.states.get("binary_sensor.test_illuminance").state == "on"
+
+    await finish_startup(hass)
+    assert hass.states.get("binary_sensor.test_illuminance").state == (
+        "on" if source == "loading" else "unavailable"
+    )
 
 
 @pytest.mark.asyncio

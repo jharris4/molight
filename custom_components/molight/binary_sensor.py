@@ -47,6 +47,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoredExtraData
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 
@@ -92,6 +93,7 @@ from .const import (
 )
 from .helpers import (
     RenamableRestoreEntity,
+    entity_gone,
     molight_config,
     renamed_to,
     run_unless_renamed,
@@ -883,7 +885,14 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
                 self.hass, [self._source_entity], self._handle_illuminance_change
             )
         )
+        self.async_on_remove(
+            async_track_entity_registry_updated_event(
+                self.hass, [self._source_entity], self._handle_registry_change
+            )
+        )
         self._seed_state()
+        # A source that has not loaded yet is not gone: judge once started.
+        self.async_on_remove(async_at_started(self.hass, self._on_source_gone))
 
     def _seed_state(self) -> None:
         state = self.hass.states.get(self._source_entity)
@@ -894,9 +903,32 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
     @callback
     def _handle_illuminance_change(self, event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if new_state is None:
+            # Deleted or disabled, unless it is only being renamed.
+            self.async_on_remove(
+                run_unless_renamed(self.hass, self._source_entity, self._on_source_gone)
+            )
+            return
+        if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return  # hold last known value while the source is unavailable
         self._update_from_state(new_state.state)
+        self.async_write_ha_state()
+
+    @callback
+    def _handle_registry_change(
+        self, event: Event[er.EventEntityRegistryUpdatedData]
+    ) -> None:
+        """Notice a source disabled along with its entry, which keeps a placeholder."""
+        if event.data["action"] == "update" and "old_entity_id" not in event.data:
+            self._on_source_gone()
+
+    @callback
+    def _on_source_gone(self, _hass: HomeAssistant | None = None) -> None:
+        """Drop the held reading of a source that can never report again."""
+        if not self._attr_available or not entity_gone(self.hass, self._source_entity):
+            return
+        self._attr_available = False
+        self._attr_is_on = False
         self.async_write_ha_state()
 
     def _update_from_state(self, state_value: str) -> None:

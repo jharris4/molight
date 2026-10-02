@@ -16,15 +16,27 @@ from homeassistant.components.light import ColorMode, LightEntity
 from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockEntityPlatform
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntityPlatform,
+    MockModule,
+    MockPlatform,
+    mock_integration,
+    mock_platform,
+)
 
 from tests.conftest import settle
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.helpers.entity import Entity
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 
 class RealLight(LightEntity):
@@ -168,6 +180,56 @@ async def add_real(hass: HomeAssistant, *entities: Entity) -> None:
         platform = MockEntityPlatform(hass, domain=domain, platform_name="test")
         await platform.async_add_entities(members)
     await hass.async_block_till_done()
+
+
+class _RealFlow(ConfigFlow, domain="real"):
+    """The flow an integration's entry needs to be set up."""
+
+
+async def add_real_with_entry(
+    hass: HomeAssistant, *make: Callable[[], Entity]
+) -> ConfigEntry:
+    """Add real entities from an entry of their own integration, "real".
+
+    Each loading of the entry adds them afresh from make. Disabling it
+    disables them too, and leaves the placeholder state Home Assistant
+    writes for an entity whose entry is not loaded.
+    """
+    domains = list(dict.fromkeys(m().entity_id.split(".")[0] for m in make))
+
+    async def setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+        await hass.config_entries.async_forward_entry_setups(entry, domains)
+        return True
+
+    async def unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+        return await hass.config_entries.async_unload_platforms(entry, domains)
+
+    mock_integration(
+        hass,
+        MockModule(
+            "real", async_setup_entry=setup_entry, async_unload_entry=unload_entry
+        ),
+    )
+    mock_platform(hass, "real.config_flow", None)
+    for domain in domains:
+
+        async def setup_platform(
+            _hass: HomeAssistant,
+            _entry: ConfigEntry,
+            add: AddEntitiesCallback,
+            domain: str = domain,
+        ) -> None:
+            entities = (m() for m in make)
+            add([e for e in entities if e.entity_id.startswith(f"{domain}.")])
+
+        mock_platform(
+            hass, f"real.{domain}", MockPlatform(async_setup_entry=setup_platform)
+        )
+    entry = MockConfigEntry(domain="real")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
 
 
 async def rename(hass: HomeAssistant, entity_id: str, new_entity_id: str) -> None:
