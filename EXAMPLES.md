@@ -118,7 +118,7 @@ Warning grace period:    20       # then 20s at current brightness to re-trigger
 Warning color:           255, 0, 0   # red: bulbs that can show color turn red for it
 ```
 
-Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel, shown in red on any color-capable bulb for an unmissable cue (brightness-only bulbs just hold their level). Get up in that window and it's as if nothing happened: original brightness and color restored, no trace.
+Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel, shown in red on any color-capable bulb for an unmissable cue (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
 
 At each MoLight off-to-on transition, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
@@ -154,7 +154,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   Follow    # on at window start, off at window end
 ```
 
-**Follow** = porch-light behavior; the window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
+**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
 
 ---
 
@@ -213,12 +213,12 @@ Schedule sensor:   binary_sensor.night_window
 Schedule mode:     Gate and keep state
 ```
 
-Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the window ends. Someone walking in at 05:58 keeps the light until their timer runs out at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
+Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the schedule window ends. Someone walking in at 05:58 keeps the light until their timer runs out at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
 
 - **Gate and turn off** (Example 5) would switch the light off at 06:00, mid-stairs.
 - **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and history, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
 
-Two things every Gate mode does at 22:00 that are easy to miss: if someone is already on the stairs when the window starts (the occupancy sensor is on and it's dark), the light turns on right then; and if the light is already on, that person holds it. The window start never turns a light off.
+Two things every Gate mode does at 22:00 that are easy to miss: if someone is already on the stairs when the schedule window starts (the occupancy sensor is on and it's dark), the light turns on right then; and if the light is already on, that person holds it. The window start never turns a light off.
 
 ---
 
@@ -288,7 +288,7 @@ Auto-on color temperature: 2200                  # warm night light
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
 - With this example's **Keep state** choice and profiles, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. An incoming profile with bright illuminance in **Control** mode can still force off under the normal rules.
-- Choose **Switch state** to replace an on light's state and deadline using the outside profile's current sensors/history and 300-second timeout, or **Turn off using the inside settings** when the end of the night window itself should be an automatic off boundary.
+- Choose **Switch state** to replace an on light's state and deadline using the outside profile's current sensors/history and 300-second timeout, or **Turn off using the inside settings** when the end of the night schedule window itself should be an automatic off boundary.
 - Every setting can differ per side, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one side and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
 
@@ -415,10 +415,10 @@ Standby:                                         # collapsed section; expand it
 With no occupancy sensor on the outside side, motion does nothing in the daytime. Things worth knowing:
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
-- Switching the porch off by hand turns standby off for the rest of the window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
+- Switching the porch off by hand turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby colour without a brightness.
 - See the [README](README.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---
 
-**Global "don't touch my lights" toggle:** make an `input_boolean.guest_mode` and drop it into the **Keep-on entities** field of any virtual light. While it's on, every automatic turn-off is suspended (timers, forced-offs, window ends), but turn-ons and manual off still work. Every light also gets its own companion `... Auto-off` switch for the same thing per-room.
+**Global "don't touch my lights" toggle:** make an `input_boolean.guest_mode` and drop it into the **Keep-on entities** field of any virtual light. While it's on, every automatic turn-off is suspended (timers, forced-offs, schedule window ends), but turn-ons and manual off still work. Every light also gets its own companion `... Auto-off` switch for the same thing per-room.
