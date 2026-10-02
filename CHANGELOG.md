@@ -17,17 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rest at a low brightness and colour instead of turning off. A dusk-to-dawn
   porch can glow at 1%, come up to 100% when someone walks up, drop back to 1%
   once they leave, and turn off when the schedule ends. A manual off turns
-  standby off until the next schedule boundary. A turn-on without a
-  brightness, such as a voice "turn on", raises it as presence would.
+  standby off until the next schedule boundary, which includes one window
+  starting as another ends and midnight on an all-day schedule. Turning the
+  light back on, through MoLight or at the wall, rejoins standby. A turn-on
+  without a brightness, such as a voice "turn on", raises it as presence
+  would.
 
 ### Fixed
 
 - A virtual light reports the state it had before a restart until Home
   Assistant has finished starting, instead of `off` and `idle`. A crash or
-  power cut shortly after a restart no longer brings standby back on after a
-  manual off, loses a missed *Turn off* end or forgets that the light was
-  resting at standby, a light that was on no longer flicks off and on at
-  startup, and a virtual light that wraps another one reads its real state.
+  power cut shortly after a restart no longer loses a missed *Turn off* end,
+  a light that was on no longer flicks off and on at startup, and a virtual
+  light that wraps another one reads its real state.
 - A Virtual Combined Occupancy Sensor that is still waiting for a maintain
   sensor to load keeps that wait through another restart.
 - A schedule end missed while Home Assistant was down is applied to a real
@@ -38,9 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A restart during an effect or warn stage restores the pre-warning brightness
   and colour on a real light that loads late, instead of keeping the
   warning's.
-- A manual off that a Virtual Scheduled Light's schedule boundary had ended
-  no longer comes back with a restart; the new `manual_off_cleared` attribute
-  records it.
 - Changing a follow-mode light's schedule, or its schedule mode, no longer
   turns it off as if the old schedule's window had ended. The new
   `schedule_window_schedule` attribute records which schedule the window
@@ -77,10 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light's reports with MoLight's command after five seconds, so the later
   steps of a 10 s warning fade cancelled the warning and restarted the
   timeout, and a long auto-on fade was recorded as a turn-on at the wall. The
-  same goes for effect, standby and caller fades, and for the fade back to
-  the pre-warning brightness. A fade to off of any length that reports dimmer
-  levels on its way no longer turns the virtual light back on and then
-  records a manual off.
+  same goes for effect and caller fades, and for the fade back to the
+  pre-warning brightness. A fade to off of any length that reports dimmer
+  levels on its way no longer turns the virtual light back on and then records
+  a manual off.
 - With colour lights and colour-temperature-only lights in one virtual light,
   a slow reply from the latter to a colour is no longer taken for a change at
   the wall. Home Assistant sends such a light the nearest colour temperature,
@@ -88,7 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recorded as a turn-on at the wall and lost the false-detection quick off,
   and a coloured warning stage cancelled itself and restarted the timeout.
 - A colour temperature outside the range a virtual light's real lights span,
-  such as an auto-on, stage or standby colour temperature of 2000 K on lights
+  such as an auto-on or stage colour temperature of 2000 K on lights
   that start at 2700 K, is reported as the nearest one in the range, which is
   what the real lights show. The virtual light reported 2000 K, below its own
   `min_color_temp_kelvin`, and remembered that through a warning.
@@ -98,11 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   during a stage left the rest at the stage's brightness and colour.
 - A command sent while a replaced turn-on's select call is still in progress
   is no longer undone by the preset. A real light that came back from
-  `unavailable` was being re-sent its settings and preset when the light
-  dropped to standby, or was given a new brightness: the preset then set its
-  own brightness on the device, which stayed there, and the virtual light
-  took it for a dim at the wall, left standby and restarted its timer. The
-  newest command is now sent again when the select call finishes.
+  `unavailable` was being re-sent its settings and preset when the light was
+  given a new brightness: the preset then set its own brightness on the
+  device, which stayed there, and the virtual light took it for a dim at the
+  wall and restarted its timer. The newest command is now sent again when
+  the select call finishes.
 - A preset that lights its own device's light in the last moment of the
   select call is no longer taken for a turn-on at the wall when the light's
   report reaches MoLight just after the call has returned.
@@ -128,24 +127,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hold straight away, instead of only after the next reload or restart.
 - Discovery skips a pick that another MoLight entity started wrapping while
   its forms were open, and says how many it skipped.
-- Turning a Virtual Scheduled Light back on by hand while someone's presence
-  has it raised shows standby rejoined at once, so a restart keeps it.
 - A keep-on entity that is also the illuminance sensor holds the light as it
   gets bright, instead of letting brightness turn it off first.
-- A manual off of a Virtual Scheduled Light ends at the next window when one
-  window starts as another ends, or at midnight for an all-day schedule, so
-  standby comes back as it does after any other boundary.
 - A restart no longer turns a light back on for presence, or a door left
   open, that it was turned off by hand during; a visit that began after the
-  off still lights it. The new `last_off_manual` attribute records that off;
-  a member light that reports in, or comes back from `unavailable`, while the
-  light is off is not counted as one.
+  off still lights it, and on a Virtual Scheduled Light so does a schedule
+  boundary crossed since. The new `last_off_manual` attribute records that
+  off and `manual_off_cleared` whether a boundary has ended it; a member light
+  that reports in, or comes back from `unavailable`, while the light is off
+  is not counted as one.
 - Going dark after brightness turned a light off brings it back until its
   countdown would have ended, also when that countdown had been restarted by
-  a dim or recolour at the wall, a released keep-on entity or Auto-off
-  switch, or a standby light's *Keep state* schedule end. An old visit in
-  the occupancy history no longer cancels it, and the new
-  `bright_resume_until` attribute keeps it through a restart.
+  a dim or recolour at the wall, or a released keep-on entity or Auto-off
+  switch. An old visit in the occupancy history no longer cancels it, and the
+  new `bright_resume_until` attribute keeps it through a restart.
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
@@ -175,12 +170,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dimming, recolouring or turning on a real light at the wall while motion
   has the light on makes the on-period yours, as the same change through the
   virtual light does: a false detection no longer turns it off after the
-  short delay, and a Virtual Scheduled Light that was turned off by hand
-  rejoins standby.
+  short delay.
 - A real light turned on, dimmed or recoloured at the wall while a turn-on is
   still waiting on a slow select keeps the level set at the wall, instead of
   being overwritten when the select call finishes. This holds for an
-  automatic turn-on (occupancy, a door, a schedule start, standby) and for
+  automatic turn-on (occupancy, a door, a schedule start) and for
   one made through the virtual light.
 - A schedule end also takes over a manual turn-on still waiting on a slow
   select, as it does an automatic one: *Turn off*, or a regular light's
@@ -205,23 +199,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A colour fade between far-apart colours (red to cyan, warm white to blue)
   is no longer taken for a recolour at the wall when a real light reports its
   colour partway through and blends through paler colours on the way. This
-  covers the effect and warn stages, standby, auto-on colours and the
-  restored pre-warning colour. A warning could cancel itself this way, and
+  covers the effect and warn stages, auto-on colours and the restored
+  pre-warning colour. A warning could cancel itself this way, and
   far-apart effect and warn colours could keep the light on indefinitely.
 - A real light that loads, or comes back from `unavailable`, as off while a
   turn-on is still waiting on a slow select no longer cancels that turn-on
-  and leaves the room dark, and is no longer recorded as a manual off, which
-  also paused standby until the next schedule boundary.
+  and leaves the room dark, and is no longer recorded as a manual off.
 - A real light that loads, or comes back from `unavailable`, as off while the
   light is on is sent the light's settings and turn-on selection again. It
-  was recorded as a manual off: the light went off, standby paused until the
-  next schedule boundary, and presence still there did not light it after a
-  restart.
+  was recorded as a manual off, and the light went off.
 - A turn-on select on the same device as a real light (a WLED preset that
   includes "on") no longer has that light's own report, arriving while the
   select call is still in progress, taken for a turn-on at the wall, which
-  dropped the automatic brightness and colour. A preset that lights the light
-  while standby waits on the select no longer takes the light out of standby.
+  dropped the automatic brightness and colour.
 - Home Assistant and HACS list MoLight as *Calculated* instead of *Local
   Push*, since it only works from other entities' states.
 - A turn-on select with no option currently chosen (state `unknown`, as a
@@ -332,7 +322,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light is now held and re-triggered by occupancy and the door as in the
   dark: on a turn-on by hand or at the wall, a hold's release, a door or
   maintain sensor clearing, at startup and at a *Gate and switch state* end.
-  Raising standby still waits for the dark.
 - Releasing an Auto-off or keep-on hold on a light under *Gate and turn off*
   turns it off only when a window ended while it was held. A light turned on
   by hand outside the window was turned off at once on release instead of
@@ -372,7 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   silently never held. A light saved with one logs a warning naming it.
 - A brightness percentage below 1, which only a hand-edited or programmatic
   configuration can hold, counts as unset at runtime and in the form checks.
-  An auto-on, standby or warn brightness of 0.5% sent brightness 0, turning
+  An auto-on or warn brightness of 0.5% sent brightness 0, turning
   the lights off or blinking them; a Virtual Remote preset of 0.5% turned
   them off, and a dim step of 0.5% made its buttons do nothing (it now uses
   the default step).
