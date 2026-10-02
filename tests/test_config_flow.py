@@ -7557,6 +7557,18 @@ _SHARED_LIGHT_CASES = {
         },
         {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"},
     ),
+    # A maintain sensor's visits feed the countdown the same way.
+    "maintain_timeout": (
+        _ALL_MODES,
+        LightEntityFeature.TRANSITION,
+        {
+            CONF_LIGHT_TIMEOUT: 20,
+            SECTION_SENSORS: {
+                CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"
+            },
+        },
+        {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"},
+    ),
     "stage_transition": (
         _ALL_MODES,
         LightEntityFeature.TRANSITION,
@@ -9254,3 +9266,122 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
     }
     assert _validate_remote(hass, cfg) == {"base": "preset_values_required"}
     assert _validate_remote(hass, {**cfg, CONF_PRESET_1_BRIGHTNESS: 1}) == {}
+
+
+# ---------------------------------------------------------------------------
+# The light_timeout >= occupancy_timeout guard, from the sensor's side
+# ---------------------------------------------------------------------------
+
+
+def _dependent_light(scheduled: bool, key: str, sensor: str) -> MockConfigEntry:
+    """A 60 s light, or a scheduled light's inside side, that uses the sensor."""
+    if not scheduled:
+        return _light_entry("Hall", "hall", **{key: sensor})
+    entry = _scheduled_light_entry("Hall", "hall")
+    entry.data[CONF_INSIDE_SCHEDULE_SETTINGS][key] = sensor
+    return entry
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+@pytest.mark.parametrize("key", [CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY])
+async def test_occupancy_options_check_lights_using_it_in_either_role(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    scheduled: bool,
+    key: str,
+) -> None:
+    """Raising a sensor's timeout above a dependent light's is refused."""
+    await _setup_night_schedule(hass)
+    await setup_entries(
+        hass,
+        occupancy_entry,
+        _dependent_light(scheduled, key, "binary_sensor.test_occupancy"),
+    )
+
+    for seconds, error in ((61, "occupancy_timeout_too_long"), (60, None)):
+        result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Test Occupancy",
+                CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+                CONF_OCCUPANCY_TIMEOUT: seconds,
+                SECTION_ADVANCED: {},
+            },
+        )
+        if error:
+            assert result["errors"] == {CONF_OCCUPANCY_TIMEOUT: error}
+        else:
+            assert result["type"] == FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outer_first", [True, False], ids=["outer_first", "inner_first"]
+)
+async def test_occupancy_options_check_lights_through_nested_combined_sensors(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, outer_first: bool
+) -> None:
+    """A light on an outer combined sensor depends on the sensors two levels down."""
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.inner"],
+        },
+    )
+    inner = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Inner",
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_TRIGGER_SENSORS: [],
+        },
+    )
+    combined = (outer, inner) if outer_first else (inner, outer)
+    await setup_entries(hass, occupancy_entry, *combined)
+    assert [
+        molight_config(e)[CONF_NAME]
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_COMBINED_OCCUPANCY
+    ] == (["Outer", "Inner"] if outer_first else ["Inner", "Outer"])
+    await setup_entries(
+        hass, _light_entry("Hall", "hall", occupancy_entity="binary_sensor.outer")
+    )
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 120,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["errors"] == {CONF_OCCUPANCY_TIMEOUT: "occupancy_timeout_too_long"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN])
+async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, role: str
+) -> None:
+    """The guard is light_timeout >= occupancy_timeout, so equal is enough."""
+    equal = _light_entry("Closet", "closet", timeout=30)  # the sensor's 30 s
+    await setup_entries(hass, occupancy_entry, equal)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy", CONF_ASSIGN_ROLE: role},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.closet"]}
+    )
+    assert result["reason"] == "assign_done"
+    assert result["description_placeholders"]["assigned"] == "1"
