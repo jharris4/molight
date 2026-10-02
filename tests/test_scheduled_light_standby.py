@@ -1461,6 +1461,81 @@ async def test_schedule_end_timeout_from_standby_survives_a_false_detection(
 
 
 @pytest.mark.asyncio
+async def test_schedule_end_switch_from_standby_keeps_a_history_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A countdown that recent motion accounts for is not a fresh timeout, so
+    a false detection afterwards does not stretch it to a full one."""
+    yard = "binary_sensor.yard_occupancy"
+    visit = (datetime.now(UTC) - timedelta(seconds=20)).isoformat()
+    hass.states.async_set(yard, "off", {"latest_occupied_time": visit})
+    await _setup_porch(
+        hass,
+        _porch(
+            end_action=SCHEDULE_END_ACTION_SWITCH,
+            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
+        ),
+    )
+    await _echo_standby(hass)
+    await _set(hass, SCHEDULE, "off")  # T0: 40 s left of the visit's timeout
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 2)
+
+    await _set(hass, yard, "on", latest_occupied_time=visit)
+    await _set(
+        hass, yard, "off", latest_occupied_time=visit, last_clear_false_detection=True
+    )
+
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 37)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await _tick(hass, freezer, 2)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raiser", ["occupancy", "door"])
+async def test_dark_edge_raise_from_standby_is_occupancy_lit_only_by_motion(
+    hass: HomeAssistant, freezer, raiser: str
+) -> None:
+    """Darkness raising standby over motion drops back quickly after a false
+    detection; over an open door it is a person's, and counts down in full."""
+    door = "binary_sensor.front_door"
+    illuminance = "binary_sensor.porch_bright"
+    hass.states.async_set(door, "off")
+    hass.states.async_set(illuminance, "on")
+    await _setup_porch(
+        hass,
+        _porch(
+            inside={
+                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
+                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+            }
+        ),
+    )
+    await _set(hass, OCCUPANCY if raiser == "occupancy" else door, "on")
+    _assert_standby(hass)
+
+    await _set(hass, illuminance, "off")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    assert _attrs(hass)["brightness"] == BOOST
+    if raiser == "door":
+        await _set(hass, OCCUPANCY, "on")
+        await _set(hass, door, "off")
+        assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+    await _set(hass, OCCUPANCY, "off", last_clear_false_detection=True)
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    left = 5 if raiser == "occupancy" else 30
+    await _tick(hass, freezer, left - 1)
+    assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 2)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_keep_leaves_a_raised_light_to_its_presence(
     hass: HomeAssistant, freezer
 ) -> None:

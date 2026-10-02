@@ -421,6 +421,37 @@ async def test_disabled_input_entity_is_unknown(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"name": "Early morning"},
+        {"icon": "mdi:weather-sunset-up"},
+        {"hidden_by": er.RegistryEntryHider.USER},
+    ],
+    ids=["name", "icon", "hidden"],
+)
+async def test_input_registry_edit_does_not_rebuild(
+    hass: HomeAssistant, freezer, change: dict
+) -> None:
+    """Only disabling an input rebuilds the combination; renaming, a new icon
+    or hiding it leaves the combined schedule untouched."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    await _setup(
+        hass,
+        _time_schedule("Morning", "06:00", "08:00"),
+        _combined("Bedside", ["binary_sensor.morning"]),
+    )
+    writes = _record_states(hass, "binary_sensor.bedside")
+
+    er.async_get(hass).async_update_entity("binary_sensor.morning", **change)
+    await settle(hass)
+
+    assert writes == []
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_no_inputs_is_off(hass: HomeAssistant, freezer) -> None:
     """A combined schedule whose inputs were all removed is permanently off."""
     await hass.config.async_set_time_zone("UTC")
