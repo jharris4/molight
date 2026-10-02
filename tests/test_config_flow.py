@@ -8891,3 +8891,152 @@ async def test_an_id_taken_again_after_its_removal_is_accepted(
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert molight_config(hall)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+
+
+# ---------------------------------------------------------------------------
+# A member cycle through a Home Assistant light group
+# ---------------------------------------------------------------------------
+
+
+def _group_entry(name: str, members: list[str]) -> MockConfigEntry:
+    """A light group helper's entry."""
+    return MockConfigEntry(
+        domain="group",
+        title=name,
+        options={
+            "group_type": "light",
+            "name": name,
+            "entities": members,
+            "hide_members": False,
+        },
+    )
+
+
+async def _light_group(hass: HomeAssistant, name: str, members: list[str]) -> str:
+    """Set up a light group helper and return its entity ID."""
+    for member in members:
+        if hass.states.get(member) is None:
+            hass.states.async_set(member, "off")
+    entry = _group_entry(name, members)
+    await setup_entries(hass, entry)
+    await hass.async_block_till_done()
+    (entity_id,) = [
+        e.entity_id
+        for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    ]
+    assert hass.states.get(entity_id).attributes["entity_id"] == members
+    return entity_id
+
+
+def _group_helper(hass: HomeAssistant, name: str, members: list[str]) -> str:
+    """Register a light group helper that has not loaded, so it has no state."""
+    entry = _group_entry(name, members)
+    entry.add_to_hass(hass)
+    return (
+        er.async_get(hass)
+        .async_get_or_create(
+            "light",
+            "group",
+            entry.entry_id,
+            config_entry=entry,
+            suggested_object_id=name,
+        )
+        .entity_id
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+@pytest.mark.parametrize("via", ["group", "unloaded_helper", "group_of_outer"])
+async def test_light_options_reject_a_light_group_that_includes_the_light(
+    hass: HomeAssistant, scheduled: bool, via: str
+) -> None:
+    """A light group naming the light, or a light that includes it, is a cycle."""
+    await _setup_night_schedule(hass)
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    outer = _light_entry("Outer", "outer")
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    await setup_entries(hass, hall, outer)
+    # Opened first, so its picker still offers the group set up next.
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    if via == "group":
+        group = await _light_group(hass, "Kitchen", ["light.hall", "light.bulb"])
+    elif via == "group_of_outer":
+        group = await _light_group(hass, "Kitchen", ["light.outer", "light.bulb"])
+    else:
+        group = _group_helper(hass, "kitchen", ["light.bulb", "light.hall"])
+
+    fresh = await hass.config_entries.options.async_init(hall.entry_id)
+    assert group in _selector_config(fresh, CONF_LIGHTS)["exclude_entities"]
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: [group],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+    else:
+        result = await _submit_light_options(hass, result, [group])
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_accept_a_light_group_without_the_light(
+    hass: HomeAssistant,
+) -> None:
+    """A group of other lights, even one sharing a member, is a valid member."""
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    group = await _light_group(hass, "Kitchen", ["light.hall_real", "light.bulb"])
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    assert group not in _selector_config(result, CONF_LIGHTS)["exclude_entities"]
+    result = await _submit_light_options(hass, result, [group])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_new_light_rejects_a_member_group_that_already_names_it(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A group set up first, naming the ID the new light will get, is a cycle."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("light.bulb", "off")
+    await setup_entries(hass, _group_entry("Kitchen", ["light.hall", "light.bulb"]))
+    group = "light.kitchen"
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT
+            if scheduled
+            else ENTITY_TYPE_LIGHT
+        },
+    )
+    submitted = {CONF_NAME: "Hall", CONF_LIGHTS: [group], SECTION_ADVANCED: {}}
+    if scheduled:
+        submitted[CONF_SCHEDULE_ENTITY] = "binary_sensor.night_schedule"
+    else:
+        submitted.update({**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], submitted
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+    # Under another ID the group no longer names it.
+    submitted[SECTION_ADVANCED] = {CONF_ENTITY_ID: "hall_lamps"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], submitted
+    )
+    assert not result.get("errors")
+    assert result.get("step_id") in (None, "scheduled_light_outside")

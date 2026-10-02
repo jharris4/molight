@@ -15,7 +15,7 @@ from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
 from homeassistant.components.select import ATTR_OPTIONS
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
@@ -1717,6 +1717,43 @@ def _molight_light_entries(
 _MEMBER_LIGHT_TYPES = (ENTITY_TYPE_LIGHT, ENTITY_TYPE_SCHEDULED_LIGHT)
 
 
+def _light_member_ids(
+    hass: HomeAssistant,
+    entity_id: str,
+    lights: dict[str, config_entries.ConfigEntry],
+) -> list[str]:
+    """Return the members of a virtual light or a light group."""
+    if (entry := lights.get(entity_id)) is not None:
+        return _molight_cfg(entry).get(CONF_LIGHTS, [])
+    if (state := hass.states.get(entity_id)) is not None:
+        for key in (ATTR_ENTITY_ID, "group_entities"):
+            if isinstance(members := state.attributes.get(key), (list, tuple)):
+                return [m for m in members if isinstance(m, str)]
+    # An unavailable or unloaded group helper still names them in its options.
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    if reg_entry is None or reg_entry.platform != "group":
+        return []
+    group = hass.config_entries.async_get_entry(reg_entry.config_entry_id or "")
+    return list(group.options.get("entities", [])) if group is not None else []
+
+
+def _light_descendants(
+    hass: HomeAssistant,
+    entity_ids: Sequence[str],
+    lights: dict[str, config_entries.ConfigEntry],
+) -> set[str]:
+    """Return the given lights and every light under them, through any nesting."""
+    found: set[str] = set()
+    pending = list(entity_ids)
+    while pending:
+        entity_id = pending.pop()
+        entity_id = renamed_to(hass, entity_id) or entity_id
+        if entity_id not in found:
+            found.add(entity_id)
+            pending.extend(_light_member_ids(hass, entity_id, lights))
+    return found
+
+
 def _light_members_create_cycle(
     hass: HomeAssistant,
     edited_entry: config_entries.ConfigEntry,
@@ -1724,30 +1761,33 @@ def _light_members_create_cycle(
 ) -> bool:
     """Return True when the proposed members lead back to the edited light."""
     lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
-    pending = [lights[m] for m in members if m in lights]
-    visited: set[str] = set()
-    while pending:
-        entry = pending.pop()
-        if entry.entry_id == edited_entry.entry_id:
-            return True
-        if entry.entry_id in visited:
-            continue
-        visited.add(entry.entry_id)
-        pending.extend(
-            lights[m] for m in _molight_cfg(entry).get(CONF_LIGHTS, []) if m in lights
-        )
-    return False
+    own = {e for e, entry in lights.items() if entry.entry_id == edited_entry.entry_id}
+    return not own.isdisjoint(_light_descendants(hass, members, lights))
 
 
 def _light_member_cycle_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
 ) -> list[str]:
     """Light entity ids that would make the edited light a member of itself."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    own = {e for e, entry in lights.items() if entry.entry_id == edited_entry.entry_id}
+    candidates = set(hass.states.async_entity_ids("light")).union(
+        e.entity_id for e in er.async_get(hass).entities.values() if e.domain == "light"
+    )
     return sorted(
         entity_id
-        for entity_id in _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
-        if _light_members_create_cycle(hass, edited_entry, [entity_id])
+        for entity_id in candidates
+        if not own.isdisjoint(_light_descendants(hass, [entity_id], lights))
     )
+
+
+def _new_light_in_members(
+    hass: HomeAssistant, entity_id: str, members: Sequence[str]
+) -> bool:
+    """Return True when a light group among the members already names the new light."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    under = [m for member in members for m in _light_member_ids(hass, member, lights)]
+    return entity_id in _light_descendants(hass, under, lights)
 
 
 def _own_entity_ids(
@@ -2075,6 +2115,20 @@ class MoLightConfigFlow(
         if self._entity_id_taken(candidate):
             return None, {}, True, candidate
         return None, {}, False, candidate
+
+    def _new_light_errors(self, flat: dict[str, Any]) -> dict[str, str]:
+        """Check a new light's entity ID, and that no member group already names it."""
+        _, errors, needs_confirm, candidate = self._resolve_entity_id(
+            flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
+        )
+        # A taken ID gets a suffix, so a group naming it means another light.
+        if (
+            not errors
+            and not needs_confirm
+            and _new_light_in_members(self.hass, candidate, flat[CONF_LIGHTS])
+        ):
+            return {CONF_LIGHTS: "light_member_cycle"}
+        return errors
 
     async def _resolve_and_create(
         self,
@@ -3470,10 +3524,7 @@ class MoLightConfigFlow(
             ):
                 errors["base"] = "schedule_entity_not_schedule"
             if not errors:
-                _, entity_errors, _, _ = self._resolve_entity_id(
-                    flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
-                )
-                errors.update(entity_errors)
+                errors.update(self._new_light_errors(flat))
             if not errors:
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
                     self._light_pending = {
@@ -3587,10 +3638,7 @@ class MoLightConfigFlow(
             ):
                 errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
             if not errors:
-                _, entity_errors, _, _ = self._resolve_entity_id(
-                    flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
-                )
-                errors.update(entity_errors)
+                errors.update(self._new_light_errors(flat))
             if not errors:
                 self._scheduled_light_shared = flat
                 self._scheduled_light_shared_input = user_input
