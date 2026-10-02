@@ -45,6 +45,6 @@ compose up --detach homeassistant
 
 echo "Running behaviour scenario shard $SHARD..."
 compose run --rm runner python runner.py "scenarios-$SHARD"
-check_ha_logs
+check_ha_logs 1
 
 echo "MoLight E2E behaviour scenario shard $SHARD passed."

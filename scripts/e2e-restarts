@@ -98,6 +98,7 @@ compose run --rm runner python runner.py combined-restart-verify combined-schedu
 echo "Restarting with a combined schedule whose mirrored input and member light load late..."
 compose restart homeassistant
 compose run --rm runner python runner.py combined-schedule-restart-verify
-check_ha_logs
+# The first start, nine restarts and two outages.
+check_ha_logs 12
 
 echo "MoLight E2E restart scenarios passed."

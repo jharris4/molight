@@ -55,6 +55,6 @@ echo "Running the browser smoke tests..."
 compose run --rm browser npx playwright test \
     --config tests/e2e/browser/playwright.config.mjs
 
-check_ha_logs
+check_ha_logs 1
 
 echo "MoLight browser E2E smoke test passed."

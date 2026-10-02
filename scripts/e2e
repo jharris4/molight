@@ -69,6 +69,7 @@ compose run --rm runner python runner.py auto-off-restart restart-warning-prepar
 echo "Restarting during a live warning stage..."
 compose restart homeassistant
 compose run --rm runner python runner.py restart-warning-verify
-check_ha_logs
+# The first start, six container restarts and the core restart in primary.
+check_ha_logs 8
 
 echo "MoLight E2E acceptance suite passed."

@@ -16,11 +16,12 @@ if [ "${MOLIGHT_E2E_HA_IMAGE:-}" = floor ]; then
 fi
 export MOLIGHT_E2E_HA_IMAGE="${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:$MOLIGHT_E2E_HA_VERSION}"
 
-# Check every boot's logs. The runner cannot reach the container's output,
-# which unlike home-assistant.log keeps them all, so save it where it can.
+# Check every boot's logs; the argument is how many boots the lane made. The
+# runner cannot reach the container's output, which unlike home-assistant.log
+# keeps them all, so save it where it can.
 check_ha_logs() {
     echo "Checking the Home Assistant logs of every boot..."
     compose logs --no-color --no-log-prefix homeassistant \
         > "$MOLIGHT_E2E_CONFIG_DIR/e2e-container.log"
-    compose run --rm runner python runner.py logs
+    compose run --rm runner python runner.py logs "${1:?check_ha_logs needs the boot count of the lane}"
 }

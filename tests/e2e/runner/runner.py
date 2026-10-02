@@ -4313,9 +4313,9 @@ def log_failures(content: str) -> list[str]:
                 MOLIGHT_LOG.search(first) or MOLIGHT_TRACEBACK.search(record)
             ) and not any(allowed in record for allowed in ALLOWED_ERRORS)
         elif level == "WARNING":
-            bad = MOLIGHT_LOG.search(first) and not any(
-                allowed in first for allowed in ALLOWED_WARNINGS
-            )
+            bad = (
+                MOLIGHT_LOG.search(first) or MOLIGHT_TRACEBACK.search(record)
+            ) and not any(allowed in first for allowed in ALLOWED_WARNINGS)
         else:
             bad = MOLIGHT_TRACEBACK.search(record)
         if bad:
@@ -8721,7 +8721,15 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 BOOT_LINE = "We found a custom integration molight which"
 
 
-def check_logs() -> None:
+def log_boots(content: str) -> int:
+    """Count the boots whose records the parser could read."""
+    return sum(
+        level == "WARNING" and BOOT_LINE in first
+        for level, first, _ in log_records(content)
+    )
+
+
+def check_logs(expected_boots: int) -> None:
     """Fail for MoLight errors, warnings, or tracebacks from any HA boot."""
     if not CONTAINER_LOG.exists():
         raise AssertionError(f"{CONTAINER_LOG} is missing; the lane script saves it")
@@ -8731,7 +8739,13 @@ def check_logs() -> None:
         raise AssertionError(
             "Unexpected MoLight log failures:\n" + "\n".join(bad_lines)
         )
-    boots = content.count(BOOT_LINE)
+    # A log the parser cannot read finds no failures, so it must not pass.
+    boots = log_boots(content)
+    if boots != expected_boots:
+        raise AssertionError(
+            f"Parsed {boots} Home Assistant boot(s) in the logs, expected "
+            f"{expected_boots}; check the log format and the lane's restarts"
+        )
     print(f"PASS: no MoLight errors or warnings in the logs of {boots} boot(s)")
 
 
@@ -8776,9 +8790,13 @@ def main() -> None:
         "auto-off-restart": run_auto_off_restart,
         "restart-warning-prepare": run_restart_warning_prepare,
         "restart-warning-verify": run_restart_warning_verify,
-        "logs": check_logs,
     }
     names = sys.argv[1:]
+    if names[:1] == ["logs"]:
+        if len(names) != 2 or not names[1].isdigit():
+            raise SystemExit("usage: runner.py logs <expected boots>")
+        check_logs(int(names[1]))
+        return
     if not names or any(name not in commands for name in names):
         choices = ", ".join(commands)
         raise SystemExit(
