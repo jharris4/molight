@@ -45,7 +45,7 @@ from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
 )
-from homeassistant.helpers.restore_state import RestoredExtraData, RestoreEntity
+from homeassistant.helpers.restore_state import RestoredExtraData
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 
@@ -90,6 +90,7 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
+    RenamableRestoreEntity,
     molight_config,
     renamed_to,
     run_unless_renamed,
@@ -104,6 +105,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import Event, EventStateChangedData, State
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.restore_state import RestoreEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -177,7 +179,7 @@ async def async_setup_entry(
 # ---------------------------------------------------------------------------
 
 
-class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
+class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
     """Wraps a single real binary sensor with an occupancy timeout.
 
     is_on mirrors the real sensor directly (no countdown).
@@ -449,7 +451,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
+class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
     """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
 
     Trigger sensors start occupancy; maintain sensors keep it alive once started.
@@ -824,7 +826,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualIlluminanceSensor(BinarySensorEntity, RestoreEntity):
+class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
     """Binary sensor tracking whether illuminance meets a threshold.
 
     ON  → bright enough; no artificial lighting needed
@@ -1012,7 +1014,7 @@ async def _restored_schedule_data(entity: RestoreEntity) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
+class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     """Binary sensor driven by a time window or another binary sensor.
 
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
@@ -1418,7 +1420,7 @@ class _ScheduleTree:
         )
 
 
-class VirtualCombinedScheduleSensor(BinarySensorEntity, RestoreEntity):
+class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     """Binary sensor combining MoLight schedules with any/all logic.
 
     The result is unknown (unavailable) only when an unavailable input could

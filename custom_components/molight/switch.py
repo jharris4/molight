@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.switch import ENTITY_ID_FORMAT, SwitchEntity
 from homeassistant.const import STATE_OFF
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     CONF_ENTITY_TYPE,
@@ -28,7 +27,7 @@ from .const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     SIGNAL_AUTO_OFF_TOGGLED,
 )
-from .helpers import molight_config, suggested_entity_id
+from .helpers import RenamableRestoreEntity, molight_config, suggested_entity_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -55,7 +54,7 @@ async def async_setup_entry(
         async_add_entities([entity])
 
 
-class AutoOffSwitch(SwitchEntity, RestoreEntity):
+class AutoOffSwitch(SwitchEntity, RenamableRestoreEntity):
     """Enables/disables a Virtual Light's automatic turn-offs."""
 
     _attr_should_poll = False

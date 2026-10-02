@@ -14,13 +14,14 @@ from typing import Any
 
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, State, callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache_with_extra_data,
 )
 
 from custom_components.molight import (
@@ -72,6 +73,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     REMOTE_ACTION_FIELDS,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
 )
@@ -85,6 +87,7 @@ from tests.conftest import (
     make_light_entry,
     make_scheduled_light_entry,
     record_service_calls,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -1160,3 +1163,299 @@ async def test_timeout_guard_and_removal_follow_a_renamed_sensor(
     await hass.config_entries.async_remove(sensor.entry_id)
     await settle(hass)
     assert CONF_OCCUPANCY_ENTITY not in molight_config(light)
+
+
+# ---------------------------------------------------------------------------
+# A MoLight entity's own ID
+# ---------------------------------------------------------------------------
+
+SWITCH = "switch.matrix_light_auto_off"
+
+
+async def test_renamed_auto_off_switch_keeps_the_hold(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """An Auto-off switch that is off stays off under its new ID."""
+    member = RealLight("real_1", on=True)
+    await add_real(hass, member)
+    await setup_entries(hass, make_light_entry(timeout=60))
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": SWITCH}, blocking=True
+    )
+    await settle(hass)
+    assert attrs(hass)["auto_off_held"] is True
+
+    await rename(hass, SWITCH, "switch.guest_hold")
+    assert hass.states.get("switch.guest_hold").state == "off"
+    assert attrs(hass)["auto_off_held"] is True
+    await tick(hass, freezer, 3600)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    await hass.services.async_call(
+        "switch", "turn_on", {"entity_id": "switch.guest_hold"}, blocking=True
+    )
+    await tick(hass, freezer, 61)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+async def test_switch_renamed_back_takes_its_latest_state_along(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """What was saved under an ID earlier does not come back with that ID."""
+    await add_real(hass, RealLight("real_1", on=True))
+    await setup_entries(hass, make_light_entry(timeout=60))
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": SWITCH}, blocking=True
+    )
+    await rename(hass, SWITCH, "switch.guest_hold")
+    await hass.services.async_call(
+        "switch", "turn_on", {"entity_id": "switch.guest_hold"}, blocking=True
+    )
+    await settle(hass)
+    assert attrs(hass)["auto_off_held"] is False
+
+    await rename(hass, "switch.guest_hold", SWITCH)
+    assert hass.states.get(SWITCH).state == "on"
+    assert attrs(hass)["auto_off_held"] is False
+
+
+@pytest.mark.regular_virtual_light_only
+async def test_renamed_follow_light_keeps_a_manual_off(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """A follow light turned off mid-window is not lit again by its own rename."""
+    member = RealLight("real_1")
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        schedule_entry(),
+        make_light_entry(
+            schedule="binary_sensor.day", schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+    await settle(hass)
+    assert member.is_on
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    before = dict(attrs(hass))
+
+    calls = record_service_calls(hass)
+    await rename(hass, VIRTUAL, "light.porch")
+    state = hass.states.get("light.porch")
+    assert state.state == "off"
+    assert light_targets(calls, "turn_on") == []
+    for attribute in ("schedule_window_start", "last_off_manual", "last_on_virtual"):
+        assert state.attributes[attribute] == before[attribute]
+
+
+async def test_renamed_scheduled_light_does_not_replay_an_end_it_already_applied(
+    hass: HomeAssistant,
+) -> None:
+    """A light lit by hand after its window ended is not turned off by its rename.
+
+    The same object is added again, and what it restored at startup (inside
+    the schedule) is long out of date.
+    """
+    workday = RealBinary("workday", on=True)
+    member = RealLight("real_1", on=True)
+    await add_real(hass, workday, member)
+    light = make_scheduled_light_entry(
+        schedule="binary_sensor.day", schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF
+    )
+    source_schedule = schedule_entry(
+        **{
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.workday",
+        }
+    )
+    await setup_entries(hass, source_schedule, light)
+    await settle(hass)
+    virtual = "light.scheduled_light"
+    # Restart inside the schedule, so that is what the light restores.
+    await restart_entries(hass, source_schedule, light)
+    await settle(hass)
+    assert attrs(hass, virtual)["active_settings"] == "inside_schedule"
+
+    workday.set(False)
+    await settle(hass)
+    assert not member.is_on
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": virtual}, blocking=True
+    )
+    await settle(hass)
+    assert member.is_on
+
+    calls = record_service_calls(hass)
+    await rename(hass, virtual, "light.porch")
+    assert light_targets(calls, "turn_off") == []
+    state = hass.states.get("light.porch")
+    assert state.state == "on"
+    assert state.attributes["active_settings"] == "outside_schedule"
+    assert member.is_on
+
+
+@pytest.mark.parametrize("resting", [True, False], ids=["standby", "turned-off"])
+async def test_renamed_scheduled_light_keeps_its_standby(
+    hass: HomeAssistant, resting: bool
+) -> None:
+    """A light resting at standby stays there, and one turned off stays off."""
+    member = RealLight("real_1")
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        schedule_entry(),
+        make_scheduled_light_entry(
+            schedule="binary_sensor.day",
+            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 10},
+        ),
+    )
+    await settle(hass)
+    virtual = "light.scheduled_light"
+    assert attrs(hass, virtual)["molight_state"] == "standby"
+    if not resting:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": virtual}, blocking=True
+        )
+        await settle(hass)
+
+    await rename(hass, virtual, "light.porch")
+    state = hass.states.get("light.porch")
+    assert state.attributes["molight_state"] == ("standby" if resting else "idle")
+    assert state.attributes["standby_suppressed"] is not resting
+    assert member.is_on is resting
+
+
+async def test_renamed_occupancy_sensor_keeps_its_history(
+    hass: HomeAssistant, freezer
+) -> None:
+    """latest_occupied_time, the false-detection count and the cycle survive."""
+    motion = RealBinary("motion")
+    await add_real(hass, motion)
+    await setup_entries(hass, occupancy_entry(**{CONF_FALSE_DETECTION_GRACE: 3}))
+    # One false detection (on for exactly the timeout), one real visit.
+    motion.set(True)
+    await settle(hass)
+    await tick(hass, freezer, 30)
+    motion.set(False)
+    await settle(hass)
+    motion.set(True)
+    await settle(hass)
+    await tick(hass, freezer, 300)
+    motion.set(False)
+    await settle(hass)
+    await tick(hass, freezer, 60)
+    motion.set(True)
+    await settle(hass)
+    before = dict(attrs(hass, OCCUPANCY))
+    assert before["false_detection_count"] == 1
+    assert before["latest_occupied_time"] is not None
+    assert before["last_on_time"] is not None
+
+    await rename(hass, OCCUPANCY, "binary_sensor.presence")
+    state = hass.states.get("binary_sensor.presence")
+    assert state.state == "on"
+    assert dict(state.attributes) == before
+
+
+async def test_renamed_occupancy_sensor_keeps_its_dropout_deadline(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A clear-after-unavailable countdown runs on to the same moment."""
+    motion = RealBinary("motion", on=True)
+    await add_real(hass, motion)
+    await setup_entries(hass, occupancy_entry())
+    assert hass.states.get(OCCUPANCY).state == "on"
+    motion._attr_available = False
+    motion.async_write_ha_state()
+    await settle(hass)
+
+    await tick(hass, freezer, 40)
+    await rename(hass, OCCUPANCY, "binary_sensor.presence")
+    assert hass.states.get("binary_sensor.presence").state == "on"
+    await tick(hass, freezer, 19)
+    assert hass.states.get("binary_sensor.presence").state == "on"
+    await tick(hass, freezer, 2)
+    state = hass.states.get("binary_sensor.presence")
+    assert state.state == "off"
+    assert state.attributes["last_clear_unavailable"] is True
+
+
+async def test_renamed_combined_sensor_keeps_its_history(hass: HomeAssistant) -> None:
+    """A combined sensor keeps its false-detection count and flag."""
+    constituent = RealBinary("presence")
+    await add_real(hass, constituent)
+    await setup_entries(hass, _combined_occupancy_entry(["binary_sensor.presence"]))
+    constituent.set(True)
+    await settle(hass)
+    constituent.set(False)
+    await settle(hass)
+    before = dict(attrs(hass, "binary_sensor.floor_occupancy"))
+    assert before["false_detection_count"] == 1
+
+    await rename(hass, "binary_sensor.floor_occupancy", "binary_sensor.floor")
+    assert dict(attrs(hass, "binary_sensor.floor")) == before
+
+
+async def test_renamed_schedule_keeps_its_window_marker(hass: HomeAssistant) -> None:
+    """A source-backed schedule does not date its window from the rename.
+
+    A moved marker would be a new window to the lights that follow it.
+    """
+    marker = "2026-01-14T09:00:00-08:00"
+    mock_restore_cache_with_extra_data(
+        hass,
+        [
+            (
+                State("binary_sensor.day", "on"),
+                {
+                    "is_on": True,
+                    "current_window_start": marker,
+                    "source_entity": "binary_sensor.workday",
+                    "invert": False,
+                },
+            )
+        ],
+    )
+    # The source dates its state from now, later than the restored marker.
+    workday = RealBinary("workday", on=True)
+    await add_real(hass, workday)
+    schedule = schedule_entry(
+        **{
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.workday",
+        }
+    )
+    await setup_entries(hass, schedule)
+    assert attrs(hass, "binary_sensor.day")["current_window_start"] == marker
+
+    await rename(hass, "binary_sensor.day", "binary_sensor.daytime")
+    state = hass.states.get("binary_sensor.daytime")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+async def test_renamed_remote_sensor_keeps_its_last_action(hass: HomeAssistant) -> None:
+    """The Last Action sensor is not restored, and keeps its value in memory."""
+    button = RealButton("pico_on")
+    await add_real(hass, button, RealLight("real_1"))
+    remote = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
+            CONF_NAME: "Pico",
+            CONF_TARGET_LIGHTS: [VIRTUAL],
+            CONF_ON_BUTTONS_SINGLE: ["event.pico_on"],
+        },
+    )
+    await setup_entries(hass, make_light_entry(), remote)
+    button.press()
+    await settle(hass)
+    before = hass.states.get("sensor.pico_last_action")
+    assert before.state == "turn_on"
+
+    await rename(hass, "sensor.pico_last_action", "sensor.hall_pico")
+    state = hass.states.get("sensor.hall_pico")
+    assert state.state == "turn_on"
+    assert dict(state.attributes) == dict(before.attributes)

@@ -13,8 +13,9 @@ from homeassistant.components.light import (
 )
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
 from homeassistant.core import callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, restore_state
 from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import CONF_ENTITY_ID, CONF_ENTITY_TYPE, DATA_RENAMED
 
@@ -98,6 +99,24 @@ def run_unless_renamed(
             action()
 
     return hass.loop.call_soon(_judge).cancel
+
+
+class RenamableRestoreEntity(RestoreEntity):
+    """A RestoreEntity that keeps its saved state when its entity ID changes.
+
+    Home Assistant removes a renamed entity, saving its state under the ID it
+    leaves, and adds the same object again under the new one.
+    """
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Move the state just saved to the ID the entity is renamed to."""
+        await super().async_will_remove_from_hass()
+        entry = self.registry_entry
+        if entry is None or entry.entity_id == self.entity_id:
+            return
+        saved = restore_state.async_get(self.hass).last_states
+        if (stored := saved.pop(self.entity_id, None)) is not None:
+            saved[entry.entity_id] = stored
 
 
 def _judge_lights(

@@ -51,6 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opens, and a remote lost its buttons or its lights. The entries are
   rewritten and reload, without the rename being taken for a manual off, a
   new visit or a new schedule window.
+- Changing the entity ID of a MoLight entity itself no longer makes it forget
+  its state. An Auto-off switch that was off came back on and released its
+  hold, a Virtual Scheduled Light could replay a schedule end it had already
+  applied and turn off a light lit by hand, a Virtual Occupancy Sensor lost
+  its `latest_occupied_time`, and a schedule that mirrors a sensor dated its
+  window anew.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

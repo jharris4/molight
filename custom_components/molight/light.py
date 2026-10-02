@@ -282,7 +282,6 @@ from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import color as color_util
 from homeassistant.util.percentage import percentage_to_ranged_value
 
@@ -367,6 +366,7 @@ from .const import (
     STATE_WARN,
 )
 from .helpers import (
+    RenamableRestoreEntity,
     lights_support_brightness,
     lights_support_transition,
     molight_config,
@@ -720,7 +720,7 @@ _RESTORABLE_COLOR_MODES = (
 )
 
 
-class VirtualLight(LightEntity, RestoreEntity):
+class VirtualLight(LightEntity, RenamableRestoreEntity):
     """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
     _attr_color_mode = ColorMode.BRIGHTNESS

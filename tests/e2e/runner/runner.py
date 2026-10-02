@@ -138,6 +138,8 @@ RENAME_PRESENCE = "binary_sensor.e2e_rn_presence"
 RENAME_MOTION = "binary_sensor.e2e_rn_motion"
 RENAME_BULB = "light.e2e_rn_bulb"
 RENAME_LIGHT = "light.e2e_rn"
+RENAME_SWITCH = "switch.e2e_rn_auto_off"
+RENAME_HOLD = "switch.e2e_rn_hold"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
@@ -6053,6 +6055,19 @@ def run_entity_rename_scenarios(client: HomeAssistantClient) -> None:
         lambda config: config.get("lights") == [RAW_TIMER_LIGHT],
         "rewritten back to the real light's first ID",
     )
+
+    # The light's own Auto-off switch changes ID while off: the hold is kept.
+    def held(expected: bool) -> Callable[[dict[str, Any]], bool]:
+        return lambda state: state["attributes"].get("auto_off_held") is expected
+
+    client.call_service("switch", "turn_off", {"entity_id": RENAME_SWITCH})
+    client.wait_state(RENAME_LIGHT, held(True), "held by its Auto-off switch")
+    renamed(RENAME_SWITCH, RENAME_HOLD, "off")
+    assert_state_stays(
+        client, RENAME_LIGHT, held(True), "held through its switch's rename"
+    )
+    client.call_service("switch", "turn_on", {"entity_id": RENAME_HOLD})
+    client.wait_state(RENAME_LIGHT, held(False), "released under the new ID")
     remove_entry_and_entity(client, light_id, RENAME_LIGHT)
     remove_entry_and_entity(client, occupancy_id, RENAME_OCCUPANCY)
     print("PASS: renamed entities were followed without acting on the room")
