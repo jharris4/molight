@@ -184,10 +184,10 @@ if TYPE_CHECKING:
     # form, since every step defaults user_input to None.
     _StepHandler = Callable[..., Awaitable[config_entries.FlowResult]]
 
-# "none" lets a previously chosen sun anchor be cleared in the options flow:
-# a bare SelectSelector can't be un-set once it has a value.
 _LOGGER = logging.getLogger(__name__)
 
+# "none" lets a previously chosen sun anchor be cleared in the options flow:
+# a bare SelectSelector can't be un-set once it has a value.
 _SUN_OPTIONS = ["none", *SUN_EVENTS]
 _COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
 
@@ -2196,7 +2196,7 @@ class MoLightConfigFlow(
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 1: create one entity manually, or discover many at once."""
+        """Step 1: create or discover entities, assign a sensor, or convert lights."""
         return self.async_show_menu(
             step_id="user",
             menu_options=[

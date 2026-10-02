@@ -1183,10 +1183,10 @@ async def _restored_schedule_data(entity: RestoreEntity) -> dict:
 class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     """Binary sensor driven by a time window or another binary sensor.
 
-    Each window is {"start": <edge>, "end": <edge>} where an edge is either a
-    plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
-    "offset": <minutes>, "combine": "latest"|"earliest"}, e.g. start at the
-    later of sunset-15min and 21:00. A window whose end is set earlier in the
+    Each window is {"start": <edge>, "end": <edge>} where an edge is
+    {"time": "HH:MM", "sun": "sunset"|"sunrise", "offset": <minutes>,
+    "combine": "latest"|"earliest"}, e.g. start at the later of sunset-15min
+    and 21:00. A window whose end is set earlier in the
     day than its start runs overnight (see _end_days_after).
 
     Rather than polling, the sensor resolves concrete boundary datetimes and

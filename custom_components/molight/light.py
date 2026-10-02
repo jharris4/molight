@@ -93,8 +93,8 @@ Turn-on attribution
   Five timestamps record the last time the virtual light was activated and why:
     last_on_physical:    an underlying real light entity changed to ON from an
                          external source (physical switch, another automation, HA
-                         UI acting on the real entity) while this virtual light
-                         was IDLE.
+                         UI acting on the real entity), whether this virtual
+                         light was off or already on.
     last_on_virtual:     the user toggled this virtual light entity ON via the HA UI
                          (async_turn_on was called directly).
     last_on_occupancy:   occupancy sensor triggered the lights.
@@ -102,7 +102,8 @@ Turn-on attribution
     last_on_door:        a door sensor opening triggered the lights.
 
   All are exposed as extra state attributes (ISO strings or null). They
-  decide whether a manual off still stands, not how long an on-period lasts.
+  decide whether a manual off still stands, and after a false detection the
+  manual, physical and door ones keep the countdown from ending early.
 
   Brightness changes are tracked the same way: last_brightness_change_physical
   records external changes on the real lights (and restarts a running
@@ -207,10 +208,10 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy. Outside the window a light that is on ignores
     occupancy and the door: neither holds it.
-  - gate_switch: the same activation gate for an OFF light. Window end keeps
-    an ON light on but recalculates its state and timer from current occupancy
-    history; active presence adopts it, while an expired timeout applies the
-    configured effect/warn/off behavior.
+  - gate_switch: the same activation gate for an OFF light. Window end
+    recalculates an ON light's state and timer from current occupancy history;
+    active presence adopts it, bright illuminance in control mode turns it off,
+    and an expired timeout applies the configured effect/warn/off behavior.
   - gate_keep: the same gate for turning an OFF light on; once the lights
     are on, occupancy and the door behave as inside the window (adopt, hold,
     re-hold), and window end preserves the current on-period, including its
@@ -2342,7 +2343,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
             # matches it, including on this off→on adoption edge, not just on
-            # later dims (which _on_light_brightness_change handles).
+            # later dims (which _on_light_attrs_change handles).
             if brightness:
                 self._attr_brightness = brightness
             if claim:
