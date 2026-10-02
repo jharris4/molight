@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of staying on indefinitely. A disabled real light no longer stops
   the virtual light from turning off when the remaining real lights are
   turned off, and a light whose only lit real light goes reports off.
+- Changing a Virtual Illuminance Sensor's source no longer keeps the old
+  source's reading. The sensor stayed bright or dark, on the old source's
+  side of the hysteresis band, until the new source crossed the far edge of
+  the band, and stayed bright with a new source that was `unavailable`. It
+  is now `unavailable` until the new source reports, and that first reading
+  is judged against the bare threshold.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

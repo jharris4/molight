@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
     mock_restore_cache,
+    mock_restore_cache_with_extra_data,
 )
 
 from custom_components.molight.const import (
@@ -899,6 +900,126 @@ async def test_illuminance_edit_rejudges_a_held_reading_against_the_new_band(
     # The narrower 11-13 band no longer holds 8.
     await _edit_options(hass, entry, **{CONF_ILLUMINANCE_HYSTERESIS: 1.0})
     assert hass.states.get("binary_sensor.edited_illuminance").state == "off"
+
+
+def _lux_entry(source: str = "sensor.old_lux") -> MockConfigEntry:
+    """A threshold of 10 lx with a 3 lx band: 7 to 13 holds the current state."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Swapped Lux",
+            CONF_ILLUMINANCE_SENSOR: source,
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 3.0,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("new_source", ["unavailable", "unknown", "dim", None])
+async def test_illuminance_source_swap_drops_the_old_sources_reading(
+    hass: HomeAssistant, new_source: str | None
+) -> None:
+    """A sensor switched to a source with no reading is unavailable, not bright.
+
+    Holding the last value is for an outage of the same source. The new
+    source's first reading is then judged on the bare threshold.
+    """
+    hass.states.async_set("sensor.old_lux", "100")
+    if new_source is not None:
+        hass.states.async_set("sensor.new_lux", new_source)
+    entry = _lux_entry()
+    await setup_entries(hass, entry)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
+
+    # 8 lx is inside the band, where the old source's bright would have held.
+    hass.states.async_set("sensor.new_lux", "8")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.swapped_lux").state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("old_reading", "new_reading", "expected"),
+    [("100", "8", "off"), ("0", "12", "on"), ("100", "12", "on"), ("0", "8", "off")],
+)
+async def test_illuminance_source_swap_judges_the_new_source_on_its_own(
+    hass: HomeAssistant, old_reading: str, new_reading: str, expected: str
+) -> None:
+    """The new source starts on neither side of the hysteresis band.
+
+    Its reading gives what a sensor created for it would report.
+    """
+    hass.states.async_set("sensor.old_lux", old_reading)
+    hass.states.async_set("sensor.new_lux", new_reading)
+    entry = _lux_entry()
+    await setup_entries(hass, entry)
+
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    assert hass.states.get("binary_sensor.swapped_lux").state == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restart", [False, True], ids=["reload", "restart"])
+async def test_illuminance_keeps_its_reading_through_an_outage_of_the_same_source(
+    hass: HomeAssistant, restart: bool
+) -> None:
+    """A reload or restart with the same source down still holds the last value."""
+    hass.states.async_set("sensor.old_lux", "100")
+    entry = _lux_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("sensor.old_lux", "8")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+    hass.states.async_set("sensor.old_lux", "unavailable")
+    if restart:
+        await restart_entries(hass, entry)
+    else:
+        await _edit_options(hass, entry, **{CONF_NAME: "Swapped Lux"})
+        await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+    # Back inside the band, on the side it was on.
+    hass.states.async_set("sensor.old_lux", "8")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.swapped_lux").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_illuminance_swap_is_remembered_across_a_restart(
+    hass: HomeAssistant,
+) -> None:
+    """A swap to a silent source stays unavailable after a restart too."""
+    hass.states.async_set("sensor.old_lux", "100")
+    entry = _lux_entry()
+    await setup_entries(hass, entry)
+    await _edit_options(hass, entry, **{CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"})
+    await restart_entries(hass, entry)
+    assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("saved_source", "expected"),
+    [(None, "on"), ("sensor.old_lux", "on"), ("sensor.other_lux", "unavailable")],
+    ids=["no-record", "same", "other"],
+)
+async def test_illuminance_restore_checks_the_saved_source(
+    hass: HomeAssistant, saved_source: str | None, expected: str
+) -> None:
+    """A save made before the source was recorded is trusted, as it was."""
+    extra = {} if saved_source is None else {"source": saved_source}
+    mock_restore_cache_with_extra_data(
+        hass, [(State("binary_sensor.swapped_lux", "on"), extra)]
+    )
+    await setup_entries(hass, _lux_entry())
+    assert hass.states.get("binary_sensor.swapped_lux").state == expected
 
 
 @pytest.mark.asyncio

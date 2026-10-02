@@ -863,7 +863,18 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
         """Restore state and subscribe to the illuminance source."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
-        if last is not None and last.state in ("on", "off"):
+        # A held reading and its side of the hysteresis band belong to their
+        # source. A save that predates the source record is trusted.
+        extra = await self.async_get_last_extra_data()
+        saved_source = extra.as_dict().get("source") if extra is not None else None
+        if (
+            last is not None
+            and last.state in ("on", "off")
+            and (
+                saved_source is None
+                or same_entity(self.hass, saved_source, self._source_entity)
+            )
+        ):
             self._attr_is_on = last.state == "on"
             self._attr_available = True
         self.async_on_remove(
@@ -903,6 +914,11 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
                 self._attr_is_on = False
         elif value >= self._threshold + self._hysteresis:
             self._attr_is_on = True
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Save which source the held reading belongs to."""
+        return RestoredExtraData({"source": self._source_entity})
 
 
 def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime | None:

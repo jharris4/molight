@@ -140,6 +140,7 @@ RENAME_BULB = "light.e2e_rn_bulb"
 RENAME_LIGHT = "light.e2e_rn"
 RENAME_SWITCH = "switch.e2e_rn_auto_off"
 RENAME_HOLD = "switch.e2e_rn_hold"
+SOURCE_ILLUMINANCE = "binary_sensor.e2e_src_illuminance"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
@@ -6096,6 +6097,71 @@ def run_entity_rename_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: renamed entities were followed without acting on the room")
 
 
+def run_illuminance_source_scenario(client: HomeAssistantClient) -> None:
+    """A changed source starts over instead of keeping the old source's reading."""
+    lux_before = client.state(RAW_ILLUMINANCE)["state"]
+
+    def set_lux(lux: float) -> None:
+        client.set_state(RAW_ILLUMINANCE, lux)
+        client.wait_state(
+            RAW_ILLUMINANCE,
+            lambda state: float(state["state"]) == lux,
+            f"at {lux} lx",
+        )
+
+    def choose_source(source: str) -> None:
+        result = client.start_flow(options_entry_id=entry_id)
+        expect_step(result, "illuminance")
+        result = client.continue_flow(
+            result,
+            {
+                "name": "E2E Src Illuminance",
+                "illuminance_sensor": source,
+                "illuminance_threshold": 10,
+                "illuminance_hysteresis": 1,
+            },
+            options=True,
+        )
+        finish_options(result, "Illuminance source")
+
+    set_lux(50)
+    entry_id = create_virtual_illuminance(
+        client, "E2E Src Illuminance", "e2e_src_illuminance"
+    )
+    client.wait_state(
+        SOURCE_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+    # 9.5 lx is inside the 9 to 11 lx band: bright only because it was.
+    set_lux(9.5)
+    assert_state_stays(
+        client, SOURCE_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
+    )
+
+    choose_source("sensor.e2e_no_such_lux")
+    client.wait_state(
+        SOURCE_ILLUMINANCE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable with a source that has no reading",
+    )
+    assert_state_stays(
+        client,
+        SOURCE_ILLUMINANCE,
+        lambda state: state["state"] == "unavailable",
+        "unavailable, not bright from the old source",
+    )
+    # Its first reading is judged on the bare threshold, not from bright.
+    choose_source(RAW_ILLUMINANCE)
+    client.wait_state(
+        SOURCE_ILLUMINANCE,
+        lambda state: state["state"] == "off",
+        "dark at 9.5 lx, judged afresh",
+    )
+    remove_entry_and_entity(client, entry_id, SOURCE_ILLUMINANCE)
+    if lux_before not in {"unknown", "unavailable"}:
+        client.set_state(RAW_ILLUMINANCE, float(lux_before))
+    print("PASS: a changed illuminance source started over from its own reading")
+
+
 def create_sun_schedule(
     client: HomeAssistantClient,
     name: str,
@@ -8597,6 +8663,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_illuminance_discovery_scenario,
         run_entity_id_change_scenario,
         run_entity_rename_scenarios,
+        run_illuminance_source_scenario,
         run_dark_arrival_scenarios,
         run_scheduled_light_depth_scenarios,
         run_time_window_scenario,

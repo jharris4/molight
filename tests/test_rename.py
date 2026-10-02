@@ -36,6 +36,7 @@ from custom_components.molight.const import (
     CONF_FALSE_DETECTION_GRACE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
@@ -941,6 +942,40 @@ async def test_renamed_lux_source_keeps_the_reading(hass: HomeAssistant) -> None
     lux.set(1)
     await settle(hass)
     assert hass.states.get("binary_sensor.room_bright").state == "off"
+
+
+@pytest.mark.parametrize("renamed", ["source", "sensor"])
+async def test_rename_keeps_an_illuminance_sensors_side_of_the_band(
+    hass: HomeAssistant, renamed: str
+) -> None:
+    """A renamed source is the same source: its held reading stays.
+
+    At 8 lx inside a 7 to 13 lx band the sensor is bright only because it
+    was; a changed source would start over and read dark.
+    """
+    lux = RealLux("lux", 100)
+    await add_real(hass, lux)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Room Bright",
+            CONF_ILLUMINANCE_SENSOR: "sensor.lux",
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+            CONF_ILLUMINANCE_HYSTERESIS: 3.0,
+        },
+    )
+    await setup_entries(hass, entry)
+    lux.set(8)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.room_bright").state == "on"
+
+    if renamed == "source":
+        await rename(hass, "sensor.lux", "sensor.window_lux")
+        assert hass.states.get("binary_sensor.room_bright").state == "on"
+    else:
+        await rename(hass, "binary_sensor.room_bright", "binary_sensor.daylight")
+        assert hass.states.get("binary_sensor.daylight").state == "on"
 
 
 def _combined_schedule_entry(name: str, inputs: list[str]) -> MockConfigEntry:
