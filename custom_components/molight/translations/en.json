@@ -1062,7 +1062,7 @@
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
       "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its options.",
-      "no_lights": "There are no virtual lights to assign this sensor to. Create a virtual light first.",
+      "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its settings profiles has its own sensors: set them in its Configure form, or create a Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}.",
       "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
@@ -1788,7 +1788,8 @@
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
-      "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
+      "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor.",
+      "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that uses this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter timeouts."
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",

@@ -4492,6 +4492,26 @@ async def test_assign_aborts_when_no_lights(
     assert result["reason"] == "no_lights"
 
 
+@pytest.mark.asyncio
+async def test_assign_aborts_when_only_scheduled_lights_exist(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Scheduled lights take their sensors per profile, so none can be picked."""
+    await _setup_night_schedule(hass)
+    await setup_entries(hass, occupancy_entry, _scheduled_light_entry("Porch", "porch"))
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_lights"
+
+
 # ---------------------------------------------------------------------------
 # Manual create steps not covered above
 # ---------------------------------------------------------------------------
@@ -4778,7 +4798,7 @@ async def test_combined_options_reject_constituent_above_light_timeout(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "occupancy_timeout_too_long"}
+    assert result["errors"] == {"base": "combined_occupancy_timeout_too_long"}
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],

@@ -4019,7 +4019,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         self.hass, self._entry.entry_id
                     )
                     if timeouts and min_light is not None and max(timeouts) > min_light:
-                        errors["base"] = "occupancy_timeout_too_long"
+                        errors["base"] = "combined_occupancy_timeout_too_long"
                     else:
                         return self._finish(user_input)
 

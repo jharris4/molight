@@ -371,6 +371,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the lights off or blinking them; a Virtual Remote preset of 0.5% turned
   them off, and a dim step of 0.5% made its buttons do nothing (it now uses
   the default step).
+- Bulk assignment with only Virtual Scheduled Lights explains that those take
+  their sensors per profile, instead of saying there are no virtual lights,
+  and the combined occupancy form names its sensors' longest timeout instead
+  of a timeout field it does not have.
 
 ## [1.8.0] - 2026-09-30
 
