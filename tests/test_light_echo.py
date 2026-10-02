@@ -531,6 +531,41 @@ async def test_member_clamped_kelvin_reply_is_not_physical(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("commanded", "reply", "ours"),
+    [(2050, 2202, True), (2050, 2500, False), (6500, 6000, True), (6500, 5700, False)],
+)
+async def test_late_kelvin_reply_is_judged_against_the_member_range(
+    hass: HomeAssistant, commanded: int, reply: int, ours: bool
+) -> None:
+    """Past the settle window only a full match is an echo. For a member
+    whose range ends short of the command, that is the nearest kelvin it has;
+    one further in is someone's choice."""
+    wider = "light.wider"
+    entry = make_light_entry(name="Test Light", lights=[MEMBER, wider])
+    await _setup(hass, entry)
+    narrow = {**HS_TEMP_CAPS, "max_color_temp_kelvin": 6000}
+    hass.states.async_set(MEMBER, "off", narrow)
+    hass.states.async_set(wider, "off", {**HS_TEMP_CAPS, "min_color_temp_kelvin": 2000})
+    await settle(hass)
+
+    await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=commanded)
+    _age_expectations(hass, 10)
+    await _write(
+        hass,
+        "on",
+        Context(),
+        brightness=153,
+        color_mode="color_temp",
+        color_temp_kelvin=reply,
+        **narrow,
+    )
+
+    assert (_attrs(hass)["last_on_physical"] is None) is ours
+    assert _attrs(hass)["color_temp_kelvin"] == (commanded if ours else reply)
+
+
+@pytest.mark.asyncio
 async def test_effect_kelvin_fade_reply_keeps_the_sequence(
     hass: HomeAssistant, freezer
 ) -> None:
