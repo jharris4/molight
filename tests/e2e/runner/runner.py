@@ -75,9 +75,12 @@ END_SWITCH_LIGHT = "light.e2e_end_switch"
 END_ILLUMINANCE = "binary_sensor.e2e_end_illuminance"
 END_RESTART_SCHEDULE = "binary_sensor.e2e_end_restart_schedule"
 END_RESTART_LIGHT = "light.e2e_end_restart"
+END_LATE_LIGHT = "light.e2e_end_late"
+END_FOLLOW_LATE_LIGHT = "light.e2e_end_follow_late"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
 WALL_LIGHT = "light.e2e_wall"
 RESTART_EFFECT_LIGHT = "light.e2e_restart_effect"
+RESTART_EFFECT_LATE_LIGHT = "light.e2e_restart_effect_late"
 HOLD_RULES_LIGHT = "light.e2e_hold_rules"
 HOLD_ILLUMINANCE = "binary_sensor.e2e_hold_illuminance"
 HOLD_WARN_LIGHT = "light.e2e_hold_warn"
@@ -430,7 +433,7 @@ class HomeAssistantClient:
         )
 
     def set_startup_delay(self, entity_id: str, seconds: float) -> None:
-        """Hold a simulated sensor back for this long at the next boot."""
+        """Hold a simulated entity back for this long at the next boot."""
         self.call_service(
             "molight_testbed",
             "set_startup_delay",
@@ -4954,6 +4957,21 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
 OUTAGE_EDGE_LEAD = timedelta(seconds=20)
 
 
+# How long a real light stays unloaded after a boot in the late-member
+# scenarios: long enough for Home Assistant to finish starting first.
+LATE_MEMBER_DELAY = 30
+
+
+def expect_still_loading(client: HomeAssistantClient, entity_id: str) -> None:
+    """Assert a delayed entity is still the placeholder its registry entry left."""
+    state = client.state(entity_id)
+    if state["state"] != "unavailable" or not state["attributes"].get("restored"):
+        raise AssertionError(
+            f"{entity_id} loaded before the startup decision owed to it could "
+            f"be observed: {state}"
+        )
+
+
 def schedule_outage(first_edge: datetime, last_edge: datetime) -> None:
     """Record the schedule edges the host must hold Home Assistant down across."""
     OUTAGE_SNAPSHOT.write_text(
@@ -5524,7 +5542,8 @@ def run_end_restart_prepare() -> None:
     client.authenticate()
     expect_fixtures_loaded(client)
     now = datetime.now(UTC).replace(microsecond=0)
-    window_end = now + OUTAGE_EDGE_LEAD
+    # Three lights are created and lit before the outage may begin.
+    window_end = now + 2 * OUTAGE_EDGE_LEAD
     start = (now - timedelta(seconds=60)).strftime("%H:%M:%S")
     end = window_end.strftime("%H:%M:%S")
     result = start_create(client, "schedule")
@@ -5562,13 +5581,160 @@ def run_end_restart_prepare() -> None:
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     wait_machine_state(client, "occupied", END_RESTART_LIGHT)
+    late = prepare_late_end_lights(client)
     schedule_outage(window_end, window_end)
     END_RESTART_SNAPSHOT.write_text(
         json.dumps(
-            {"schedule_entry_id": schedule_entry_id, "light_entry_id": light_entry_id}
+            {
+                "schedule_entry_id": schedule_entry_id,
+                "light_entry_id": light_entry_id,
+                **late,
+            }
         )
     )
     print("PASS: occupied scheduled light prepared; its window ends during the outage")
+
+
+def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
+    """Light a turn_off light and a follow light whose members will load late."""
+    late_entry_id = create_two_profile_light(
+        client,
+        "E2E End Late",
+        "e2e_end_late",
+        RAW_MULTI_DIMMER,
+        END_RESTART_SCHEDULE,
+        "turn_off",
+        {"light_timeout": 120},
+        {"light_timeout": 120},
+    )
+    follow_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E End Follow Late",
+            "lights": [RAW_MULTI_ON_OFF],
+            "light_timeout": 120,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {
+                "schedule_entity": END_RESTART_SCHEDULE,
+                "schedule_mode": "follow",
+            },
+            "advanced": {"entity_id": "e2e_end_follow_late"},
+        },
+        "Late follow light",
+    )
+    wait_entry_loaded(client, late_entry_id)
+    wait_entry_loaded(client, follow_entry_id)
+    wait_end_light(client, END_LATE_LIGHT, PROFILE_INSIDE)
+    client.call_service(
+        "light", "turn_on", {"entity_id": END_LATE_LIGHT, "brightness": pct(50)}
+    )
+    client.wait_state(
+        RAW_MULTI_DIMMER,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(50)
+        ),
+        "on at 50 %",
+    )
+    client.wait_state(RAW_MULTI_ON_OFF, lambda state: state["state"] == "on", "on")
+    follow = client.wait_state(
+        END_FOLLOW_LATE_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "scheduled"
+            and state["attributes"].get("schedule_window_start") is not None
+        ),
+        "scheduled in the window",
+    )
+    client.set_startup_delay(RAW_MULTI_DIMMER, LATE_MEMBER_DELAY)
+    client.set_startup_delay(RAW_MULTI_ON_OFF, LATE_MEMBER_DELAY)
+    return {
+        "late_entry_id": late_entry_id,
+        "follow_entry_id": follow_entry_id,
+        "follow_marker": follow["attributes"]["schedule_window_start"],
+        "late_last_on_physical": client.state(END_LATE_LIGHT)["attributes"].get(
+            "last_on_physical"
+        ),
+        "follow_last_on_physical": follow["attributes"].get("last_on_physical"),
+    }
+
+
+def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) -> None:
+    """Both lights seeded off with their missed end kept for the absent member."""
+    client.wait_state(
+        END_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("schedule_end_off_pending") is True
+        ),
+        "off with its missed turn_off end owed to the member still loading",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        END_FOLLOW_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("schedule_window_start")
+            == snapshot["follow_marker"]
+        ),
+        "off with its missed window end owed to the member still loading",
+        timeout=WAIT_TIMEOUT,
+    )
+    # Still absent after both were observed, so neither decision was made
+    # with the member readable.
+    expect_still_loading(client, RAW_MULTI_DIMMER)
+    expect_still_loading(client, RAW_MULTI_ON_OFF)
+
+
+def expect_late_end_applied(
+    client: HomeAssistantClient, snapshot: dict[str, Any]
+) -> None:
+    """A member that loads lit is turned off, never adopted with a timeout."""
+    for member in (RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF):
+        client.wait_state(
+            member,
+            lambda state: (
+                state["state"] == "off"
+                and (state["attributes"].get("testbed_last_command") or {}).get(
+                    "service"
+                )
+                == "turn_off"
+            ),
+            "turned off by the missed end once it loaded lit",
+            timeout=WAIT_TIMEOUT,
+        )
+    client.wait_state(
+        END_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("schedule_end_off_pending") is False
+            and state["attributes"].get("last_on_physical")
+            == snapshot["late_last_on_physical"]
+        ),
+        "off with the missed end settled and no physical turn-on recorded",
+    )
+    client.wait_state(
+        END_FOLLOW_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("schedule_window_start") is None
+            and state["attributes"].get("last_on_physical")
+            == snapshot["follow_last_on_physical"]
+        ),
+        "off with the ended window dropped and no physical turn-on recorded",
+    )
+    for member in (RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF):
+        assert_state_stays(
+            client,
+            member,
+            lambda state: state["state"] == "off",
+            "off: the late member is not relit",
+            duration=2,
+        )
 
 
 def run_end_restart_verify() -> None:
@@ -5577,15 +5743,17 @@ def run_end_restart_verify() -> None:
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
-    snapshot: dict[str, str] = json.loads(END_RESTART_SNAPSHOT.read_text())
-    wait_entry_loaded(client, snapshot["schedule_entry_id"])
-    wait_entry_loaded(client, snapshot["light_entry_id"])
+    snapshot: dict[str, Any] = json.loads(END_RESTART_SNAPSHOT.read_text())
+    for key in ("schedule_entry_id", "light_entry_id", "late_entry_id"):
+        wait_entry_loaded(client, snapshot[key])
+    wait_entry_loaded(client, snapshot["follow_entry_id"])
     client.wait_state(
         END_RESTART_SCHEDULE,
         lambda state: state["state"] == "off",
         "off",
         timeout=WAIT_TIMEOUT,
     )
+    expect_late_end_owed(client, snapshot)
     client.wait_state(
         END_RESTART_LIGHT,
         lambda state: (
@@ -5607,14 +5775,21 @@ def run_end_restart_verify() -> None:
         "off: a light the boundary turned off stays off",
         duration=2,
     )
+    print("PASS: a turn_off boundary missed during an outage was caught up once")
+    expect_late_end_applied(client, snapshot)
     for entry_id, entity_id in (
         (snapshot["light_entry_id"], END_RESTART_LIGHT),
+        (snapshot["late_entry_id"], END_LATE_LIGHT),
+        (snapshot["follow_entry_id"], END_FOLLOW_LATE_LIGHT),
         (snapshot["schedule_entry_id"], END_RESTART_SCHEDULE),
     ):
         client.remove_entry(entry_id)
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
-    print("PASS: a turn_off boundary missed during an outage was caught up once")
+    print(
+        "PASS: a schedule end missed during an outage turned off the members "
+        "that loaded late and lit"
+    )
 
 
 def near(value: str | None, expected: datetime, tolerance: float = 2.0) -> bool:
@@ -5993,10 +6168,46 @@ def run_restart_effect_prepare() -> None:
     client.wait_state(
         RESTART_EFFECT_LIGHT, lambda state: state["state"] == "off", "off"
     )
+    # A second light runs the same sequence on a member that loads late.
+    late_entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Restart Effect Late",
+            "lights": [RAW_CT],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {
+                "effect_timeout": 10,
+                "effect_brightness": 20,
+                "effect_color_temp": 5000,
+            },
+            "advanced": {"entity_id": "e2e_restart_effect_late"},
+        },
+        "Late restart-effect light",
+    )
+    wait_entry_loaded(client, late_entry_id)
+    client.set_startup_delay(RAW_CT, LATE_MEMBER_DELAY)
     set_timer_motion(client, True)
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_CT, lambda state: state["state"] == "on", "on")
     client.call_service(
         "light", "turn_on", {"entity_id": RESTART_EFFECT_LIGHT, "hs_color": [240, 100]}
+    )
+    client.call_service(
+        "light",
+        "turn_on",
+        {"entity_id": RESTART_EFFECT_LATE_LIGHT, "color_temp_kelvin": 3000},
+    )
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(60)
+            and state["attributes"].get("color_temp_kelvin") == 3000
+        ),
+        "3000 K at 60 % before the sequence",
     )
     client.wait_state(
         RAW_MULTI_RGB,
@@ -6029,7 +6240,25 @@ def run_restart_effect_prepare() -> None:
         ),
         "showing the effect brightness and red",
     )
-    RESTART_EFFECT_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(20)
+            and state["attributes"].get("color_temp_kelvin") == 5000
+        ),
+        "showing the effect brightness and 5000 K",
+    )
+    client.wait_state(
+        RESTART_EFFECT_LATE_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "effect"
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
+        ),
+        "in its effect stage with the pre-warning appearance saved",
+    )
+    RESTART_EFFECT_SNAPSHOT.write_text(
+        json.dumps({"entry_id": entry_id, "late_entry_id": late_entry_id})
+    )
     print("PASS: live effect stage prepared for a container restart")
 
 
@@ -6040,6 +6269,25 @@ def run_restart_effect_verify() -> None:
     client.authenticate()
     snapshot: dict[str, str] = json.loads(RESTART_EFFECT_SNAPSHOT.read_text())
     wait_entry_loaded(client, snapshot["entry_id"])
+    wait_entry_loaded(client, snapshot["late_entry_id"])
+    # The other light's member has not loaded: it seeds off and keeps the
+    # snapshot instead of taking the unreadable member for a finished off.
+    client.wait_state(
+        RESTART_EFFECT_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("warning_active") is True
+            and state["attributes"].get("pre_warn_brightness") == pct(60)
+            and (state["attributes"].get("pre_warn_color") or {}).get(
+                "color_temp_kelvin"
+            )
+            == 3000
+        ),
+        "off with the pre-warning appearance kept for the member still loading",
+        timeout=WAIT_TIMEOUT,
+    )
+    expect_still_loading(client, RAW_CT)
     client.wait_state(
         RESTART_EFFECT_LIGHT,
         lambda state: (
@@ -6085,6 +6333,38 @@ def run_restart_effect_verify() -> None:
     wait_entry_removed(client, snapshot["entry_id"], "Temporary restart-effect light")
     print(
         "PASS: restart mid-effect restored the pre-warning look, then finished cleanly"
+    )
+
+    # The late member reports in still showing the effect stage.
+    client.wait_state(
+        RAW_CT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and state["attributes"].get("color_temp_kelvin") == 3000
+        ),
+        "back at the pre-warning 60 % and 3000 K once it loaded",
+        timeout=WAIT_TIMEOUT,
+    )
+    client.wait_state(
+        RESTART_EFFECT_LATE_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == pct(60)
+            and state["attributes"].get("color_temp_kelvin") == 3000
+            and state["attributes"].get("warning_active") is False
+            and state["attributes"].get("pre_warn_brightness") is None
+        ),
+        "on at the pre-warning look with the interrupted effect undone",
+    )
+    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off", timeout=30)
+    wait_machine_state(client, "idle", RESTART_EFFECT_LATE_LIGHT)
+    remove_entry_and_entity(
+        client, snapshot["late_entry_id"], RESTART_EFFECT_LATE_LIGHT
+    )
+    print(
+        "PASS: a member that loaded late after a restart mid-effect got its "
+        "pre-warning look back"
     )
 
 
