@@ -17,7 +17,10 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
-from custom_components.molight.binary_sensor import _resolve_window
+from custom_components.molight.binary_sensor import (
+    _end_days_after,
+    _resolve_window,
+)
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
@@ -29,8 +32,20 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE,
+    STATE_IDLE,
 )
-from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
+from tests.conftest import (
+    ANCHORAGE,
+    LONDON,
+    TORONTO,
+    TROMSO,
+    make_light_entry,
+    restart_entries,
+    set_home,
+    settle,
+    setup_entries,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -984,7 +999,7 @@ async def test_source_schedule_does_not_restore_marker_from_previous_source(
 @pytest.mark.asyncio
 async def test_sun_edge_ignores_unparsable_offset(hass: HomeAssistant, freezer) -> None:
     """A sun edge with a non-numeric offset resolves as if it had none."""
-    await hass.config.async_set_time_zone("UTC")
+    await set_home(hass, *LONDON)
     freezer.move_to("2026-07-02 20:00:00+00:00")
     await _setup(
         hass,
@@ -1257,3 +1272,318 @@ async def test_opposite_sun_offsets_resolve_an_overnight_window(
             datetime(2026, 7, 2, 6, tzinfo=UTC),
             datetime(2026, 7, 2, 18, tzinfo=UTC),
         )
+
+
+# ---------------------------------------------------------------------------
+# Overnight or not: judged from the configured edges
+# ---------------------------------------------------------------------------
+
+_SUNSET = {"sun": "sunset"}
+_SUNRISE = {"sun": "sunrise"}
+
+
+def _at(value: str) -> dict:
+    return {"time": value}
+
+
+def _sun(event: str, offset: int) -> dict:
+    return {"sun": event, "offset": offset}
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "days"),
+    [
+        # Two fixed times: overnight when the end is not after the start.
+        (_at("06:00"), _at("22:00"), 0),
+        (_at("22:00"), _at("06:00"), 1),
+        (_at("00:00"), _at("00:00"), 1),
+        # One sun event twice, told apart by their offsets.
+        (_sun("sunset", -30), _sun("sunset", 30), 0),
+        (_sun("sunset", 30), _sun("sunset", -30), 1),
+        (_SUNSET, _SUNSET, 1),
+        (_sun("sunset", 720), _sun("sunset", -720), 2),
+        # Sunrise is a morning edge and sunset an evening one.
+        (_SUNSET, _SUNRISE, 1),
+        (_SUNRISE, _SUNSET, 0),
+        # A sun event with a fixed time in its own half of the day: same day.
+        (_SUNSET, _at("21:00"), 0),
+        (_SUNSET, _at("23:00"), 0),
+        (_at("16:00"), _SUNSET, 0),
+        (_at("12:00"), _SUNSET, 0),
+        (_SUNRISE, _at("09:00"), 0),
+        (_SUNRISE, _at("12:00"), 0),
+        (_at("06:00"), _SUNRISE, 0),
+        (_at("00:00"), _SUNRISE, 0),
+        # An evening edge to a morning edge is overnight.
+        (_SUNSET, _at("02:00"), 1),
+        (_SUNSET, _at("07:00"), 1),
+        (_SUNSET, _at("12:00"), 1),
+        (_at("22:00"), _SUNRISE, 1),
+        (_at("12:00"), _SUNRISE, 1),
+        # A morning edge to an evening edge is not; an end at 00:00 is the
+        # end of the day.
+        (_SUNRISE, _at("22:00"), 0),
+        (_at("05:00"), _SUNSET, 0),
+        (_SUNRISE, _at("00:00"), 1),
+        (_SUNSET, _at("00:00"), 1),
+        # A combined edge sits where its time-or-sun pick puts it.
+        (
+            {"time": "21:00", "sun": "sunset", "offset": -15, "combine": "latest"},
+            _at("07:00"),
+            1,
+        ),
+        (
+            _at("22:00"),
+            {"time": "07:00", "sun": "sunrise", "combine": "earliest"},
+            1,
+        ),
+        (
+            {"time": "23:00", "sun": "sunset", "combine": "earliest"},
+            _at("23:30"),
+            0,
+        ),
+        # Offsets move a sun edge into another half-day, or another day.
+        (_sun("sunset", 480), _at("07:00"), 1),
+        (_sun("sunset", 720), _sun("sunrise", -720), 2),
+        (_sun("sunrise", -720), _at("23:00"), -1),
+        # An edge with nothing valid in it gives no window.
+        (_SUNSET, {}, None),
+        (_at("25:99"), _at("07:00"), None),
+        (None, _at("07:00"), None),
+    ],
+)
+def test_overnight_is_judged_from_the_configured_edges(
+    start: dict | None, end: dict | None, days: int | None
+) -> None:
+    """How many days after the start's day the end falls, by settings alone."""
+    assert _end_days_after(start, end) == days
+
+
+# Each row: home, window, a local time, the state then.
+_CROSSING_CASES = [
+    # Sunset (21:02 in June) is past the fixed end: no window that day.
+    (TORONTO, (_SUNSET, _at("21:00")), "2026-06-22 12:00", "off"),
+    (TORONTO, (_SUNSET, _at("21:00")), "2026-06-22 21:05", "off"),
+    (TORONTO, (_SUNSET, _at("21:00")), "2026-03-20 20:00", "on"),
+    # EXAMPLES Example 11 where sunset is after 23:00.
+    (ANCHORAGE, (_SUNSET, _at("23:00")), "2026-06-22 12:00", "off"),
+    (ANCHORAGE, (_SUNSET, _at("23:00")), "2026-06-22 23:50", "off"),
+    (ANCHORAGE, (_SUNSET, _at("23:00")), "2026-09-22 21:00", "on"),
+    # A wake-up light: sunrise (04:43 in June) is before the fixed start.
+    (LONDON, (_at("06:00"), _SUNRISE), "2026-06-22 12:00", "off"),
+    (LONDON, (_at("06:00"), _SUNRISE), "2026-06-22 06:30", "off"),
+    (LONDON, (_at("06:00"), _SUNRISE), "2026-12-15 07:00", "on"),
+    # A fixed start the winter sunset (15:52) comes before.
+    (LONDON, (_at("16:00"), _SUNSET), "2026-12-15 17:00", "off"),
+    (LONDON, (_at("16:00"), _SUNSET), "2026-06-22 17:00", "on"),
+    # A fixed end the late winter sunrise (10:03) comes after.
+    (TROMSO, (_SUNRISE, _at("09:00")), "2026-01-25 12:00", "off"),
+    (LONDON, (_SUNRISE, _at("09:00")), "2026-06-22 08:00", "on"),
+    # Overnight windows stay overnight in summer.
+    (TORONTO, (_SUNSET, _at("02:00")), "2026-06-23 01:00", "on"),
+    (TORONTO, (_SUNSET, _at("02:00")), "2026-06-22 12:00", "off"),
+    (TORONTO, (_at("22:00"), _SUNRISE), "2026-06-23 03:00", "on"),
+    (TORONTO, (_at("22:00"), _SUNRISE), "2026-06-23 12:00", "off"),
+    (TORONTO, (_SUNSET, _SUNRISE), "2026-06-23 03:00", "on"),
+    (TORONTO, (_SUNSET, _SUNRISE), "2026-06-23 12:00", "off"),
+    # An end at 00:00 is the end of the day.
+    (TORONTO, (_SUNRISE, _at("00:00")), "2026-06-22 23:30", "on"),
+    (TORONTO, (_SUNRISE, _at("00:00")), "2026-06-23 00:30", "off"),
+    (TORONTO, (_SUNSET, _at("00:00")), "2026-06-22 23:30", "on"),
+    (TORONTO, (_SUNSET, _at("00:00")), "2026-06-23 00:30", "off"),
+]
+
+
+def _local(tz, when: str) -> datetime:
+    return datetime.fromisoformat(when).replace(tzinfo=tz)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("home", "edges", "when", "expected"), _CROSSING_CASES)
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+async def test_sun_edge_past_its_fixed_edge_gives_no_window(
+    hass: HomeAssistant,
+    freezer,
+    home: tuple,
+    edges: tuple,
+    when: str,
+    expected: str,
+    invert: bool,
+) -> None:
+    """A sun event that has drifted past the window's fixed edge leaves the
+    window empty that day, never running round the clock."""
+    tz = await set_home(hass, *home)
+    freezer.move_to(_local(tz, when))
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Night Schedule",
+            CONF_TIME_WINDOWS: [{"start": edges[0], "end": edges[1]}],
+            CONF_SCHEDULE_INVERT: invert,
+        },
+    )
+    await _setup(hass, entry)
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert (state.state == expected) is not invert
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("home", "window", "longest", "empty_months"),
+    [
+        (TORONTO, (_SUNSET, _at("21:00")), 5, {6, 7}),
+        (ANCHORAGE, (_SUNSET, _at("23:00")), 8, {5, 6, 7}),
+        (LONDON, (_at("06:00"), _SUNRISE), 3, {3, 4, 5, 6, 7, 8, 9}),
+        (LONDON, (_at("16:00"), _SUNSET), 6, {11, 12, 1}),
+    ],
+)
+async def test_sun_and_fixed_window_is_short_or_empty_all_year(
+    hass: HomeAssistant, home: tuple, window: tuple, longest: int, empty_months: set
+) -> None:
+    """Across the year the window shrinks to nothing and comes back; it never
+    flips into a day-long one while the sun event is past the fixed edge."""
+    await set_home(hass, *home)
+    spec = {"start": window[0], "end": window[1]}
+    empty = set()
+    for offset in range(365):
+        day = date(2026, 1, 1) + timedelta(days=offset)
+        resolved = _resolve_window(hass, spec, day)
+        if resolved is None:
+            empty.add(day)
+        else:
+            assert resolved[1] - resolved[0] < timedelta(hours=longest), day
+    assert empty
+    assert {day.month for day in empty} <= empty_months
+
+
+@pytest.mark.asyncio
+async def test_window_returns_once_the_sun_event_is_back_before_the_fixed_edge(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no boundary in sight the daily re-check finds the window again."""
+    tz = await set_home(hass, *TORONTO)
+    freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    await _setup(hass, _schedule_entry([{"start": _SUNSET, "end": _at("21:00")}]))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] is None
+
+    day = date(2026, 6, 22)
+    while True:
+        sunset = get_astral_event_date(hass, "sunset", day)
+        if sunset < _local(tz, f"{day} 20:58"):
+            break
+        t = _local(tz, f"{day} 21:30")
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await hass.async_block_till_done()
+        assert hass.states.get("binary_sensor.night_schedule").state == "off", day
+        day += timedelta(days=1)
+        t = _local(tz, f"{day} 00:00:02")
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await hass.async_block_till_done()
+    assert date(2026, 7, 1) < day < date(2026, 7, 20)
+
+    t = sunset + timedelta(seconds=2)
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == sunset.isoformat()
+    assert state.attributes["next_transition"] == f"{day}T21:00:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_follow_light_is_not_lit_all_day_by_a_sunset_past_the_fixed_end(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A follow light on sunset -> 21:00 stays off on a day with no window."""
+    tz = await set_home(hass, *TORONTO)
+    freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    hass.states.async_set("light.real_1", "off")
+    light = make_light_entry(
+        name="Desk Lamp",
+        schedule="binary_sensor.night_schedule",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    schedule = _schedule_entry([{"start": _SUNSET, "end": _at("21:00")}])
+    await setup_entries(hass, schedule, light)
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    for when in ("2026-06-22 21:03", "2026-06-23 00:00:02", "2026-06-23 12:00"):
+        t = _local(tz, when)
+        freezer.move_to(t)
+        async_fire_time_changed(hass, t)
+        await settle(hass)
+        assert hass.states.get("light.desk_lamp").state == "off", when
+
+
+@pytest.mark.asyncio
+async def test_gate_light_stays_gated_by_a_sunset_past_the_fixed_end(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A gate light on sunset -> 21:00 ignores occupancy on a day with no window."""
+    tz = await set_home(hass, *TORONTO)
+    freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    hass.states.async_set("light.real_1", "off")
+    hass.states.async_set("binary_sensor.room_occupancy", "off")
+    light = make_light_entry(
+        name="Desk Lamp",
+        occupancy="binary_sensor.room_occupancy",
+        schedule="binary_sensor.night_schedule",
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    schedule = _schedule_entry([{"start": _SUNSET, "end": _at("21:00")}])
+    await setup_entries(hass, schedule, light)
+
+    hass.states.async_set("binary_sensor.room_occupancy", "on")
+    await settle(hass)
+    state = hass.states.get("light.desk_lamp")
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
+# Polar periods (Tromso): transition nights and days with no sun event
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("edges", "when", "expected"),
+    [
+        # No sunrise on 01-20, the first one on 01-21 at 10:29.
+        ((_at("20:00"), _SUNRISE), "2026-01-20 22:00", "on"),
+        ((_at("20:00"), _SUNRISE), "2026-01-21 10:00", "on"),
+        ((_at("20:00"), _SUNRISE), "2026-01-21 11:00", "off"),
+        # Polar night: an evening with no sunrise the next day has no window.
+        ((_at("20:00"), _SUNRISE), "2026-01-10 22:00", "off"),
+        # The first night after the midnight sun: sunset 00:31, sunrise 01:12.
+        ((_SUNSET, _SUNRISE), "2026-07-26 00:50", "on"),
+        ((_SUNSET, _SUNRISE), "2026-07-26 00:20", "off"),
+        ((_SUNSET, _SUNRISE), "2026-07-26 01:30", "off"),
+        # The last night before it: sunset 00:19, sunrise 00:57.
+        ((_SUNSET, _SUNRISE), "2026-05-18 00:40", "on"),
+        ((_SUNSET, _SUNRISE), "2026-05-18 12:00", "off"),
+        # Sun-only edges give no window while the sun never sets or rises.
+        ((_SUNSET, _SUNRISE), "2026-06-21 00:30", "off"),
+        ((_SUNRISE, _SUNSET), "2026-06-21 12:00", "off"),
+        ((_SUNSET, _SUNRISE), "2026-12-21 00:30", "off"),
+        ((_SUNRISE, _SUNSET), "2026-12-21 12:00", "off"),
+        # The first and last short days around the polar night.
+        ((_SUNRISE, _SUNSET), "2026-01-21 12:00", "on"),
+        ((_SUNRISE, _SUNSET), "2026-11-22 11:30", "on"),
+    ],
+)
+async def test_polar_transition_windows(
+    hass: HomeAssistant, freezer, edges: tuple, when: str, expected: str
+) -> None:
+    """The nights and days next to a polar period are kept; a sun-only edge
+    gives no window on a day its event doesn't occur."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(_local(tz, when))
+    await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
+    assert hass.states.get("binary_sensor.night_schedule").state == expected

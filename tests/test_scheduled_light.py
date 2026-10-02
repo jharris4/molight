@@ -44,6 +44,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_SOURCE,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TIME_WINDOWS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
@@ -65,12 +66,14 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import (
+    TORONTO,
     crash_entries,
     finish_startup,
     light_targets,
     make_scheduled_light_entry,
     record_service_calls,
     restart_entries,
+    set_home,
     settle,
     setup_entries,
 )
@@ -3131,3 +3134,53 @@ async def test_new_manual_off_after_a_boundary_stands_across_a_restart(
     await finish_startup(hass)
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("when", "active", "brightness"),
+    [
+        # Sunset is at 21:02 in June, after the window's 21:00 end.
+        ("2026-06-22 12:00", ACTIVE_SETTINGS_OUTSIDE, 204),
+        ("2026-06-22 21:05", ACTIVE_SETTINGS_OUTSIDE, 204),
+        ("2026-03-20 20:00", ACTIVE_SETTINGS_INSIDE, 51),
+    ],
+)
+async def test_settings_schedule_with_a_sunset_past_its_fixed_end_stays_outside(
+    hass: HomeAssistant, freezer, when: str, active: str, brightness: int
+) -> None:
+    """A sunset -> 21:00 settings schedule has no window on a June day, so
+    the light keeps its outside settings instead of the inside ones all day."""
+    tz = await set_home(hass, *TORONTO)
+    freezer.move_to(datetime.fromisoformat(when).replace(tzinfo=tz))
+    occupancy = "binary_sensor.room_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(occupancy, "off")
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Settings Schedule",
+            CONF_TIME_WINDOWS: [{"start": {"sun": "sunset"}, "end": {"time": "21:00"}}],
+        },
+    )
+    light = make_scheduled_light_entry(
+        outside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_AUTO_ON_BRIGHTNESS: 80,
+        },
+        inside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_AUTO_ON_BRIGHTNESS: 20,
+        },
+    )
+    await setup_entries(hass, schedule, light)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_ACTIVE_SETTINGS] == active
+
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["brightness"] == brightness

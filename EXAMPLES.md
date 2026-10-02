@@ -339,7 +339,7 @@ Single vs. double is read from each button's own advertised events (`multi_press
 
 ### Example 11: Bedside lamp, morning and evening (Virtual Combined Schedule Sensor)
 
-On from 06:30 to 08:00 and again from sunset until 23:00. Each window is its own schedule; a combined schedule joins them, and the lamp follows that.
+On from 06:30 to 08:00 and again from sunset until 23:00. Each window is its own schedule; a combined schedule joins them, and the lamp follows that. Far enough north that the summer sun sets after 23:00, the evening window is empty on those days and the lamp only comes on in the morning.
 
 **1. Two Virtual Schedule Sensors**
 

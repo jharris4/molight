@@ -41,11 +41,14 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
+    ANCHORAGE,
+    TROMSO,
     finish_startup,
     light_targets,
     make_light_entry,
     record_service_calls,
     restart_entries,
+    set_home,
     settle,
 )
 
@@ -1041,3 +1044,87 @@ async def test_editing_a_nested_input_rebuilds_the_outer_combination(
     state = hass.states.get("binary_sensor.outer")
     assert state.attributes["next_transition"] == "2026-07-02T20:00:00+00:00"
     assert state.attributes["resolved_schedules"] == ["binary_sensor.evening"]
+
+
+# ---------------------------------------------------------------------------
+# Sun edges past a fixed edge, and polar periods
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("when", "bedside", "workdays", "not_bedside"),
+    [
+        ("2026-06-22 07:00", "on", "on", "off"),
+        ("2026-06-22 12:00", "off", "off", "on"),
+        # Sunset is at 23:42, after the evening window's 23:00 end.
+        ("2026-06-22 23:30", "off", "off", "on"),
+        ("2026-06-22 23:50", "off", "off", "on"),
+        ("2026-06-23 03:00", "off", "off", "on"),
+        # In September sunset (19:57) is before it again.
+        ("2026-09-22 21:00", "on", "on", "off"),
+    ],
+)
+async def test_sun_input_past_its_fixed_end_adds_no_window(
+    hass: HomeAssistant,
+    freezer,
+    when: str,
+    bedside: str,
+    workdays: str,
+    not_bedside: str,
+) -> None:
+    """EXAMPLES Example 11 where the June sunset is after 23:00: the evening
+    input is empty, not on round the clock, in every combination built on it."""
+    tz = await set_home(hass, *ANCHORAGE)
+    freezer.move_to(datetime.fromisoformat(when).replace(tzinfo=tz))
+    hass.states.async_set("binary_sensor.workday", "on")
+    await _setup(
+        hass,
+        _time_schedule("Bedside Morning", "06:30", "08:00"),
+        _time_schedule("Bedside Evening", {"sun": "sunset"}, "23:00"),
+        _mirror_schedule("Workday", "binary_sensor.workday"),
+        _combined(
+            "Bedside Schedule",
+            ["binary_sensor.bedside_morning", "binary_sensor.bedside_evening"],
+        ),
+        _combined(
+            "Bedside Workdays",
+            ["binary_sensor.bedside_schedule", "binary_sensor.workday_2"],
+            operator=SCHEDULE_OPERATOR_ALL,
+        ),
+        _combined("Not Bedside", ["binary_sensor.bedside_schedule"], invert=True),
+    )
+    assert hass.states.get("binary_sensor.bedside_schedule").state == bedside
+    assert hass.states.get("binary_sensor.bedside_workdays").state == workdays
+    assert hass.states.get("binary_sensor.not_bedside").state == not_bedside
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("start", "end", "when", "expected"),
+    [
+        # No sunrise on 01-20; the first one is on 01-21 at 10:29.
+        ("20:00", {"sun": "sunrise"}, "2026-01-20 22:00", "on"),
+        ("20:00", {"sun": "sunrise"}, "2026-01-21 11:00", "off"),
+        # The first night after the midnight sun: sunset 00:31, sunrise 01:12.
+        ({"sun": "sunset"}, {"sun": "sunrise"}, "2026-07-26 00:50", "on"),
+        ({"sun": "sunset"}, {"sun": "sunrise"}, "2026-07-26 01:30", "off"),
+        # No sun event, no window.
+        ({"sun": "sunrise"}, {"sun": "sunset"}, "2026-06-21 12:00", "off"),
+    ],
+)
+async def test_polar_transition_windows_in_a_combination(
+    hass: HomeAssistant, freezer, start: str | dict, end: dict, when: str, expected: str
+) -> None:
+    """A time-window input keeps the nights next to a polar period."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(datetime.fromisoformat(when).replace(tzinfo=tz))
+    await _setup(
+        hass,
+        _time_schedule("Night", start, end),
+        _combined("Nights", ["binary_sensor.night"]),
+        _combined("Days", ["binary_sensor.nights"], invert=True),
+    )
+    assert hass.states.get("binary_sensor.nights").state == expected
+    opposite = "off" if expected == "on" else "on"
+    assert hass.states.get("binary_sensor.days").state == opposite

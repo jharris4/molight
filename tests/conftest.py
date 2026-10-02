@@ -12,6 +12,7 @@ from freezegun import freeze_time
 from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, callback
 from homeassistant.helpers import restore_state
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_mock_load_restore_state_from_storage,
@@ -67,6 +68,8 @@ from custom_components.molight.const import (
 )
 
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     from homeassistant.core import Event, HomeAssistant
 
 
@@ -276,6 +279,23 @@ def light_targets(calls: list[dict], service: str) -> list[list[str]]:
         for call in calls
         if call["domain"] == "light" and call["service"] == service
     ]
+
+
+# Homes for sun-edge tests: time zone, latitude, longitude.
+TORONTO = ("America/Toronto", 43.65, -79.38)
+LONDON = ("Europe/London", 51.5, -0.12)
+ANCHORAGE = ("America/Anchorage", 61.22, -149.9)
+TROMSO = ("Europe/Oslo", 69.65, 18.96)
+
+
+async def set_home(
+    hass: HomeAssistant, time_zone: str, latitude: float, longitude: float
+) -> tzinfo:
+    """Put the home somewhere real, so sun events match its clock."""
+    await hass.config.async_set_time_zone(time_zone)
+    hass.config.latitude = latitude
+    hass.config.longitude = longitude
+    return dt_util.get_time_zone(time_zone)
 
 
 async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:

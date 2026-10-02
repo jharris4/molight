@@ -956,56 +956,112 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
         return RestoredExtraData({"source": self._source_entity})
 
 
+def _edge_time(edge: dict) -> time | None:
+    """Return an edge's fixed time, if it has a valid one."""
+    if edge.get(EDGE_TIME):
+        with contextlib.suppress(ValueError):
+            return time.fromisoformat(edge[EDGE_TIME])
+    return None
+
+
+def _edge_sun(edge: dict) -> tuple[str, int] | None:
+    """Return an edge's sun event and its offset in minutes, if it has one."""
+    if edge.get(EDGE_SUN) not in SUN_EVENTS:
+        return None
+    offset = 0
+    with contextlib.suppress(ValueError, TypeError):
+        offset = int(edge.get(EDGE_OFFSET, 0))
+    return edge[EDGE_SUN], offset
+
+
+def _picks_latest(edge: dict) -> bool:
+    return edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST
+
+
 def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime | None:
     """Resolve an edge spec to a concrete datetime on the given day."""
     if not isinstance(edge, dict):
         return None
 
     fixed: datetime | None = None
-    if edge.get(EDGE_TIME):
-        with contextlib.suppress(ValueError):
-            fixed = datetime.combine(
-                day,
-                time.fromisoformat(edge[EDGE_TIME]),
-                tzinfo=dt_util.DEFAULT_TIME_ZONE,
-            )
+    if (at := _edge_time(edge)) is not None:
+        fixed = datetime.combine(day, at, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 
     sun: datetime | None = None
-    if edge.get(EDGE_SUN) in SUN_EVENTS:
+    if (anchor := _edge_sun(edge)) is not None:
         # None on polar days when the event doesn't occur; the fixed
         # time (if any) then stands alone.
-        sun = get_astral_event_date(hass, edge[EDGE_SUN], day)
+        sun = get_astral_event_date(hass, anchor[0], day)
         if sun is not None:
-            with contextlib.suppress(ValueError, TypeError):
-                sun += timedelta(minutes=int(edge.get(EDGE_OFFSET, 0)))
+            sun += timedelta(minutes=anchor[1])
 
     candidates = [d for d in (fixed, sun) if d is not None]
     if not candidates:
         return None
     if len(candidates) == 1:
         return candidates[0]
-    if edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST:
-        return max(candidates)
-    return min(candidates)
+    return max(candidates) if _picks_latest(edge) else min(candidates)
+
+
+_DAY = 24 * 3600
+_HALF_DAY = _DAY // 2
+# Where a sun event sits on the clock when judging overnight windows (seconds).
+_SUN_CLOCK = {"sunrise": 6 * 3600, "sunset": 18 * 3600}
+
+
+def _edge_clock(edge: dict | None) -> tuple[str, int] | None:
+    """Return an edge's kind and its place on the clock, from its settings alone.
+
+    The place is in seconds after midnight; a sun offset can push it into a
+    neighbouring day.
+    """
+    if not isinstance(edge, dict):
+        return None
+    at, anchor = _edge_time(edge), _edge_sun(edge)
+    fixed = None if at is None else at.hour * 3600 + at.minute * 60 + at.second
+    if anchor is None:
+        return None if fixed is None else ("time", fixed)
+    sun = _SUN_CLOCK[anchor[0]] + anchor[1] * 60
+    if fixed is None:
+        return (anchor[0], sun)
+    return ("both", max(fixed, sun) if _picks_latest(edge) else min(fixed, sun))
+
+
+def _end_days_after(start_edge: dict | None, end_edge: dict | None) -> int | None:
+    """Return how many days after the start's day the end's day is.
+
+    Judged from the settings, never the resolved times: a sun event drifts
+    past a fixed time with the seasons, and the window is then empty that
+    day, as with Home Assistant's own sun and time conditions.
+    """
+    start, end = _edge_clock(start_edge), _edge_clock(end_edge)
+    if start is None or end is None:
+        return None
+    (start_kind, start_at), (end_kind, end_at) = start, end
+    if start_kind == end_kind != "both":
+        # Two fixed times, or one sun event twice, never swap order: the end
+        # is the first one after the start.
+        return (start_at - end_at) // _DAY + 1
+    # Otherwise by half-days: the end is in the start's half or the next one,
+    # so an evening start with a morning end runs overnight. An end at 00:00
+    # or 12:00 closes the half before it.
+    start_half = start_at // _HALF_DAY
+    end_half = -(-end_at // _HALF_DAY) - 1
+    return -((end_half - start_half) // 2)
 
 
 def _resolve_window(
     hass: HomeAssistant, window: dict, day: date
 ) -> tuple[datetime, datetime] | None:
-    start = _resolve_edge(hass, window.get("start"), day)
-    if start is None:
+    start_edge, end_edge = window.get("start"), window.get("end")
+    start = _resolve_edge(hass, start_edge, day)
+    days = _end_days_after(start_edge, end_edge)
+    if start is None or days is None:
         return None
-    end = _resolve_edge(hass, window.get("end"), day)
-    # Overnight window: the end belongs to a later day. Opposing sun offsets
-    # can put the start a day late and the end a day early, so advance up to
-    # three times.
-    for days in range(1, 4):
-        if end is None or end > start:
-            break
-        end = _resolve_edge(hass, window.get("end"), day + timedelta(days=days))
+    end = _resolve_edge(hass, end_edge, day + timedelta(days=days))
     if end is None or end.timestamp() <= start.timestamp():
-        # A start in the spring-forward gap lands an hour later on the clock,
-        # which can put it after the end: no window that day.
+        # No window that day: a sun event has passed the edge it is paired
+        # with, or a start in the spring-forward gap landed after the end.
         return None
     return (start, end)
 
@@ -1071,8 +1127,8 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     Each window is {"start": <edge>, "end": <edge>} where an edge is either a
     plain "HH:MM" string or {"time": "HH:MM", "sun": "sunset"|"sunrise",
     "offset": <minutes>, "combine": "latest"|"earliest"}, e.g. start at the
-    later of sunset-15min and 21:00. Overnight windows (end before start)
-    roll the end to the next day.
+    later of sunset-15min and 21:00. A window whose end is set earlier in the
+    day than its start runs overnight (see _end_days_after).
 
     Rather than polling, the sensor resolves concrete boundary datetimes and
     schedules a single callback for the next transition, so state flips at the

@@ -190,6 +190,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as the light runs them. A fractional timeout could pass a check for a stage
   the light then ran shorter or not at all, such as a 0.5 s effect stage with
   a brightness the light ignored, or a 2.5 s fade on a stage that ran 2 s.
+- A schedule window with a sun event on one edge and a fixed time on the
+  other no longer runs round the clock once the sun event passes the fixed
+  time. *sunset → 21:00* was `on` almost all day through the weeks the sun
+  sets after 21:00, and *06:00 → sunrise* all summer, so a follow light stayed
+  lit and a gate never closed. Whether a window runs overnight is now decided
+  from how its edges are set (README, "Overnight windows"), and the window is
+  empty on such a day, as with Home Assistant's own sun and time conditions.
+  A window from a sun event to a fixed time in the same half of the next day,
+  such as *sunrise → 01:00*, is now always empty; invert *01:00 → sunrise*
+  instead.
+- The nights next to a polar period are no longer skipped: the first short
+  night after the midnight sun, and an evening window that ends at the first
+  sunrise after the polar night.
 
 ## [1.8.0] - 2026-09-30
 

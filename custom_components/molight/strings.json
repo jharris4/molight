@@ -470,7 +470,7 @@
           },
           "end": {
             "name": "Window end",
-            "description": "A fixed time, a sun event with an optional offset, or both combined. An end at or before the start rolls over to the next day (overnight window).",
+            "description": "A fixed time, a sun event with an optional offset, or both combined. A fixed end at or before a fixed start, or a morning end after an evening start (sunrise counts as morning, sunset as evening), rolls over to the next day (overnight window). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
             "data": {
               "time": "Time",
               "sun": "Sun event",
@@ -1479,7 +1479,7 @@
           },
           "end": {
             "name": "Window end",
-            "description": "A fixed time, a sun event with an optional offset, or both combined. An end at or before the start rolls over to the next day (overnight window).",
+            "description": "A fixed time, a sun event with an optional offset, or both combined. A fixed end at or before a fixed start, or a morning end after an evening start (sunrise counts as morning, sunset as evening), rolls over to the next day (overnight window). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
             "data": {
               "time": "Time",
               "sun": "Sun event",

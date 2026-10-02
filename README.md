@@ -177,7 +177,7 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity 
 
 A Virtual Schedule Sensor provides a reusable on/off schedule signal. Choose its definition when creating or configuring it:
 
-- **Time window**: `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported. The form accepts one window per entry; to follow several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule Sensor](#virtual-combined-schedule-binary-sensor).
+- **Time window**: `on` while the current time is within a fixed-time and/or sun-based window. Transitions are event-scheduled (no polling) and fire within a second of the boundary. Overnight windows (e.g. 22:00 → 06:00) are supported; [which windows run overnight](#overnight-windows) is decided from the settings. The form accepts one window per entry; to follow several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule Sensor](#virtual-combined-schedule-binary-sensor).
 - **Binary sensor**: mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. MoLight's own schedules are excluded as sources to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead.
 
 **Invert output** is available for both definitions. A time-window schedule is then `on` outside its configured window; a source-backed schedule is `on` while its source is `off`. An unknown, unavailable, or missing source makes the Virtual Schedule Sensor unavailable and is never inverted to `on`.
@@ -196,6 +196,16 @@ e.g. *start at the later of 15 min before sunset and 21:00*. On polar days where
 Attributes: `current_window_start` (identifies the effective `on` period, where overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_transition`, `source_entity`, `inverted`.
 
 Source-backed schedules preserve their effective state and window marker across a temporary source outage. Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state. As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
+
+#### Overnight windows
+
+Whether a schedule window runs past midnight is decided from how its edges are set, never from where the sun is on a given day:
+
+- **Two fixed times**: overnight when the end is at or before the start (22:00 → 06:00). 00:00 → 00:00 is a full day.
+- **A sun event on either edge**: overnight when an evening edge starts the window and a morning edge ends it (sunset → 02:00, 22:00 → sunrise, sunset → sunrise). Sunrise is a morning edge and sunset an evening one. A fixed time is a morning edge before 12:00, an end at 12:00 still counts as morning, and an end at 00:00 is the end of the day, so sunrise → 00:00 runs until midnight. A sun offset moves the edge with it: sunset + 8 h is a morning edge. An edge with both a time and a sun event sits where **Time vs. sun** puts it, taking sunrise as 06:00 and sunset as 18:00.
+- **The same sun event on both edges**: overnight when the end's offset is not after the start's.
+
+Any other window starts and ends on the same day, and is empty on a day its end comes before its start. *sunset → 21:00* is `on` from sunset until 21:00 while the sun sets before 21:00, and stays `off` on the summer days it sets later, the same as Home Assistant's own `after: sunset` and `before: "21:00"` conditions. *06:00 → sunrise* likewise stays `off` once the sun rises before 06:00. To run from a sun event into the same half of the next day (sunrise until 01:00), invert the opposite window (01:00 → sunrise).
 
 ### Virtual Combined Schedule Binary Sensor
 
