@@ -15,7 +15,6 @@ import pytest
 from homeassistant.components.light import (
     DEFAULT_MAX_KELVIN,
     DEFAULT_MIN_KELVIN,
-    LightEntity,
 )
 from homeassistant.const import ATTR_RESTORED, EVENT_CALL_SERVICE, EVENT_STATE_CHANGED
 from homeassistant.core import (
@@ -221,11 +220,9 @@ async def test_colored_light_reports_its_restored_state_until_it_seeds(
 
 @pytest.mark.asyncio
 async def test_color_temp_light_reports_a_kelvin_range_until_it_seeds(
-    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, caplog
+    hass: HomeAssistant, caplog
 ) -> None:
     """Home Assistant 2026.1 has no default range and warns of mireds without one."""
-    for attr in ("__attr_min_color_temp_kelvin", "__attr_max_color_temp_kelvin"):
-        monkeypatch.setattr(LightEntity, attr, None)
     real = _Members(hass, [REAL], CT_CAPS)
     entry = make_light_entry()
     await setup_entries(hass, entry)
