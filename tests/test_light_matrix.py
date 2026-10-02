@@ -1344,14 +1344,16 @@ async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE_KEEP, SCHEDULE_MODE_GATE_SWITCH])
 async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, mode: str
 ) -> None:
-    """gate_keep gates an off light but lets an open door hold an on light."""
+    """gate_keep and gate_switch gate an off light but let an open door hold
+    an on light."""
     door = "binary_sensor.door"
     entry = make_light_entry(
         schedule=SCHED,
-        schedule_mode=SCHEDULE_MODE_GATE_KEEP,
+        schedule_mode=mode,
         door=door,
         door_mode=DOOR_MODE_OPEN_CLOSE,
     )
@@ -1377,6 +1379,43 @@ async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("how", ["virtual", "wall", "startup", "maintain_clear"])
+async def test_hard_gate_light_on_outside_its_window_ignores_an_open_door(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """Under gate, a light on outside the window is not held by a door that
+    is already open, however it came to be on or to be re-evaluated."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(DOOR, "on")  # standing open
+    hass.states.async_set(MAINT, "on" if how == "maintain_clear" else "off")
+    hass.states.async_set(REAL, "on" if how == "startup" else "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            maintain=MAINT,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+    )
+    if how == "wall":
+        hass.states.async_set(REAL, "on")
+    elif how != "startup":
+        await _turn_on_by(hass, "virtual")
+    await settle(hass)
+    if how == "maintain_clear":
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+        hass.states.async_set(MAINT, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] in (STATE_ACTIVE, STATE_COUNTDOWN)
+
+    await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
 
 

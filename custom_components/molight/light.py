@@ -201,7 +201,8 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     while SCHEDULED.
   - gate: occupancy may only activate lights inside the window; window end
     forces lights off (like illuminance turning bright), window start
-    re-evaluates occupancy.
+    re-evaluates occupancy. Outside the window a light that is on ignores
+    occupancy and the door: neither holds it.
   - gate_switch: the same activation gate for an OFF light. Window end keeps
     an ON light on but recalculates its state and timer from current occupancy
     history; active presence adopts it, while an expired timeout applies the
@@ -1621,9 +1622,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 return
 
         if self._attr_is_on and (self._maintain_active() or self._door_holds()):
-            # Adopt an already-on light as maintained without gating, since this
-            # is not a turn-on; the maintain entity clearing, or the door
-            # closing, starts the countdown as usual.
+            # Not a turn-on, so only a hard-gate window keeps the door from
+            # holding; the maintain entity clearing, or the door closing,
+            # starts the countdown as usual.
             self._machine_state = STATE_OCCUPIED
             self.async_write_ha_state()
             return
@@ -2810,8 +2811,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return  # resting at standby has no timer to resume
 
         # Occupancy adoption is gated exactly like every other adoption path
-        # (_occupancy_holds); the maintain entity and an open_close door are
-        # never gated once the light is on.
+        # (_occupancy_holds); the maintain entity is never gated once the
+        # light is on, and an open_close door only by a hard-gate window.
         if self._occupancy_holds() or self._maintain_active() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
             return
@@ -3324,13 +3325,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         Such a door holds an already-on light on with no timer, exactly like
         active occupancy or the maintain entity, and its closing starts the
         countdown. In plain open mode a door never holds (it is only a
-        momentary turn-on trigger), so this is always False there. Reads the
-        last known door state, so a sensor that blips unavailable keeps
+        momentary turn-on trigger), so this is always False there. Nor does
+        it hold outside a hard-gate window, where the door is ignored. Reads
+        the last known door state, so a sensor that blips unavailable keeps
         holding, until it has been unavailable for DOOR_UNAVAILABLE_TIMEOUT.
         """
         if not self._door_entity or self._door_mode != DOOR_MODE_OPEN_CLOSE:
             return False
-        return self._door_open
+        return self._door_open and not self._hard_gate_schedule_inactive()
 
     def _start_door_dropout(self) -> None:
         """Count an open door whose sensor stays unavailable as closed.
@@ -3402,6 +3404,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         else:
             if self._door_mode != DOOR_MODE_OPEN_CLOSE:
                 return  # open mode: closing is ignored
+            if self._hard_gate_schedule_inactive():
+                return  # outside a hard-gate window the door is ignored
             if self._machine_state in (STATE_IDLE, STATE_STANDBY):
                 return
             if self._occupancy_holds() or self._maintain_active():

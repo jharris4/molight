@@ -114,6 +114,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
+- Outside a *Gate and turn off* schedule window, a light that is on ignores an
+  `open_close` door, as the README says. A door already standing open held a
+  light turned on by hand or at the wall, or found on at startup, with no
+  timer, and kept it on after the maintain sensor cleared; closing the door
+  restarted the timer. A schedule that blips `unavailable` inside the window
+  still leaves the door holding.
 - An `open_close` door whose sensor goes `unavailable` while the door is open,
   such as a battery contact sensor that dies, no longer holds the light on
   until Home Assistant restarts. After 60 seconds it counts as closed, as it

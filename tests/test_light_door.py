@@ -448,6 +448,44 @@ async def test_gate_window_start_reevaluates_open_door(
         assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
 
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("event", ["maintain_clears", "door_closes"])
+async def test_gate_schedule_blip_keeps_the_doors_part(
+    hass: HomeAssistant, event: str
+) -> None:
+    """Only a gate window that has ended makes the door ignored: through a
+    blip of the schedule the open door still holds, and its close still
+    starts the countdown."""
+    maintain = "binary_sensor.maint"
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(maintain, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            maintain=maintain,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+        ),
+    )
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    if event == "door_closes":
+        hass.states.async_set(maintain, "off")
+        await settle(hass)
+
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    hass.states.async_set(maintain if event == "maintain_clears" else DOOR, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == (
+        STATE_OCCUPIED if event == "maintain_clears" else STATE_COUNTDOWN
+    )
+
+
 # ---------------------------------------------------------------------------
 # unavailability: the hold survives a sensor blip
 # ---------------------------------------------------------------------------
@@ -886,7 +924,9 @@ async def test_open_close_close_ignores_gated_occupancy(
     hass: HomeAssistant, freezer, gate: str
 ) -> None:
     """Occupancy that a gate keeps from holding the light cannot hold it
-    after the door closes: the countdown starts."""
+    after the door closes: the countdown starts. Outside a gate window the
+    door is ignored as well, so it neither holds the light nor restarts its
+    timer by closing."""
     if gate == "bright":
         entry = make_light_entry(
             door=DOOR,
@@ -913,13 +953,23 @@ async def test_open_close_close_ignores_gated_occupancy(
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
-    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    door_holds = gate == "bright"
+    assert _state(hass).attributes["molight_state"] == (
+        STATE_OCCUPIED if door_holds else STATE_ACTIVE
+    )
 
+    freezer.tick(timedelta(seconds=5))
     hass.states.async_set(DOOR, "off")
     await settle(hass)
-    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    assert _state(hass).attributes["molight_state"] == (
+        STATE_COUNTDOWN if door_holds else STATE_ACTIVE
+    )
 
-    freezer.tick(timedelta(seconds=11))
+    freezer.tick(timedelta(seconds=6 if door_holds else 1))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    freezer.tick(timedelta(seconds=5))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "off"
