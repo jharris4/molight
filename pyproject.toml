@@ -6,6 +6,7 @@ timeout = 60
 markers = [
     "regular_virtual_light_only: behavior requires a regular Virtual Light's own schedule mode",
     "allow_error_log: the test logs an error on purpose",
+    "allow_warning_log: the test logs a MoLight warning on purpose",
     "real_clock: the test compares against a subprocess, which the pinned clock cannot reach",
 ]
 

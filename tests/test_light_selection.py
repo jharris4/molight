@@ -236,6 +236,7 @@ async def test_unusable_source_falls_back_to_fixed_option(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_source_without_fallback_can_skip_selection(
     hass: HomeAssistant, caplog
 ) -> None:
@@ -326,6 +327,7 @@ async def test_follow_member_reboot_reapplies_selection(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_selection_failure_does_not_prevent_turn_on(
     hass: HomeAssistant, caplog
 ) -> None:
@@ -348,6 +350,7 @@ async def test_selection_failure_does_not_prevent_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("target", ["missing", "unavailable"])
+@pytest.mark.allow_warning_log
 async def test_selection_skipped_when_target_is_missing_or_unavailable(
     hass: HomeAssistant, caplog, target: str
 ) -> None:
@@ -445,6 +448,7 @@ async def test_selection_applied_when_target_has_no_current_option(
         "source_without_padding",
     ],
 )
+@pytest.mark.allow_warning_log
 async def test_selection_prefers_the_exact_option(
     hass: HomeAssistant,
     options: list[str],
@@ -1389,6 +1393,7 @@ async def test_waiting_turn_on_reports_on_at_its_level(
     [HomeAssistantError("device offline"), RuntimeError("boom")],
     ids=["ha_error", "unexpected_error"],
 )
+@pytest.mark.allow_warning_log
 async def test_waiting_turn_on_whose_selection_fails_still_lights_the_room(
     hass: HomeAssistant, caplog, trigger: str, error: Exception
 ) -> None:
@@ -1435,6 +1440,7 @@ async def _pass(hass: HomeAssistant, freezer, seconds: float) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+@pytest.mark.allow_warning_log
 async def test_select_call_that_never_answers_still_lights_the_room(
     hass: HomeAssistant, freezer, caplog, trigger: str
 ) -> None:
@@ -1491,6 +1497,7 @@ async def test_select_call_answering_within_the_limit_is_applied(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("overtaker", ["off", "wall"])
+@pytest.mark.allow_warning_log
 async def test_select_call_given_up_on_after_an_off_lights_nothing(
     hass: HomeAssistant, freezer, overtaker: str
 ) -> None:
@@ -1520,6 +1527,7 @@ async def test_select_call_given_up_on_after_an_off_lights_nothing(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_resend_whose_select_call_never_answers_is_still_sent(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -1564,6 +1572,7 @@ async def test_resend_whose_select_call_never_answers_is_still_sent(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.allow_warning_log
 async def test_window_start_whose_select_call_never_answers_still_lights(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -1594,6 +1603,7 @@ async def test_window_start_whose_select_call_never_answers_still_lights(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.allow_warning_log
 async def test_standby_whose_select_call_never_answers_still_comes_on(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -2286,6 +2296,7 @@ async def test_wall_turn_on_after_a_switch_to_a_device_selection_overtakes(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("other", ["no_selection", "another_device"])
+@pytest.mark.allow_warning_log
 async def test_failed_select_call_is_named_after_a_settings_switch(
     hass: HomeAssistant, caplog, other: str
 ) -> None:

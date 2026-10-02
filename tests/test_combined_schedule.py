@@ -858,6 +858,7 @@ async def test_editing_an_input_rebuilds_the_combination(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_loop_is_unknown_instead_of_hanging(
     hass: HomeAssistant, freezer, caplog
 ) -> None:

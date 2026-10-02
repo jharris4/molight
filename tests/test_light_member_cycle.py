@@ -64,6 +64,7 @@ async def _count_turn_offs(hass: HomeAssistant, monkeypatch) -> list[int]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("group", ["loaded", "unloaded"])
+@pytest.mark.allow_warning_log
 async def test_a_member_group_that_includes_the_light_is_not_driven(
     hass: HomeAssistant, monkeypatch, caplog: pytest.LogCaptureFixture, group: str
 ) -> None:
@@ -103,6 +104,7 @@ async def test_a_member_group_that_includes_the_light_is_not_driven(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_a_member_group_changed_to_include_the_light_is_dropped(
     hass: HomeAssistant, monkeypatch, caplog: pytest.LogCaptureFixture
 ) -> None:

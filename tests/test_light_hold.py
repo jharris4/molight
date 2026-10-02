@@ -1090,6 +1090,7 @@ def _refused_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -1113,6 +1114,7 @@ async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_load_warns_once_for_a_keep_on_entity_on_both_scheduled_sides(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:

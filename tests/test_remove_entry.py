@@ -378,6 +378,7 @@ async def test_remove_schedule_strips_it_from_combined_schedules(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_remove_entry_strips_scheduled_light_references(
     hass: HomeAssistant,
 ) -> None:

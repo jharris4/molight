@@ -359,28 +359,37 @@ async def finish_startup(hass: HomeAssistant) -> None:
 
 
 class _ErrorRecords(logging.Handler):
-    """Collect every record at ERROR or above."""
+    """Collect every record at ERROR or above, and MoLight's warnings."""
 
     def __init__(self) -> None:
-        super().__init__(logging.ERROR)
-        self.records: list[logging.LogRecord] = []
+        super().__init__(logging.WARNING)
+        self.errors: list[logging.LogRecord] = []
+        self.warnings: list[logging.LogRecord] = []
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
+        if record.levelno >= logging.ERROR:
+            self.errors.append(record)
+        elif record.name.startswith("custom_components.molight"):
+            self.warnings.append(record)
 
 
 @pytest.fixture(autouse=True)
 def fail_on_error_log(request: pytest.FixtureRequest):
-    """Fail a test that logged an error, since HA only logs listener crashes."""
+    """Fail a test that logged an error, since HA only logs listener crashes,
+    or a MoLight warning it did not expect, as the e2e log gate would."""
     handler = _ErrorRecords()
     root = logging.getLogger()
     root.addHandler(handler)
     yield
     root.removeHandler(handler)
-    if handler.records and not request.node.get_closest_marker("allow_error_log"):
-        pytest.fail(
-            "logged errors:\n" + "\n".join(handler.format(r) for r in handler.records)
-        )
+    for records, marker, what in (
+        (handler.errors, "allow_error_log", "errors"),
+        (handler.warnings, "allow_warning_log", "MoLight warnings"),
+    ):
+        if records and not request.node.get_closest_marker(marker):
+            pytest.fail(
+                f"logged {what}:\n" + "\n".join(handler.format(r) for r in records)
+            )
 
 
 # A Wednesday noon in US/Pacific (the test timezone), away from every schedule

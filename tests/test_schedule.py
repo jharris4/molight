@@ -491,6 +491,7 @@ async def test_inverted_overlapping_windows_begin_after_merged_interval(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_inverted_unresolvable_sun_window_uses_stable_marker(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -549,6 +550,7 @@ async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log
 async def test_invalid_window_edges_never_activate(
     hass: HomeAssistant, freezer
 ) -> None:
@@ -2266,6 +2268,7 @@ async def test_window_ever_opens(
         ((_at("22:00"), _at("06:00")), False),
     ],
 )
+@pytest.mark.allow_warning_log
 async def test_saved_window_that_never_opens_is_logged_at_setup(
     hass: HomeAssistant, freezer, caplog, edges: tuple, warned: bool
 ) -> None:
