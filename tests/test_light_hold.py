@@ -29,6 +29,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -745,25 +746,26 @@ async def _assert_fresh_timer_on_release(hass: HomeAssistant, freezer, hold: str
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+)
 async def test_release_outside_a_gate_window_runs_a_fresh_timer(
-    hass: HomeAssistant, freezer, hold: str
+    hass: HomeAssistant, freezer, mode: str, hold: str
 ) -> None:
-    """Turned on by hand outside a Gate and turn off window: no window ended
-    while held, so the release starts a fresh full timer."""
+    """Turned on by hand outside a gate-mode window: no window ended while
+    held, so the release starts a fresh full timer."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(HOLD, "off")
     await setup_entries(
         hass,
-        make_light_entry(
-            schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, hold_entities=[HOLD]
-        ),
+        make_light_entry(schedule=SCHED, schedule_mode=mode, hold_entities=[HOLD]),
     )
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
     await _hold(hass, hold, on=True)
     await _tick(hass, freezer, 120)
-    assert _state(hass).attributes[ATTR_SCHEDULE_END_OFF_PENDING] is False
+    assert not _state(hass).attributes.get(ATTR_SCHEDULE_END_OFF_PENDING)
 
     await _assert_fresh_timer_on_release(hass, freezer, hold)
 
