@@ -279,6 +279,26 @@ class HomeAssistantClient:
                 time.sleep(0.5)
         raise TimeoutError(f"Home Assistant did not become ready: {last_error}")
 
+    def wait_started(self, timeout: float = WAIT_TIMEOUT) -> None:
+        """Wait until Home Assistant has finished starting.
+
+        The API already answers while it starts, when a virtual light still
+        reports its restored state and a real light may not exist yet.
+        """
+        deadline = time.monotonic() + timeout
+        last: Any = None
+        while time.monotonic() < deadline:
+            try:
+                last = self.request("GET", "/api/config").get("state")
+                if last == "RUNNING":
+                    return
+            except REQUEST_ERRORS as err:
+                if not poll_tolerates(err, missing_ok=False):
+                    raise
+                last = err
+            time.sleep(0.2)
+        raise TimeoutError(f"Home Assistant did not finish starting: {last}")
+
     def answer(self) -> str | None:
         """How the HTTP API answered, or None when nothing is listening."""
         try:
@@ -295,7 +315,7 @@ class HomeAssistantClient:
         return self.state("zone.home")["last_changed"]
 
     def restart_core(self) -> None:
-        """Restart core and wait until a new boot is serving requests."""
+        """Restart core and wait until the new boot has finished starting."""
         marker = self.boot_marker()
         self.call_service("homeassistant", "restart", {})
         self.wait_state(
@@ -304,9 +324,10 @@ class HomeAssistantClient:
             "rebooted after the core restart",
             timeout=WAIT_TIMEOUT,
         )
+        self.wait_started()
 
     def authenticate(self) -> None:
-        """Create the isolated owner or log back in after a restart."""
+        """Create the isolated owner or log back in, once startup has finished."""
         onboarding = self.request("GET", "/api/onboarding")
         user_done = next(item["done"] for item in onboarding if item["step"] == "user")
         if not user_done:
@@ -355,6 +376,7 @@ class HomeAssistantClient:
             form=True,
         )
         self.token = token["access_token"]
+        self.wait_started()
 
     def finish_onboarding(self) -> None:
         """Complete non-user onboarding steps for browser-driven scenarios."""
