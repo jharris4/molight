@@ -135,7 +135,7 @@ from custom_components.molight.const import (
     STANDBY_KEYS,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import settle, setup_entries
+from tests.conftest import TORONTO, set_home, settle, setup_entries
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -439,6 +439,119 @@ async def test_config_flow_schedule_rejects_incomplete_window(
             "end": {"sun": "sunrise", "combine": "latest"},
         }
     ]
+
+
+# A sun event with a fixed time in its own half of the day is a same-day
+# window; these pairs have the end before the start all year.
+_NEVER_OPEN_WINDOWS = [
+    ({"sun": "sunrise"}, {"time": "01:00:00"}),
+    ({"sun": "sunset"}, {"time": "13:00:00"}),
+    ({"time": "11:00:00"}, {"sun": "sunrise"}),
+    ({"time": "23:00:00"}, {"sun": "sunset"}),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("start", "end"), _NEVER_OPEN_WINDOWS)
+async def test_config_flow_schedule_rejects_a_window_that_never_opens(
+    hass: HomeAssistant, start: dict, end: dict
+) -> None:
+    """A window that is empty every day of the year is an error, and the
+    opposite window, inverted, is accepted in its place."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await _choose_time_schedule(hass, result)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Day", "start": start, "end": end, SECTION_ADVANCED: {}},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_never_opens"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Day",
+            "start": end,
+            "end": start,
+            CONF_SCHEDULE_INVERT: True,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_SCHEDULE_INVERT] is True
+
+
+@pytest.mark.asyncio
+async def test_config_flow_schedule_accepts_a_window_empty_part_of_the_year(
+    hass: HomeAssistant,
+) -> None:
+    """Sunset -> 21:00 in Toronto is empty in June only: no error."""
+    await set_home(hass, *TORONTO)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await _choose_time_schedule(hass, result)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Evening",
+            "start": {"sun": "sunset"},
+            "end": {"time": "21:00:00"},
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_config_flow_schedule_rejects_a_window_a_wrong_time_zone_empties(
+    hass: HomeAssistant,
+) -> None:
+    """On a UTC clock at a Californian location sunset is at about 03:00, so
+    sunset -> 23:00 never opens; with the right time zone it does."""
+    await hass.config.async_set_time_zone("UTC")
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+    )
+    result = await _choose_time_schedule(hass, result)
+    window = {
+        CONF_NAME: "Evening",
+        "start": {"sun": "sunset"},
+        "end": {"time": "23:00:00"},
+        SECTION_ADVANCED: {},
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], window)
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_never_opens"}
+
+    await hass.config.async_set_time_zone("America/Los_Angeles")
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], window)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("start", "end"), _NEVER_OPEN_WINDOWS)
+async def test_schedule_options_reject_a_window_that_never_opens(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry, start: dict, end: dict
+) -> None:
+    """The Configure form applies the same check and keeps the saved window."""
+    await setup_entries(hass, schedule_entry)
+    saved = molight_config(schedule_entry)[CONF_TIME_WINDOWS]
+
+    result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+    result = await _choose_time_schedule_options(hass, result)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_NAME: "Test Schedule", "start": start, "end": end},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "window_never_opens"}
+    assert molight_config(schedule_entry)[CONF_TIME_WINDOWS] == saved
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -22,6 +23,7 @@ from custom_components.molight.binary_sensor import (
     _end_days_after,
     _resolve_window,
     _sun_event,
+    window_ever_opens,
 )
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
@@ -2219,3 +2221,59 @@ async def test_gate_light_follows_a_time_zone_change(
     hass.states.async_set(occupancy, "on")
     await settle(hass)
     assert hass.states.get("light.desk_lamp").state == "on"
+
+
+# ---------------------------------------------------------------------------
+# A window that never opens at the home location
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("home", "edges", "opens"),
+    [
+        # A sun event to a fixed time in the same half of the next day.
+        (LONDON, (_SUNRISE, _at("01:00")), False),
+        (LONDON, (_SUNSET, _at("13:00")), False),
+        (LONDON, (_at("11:00"), _SUNRISE), False),
+        (LONDON, (_at("23:00"), _SUNSET), False),
+        # Empty for part of the year only.
+        (TORONTO, (_SUNSET, _at("21:00")), True),
+        (LONDON, (_at("06:00"), _SUNRISE), True),
+        # Sun-only windows at a polar home open outside its polar periods.
+        (TROMSO, (_SUNSET, _SUNRISE), True),
+        (TROMSO, (_SUNRISE, _SUNSET), True),
+        # In Tromso the sun does rise before 01:00 for a few days in May.
+        (TROMSO, (_SUNRISE, _at("01:00")), True),
+        (LONDON, (_at("22:00"), _at("06:00")), True),
+        (LONDON, (_at("25:99"), _at("06:00")), False),
+    ],
+)
+async def test_window_ever_opens(
+    hass: HomeAssistant, home: tuple, edges: tuple, opens: bool
+) -> None:
+    """Whether any day of the coming year has the window, at this home."""
+    await set_home(hass, *home)
+    assert window_ever_opens(hass, {"start": edges[0], "end": edges[1]}) is opens
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("edges", "warned"),
+    [
+        ((_SUNRISE, _at("01:00")), True),
+        ((_SUNSET, _at("21:00")), False),
+        ((_at("22:00"), _at("06:00")), False),
+    ],
+)
+async def test_saved_window_that_never_opens_is_logged_at_setup(
+    hass: HomeAssistant, freezer, caplog, edges: tuple, warned: bool
+) -> None:
+    """A schedule saved before the form rejected its window still loads, as
+    off, and says why in the log."""
+    tz = await set_home(hass, *TORONTO)
+    freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    with caplog.at_level(logging.WARNING):
+        await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
+    assert hass.states.get(NIGHT).state == "off"
+    assert ("never opens" in caplog.text) is warned

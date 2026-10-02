@@ -1104,6 +1104,15 @@ def _resolve_window(
     return (start, end)
 
 
+def window_ever_opens(hass: HomeAssistant, window: dict) -> bool:
+    """Return whether a window opens on any day of the coming year at this home."""
+    today = dt_util.now().date()
+    return any(
+        _resolve_window(hass, window, today + timedelta(days=offset)) is not None
+        for offset in range(366)
+    )
+
+
 # Sun offsets move edges up to 12h into a neighbouring day, so extra days are
 # resolved and values trusted only from yesterday to the day after tomorrow.
 _DAY_OFFSETS = range(-3, 4)
@@ -1256,6 +1265,13 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                     EVENT_CORE_CONFIG_UPDATE, self._handle_core_config_update
                 )
             )
+            # The form rejects these; one saved before it did stays off.
+            if not all(window_ever_opens(self.hass, w) for w in self._windows):
+                _LOGGER.warning(
+                    "Schedule %s has a window that never opens at this home "
+                    "location: its end always comes before its start",
+                    self._attr_name,
+                )
             self._refresh()
 
     def _saved_invert_matches(self, saved: dict) -> bool:

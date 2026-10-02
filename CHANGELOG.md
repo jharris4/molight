@@ -199,7 +199,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty on such a day, as with Home Assistant's own sun and time conditions.
   A window from a sun event to a fixed time in the same half of the next day,
   such as *sunrise → 01:00*, is now always empty; invert *01:00 → sunrise*
-  instead.
+  instead. The form rejects a window that never opens at the home location,
+  and a schedule already saved with one logs a warning when it loads.
 - The nights next to a polar period are no longer skipped: the first short
   night after the midnight sun, and an evening window that ends at the first
   sunrise after the polar night.

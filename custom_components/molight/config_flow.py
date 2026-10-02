@@ -20,6 +20,7 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
 
+from .binary_sensor import window_ever_opens
 from .const import (
     AFFIX_TARGET_ENTITY_ID,
     AFFIX_TARGET_NAME,
@@ -3238,6 +3239,8 @@ class MoLightConfigFlow(
                     if _window_input_provided(user_input)
                     else "window_required"
                 )
+            elif not window_ever_opens(self.hass, window):
+                errors["base"] = "window_never_opens"
             elif not errors:
                 data = {
                     CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
@@ -3935,6 +3938,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     if _window_input_provided(user_input)
                     else "window_required"
                 )
+            elif not window_ever_opens(self.hass, window):
+                errors["base"] = "window_never_opens"
             elif not errors:
                 return self._finish(
                     {
