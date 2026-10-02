@@ -2321,3 +2321,119 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
     assert list(_stamps(hass)) == ["last_color_change_physical"]
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == PURPLE
+
+
+# ---------------------------------------------------------------------------
+# A member with a color temperature but no color
+#
+# Home Assistant turns a color into the nearest color temperature for such a
+# member, which clamps it to its own range. Its reply here comes six seconds
+# late, when only a full match of what was asked is still our echo.
+# ---------------------------------------------------------------------------
+
+RED_RGB, BLUE_RGB = [255, 0, 0], [0, 0, 255]
+COLOR_SOURCES = ["auto_on", "effect", "warn", "standby", "caller"]
+
+
+async def _mixed_light(
+    hass: HomeAssistant, source: str, rgb: list[int]
+) -> tuple[FadingLight, str]:
+    """A color member and a slow color-temperature one; source sends rgb.
+
+    Returns the color-temperature member and the state the light is then in.
+    """
+    occupancy, schedule = "binary_sensor.occ", "binary_sensor.settings_schedule"
+    lights = ["light.color", "light.white"]
+    lit = source in ("effect", "warn", "caller")
+    white = FadingLight("white", on=lit, brightness=200, kelvin=3000, latency=6)
+    await add_real(hass, FadingLight("color", on=lit, brightness=200, hs=GREEN), white)
+    hass.states.async_set(occupancy, "off")
+    hass.states.async_set(schedule, "off")
+    if source == "standby":
+        entry = make_scheduled_light_entry(
+            name="Matrix Light",
+            lights=lights,
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_STANDBY_RGB_COLOR: rgb,
+            },
+        )
+    else:
+        stage = {
+            f"{source}_timeout": 30,
+            f"{source}_brightness": 50,
+            f"{source}_rgb_color": rgb,
+        }
+        entry = make_light_entry(
+            lights=lights,
+            occupancy=occupancy,
+            auto_on_rgb_color=rgb if source == "auto_on" else None,
+            **(stage if source in ("effect", "warn") else {}),
+        )
+    await setup_entries(hass, entry)
+    if source == "auto_on":
+        hass.states.async_set(occupancy, "on")
+    elif source == "standby":
+        hass.states.async_set(schedule, "on")
+    elif source == "caller":
+        hs = list(color_util.color_RGB_to_hs(*rgb))
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": INSTANT, "hs_color": hs}
+        )
+    await settle(hass)
+    return white, {
+        "auto_on": STATE_OCCUPIED,
+        "standby": STATE_STANDBY,
+        "caller": STATE_ACTIVE,
+    }.get(source, source)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", COLOR_SOURCES)
+@pytest.mark.parametrize(("rgb", "kelvin"), [(RED_RGB, 6279), (BLUE_RGB, 2202)])
+async def test_late_color_temperature_reply_to_a_color_is_not_physical(
+    hass: HomeAssistant, freezer, source: str, rgb: list[int], kelvin: int
+) -> None:
+    """Red is nearest 6279 K; blue is nearest a kelvin below the member's
+    range, so it shows its warmest. Either reply is what we asked for."""
+    white, machine_state = await _mixed_light(hass, source, rgb)
+    await _run(hass, freezer, 61 if source in ("effect", "warn") else 0)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == machine_state
+
+    await _run(hass, freezer, 7)
+
+    assert white.is_on
+    assert white.color_temp_kelvin == kelvin
+    assert _attrs_of(hass, INSTANT)["molight_state"] == machine_state
+    assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == color_util.color_RGB_to_hs(
+        *rgb
+    )
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", COLOR_SOURCES)
+async def test_late_other_color_temperature_after_a_color_is_physical(
+    hass: HomeAssistant, freezer, source: str
+) -> None:
+    """Asked for red, nearest 6279 K, the member shows 4000 K four seconds
+    later: that is someone at the wall, not its reply."""
+    white, machine_state = await _mixed_light(hass, source, RED_RGB)
+    await _run(hass, freezer, (61 if source in ("effect", "warn") else 0) + 4)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == machine_state
+    assert _stamps(hass) == {}
+
+    white.wall(color_temp_kelvin=4000)
+    await settle(hass)
+
+    attrs = _attrs_of(hass, INSTANT)
+    if source in ("auto_on", "standby"):
+        # The member was dark until then: a turn-on at the wall.
+        assert list(_stamps(hass)) == ["last_on_physical"]
+        assert attrs["color_temp_kelvin"] == 4000
+    else:
+        assert list(_stamps(hass)) == ["last_color_change_physical"]
+        assert attrs["molight_state"] == STATE_ACTIVE
+        assert attrs["warning_active"] is False
+    await _run(hass, freezer, 7)  # the member's reply to a restore after a stage

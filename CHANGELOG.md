@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the pre-warning brightness. A fade to off of any length that reports dimmer
   levels on its way no longer turns the virtual light back on and then
   records a manual off.
+- With colour lights and colour-temperature-only lights in one virtual light,
+  a slow reply from the latter to a colour is no longer taken for a change at
+  the wall. Home Assistant sends such a light the nearest colour temperature,
+  which MoLight did not expect back: an automatic turn-on with a colour was
+  recorded as a turn-on at the wall and lost the false-detection quick off,
+  and a coloured warning stage cancelled itself and restarted the timeout.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

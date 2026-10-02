@@ -2565,23 +2565,31 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _member_expectation(
         self, entity_id: str, expectation: _EchoExpectation
     ) -> _EchoExpectation:
-        """Narrow a kelvin command to the member's own range.
+        """Expect a color the way this member can show it.
 
         The virtual light offers the union of its members' ranges; a member
-        clamps a kelvin outside its own and reports the clamped value.
+        clamps a kelvin outside its own and reports the clamped value. For a
+        member with a color temperature but no color, Home Assistant turns a
+        color into the nearest color temperature.
         """
         color = expectation.color
-        if color is None or color[0] is not ColorMode.COLOR_TEMP:
-            return expectation
         state = self.hass.states.get(entity_id)
-        if state is None:
+        if color is None or state is None:
             return expectation
-        kelvin = color[1]
+        if color[0] is ColorMode.COLOR_TEMP:
+            kelvin = color[1]
+        else:
+            modes = set(state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ())
+            if ColorMode.COLOR_TEMP not in modes or modes & _HS_CAPABLE_MODES:
+                return expectation
+            kelvin = color_util.color_xy_to_temperature(
+                *color_util.color_hs_to_xy(*color[1])
+            )
         if low := state.attributes.get(ATTR_MIN_COLOR_TEMP_KELVIN):
             kelvin = max(kelvin, low)
         if high := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
             kelvin = min(kelvin, high)
-        if kelvin == color[1]:
+        if color == (ColorMode.COLOR_TEMP, kelvin):
             return expectation
         return replace(expectation, color=(ColorMode.COLOR_TEMP, kelvin))
 

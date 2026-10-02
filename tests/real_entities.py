@@ -114,47 +114,74 @@ class FadingLight(RealLight):
     """A registered real light that reports a fade as it runs.
 
     A fade publishes where it has got to at each of steps (fractions of its
-    length), then where it ends. With hs it shows a color and blends that too.
+    length), then where it ends. With hs it shows a color and blends that
+    too; with kelvin it shows a color temperature only, within KELVINS. Every
+    report comes latency seconds late.
     """
 
     _attr_supported_features = LightEntityFeature.TRANSITION
+    KELVINS = (2202, 6535)
 
     def __init__(
         self,
         object_id: str,
         *,
         steps: tuple[float, ...] = (0.6,),
+        latency: float = 0,
         hs: tuple[float, float] | None = None,
+        kelvin: int | None = None,
         **kwargs: Any,
     ):
         """Create the light."""
         super().__init__(object_id, **kwargs)
         self._steps = steps
+        self._latency = latency
         self._reports: list[CALLBACK_TYPE] = []
         if hs is not None:
             self._attr_color_mode = ColorMode.HS
             self._attr_supported_color_modes = {ColorMode.HS}
             self._attr_hs_color = hs
+        if kelvin is not None:
+            self._attr_color_mode = ColorMode.COLOR_TEMP
+            self._attr_supported_color_modes = {ColorMode.COLOR_TEMP}
+            self._attr_color_temp_kelvin = kelvin
+            self._attr_min_color_temp_kelvin, self._attr_max_color_temp_kelvin = (
+                self.KELVINS
+            )
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Fade to the brightness and color asked for."""
+        kelvin = kwargs.get("color_temp_kelvin", self._attr_color_temp_kelvin)
+        if kelvin is not None:
+            kelvin = min(max(kelvin, self.KELVINS[0]), self.KELVINS[1])
         self._fade(
             kwargs.get("brightness", self._attr_brightness),
             kwargs.get("hs_color", self._attr_hs_color),
+            kelvin,
             kwargs.get("transition"),
         )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Fade out."""
-        self._fade(0, self._attr_hs_color, kwargs.get("transition"))
+        self._fade(
+            0,
+            self._attr_hs_color,
+            self._attr_color_temp_kelvin,
+            kwargs.get("transition"),
+        )
 
     def _fade(
-        self, brightness: int, hs: tuple[float, float] | None, length: float | None
+        self,
+        brightness: int,
+        hs: tuple[float, float] | None,
+        kelvin: int | None,
+        length: float | None,
     ) -> None:
         self._cancel_reports()
         # Off keeps the level to come back on at.
         rest, start_hs = self._attr_brightness, self._attr_hs_color
         start = rest if self._attr_is_on else 0
+        start_kelvin = self._attr_color_temp_kelvin
         for fraction in (*self._steps, 1) if length else (1,):
             level = round(start + (brightness - start) * fraction)
             color = hs
@@ -164,17 +191,22 @@ class FadingLight(RealLight):
                     (start_hs[0] + turn * fraction) % 360,
                     start_hs[1] + (hs[1] - start_hs[1]) * fraction,
                 )
-            report = partial(self._report, level or rest, color, on=bool(level))
-            if not length:
+            warmth = kelvin
+            if kelvin is not None and start_kelvin is not None:
+                warmth = round(start_kelvin + (kelvin - start_kelvin) * fraction)
+            report = partial(self._report, level or rest, color, warmth, on=bool(level))
+            delay = self._latency + (length or 0) * fraction
+            if not delay:
                 report(None)
                 return
-            self._reports.append(async_call_later(self.hass, length * fraction, report))
+            self._reports.append(async_call_later(self.hass, delay, report))
 
     @callback
     def _report(
         self,
         brightness: int,
         hs: tuple[float, float] | None,
+        kelvin: int | None,
         _now: datetime | None,
         *,
         on: bool,
@@ -182,6 +214,7 @@ class FadingLight(RealLight):
         self._attr_is_on = on
         self._attr_brightness = brightness
         self._attr_hs_color = hs
+        self._attr_color_temp_kelvin = kelvin
         self.async_write_ha_state()
 
     def _cancel_reports(self) -> None:
