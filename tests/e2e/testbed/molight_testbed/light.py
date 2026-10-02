@@ -90,6 +90,7 @@ class TestbedLight(TestbedEntity, LightEntity):
             "state": self.record["state"],
             "attributes": deepcopy(self.record["attributes"]),
             "last_command": deepcopy(self.record.get("last_command")),
+            "commands": self.record.get("commands", 0),
         }
 
     def _cancel_pending(self) -> None:
@@ -160,8 +161,11 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the last command for black-box service-routing assertions."""
-        return {"testbed_last_command": self._reported.get("last_command")}
+        """Expose the last command, and how many light commands there were."""
+        return {
+            "testbed_last_command": self._reported.get("last_command"),
+            "testbed_commands": self._reported.get("commands", 0),
+        }
 
     def _reject_if_asked(self) -> None:
         if self.behavior["reject"]:
@@ -184,6 +188,7 @@ class TestbedLight(TestbedEntity, LightEntity):
                 kwargs[ATTR_COLOR_TEMP_KELVIN]
             )
         self.record["last_command"] = {"service": "turn_on", "data": kwargs}
+        self.record["commands"] = self.record.get("commands", 0) + 1
         await self.controller.async_save()
         self._schedule_reports(previous, kwargs.get(ATTR_TRANSITION))
 
@@ -192,6 +197,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         self._reject_if_asked()
         self.record["state"] = "off"
         self.record["last_command"] = {"service": "turn_off", "data": kwargs}
+        self.record["commands"] = self.record.get("commands", 0) + 1
         await self.controller.async_save()
         self._schedule_reports(None, None)
 
@@ -247,6 +253,7 @@ class TestbedLight(TestbedEntity, LightEntity):
                 self._reported["state"] = partial_report["state"]
             self._reported["attributes"].update(partial_report.get("attributes", {}))
             self._reported["last_command"] = deepcopy(self.record.get("last_command"))
+            self._reported["commands"] = self.record.get("commands", 0)
         self.async_write_ha_state()
 
     def set_test_state(

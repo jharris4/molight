@@ -666,7 +666,12 @@ mirrored schedules, a gate-mode light using one, unavailable inputs,
 rebuilding after a time-window input is edited, and input deletion, then
 restart with a follow light manually off mid-window while an input and the
 member light load late, verifying the window is kept, the late member's
-first state doesn't re-light it, and a new window does.
+first state doesn't re-light it, and a new window does. A select-in-flight
+scenario parks the simulated select so a turn-on selection stays in progress,
+then checks an off and a newer turn-on during the call, a preset lighting its
+own device's light against another device's light turned on at the wall, a
+warning that begins during a recovery re-send, and a scheduled light
+switching settings before the call has finished.
 
 The default image is pinned, in `tests/e2e/env.sh`, to the Home Assistant
 release used by the current test dependencies; CI fails if the two drift

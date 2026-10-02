@@ -113,3 +113,34 @@ disable_entity:
       required: true
       selector:
         entity: {}
+
+park_select:
+  name: Park a simulated select
+  description: Hold every select call to a testbed select, like a slow device, until it is released. A released call applies its option.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity:
+          domain: select
+    parked:
+      name: Parked
+      required: true
+      selector:
+        boolean: {}
+
+set_device:
+  name: Put entities on one device
+  description: Register the entities under one testbed device, like a light and its preset select. Without a device name they are taken off their device.
+  fields:
+    entity_id:
+      name: Entities
+      required: true
+      selector:
+        entity:
+          multiple: true
+    device:
+      name: Device name
+      selector:
+        text: {}

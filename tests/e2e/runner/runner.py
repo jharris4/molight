@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -145,6 +146,9 @@ REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
 PRESET_REMOTE_LAST_ACTION = "sensor.e2e_preset_remote_last_action"
+PARK_LIGHT = "light.e2e_park"
+PARK_SCHEDULE = "binary_sensor.e2e_park_schedule"
+PARK_SCHEDULED_LIGHT = "light.e2e_park_scheduled"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -481,6 +485,48 @@ class HomeAssistantClient:
     def disable_entity(self, entity_id: str) -> None:
         """Disable an entity, as the entity settings dialog does."""
         self.call_service("molight_testbed", "disable_entity", {"entity_id": entity_id})
+
+    def park_select(self, entity_id: str, parked: bool) -> None:
+        """Hold a simulated select's calls, or let the held ones finish."""
+        self.call_service(
+            "molight_testbed",
+            "park_select",
+            {"entity_id": entity_id, "parked": parked},
+        )
+
+    def set_device(self, entity_ids: list[str], device: str | None) -> None:
+        """Put simulated entities on one device, or take them off theirs."""
+        data: dict[str, Any] = {"entity_id": entity_ids}
+        if device:
+            data["device"] = device
+        self.call_service("molight_testbed", "set_device", data)
+
+    def call_service_in_background(
+        self, domain: str, service: str, data: dict[str, Any]
+    ) -> Callable[[], None]:
+        """Start a service call that answers only once the test lets it.
+
+        Returns a function that waits for the answer and raises its error.
+        """
+        errors: list[BaseException] = []
+
+        def call() -> None:
+            try:
+                self.call_service(domain, service, data)
+            except BaseException as err:  # noqa: BLE001 - re-raised by finish
+                errors.append(err)
+
+        thread = threading.Thread(target=call, daemon=True)
+        thread.start()
+
+        def finish() -> None:
+            thread.join(REQUEST_TIMEOUT + 5)
+            if thread.is_alive():
+                raise AssertionError(f"{domain}.{service} never answered: {data}")
+            if errors:
+                raise errors[0]
+
+        return finish
 
     def fire_event(
         self,
@@ -8668,6 +8714,334 @@ def run_timer_scenarios(client: HomeAssistantClient) -> None:
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
 
 
+def wait_parked_calls(client: HomeAssistantClient, calls: int) -> None:
+    """Wait until the parked target select holds this many select calls."""
+    client.wait_state(
+        TARGET_SELECT,
+        lambda state: state["attributes"].get("testbed_parked_calls") == calls,
+        f"holding {calls} select call(s)",
+    )
+
+
+def release_select(client: HomeAssistantClient, *finish: Callable[[], None]) -> None:
+    """Let the held select calls finish, and the service calls behind them."""
+    client.park_select(TARGET_SELECT, False)
+    wait_parked_calls(client, 0)
+    for wait_for_answer in finish:
+        wait_for_answer()
+
+
+def member_commands(client: HomeAssistantClient, *members: str) -> list[int]:
+    """Return how many light commands each simulated light has received."""
+    return [client.state(m)["attributes"]["testbed_commands"] for m in members]
+
+
+def wait_member(
+    client: HomeAssistantClient, member: str, brightness: int | None
+) -> dict[str, Any]:
+    """Wait for a simulated light to be on at a brightness, or off for None."""
+    if brightness is None:
+        return client.wait_state(member, lambda state: state["state"] == "off", "off")
+    return client.wait_state(
+        member,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("brightness") == brightness
+        ),
+        f"on at brightness {brightness}",
+    )
+
+
+def create_park_light(client: HomeAssistantClient) -> str:
+    """Create a two-member light with a turn-on selection and a warn stage."""
+    result = start_create(client, "light")
+    expect_step(result, "light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Park",
+            "lights": [RAW_MULTI_DIMMER, RAW_MULTI_RGB],
+            "light_timeout": 12,
+            **EMPTY_LIGHT_SECTIONS,
+            "behavior": {"turn_on_select_entity": TARGET_SELECT},
+            "warning": {"warn_timeout": 20, "warn_brightness": 20},
+            "advanced": {"entity_id": "e2e_park"},
+        },
+    )
+    expect_step(result, "light_selection")
+    result = client.continue_flow(result, {"turn_on_select_option": "Night"})
+    return finish_creation(result, "Park light")
+
+
+def create_park_scheduled_light(client: HomeAssistantClient) -> str:
+    """Create a scheduled light that selects a preset outside its schedule only."""
+    result = start_create(client, "scheduled_light")
+    expect_step(result, "scheduled_light")
+    result = client.continue_flow(
+        result,
+        {
+            "name": "E2E Park Scheduled",
+            "lights": [RAW_MULTI_DIMMER],
+            "schedule_entity": PARK_SCHEDULE,
+            "schedule_end_action": "keep",
+            "advanced": {"entity_id": "e2e_park_scheduled"},
+        },
+    )
+    expect_step(result, "scheduled_light_outside")
+    result = client.continue_flow(
+        result,
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            "light_timeout": 30,
+            "behavior": {"turn_on_select_entity": TARGET_SELECT},
+        },
+    )
+    expect_step(result, "scheduled_light_selection")
+    result = client.continue_flow(result, {"turn_on_select_option": "Night"})
+    expect_step(result, "scheduled_light_inside")
+    result = client.continue_flow(
+        result, {**EMPTY_INSIDE_LIGHT_SECTIONS, "light_timeout": 30}
+    )
+    return finish_creation(result, "Park scheduled light")
+
+
+def park_light_off(client: HomeAssistantClient, light: str, *members: str) -> None:
+    """Turn a parked-select light off again between scenarios."""
+    client.call_service("light", "turn_off", {"entity_id": light})
+    for member in members:
+        wait_member(client, member, None)
+    wait_machine_state(client, "idle", light)
+
+
+def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
+    """What happens around a turn-on while its select call is still running."""
+    members = (RAW_MULTI_DIMMER, RAW_MULTI_RGB)
+    option_before = client.state(TARGET_SELECT)["state"]
+    entry_id = create_park_light(client)
+    assert_entry_loaded(client, entry_id)
+    for member in members:
+        wait_member(client, member, None)
+
+    # An off during the call: the waiting turn-on never lights the room.
+    client.park_select(TARGET_SELECT, True)
+    turn_on = client.call_service_in_background(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
+    )
+    wait_parked_calls(client, 1)
+    client.wait_state(
+        PARK_LIGHT,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 100
+        ),
+        "reporting on at 100 while its select call runs",
+    )
+    for member in members:
+        wait_member(client, member, None)
+    commands = [count + 1 for count in member_commands(client, *members)]
+    client.call_service("light", "turn_off", {"entity_id": PARK_LIGHT})
+    client.wait_state(PARK_LIGHT, lambda state: state["state"] == "off", "off")
+    for member, count in zip(members, commands, strict=True):
+        client.wait_state(
+            member,
+            lambda state, count=count: state["attributes"]["testbed_commands"] == count,
+            "sent the off",
+        )
+    release_select(client, turn_on)
+    client.wait_state(TARGET_SELECT, lambda state: state["state"] == "Night", "Night")
+    assert_state_stays(
+        client,
+        PARK_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+        ),
+        "off and idle after the select call finished",
+        duration=2,
+    )
+    if member_commands(client, *members) != commands:
+        raise AssertionError("A turn-on cancelled by an off was sent after its select")
+    checkpoint("an off during the select call kept the waiting turn-on from the lights")
+
+    # A newer manual turn-on during the call: only that one is sent.
+    client.park_select(TARGET_SELECT, True)
+    first = client.call_service_in_background(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
+    )
+    wait_parked_calls(client, 1)
+    second = client.call_service_in_background(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
+    )
+    wait_parked_calls(client, 2)
+    commands = member_commands(client, *members)
+    release_select(client, first, second)
+    for member in members:
+        state = wait_member(client, member, 200)
+        command = state["attributes"]["testbed_last_command"]
+        if command["data"].get("brightness") != 200:
+            raise AssertionError(f"{member} was last sent {command}, not 200")
+    wait_machine_state(client, "active", PARK_LIGHT)
+    if member_commands(client, *members) != [count + 1 for count in commands]:
+        raise AssertionError(
+            "The overtaken turn-on was sent as well: "
+            f"{commands} -> {member_commands(client, *members)}"
+        )
+    park_light_off(client, PARK_LIGHT, *members)
+    checkpoint("a newer manual turn-on during the select call was the only one sent")
+
+    # The select and one real light share a device, like a WLED strip and its
+    # presets. The preset lighting that light is no change at the wall; the
+    # other real light turned on at the wall still is, and wins.
+    client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], "E2E Preset Strip")
+    physical_before = client.state(PARK_LIGHT)["attributes"].get("last_on_physical")
+    client.park_select(TARGET_SELECT, True)
+    turn_on = client.call_service_in_background(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
+    )
+    wait_parked_calls(client, 1)
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 90})
+    assert_state_stays(
+        client,
+        PARK_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("last_on_physical") == physical_before
+        ),
+        "on with no turn-on at the wall recorded for the preset's own light",
+        duration=1,
+    )
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": 150})
+    client.wait_state(
+        PARK_LIGHT,
+        lambda state: (
+            state["attributes"].get("last_on_physical") not in (None, physical_before)
+            and state["attributes"].get("brightness") == 150
+        ),
+        "at the wall's 150 with the turn-on at the wall recorded",
+    )
+    commands = member_commands(client, *members)
+    release_select(client, turn_on)
+    assert_state_stays(
+        client,
+        RAW_MULTI_DIMMER,
+        lambda state: state["attributes"].get("brightness") == 90,
+        "at the preset's 90: the waiting turn-on was dropped",
+        duration=2,
+    )
+    if member_commands(client, *members) != commands:
+        raise AssertionError(
+            "A turn-on overtaken at the wall was sent after its select"
+        )
+    wait_member(client, RAW_MULTI_RGB, 150)
+    park_light_off(client, PARK_LIGHT, *members)
+    checkpoint(
+        "the preset's own light was no wall change; another device's light was, and won"
+    )
+
+    # A real light drops out and comes back off shortly before the warning.
+    # Its re-send waits for the select call while the warn stage begins: the
+    # stage is what all real lights show afterwards, not the 200 from before.
+    client.call_service(
+        "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
+    )
+    started = time.monotonic()
+    for member in members:
+        wait_member(client, member, 200)
+    lit = wait_machine_state(client, "active", PARK_LIGHT)["attributes"]
+    time.sleep(max(0.0, started + 7 - time.monotonic()))
+    client.park_select(TARGET_SELECT, True)
+    client.set_available(RAW_MULTI_DIMMER, False)
+    client.wait_state(
+        RAW_MULTI_DIMMER, lambda state: state["state"] == "unavailable", "unavailable"
+    )
+    client.set_state(RAW_MULTI_DIMMER, "off")
+    client.set_available(RAW_MULTI_DIMMER, True)
+    wait_parked_calls(client, 1)
+    wait_machine_state(client, "warn", PARK_LIGHT)
+    wait_member(client, RAW_MULTI_RGB, pct(20))
+    release_select(client)
+    for member in members:
+        wait_member(client, member, pct(20))
+    for entity_id in (*members, PARK_LIGHT):
+        assert_state_stays(
+            client,
+            entity_id,
+            lambda state: (
+                state["state"] == "on"
+                and state["attributes"].get("brightness") == pct(20)
+            ),
+            "on at the warn brightness after the re-send's select call finished",
+            duration=1,
+        )
+    warned = client.state(PARK_LIGHT)["attributes"]
+    if (
+        warned.get("molight_state") != "warn"
+        or warned.get("pre_warn_brightness") != 200
+        or warned.get("last_off_manual") != lit.get("last_off_manual")
+    ):
+        raise AssertionError(f"The re-send disturbed the warning: {warned}")
+    park_light_off(client, PARK_LIGHT, *members)
+    remove_entry_and_entity(client, entry_id, PARK_LIGHT)
+    checkpoint("a warning that began during a recovery re-send stayed on the lights")
+
+    # A scheduled light switches settings while the preset of the settings it
+    # left is still being applied: that select call keeps speaking for its
+    # device, so the preset lighting the light is still no change at the wall.
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E Park Schedule", "e2e_park_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.wait_state(PARK_SCHEDULE, lambda state: state["state"] == "off", "off")
+    scheduled_entry_id = create_park_scheduled_light(client)
+    assert_entry_loaded(client, scheduled_entry_id)
+    wait_end_light(client, PARK_SCHEDULED_LIGHT, PROFILE_OUTSIDE)
+    client.park_select(TARGET_SELECT, True)
+    turn_on = client.call_service_in_background(
+        "light", "turn_on", {"entity_id": PARK_SCHEDULED_LIGHT, "brightness": 200}
+    )
+    wait_parked_calls(client, 1)
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    wait_end_light(client, PARK_SCHEDULED_LIGHT, PROFILE_INSIDE)
+    client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 100})
+    wait_member(client, RAW_MULTI_DIMMER, 100)
+    assert_state_stays(
+        client,
+        PARK_SCHEDULED_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("last_on_physical") is None
+        ),
+        "on with no turn-on at the wall recorded after the settings switch",
+        duration=1,
+    )
+    release_select(client, turn_on)
+    state = wait_member(client, RAW_MULTI_DIMMER, 200)
+    if state["attributes"]["testbed_last_command"]["data"].get("brightness") != 200:
+        raise AssertionError(f"The waiting turn-on was not sent: {state}")
+    client.wait_state(
+        PARK_SCHEDULED_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("brightness") == 200
+            and state["attributes"].get("last_on_physical") is None
+            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+        ),
+        "active at 200 under the inside settings, lit by the user's turn-on",
+    )
+    park_light_off(client, PARK_SCHEDULED_LIGHT, RAW_MULTI_DIMMER)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    remove_entry_and_entity(client, scheduled_entry_id, PARK_SCHEDULED_LIGHT)
+    remove_entry_and_entity(client, schedule_entry_id, PARK_SCHEDULE)
+    client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], None)
+    client.call_service(
+        "select", "select_option", {"entity_id": TARGET_SELECT, "option": option_before}
+    )
+    print(
+        "PASS: offs, newer turn-ons, wall changes, a warning and a settings switch "
+        "during a select call"
+    )
+
+
 # Self-contained behaviour scenarios, grouped into shards of similar duration
 # that each run on their own fresh Home Assistant.
 SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
@@ -8692,6 +9066,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_maintain_scenarios,
         run_combined_extras_scenarios,
         run_combined_schedule_scenarios,
+        run_select_in_flight_scenarios,
     ],
     "c": [
         # First, while nothing else wraps the lux sensor.

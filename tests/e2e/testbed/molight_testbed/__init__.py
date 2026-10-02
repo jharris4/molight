@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import (
     area_registry as ar,
     config_validation as cv,
+    device_registry as dr,
     entity_registry as er,
     label_registry as lr,
 )
@@ -21,8 +22,10 @@ from homeassistant.helpers.storage import Store
 from .const import (
     ATTR_AVAILABLE,
     ATTR_BEHAVIOR,
+    ATTR_DEVICE,
     ATTR_EVENT_TYPE,
     ATTR_NEW_ENTITY_ID,
+    ATTR_PARKED,
     ATTR_SECONDS,
     DATA_CONTROLLER,
     DEFAULT_STATES,
@@ -30,9 +33,11 @@ from .const import (
     PLATFORMS,
     SERVICE_DISABLE_ENTITY,
     SERVICE_FIRE_EVENT,
+    SERVICE_PARK_SELECT,
     SERVICE_RENAME_ENTITY,
     SERVICE_SET_AVAILABLE,
     SERVICE_SET_BEHAVIOR,
+    SERVICE_SET_DEVICE,
     SERVICE_SET_STARTUP_DELAY,
     SERVICE_SET_STATE,
     STORAGE_KEY,
@@ -75,6 +80,18 @@ RENAME_ENTITY_SCHEMA = vol.Schema(
     }
 )
 DISABLE_ENTITY_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
+PARK_SELECT_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_PARKED): cv.boolean,
+    }
+)
+SET_DEVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_ids,
+        vol.Optional(ATTR_DEVICE): cv.string,
+    }
+)
 FIRE_EVENT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
@@ -161,6 +178,14 @@ class TestbedController:
             self.hass.async_create_task(self.async_save())
         return delay
 
+    def park_select(self, entity_id: str, parked: bool) -> None:
+        """Hold a simulated select's calls, or let the held ones finish."""
+        entity = self.entities.get(entity_id)
+        if entity is None or not hasattr(entity, "set_test_parked"):
+            raise ValueError(f"Unknown testbed select: {entity_id}")
+        entity.set_test_parked(parked)
+        entity.async_write_ha_state()
+
     def fire_event(
         self, entity_id: str, event_type: str, attributes: dict[str, Any]
     ) -> None:
@@ -237,6 +262,29 @@ async def async_setup_entry(
             call.data["attributes"],
         )
 
+    @callback
+    def _park_select(call: ServiceCall) -> None:
+        controller.park_select(call.data[ATTR_ENTITY_ID], call.data[ATTR_PARKED])
+
+    @callback
+    def _set_device(call: ServiceCall) -> None:
+        # One device for the entities, like a WLED light and its preset select;
+        # without a device name they are taken off theirs again.
+        devices = dr.async_get(hass)
+        registry = er.async_get(hass)
+        device_id = None
+        if name := call.data.get(ATTR_DEVICE):
+            device_id = devices.async_get_or_create(
+                config_entry_id=entry.entry_id, identifiers={(DOMAIN, name)}, name=name
+            ).id
+        for entity_id in call.data[ATTR_ENTITY_ID]:
+            registry.async_update_entity(entity_id, device_id=device_id)
+        for device in dr.async_entries_for_config_entry(devices, entry.entry_id):
+            if not er.async_entries_for_device(
+                registry, device.id, include_disabled_entities=True
+            ):
+                devices.async_remove_device(device.id)
+
     hass.services.async_register(
         DOMAIN, SERVICE_SET_STATE, _set_state, schema=SET_STATE_SCHEMA
     )
@@ -263,6 +311,12 @@ async def async_setup_entry(
     )
     hass.services.async_register(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_PARK_SELECT, _park_select, schema=PARK_SELECT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_DEVICE, _set_device, schema=SET_DEVICE_SCHEMA
     )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _assign_area_and_label(hass)
@@ -303,6 +357,8 @@ async def async_unload_entry(
     hass.services.async_remove(DOMAIN, SERVICE_SET_BEHAVIOR)
     hass.services.async_remove(DOMAIN, SERVICE_SET_STARTUP_DELAY)
     hass.services.async_remove(DOMAIN, SERVICE_FIRE_EVENT)
+    hass.services.async_remove(DOMAIN, SERVICE_PARK_SELECT)
+    hass.services.async_remove(DOMAIN, SERVICE_SET_DEVICE)
     hass.data[DOMAIN].pop(entry.entry_id)
     return True
 

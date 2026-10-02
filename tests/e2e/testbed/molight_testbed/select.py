@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.components.select import SelectEntity
@@ -17,9 +18,20 @@ OPTIONS = ["Cozy", "Focus", "Night"]
 
 
 class TestbedSelect(TestbedEntity, SelectEntity):
-    """A persistent simulated select."""
+    """A persistent simulated select.
+
+    A test can park it: each select call then waits, like a slow device,
+    until the test releases them, and applies its option only then.
+    """
 
     _attr_options = OPTIONS
+
+    def __init__(self, *args: Any) -> None:
+        """Initialize a select that answers at once."""
+        super().__init__(*args)
+        self._released = asyncio.Event()
+        self._released.set()
+        self._parked_calls = 0
 
     @property
     def current_option(self) -> str:
@@ -30,6 +42,15 @@ class TestbedSelect(TestbedEntity, SelectEntity):
         """Apply and persist a standard select command."""
         if option not in self.options:
             raise ValueError(f"Unsupported option: {option}")
+        if not self._released.is_set():
+            self._parked_calls += 1
+            self.async_write_ha_state()
+            try:
+                await self._released.wait()
+            finally:
+                # Also when the caller gives up on the call and cancels it.
+                self._parked_calls -= 1
+                self.async_write_ha_state()
         self.record["state"] = option
         self.record["last_command"] = {"service": "select_option", "option": option}
         await self.controller.async_save()
@@ -37,8 +58,19 @@ class TestbedSelect(TestbedEntity, SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the last option command for routing assertions."""
-        return {"testbed_last_command": self.record.get("last_command")}
+        """Expose the last option command and the calls being held."""
+        return {
+            "testbed_last_command": self.record.get("last_command"),
+            "testbed_parked": not self._released.is_set(),
+            "testbed_parked_calls": self._parked_calls,
+        }
+
+    def set_test_parked(self, parked: bool) -> None:
+        """Hold the select calls from now on, or let the held ones finish."""
+        if parked:
+            self._released.clear()
+        else:
+            self._released.set()
 
     def set_test_state(
         self, state: str | float | bool, attributes: dict[str, Any]
