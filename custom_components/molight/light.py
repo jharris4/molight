@@ -63,7 +63,8 @@ Effect/warn warning
   / pre_warn_color attributes (null outside the sequence) and survive
   restarts: a restart landing mid-warning with the lights still on restores
   them instead of adopting the stage's; lights found off stay off (the
-  auto-off completed).
+  auto-off completed), and lights not readable yet keep the snapshot until
+  they report.
 
   any + light turned off externally
        → IDLE
@@ -672,6 +673,28 @@ class _EchoExpectation:
         return "pending" if settling else "contradiction"
 
 
+@dataclass
+class _Owed:
+    """Saved startup decisions owed to members unreadable when the light seeded.
+
+    The light seeded as off, so each stays open until those members report:
+    one that reports lit gets it applied, as startup would have.
+    """
+
+    members: set[str]
+    # A scheduled light's missed end: its off, or its switch recalculation.
+    end_off: bool = False
+    end_switch: bool = False
+    # Marker of the follow window whose end was missed.
+    window: str | None = None
+    # The pre-warning brightness and color of an interrupted warning.
+    look: tuple[int | None, dict | None] | None = None
+
+    def ends(self) -> bool:
+        """Return True while a missed schedule end is owed."""
+        return self.end_off or self.end_switch or self.window is not None
+
+
 _MACHINE_STATES = frozenset(
     {
         STATE_IDLE,
@@ -822,6 +845,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         # restored: Home Assistant saves every state as it starts.
         self._showing_restored = False
         self._seeded = False
+        self._owed: _Owed | None = None
         self._timer_unsub: CALLBACK_TYPE | None = None
         # When the armed timer fires, None while none is armed.
         self._timer_ends: datetime | None = None
@@ -1241,6 +1265,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             # window becomes active again.
             self._schedule_end_off_pending = False
             self._schedule_end_switch_pending = False
+            self._close_owed_ends()
         self._inside_schedule = inside
         prev_door_entity = self._door_entity
         prev_hold_states = self._hold_states
@@ -1429,19 +1454,51 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
         self._occupancy_last_on = self._live_occupancy_on()
+        self._seed_from_members(commanded=True)
 
-        # Brightness 0 counts as off, matching _all_lights_off. A command made
-        # before the seed counts for a member yet to answer it.
+    def _seed_from_members(self, *, commanded: bool = False) -> None:
+        """Settle the saved decisions against the members' power.
+
+        Members that cannot be read were not proven off: what is settled
+        without them stays owed to them (see _settle_owed). With commanded,
+        a command made before the seed counts for a member yet to answer it.
+        """
+        self._owed = None
+        end_off = self._schedule_end_off_pending
+        end_switch = self._schedule_end_switch_pending
+        window = self._schedule_window_applied
+        look = (
+            (self._pre_warn_brightness, self._pre_warn_color)
+            if self._warning_active
+            else None
+        )
+        self._adopt_members(commanded=commanded)
+        unknown = {e for e in self._lights if self._member_is_lit(e) is None}
+        # A missed end is only owed while the light is off: a new on-period
+        # supersedes it.
+        off = not self._is_lit()
+        owed = _Owed(
+            unknown,
+            end_off=end_off and off,
+            end_switch=end_switch and off,
+            window=window if off and self._schedule_window_applied is None else None,
+            look=look,
+        )
+        if unknown and (owed.ends() or owed.look is not None):
+            self._owed = owed
+            self.async_write_ha_state()
+
+    def _adopt_members(self, *, commanded: bool) -> None:
+        """Seed from the members that can be read; the others count as off."""
+        # Brightness 0 counts as off, matching _all_lights_off.
         self._attr_is_on = any(
             self._member_is_lit(e)
-            if (awaited := self._awaited_power(e)) is None
+            if not commanded or (awaited := self._awaited_power(e)) is None
             else awaited
             for e in self._lights
         )
-        self._members_seen = {
-            e
-            for e in self._lights
-            if (s := self.hass.states.get(e)) is not None and s.state in ("on", "off")
+        self._members_seen |= {
+            e for e in self._lights if self._member_is_lit(e) is not None
         }
 
         # Match the physical brightness and color at startup too, overriding
@@ -1494,6 +1551,11 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # The lights ended up off (e.g. mid blink-off): treat the
                 # auto-off as having completed; the room is not re-lit.
                 self._warning_active = False
+                # The light's own look is the one from before the warning.
+                if self._pre_warn_brightness is not None:
+                    self._attr_brightness = self._pre_warn_brightness
+                if self._pre_warn_color:
+                    self._adopt_color_data(self._pre_warn_color)
                 self._pre_warn_brightness = None
                 self._pre_warn_color = None
 
@@ -1739,6 +1801,12 @@ class VirtualLight(LightEntity, RestoreEntity):
             lit = (
                 new_state.state == "on" and new_state.attributes.get("brightness") != 0
             )
+            if (
+                self._owed is not None
+                and entity_id in self._owed.members
+                and self._settle_owed(entity_id, lit=lit)
+            ):
+                return
             if self._is_own_echo(
                 entity_id, old_state, new_state, own_context=own_context
             ):
@@ -1899,6 +1967,58 @@ class VirtualLight(LightEntity, RestoreEntity):
         if entity_id in self._hold_entities and not holding:
             self._hold_states[entity_id] = False
             self._refresh_hold()
+
+    def _settle_owed(self, entity_id: str, *, lit: bool) -> bool:
+        """Settle the saved startup decisions with a member reporting in late.
+
+        Returns True when that handled the report.
+        """
+        owed = self._owed
+        owed.members.discard(entity_id)
+        if lit and not self._is_lit():
+            # The on-period the restart interrupted is still running on this
+            # member: seed again, as startup would have with it readable.
+            self._schedule_end_off_pending = owed.end_off
+            self._schedule_end_switch_pending = owed.end_switch
+            if owed.window is not None:
+                self._schedule_window_applied = owed.window
+            if owed.look is not None:
+                self._warning_active = True
+                self._pre_warn_brightness, self._pre_warn_color = owed.look
+            self._seed_from_members()
+            return True
+        handled = False
+        if lit and owed.look is not None and not self._in_warning():
+            # The light is on again and this member missed the restore: it
+            # is sent the light's look, not mirrored at the warning's.
+            self.hass.async_create_task(
+                self._set_lights(
+                    True,
+                    brightness=self._attr_brightness,
+                    color=self._current_color() or owed.look[1],
+                )
+            )
+            handled = True
+        if not owed.members:
+            self._owed = None
+            self.async_write_ha_state()
+        return handled
+
+    def _close_owed_ends(self) -> None:
+        """Drop a missed schedule end still owed: a new on-period replaces it."""
+        owed = self._owed
+        if owed is None or not owed.ends():
+            return
+        owed.end_off = owed.end_switch = False
+        owed.window = None
+        if owed.look is None:
+            self._owed = None
+
+    def _owed_look(self) -> tuple[int | None, dict | None] | None:
+        """Return the pre-warning look late members owe while the light is off."""
+        if self._owed is None or self._is_lit():
+            return None
+        return self._owed.look
 
     def _is_new_follow_window(
         self, entity_id: str, old_state: State, new_state: State
@@ -3312,6 +3432,7 @@ class VirtualLight(LightEntity, RestoreEntity):
         self._clear_bright_forced_off()
         # Turning the light back on after a manual off rejoins standby.
         self._standby_suppressed = False
+        self._close_owed_ends()
         # Set before the hold checks: activation-only gate modes only gate turning
         # an off light on, so occupancy may hold this turn-on outside it.
         self._attr_is_on = True
@@ -3682,6 +3803,10 @@ class VirtualLight(LightEntity, RestoreEntity):
         was_off = not self._attr_is_on or self._all_lights_off()
         if on:
             self._clear_bright_forced_off()
+            self._close_owed_ends()
+            if color and self._owed is not None and self._owed.look is not None:
+                # Late members owe the color named last, not the snapshot's.
+                self._owed.look = (self._owed.look[0], color)
         context = Context()
         self._self_context_ids.append(context.id)
         if not on or manual:
@@ -3834,6 +3959,9 @@ class VirtualLight(LightEntity, RestoreEntity):
         def _fmt(t: datetime | None) -> str | None:
             return t.isoformat() if t else None
 
+        owed = self._owed
+        look = self._owed_look()
+        window = self._schedule_window_applied or (owed.window if owed else None)
         attributes = {
             "molight_state": self._machine_state,
             "auto_off_held": self._held,
@@ -3856,10 +3984,10 @@ class VirtualLight(LightEntity, RestoreEntity):
             # Non-null only while the effect/warn stage is showing; persisted
             # so a restart mid-warning can restore the pre-warning brightness
             # and color.
-            "warning_active": self._warning_active,
-            "pre_warn_brightness": self._pre_warn_brightness,
-            "pre_warn_color": self._pre_warn_color,
-            "schedule_window_start": self._schedule_window_applied,
+            "warning_active": self._warning_active or look is not None,
+            "pre_warn_brightness": look[0] if look else self._pre_warn_brightness,
+            "pre_warn_color": look[1] if look else self._pre_warn_color,
+            "schedule_window_start": window,
             "bright_forced_off": self._bright_forced_off,
             "bright_resume_until": _fmt(self._bright_resume_until),
         }
@@ -3869,7 +3997,9 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if self._inside_schedule
                 else ACTIVE_SETTINGS_OUTSIDE
             )
-            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = self._schedule_end_off_pending
+            attributes[ATTR_SCHEDULE_END_OFF_PENDING] = (
+                self._schedule_end_off_pending or bool(owed and owed.end_off)
+            )
             attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
             attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity
             attributes[ATTR_ACTIVE_SETTINGS_WINDOW] = self._settings_window()

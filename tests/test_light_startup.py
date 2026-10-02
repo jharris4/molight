@@ -29,10 +29,13 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
+    ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_ACTIVE_SETTINGS_WINDOW,
+    ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
+    CONF_HOLD_ENTITIES,
     CONF_LIGHT_TIMEOUT,
     CONF_OCCUPANCY_ENTITY,
     CONF_STANDBY_BRIGHTNESS,
@@ -42,7 +45,9 @@ from custom_components.molight.const import (
     STATE_ACTIVE,
     STATE_IDLE,
     STATE_OCCUPIED,
+    STATE_SCHEDULED,
     STATE_STANDBY,
+    STATE_WARN,
 )
 from tests.conftest import (
     crash_entries,
@@ -396,3 +401,605 @@ async def test_nested_follow_light_applies_a_missed_end_in_either_order(
     assert _state(hass).state == "off"
     assert _attrs(hass)["molight_state"] == STATE_IDLE
     assert _attrs(hass)["last_on_physical"] is None
+
+
+# ---------------------------------------------------------------------------
+# Members whose power is not known when the light seeds
+# ---------------------------------------------------------------------------
+
+REAL2 = "light.real_2"
+HOLD = "input_boolean.keep_on"
+RED = (0.0, 100.0)
+
+# How a member that is not readable when the light seeds can look.
+UNKNOWN = ["placeholder", "unavailable", "absent"]
+
+
+def _turn_ons(calls: list[dict]) -> list[dict]:
+    """Service data of each recorded light.turn_on sent to real lights."""
+    return [
+        call["service_data"]
+        for call in calls
+        if call["domain"] == "light"
+        and call["service"] == "turn_on"
+        and call["service_data"]["entity_id"] != VIRTUAL
+    ]
+
+
+# ---------------------------------------------------------------------------
+# A missed schedule end: scheduled Turn off and follow mode
+# ---------------------------------------------------------------------------
+
+
+def _end_entry(mode: str, members: list[str], *, hold: bool = False):
+    if mode == "follow":
+        return make_light_entry(
+            lights=members,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            hold_entities=[HOLD] if hold else None,
+        )
+    settings = {CONF_LIGHT_TIMEOUT: 60}
+    if hold:
+        settings[CONF_HOLD_ENTITIES] = [HOLD]
+    return make_scheduled_light_entry(
+        name="Matrix Light",
+        lights=members,
+        schedule=SCHED,
+        schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+        outside=settings,
+        inside=settings,
+    )
+
+
+async def _lit_in_window(
+    hass: HomeAssistant, entry: MockConfigEntry, members: list[str]
+) -> _Members:
+    """Set the light up inside its window with every member on."""
+    real = _Members(hass, members, {})
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(HOLD, "off")
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert all(hass.states.get(member).state == "on" for member in members)
+    return real
+
+
+async def _restart_across_end(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    real: _Members,
+    boots: dict[str, str],
+    *,
+    hold: bool = False,
+) -> list[dict]:
+    """Restart with the window ended while Home Assistant was down."""
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "off")
+    if hold:
+        hass.states.async_set(HOLD, "on")
+    for member, how in boots.items():
+        real.boot(member, how)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    return calls
+
+
+def _end_owed(hass: HomeAssistant, mode: str) -> bool:
+    """Whether the saved state still carries the missed end."""
+    if mode == "follow":
+        return _attrs(hass)["schedule_window_start"] is not None
+    return _attrs(hass)[ATTR_SCHEDULE_END_OFF_PENDING]
+
+
+END_MODES = ["turn_off", "follow"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("boot", ["on", "off"])
+async def test_missed_end_with_the_member_known(
+    hass: HomeAssistant, mode: str, boot: str
+) -> None:
+    """A lit member is turned off once; one found off settles the end."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(hass, entry, real, {REAL: boot})
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if boot == "on" else [])
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    assert not _end_owed(hass, mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("late", ["on", "off"])
+async def test_missed_end_is_owed_to_a_member_that_loads_late(
+    hass: HomeAssistant, mode: str, boot: str, late: str
+) -> None:
+    """An unreadable member was not proven off: the end waits for its report."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(hass, entry, real, {REAL: boot})
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "off"
+    assert _end_owed(hass, mode)
+
+    states = _virtual_states(hass)
+    real.load(REAL, late)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == ([[REAL]] if late == "on" else [])
+    assert hass.states.get(REAL).state == "off"
+    assert "on" not in states
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    assert _attrs(hass)["last_on_physical"] is None
+    assert not _end_owed(hass, mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("known", ["on", "off"])
+@pytest.mark.parametrize("late", ["on", "off"])
+async def test_missed_end_in_a_mixed_group(
+    hass: HomeAssistant, mode: str, boot: str, known: str, late: str
+) -> None:
+    """The readable member is settled at startup, the other when it reports."""
+    members = [REAL, REAL2]
+    entry = _end_entry(mode, members)
+    real = await _lit_in_window(hass, entry, members)
+    calls = await _restart_across_end(hass, entry, real, {REAL: known, REAL2: boot})
+    offs = [members] if known == "on" else []
+    assert light_targets(calls, "turn_off") == offs
+    assert _state(hass).state == "off"
+    assert _end_owed(hass, mode)
+
+    states = _virtual_states(hass)
+    real.load(REAL2, late)
+    await settle(hass)
+    if late == "on":
+        offs = [*offs, members]
+    assert light_targets(calls, "turn_off") == offs
+    assert hass.states.get(REAL2).state == "off"
+    assert "on" not in states
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    assert not _end_owed(hass, mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("boot", UNKNOWN)
+async def test_held_missed_end_adopts_a_late_member_until_release(
+    hass: HomeAssistant, mode: str, boot: str
+) -> None:
+    """Under a hold the late member stays on, and the release applies the end."""
+    entry = _end_entry(mode, [REAL], hold=True)
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(hass, entry, real, {REAL: boot}, hold=True)
+    assert _state(hass).state == "off"
+    assert _end_owed(hass, mode)
+
+    real.load(REAL, "on")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["molight_state"] == (
+        STATE_SCHEDULED if mode == "follow" else STATE_ACTIVE
+    )
+    assert _end_owed(hass, mode)
+
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+    assert not _end_owed(hass, mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+async def test_held_missed_end_is_dropped_when_the_late_member_is_off(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """With every member off there is nothing left for the hold to keep."""
+    entry = _end_entry(mode, [REAL], hold=True)
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(
+        hass, entry, real, {REAL: "placeholder"}, hold=True
+    )
+    real.load(REAL, "off")
+    await settle(hass)
+    assert not _end_owed(hass, mode)
+
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("by", ["virtual", "next_window"])
+async def test_new_on_period_replaces_an_owed_end(
+    hass: HomeAssistant, mode: str, by: str
+) -> None:
+    """A turn-on or the next window start is not undone by the old end."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
+    assert _end_owed(hass, mode)
+
+    if by == "virtual":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+        )
+    else:
+        hass.states.async_set(SCHED, "on", {"current_window_start": MARKER2})
+    await settle(hass)
+    if mode == "turn_off":
+        assert not _attrs(hass)[ATTR_SCHEDULE_END_OFF_PENDING]
+    else:
+        assert _attrs(hass)["schedule_window_start"] == (
+            MARKER2 if by == "next_window" else None
+        )
+
+    real.load(REAL, "on")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert hass.states.get(REAL).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+async def test_a_manual_off_leaves_the_end_owed(hass: HomeAssistant, mode: str) -> None:
+    """An off through the light never reached the member still loading."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _end_owed(hass, mode)
+    calls.clear()
+
+    real.load(REAL, "on")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("how", ["restart", "crash"])
+async def test_owed_end_survives_a_second_restart(
+    hass: HomeAssistant, mode: str, how: str
+) -> None:
+    """The end is still applied when HA restarts again before the member loads."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
+    assert _end_owed(hass, mode)
+
+    again = restart_entries if how == "restart" else crash_entries
+    await again(hass, entry, started=False)
+    real.boot(REAL, "on")
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+    assert not _end_owed(hass, mode)
+
+
+# ---------------------------------------------------------------------------
+# A missed Switch state end
+# ---------------------------------------------------------------------------
+
+
+def _switch_entry() -> MockConfigEntry:
+    return make_scheduled_light_entry(
+        name="Matrix Light",
+        schedule=SCHED,
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
+        inside={CONF_LIGHT_TIMEOUT: 60},
+    )
+
+
+async def _lit_before_switch_end(hass: HomeAssistant, entry) -> _Members:
+    """Lit inside the window; the outside profile's room emptied an hour ago."""
+    left = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
+    return await _lit_in_window(hass, entry, [REAL])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", ["on", "off"])
+async def test_missed_switch_end_with_the_member_known(
+    hass: HomeAssistant, boot: str
+) -> None:
+    """The outside profile's history says the light is already due off."""
+    entry = _switch_entry()
+    real = await _lit_before_switch_end(hass, entry)
+    calls = await _restart_across_end(hass, entry, real, {REAL: boot})
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if boot == "on" else [])
+    assert _state(hass).state == "off"
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("late", ["on", "off"])
+async def test_missed_switch_end_is_owed_to_a_member_that_loads_late(
+    hass: HomeAssistant, boot: str, late: str
+) -> None:
+    """A late lit member gets the recalculation, not a fresh full timeout."""
+    entry = _switch_entry()
+    real = await _lit_before_switch_end(hass, entry)
+    calls = await _restart_across_end(hass, entry, real, {REAL: boot})
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "off"
+
+    real.load(REAL, late)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == ([[REAL]] if late == "on" else [])
+    assert hass.states.get(REAL).state == "off"
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_new_on_period_replaces_an_owed_switch_end(hass: HomeAssistant) -> None:
+    """A light turned on under the outside profile runs its normal timeout."""
+    entry = _switch_entry()
+    real = await _lit_before_switch_end(hass, entry)
+    calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+
+    real.load(REAL, "on")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# A warning snapshot
+# ---------------------------------------------------------------------------
+
+WARN = 51  # 20 %
+
+
+async def _restart_mid_warn(
+    hass: HomeAssistant,
+    freezer,
+    boots: dict[str, str],
+    *,
+    color: bool = False,
+    started: bool = True,
+) -> tuple[MockConfigEntry, _Members, list[dict]]:
+    """Run a light at 200 into its warn stage, then restart Home Assistant."""
+    members = list(boots)
+    real = _Members(hass, members, HS_CAPS if color else {})
+    entry = make_light_entry(
+        lights=members,
+        warn_timeout=30,
+        warn_brightness=20,
+        warn_rgb_color=[255, 0, 0] if color else None,
+    )
+    await setup_entries(hass, entry)
+    data = {"entity_id": VIRTUAL, "brightness": 200}
+    if color:
+        data["hs_color"] = BLUE
+    await hass.services.async_call("light", "turn_on", data, blocking=True)
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_WARN
+    for member in members:
+        assert hass.states.get(member).attributes["brightness"] == WARN
+
+    await restart_entries(hass, entry, started=False)
+    stage = {"brightness": WARN}
+    if color:
+        stage |= {"hs_color": RED, "color_mode": "hs"}
+    for member, how in boots.items():
+        real.boot(member, how, **(stage if how == "on" else {}))
+    calls = record_service_calls(hass)
+    if started:
+        await finish_startup(hass)
+        await settle(hass)
+    return entry, real, calls
+
+
+def _assert_restored(hass: HomeAssistant, call: dict, *, color: bool) -> None:
+    """The command restores the pre-warning look, and the light reports it."""
+    assert call["brightness"] == 200
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["warning_active"] is False
+    assert _attrs(hass)["pre_warn_brightness"] is None
+    if color:
+        assert tuple(call["hs_color"]) == BLUE
+        assert tuple(_attrs(hass)["hs_color"]) == BLUE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
+async def test_warning_restart_with_the_member_lit(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, color: bool
+) -> None:
+    """A member still showing the warn stage is put back as it was."""
+    _, _, calls = await _restart_mid_warn(hass, freezer, {REAL: "on"}, color=color)
+    (call,) = _turn_ons(calls)
+    _assert_restored(hass, call, color=color)
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_warning_restart_with_the_member_off_stays_off(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """Members really off completed the auto-off: the room is not re-lit."""
+    _, _, calls = await _restart_mid_warn(hass, freezer, {REAL: "off"})
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["warning_active"] is False
+    assert _attrs(hass)["pre_warn_brightness"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
+async def test_warning_snapshot_is_owed_to_a_member_that_loads_late(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str, color: bool
+) -> None:
+    """An unreadable member keeps the snapshot until it reports lit."""
+    _, real, calls = await _restart_mid_warn(hass, freezer, {REAL: boot}, color=color)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["warning_active"] is True
+    assert _attrs(hass)["pre_warn_brightness"] == 200
+
+    stage = {"hs_color": RED, "color_mode": "hs"} if color else {}
+    real.load(REAL, "on", brightness=WARN, **stage)
+    await settle(hass)
+    (call,) = _turn_ons(calls)
+    _assert_restored(hass, call, color=color)
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert hass.states.get(REAL).attributes["brightness"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", UNKNOWN)
+async def test_warning_snapshot_is_dropped_when_the_late_member_is_off(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
+) -> None:
+    """A late member reporting off completes the auto-off like any other."""
+    _, real, calls = await _restart_mid_warn(hass, freezer, {REAL: boot})
+    real.load(REAL, "off")
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["warning_active"] is False
+    assert _attrs(hass)["pre_warn_brightness"] is None
+    assert _attrs(hass)["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("known", ["on", "off"])
+@pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
+async def test_warning_restart_in_a_mixed_group(
+    hass: HomeAssistant,
+    freezer,
+    virtual_light_behavior_variant,
+    boot: str,
+    known: str,
+    color: bool,
+) -> None:
+    """A late member is sent the restored look, never mirrored at the warn's."""
+    _, real, calls = await _restart_mid_warn(
+        hass, freezer, {REAL: known, REAL2: boot}, color=color
+    )
+    sent = 1 if known == "on" else 0
+    assert len(_turn_ons(calls)) == sent
+    assert _state(hass).state == known
+
+    stage = {"hs_color": RED, "color_mode": "hs"} if color else {}
+    real.load(REAL2, "on", brightness=WARN, **stage)
+    await settle(hass)
+    assert len(_turn_ons(calls)) == sent + 1
+    _assert_restored(hass, _turn_ons(calls)[-1], color=color)
+    for member in (REAL, REAL2):
+        assert hass.states.get(member).attributes["brightness"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
+async def test_manual_turn_on_while_a_member_loads_sets_what_it_is_sent(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, color: bool
+) -> None:
+    """The late member gets the new on-period's brightness, not the warn's."""
+    _, real, calls = await _restart_mid_warn(
+        hass, freezer, {REAL: "placeholder"}, color=color
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 128}, blocking=True
+    )
+    await settle(hass)
+    calls.clear()
+
+    stage = {"hs_color": RED, "color_mode": "hs"} if color else {}
+    real.load(REAL, "on", brightness=WARN, **stage)
+    await settle(hass)
+    (call,) = _turn_ons(calls)
+    assert call["brightness"] == 128
+    assert _attrs(hass)["brightness"] == 128
+    if color:
+        assert tuple(call["hs_color"]) == BLUE
+        assert tuple(_attrs(hass)["hs_color"]) == BLUE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["restart", "crash"])
+async def test_owed_warning_snapshot_survives_a_second_restart(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
+) -> None:
+    """The snapshot is still restored when HA restarts again before the member loads."""
+    entry, real, _ = await _restart_mid_warn(hass, freezer, {REAL: "placeholder"})
+    assert _attrs(hass)["warning_active"] is True
+
+    again = restart_entries if how == "restart" else crash_entries
+    await again(hass, entry, started=False)
+    real.boot(REAL, "on", brightness=WARN)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    (call,) = _turn_ons(calls)
+    _assert_restored(hass, call, color=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", ["off", *UNKNOWN])
+async def test_restart_during_a_blink_off_stays_off(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
+) -> None:
+    """Members blinked off by the effect stage stay off, readable or late."""
+    real = _Members(hass, [REAL], {})
+    entry = make_light_entry(effect_timeout=30, effect_brightness=0, warn_timeout=30)
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(REAL).state == "off"
+
+    await restart_entries(hass, entry, started=False)
+    real.boot(REAL, boot)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    real.load(REAL, "off")
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["warning_active"] is False
+    assert _attrs(hass)["pre_warn_brightness"] is None

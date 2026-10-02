@@ -29,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   startup, and a virtual light that wraps another one reads its real state.
 - A Virtual Combined Occupancy Sensor that is still waiting for a maintain
   sensor to load keeps that wait through another restart.
+- A schedule end missed while Home Assistant was down is applied to a real
+  light that loads late and reports lit, instead of adopting it with a fresh
+  timeout: follow mode, *Turn off* and *Switch state* ends, also under a
+  keep-on hold. A turn-on in the meantime, or the next schedule window
+  starting, replaces the missed end.
+- A restart during an effect or warn stage restores the pre-warning brightness
+  and colour on a real light that loads late, instead of keeping the
+  warning's.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming
