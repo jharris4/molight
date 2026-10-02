@@ -14,19 +14,28 @@ import pytest
 from homeassistant.components.light import ColorMode
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.setup import async_setup_component
 from homeassistant.util import color as color_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_RGB_COLOR,
+    CONF_ENTITY_TYPE,
     CONF_LIGHT_TIMEOUT,
+    CONF_LIGHTS,
+    CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_RGB_COLOR,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
+    DOMAIN,
+    ENTITY_TYPE_LIGHT,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_IDLE,
@@ -36,10 +45,16 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.light import _color_toward, _colors_close
 
-from .conftest import make_light_entry, make_scheduled_light_entry, settle
+from .conftest import (
+    make_light_entry,
+    make_scheduled_light_entry,
+    settle,
+    setup_entries,
+)
+from .real_entities import InstantLight, RealLight, add_real
 
 if TYPE_CHECKING:
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from homeassistant.helpers.entity import Entity
 
 MEMBER = "light.living_room"
 VIRTUAL = "light.test_light"
@@ -1720,3 +1735,187 @@ async def test_standby_and_auto_on_color_fades_are_not_recolors(
     assert _attrs(hass)["last_color_change_physical"] is None
     assert _attrs(hass)["brightness"] == 51
     assert tuple(_attrs(hass)["hs_color"]) == (0, 80)
+
+
+# ---------------------------------------------------------------------------
+# Real lights that reply inside the service call
+#
+# Home Assistant starts a service call at once, so a light that writes its
+# new state without waiting for anything (LightwaveRF, the demo light, a
+# light group of those, a virtual light) has replied before the call returns.
+# ---------------------------------------------------------------------------
+
+INSTANT = "light.matrix_light"
+
+
+def _reports_of(hass: HomeAssistant, entity_id: str) -> list[tuple[str, int | None]]:
+    """Record each (state, brightness) the entity publishes from here on."""
+    seen: list[tuple[str, int | None]] = []
+
+    @callback
+    def record(event: Event) -> None:
+        state = event.data["new_state"]
+        if event.data["entity_id"] == entity_id and state is not None:
+            seen.append((state.state, state.attributes.get("brightness")))
+
+    hass.bus.async_listen("state_changed", record)
+    return seen
+
+
+async def _light_group(hass: HomeAssistant, member: Entity) -> str:
+    """Wrap the member in Home Assistant's own light group."""
+    assert await async_setup_component(
+        hass,
+        "light",
+        {"light": [{"platform": "group", "name": "Grp", "entities": ["light.real_1"]}]},
+    )
+    await add_real(hass, member)
+    return "light.grp"
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("member", ["instant", "instant_group", "after_the_call"])
+@pytest.mark.parametrize("trigger", ["manual", "manual_level", "occupancy", "level"])
+async def test_reply_inside_the_turn_on_call_never_reports_off(
+    hass: HomeAssistant, member: str, trigger: str
+) -> None:
+    """The virtual light counts as on before its command is sent, so a reply
+    mirrored inside the call is published as on, never as off."""
+    lights = ["light.real_1"]
+    if member == "instant_group":
+        lights = [await _light_group(hass, InstantLight("real_1", kelvin=3000))]
+    elif member == "instant":
+        await add_real(hass, InstantLight("real_1", kelvin=3000))
+    else:
+        await add_real(hass, RealLight("real_1"))
+    hass.states.async_set("binary_sensor.occ", "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            lights=lights,
+            occupancy="binary_sensor.occ",
+            auto_on_brightness=40 if trigger == "level" else None,
+        ),
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    if trigger in ("manual", "manual_level"):
+        data = {"brightness": 200} if trigger == "manual_level" else {}
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": INSTANT, **data}, blocking=True
+        )
+    else:
+        hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+
+    assert seen
+    assert [state for state, _ in seen if state != "on"] == []
+    assert hass.states.get(lights[0]).state == "on"
+    assert _attrs_of(hass, INSTANT)["last_on_physical"] is None
+
+    seen.clear()
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": INSTANT}, blocking=True
+    )
+    await settle(hass)
+    assert seen
+    assert [state for state, _ in seen if state != "off"] == []
+    assert _attrs_of(hass, INSTANT)["last_off_manual"] is not None
+
+
+def _attrs_of(hass: HomeAssistant, entity_id: str) -> dict:
+    return hass.states.get(entity_id).attributes
+
+
+@pytest.mark.asyncio
+async def test_reply_inside_the_standby_call_never_reports_off(
+    hass: HomeAssistant,
+) -> None:
+    """Coming on at standby is a turn-on from off like any other."""
+    await add_real(hass, InstantLight("real_1", kelvin=3000))
+    hass.states.async_set("binary_sensor.settings_schedule", "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Matrix Light",
+            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        ),
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    await settle(hass)
+
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
+    assert seen
+    assert set(seen) == {("on", 51)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("stage", ["effect", "warn"])
+async def test_reply_inside_a_stage_call_reports_the_stage_level_only(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """A stage's level is adopted before its command is sent, so a color
+    mirrored from a reply inside the call is not published at the old level."""
+    member = InstantLight("real_1", kelvin=3000)
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            warn_timeout=10,
+            warn_brightness=20,
+            effect_timeout=10 if stage == "effect" else None,
+            effect_brightness=20 if stage == "effect" else None,
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": INSTANT, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    # The bulb drifts warmer: its next reply carries a color to mirror.
+    member._attr_color_temp_kelvin = 2700
+    seen = _reports_of(hass, INSTANT)
+
+    await _tick(hass, freezer, 61)
+
+    assert _attrs_of(hass, INSTANT)["molight_state"] == stage
+    assert _attrs_of(hass, INSTANT)["color_temp_kelvin"] == 2700
+    assert seen
+    assert set(seen) == {("on", 51)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("member", ["instant", "after_the_call"])
+async def test_wrapping_light_sees_no_off_from_the_light_it_wraps(
+    hass: HomeAssistant, member: str
+) -> None:
+    """A virtual light replies inside the call itself, whatever it wraps; the
+    light wrapping it must not take a blink for an off at the wall."""
+    cls = InstantLight if member == "instant" else RealLight
+    await add_real(hass, cls("real_1"))
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Outer",
+            CONF_LIGHTS: [INSTANT],
+            CONF_LIGHT_TIMEOUT: 60,
+        },
+    )
+    await setup_entries(hass, make_light_entry(timeout=600), outer)
+    inner_seen = _reports_of(hass, INSTANT)
+    outer_seen = _reports_of(hass, "light.outer")
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.outer"}, blocking=True
+    )
+    await settle(hass)
+
+    for seen in (inner_seen, outer_seen):
+        assert seen
+        assert [state for state, _ in seen if state != "on"] == []
+    assert _attrs_of(hass, "light.outer")["last_off_manual"] is None
+    assert _attrs_of(hass, "light.outer")["molight_state"] == STATE_ACTIVE

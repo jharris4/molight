@@ -3876,7 +3876,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
         )
+        # Set before the call: a member may answer inside it.
+        self._attr_is_on = True
         if brightness:
+            self._attr_brightness = brightness
+            if color:
+                self._adopt_color_data(color)
             color_data = color or {}
             await self.hass.services.async_call(
                 "light",
@@ -3890,9 +3895,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 blocking=False,
                 context=context,
             )
-            self._attr_brightness = brightness
-            if color:
-                self._adopt_color_data(color)
         else:
             await self.hass.services.async_call(
                 "light",
@@ -3901,7 +3903,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 blocking=False,
                 context=context,
             )
-        self._attr_is_on = True
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
@@ -4014,6 +4015,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             service_data.update(color)
             self._adopt_color_data(color)
         self._expect_echo(on, brightness, color, transition)
+        # Set before the call: a member may answer inside it.
+        self._attr_is_on = on
         await self.hass.services.async_call(
             "light",
             "turn_on" if on else "turn_off",
@@ -4021,7 +4024,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             blocking=False,
             context=context,
         )
-        self._attr_is_on = on
         self.async_write_ha_state()
         return True
 

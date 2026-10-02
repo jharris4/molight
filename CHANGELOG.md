@@ -260,6 +260,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports in the same millisecond as its previous event, such as a Shelly
   `single_push` arriving with its `btn_up`, runs its binding. It was ignored,
   because Home Assistant gave both events the same state.
+- A virtual light no longer reports `off` for a moment when it is turned on
+  and a real light replies before the turn-on call has returned, as
+  LightwaveRF lights, a light group of them and another MoLight light do. An
+  automation watching the light saw on, off, on, and a virtual light wrapping
+  that one recorded a manual off.
 
 ## [1.8.0] - 2026-09-30
 

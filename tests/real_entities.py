@@ -74,6 +74,34 @@ class RealLight(LightEntity):
         self.async_write_ha_state()
 
 
+class InstantLight(RealLight):
+    """A registered real light that replies inside the service call.
+
+    With kelvin it also reports a color temperature, so every reply carries
+    something a command that named no color has to mirror.
+    """
+
+    def __init__(self, object_id: str, *, kelvin: int | None = None, **kwargs: Any):
+        """Create the light."""
+        super().__init__(object_id, **kwargs)
+        if kelvin is not None:
+            self._attr_color_mode = ColorMode.COLOR_TEMP
+            self._attr_supported_color_modes = {ColorMode.COLOR_TEMP}
+            self._attr_color_temp_kelvin = kelvin
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on at the brightness asked for, replying at once."""
+        self._attr_is_on = True
+        if "brightness" in kwargs:
+            self._attr_brightness = kwargs["brightness"]
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off, replying at once."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
+
+
 class RealBinary(BinarySensorEntity):
     """A registered real binary sensor (motion, door, schedule source)."""
 
