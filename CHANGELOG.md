@@ -114,6 +114,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
+- A false detection only turns off quickly a light that its own cycle lit. A
+  blip during the countdown after a genuine visit, or after the maintain
+  sensor saw someone, turned the light off 5 s later instead of when the
+  visit's countdown ended; it now keeps that countdown. This also covers a
+  light lit by the room going dark or a gate schedule window starting. A door
+  opened while a blip has the light on also stops the quick off, and the light
+  gets the full timeout from the opening.
 - Dimming, recolouring or turning on a real light at the wall while motion
   has the light on makes the on-period yours, as the same change through the
   virtual light does: a false detection no longer turns it off after the

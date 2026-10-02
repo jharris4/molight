@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
@@ -1810,6 +1811,155 @@ async def test_false_clear_leaves_a_light_changed_at_the_wall_its_timeout(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "off"  # T0+71
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hold", ["occupancy", "maintain"])
+@pytest.mark.parametrize("lit_by", ["occupancy", "dark"])
+async def test_false_blip_after_a_genuine_visit_keeps_its_countdown(
+    hass: HomeAssistant, freezer, lit_by: str, hold: str
+) -> None:
+    """Only the cycle that lit the light can turn it off quickly: a blip after
+    a genuine visit cleared keeps that visit's countdown."""
+    await _assert_false_blip_keeps_the_visits_countdown(hass, freezer, lit_by, hold)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("hold", ["occupancy", "maintain"])
+async def test_false_blip_after_a_window_start_visit_keeps_its_countdown(
+    hass: HomeAssistant, freezer, hold: str
+) -> None:
+    """The same for a light a gate window start lit for standing presence."""
+    await _assert_false_blip_keeps_the_visits_countdown(hass, freezer, "window", hold)
+
+
+async def _assert_false_blip_keeps_the_visits_countdown(
+    hass: HomeAssistant, freezer, lit_by: str, hold: str
+) -> None:
+    sensors = (OCC, MAINT) if hold == "maintain" else (OCC,)
+    _real_light_reports(hass)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(ILLUM, "on" if lit_by == "dark" else "off")
+    hass.states.async_set(SCHED, "off")
+    for sensor in sensors:
+        hass.states.async_set(sensor, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            timeout=300,
+            occupancy=OCC,
+            maintain=MAINT if hold == "maintain" else None,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            schedule=SCHED if lit_by == "window" else None,
+            schedule_mode=SCHEDULE_MODE_GATE if lit_by == "window" else None,
+        ),
+    )
+    for sensor in sensors:
+        hass.states.async_set(sensor, "on")  # T0
+    await settle(hass)
+    if lit_by == "dark":
+        hass.states.async_set(ILLUM, "off")
+    elif lit_by == "window":
+        hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    freezer.tick(timedelta(seconds=120))
+    left = datetime.now(UTC).isoformat()
+    for sensor in sensors:  # T0+120: a genuine clear, off at T0+420
+        hass.states.async_set(sensor, "off", {"latest_occupied_time": left})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    await _tick(hass, freezer, 60)
+    for sensor in sensors:
+        hass.states.async_set(sensor, "on", {"latest_occupied_time": left})
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=31))
+    for sensor in sensors:  # T0+211
+        hass.states.async_set(
+            sensor,
+            "off",
+            {"latest_occupied_time": left, "last_clear_false_detection": True},
+        )
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, 209)
+
+
+@pytest.mark.asyncio
+async def test_false_clear_after_genuine_maintain_presence_keeps_its_countdown(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A blip lights the room, the maintain sensor then sees someone for
+    real: the blip's false clear no longer owns the light."""
+    old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    _real_light_reports(hass)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": old})
+    hass.states.async_set(MAINT, "off", {"latest_occupied_time": old})
+    await setup_entries(hass, make_light_entry(occupancy=OCC, maintain=MAINT))
+    hass.states.async_set(OCC, "on", {"latest_occupied_time": old})  # T0
+    await settle(hass)
+    hass.states.async_set(MAINT, "on", {"latest_occupied_time": old})
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=20))
+    seen = datetime.now(UTC).isoformat()
+    hass.states.async_set(MAINT, "off", {"latest_occupied_time": seen})  # T0+20
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=11))
+    hass.states.async_set(  # T0+31: the blip's own clear
+        OCC, "off", {"latest_occupied_time": old, "last_clear_false_detection": True}
+    )
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, 49)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("door_mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
+@pytest.mark.parametrize("when", ["occupied", "countdown"])
+async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timeout(
+    hass: HomeAssistant, freezer, when: str, door_mode: str
+) -> None:
+    """A door opened while a blip has the light on is a person: a false clear
+    then runs the full timeout from the opening, not the quick off."""
+    old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    false_clear = {"latest_occupied_time": old, "last_clear_false_detection": True}
+    _real_light_reports(hass)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off", {"latest_occupied_time": old})
+    hass.states.async_set(DOOR, "off")
+    await setup_entries(
+        hass, make_light_entry(occupancy=OCC, door=DOOR, door_mode=door_mode)
+    )
+    hass.states.async_set(OCC, "on", {"latest_occupied_time": old})  # T0
+    await settle(hass)
+
+    if when == "countdown":
+        freezer.tick(timedelta(seconds=31))
+        hass.states.async_set(OCC, "off", false_clear)  # quick off armed
+        await settle(hass)
+        freezer.tick(timedelta(seconds=2))  # T0+33
+    else:
+        freezer.tick(timedelta(seconds=10))  # T0+10
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    if when == "countdown":
+        freezer.tick(timedelta(seconds=7))
+        hass.states.async_set(OCC, "on", {"latest_occupied_time": old})  # T0+40
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    freezer.tick(timedelta(seconds=31 if when == "countdown" else 21))
+    hass.states.async_set(OCC, "off", false_clear)  # door opened 38 / 21 s ago
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, 22 if when == "countdown" else 39)
 
 
 @pytest.mark.asyncio

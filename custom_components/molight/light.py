@@ -3076,6 +3076,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
     def _on_occupancy_change(self, occupied: bool) -> None:
         """Handle the virtual occupancy sensor changing."""
+        if not occupied and not self._occupancy_clear_was_false():
+            # A genuine visit ended: a later false cycle did not light the light.
+            self._occupancy_lit_lights = False
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if occupied:
@@ -3119,6 +3122,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         Holds an already-on light on while occupied; never turns lights on.
         """
+        if not maintained and not self._clear_was_false(self._maintain_entity):
+            self._occupancy_lit_lights = False  # genuine presence since it lit
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if maintained:
@@ -3338,6 +3343,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             was_warning = self._in_warning()
             was_standby = self._machine_state == STATE_STANDBY
             self._last_on_door = datetime.now(UTC)
+            # A person opened it, so a false clear no longer cuts the light short.
+            self._occupancy_lit_lights = False
             # An open_close door holds the light (no timer) like the maintain
             # entity; an already-occupied/maintained room holds it too. Only a
             # plain open-mode trigger with no other hold runs the timeout.
@@ -3355,7 +3362,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # stage so the light looks as it did before the warning.
                 self._resume_lights()
             elif not self._attr_is_on or was_standby:
-                self._occupancy_lit_lights = False  # the door owns this period
                 self.hass.async_create_task(self._auto_lights_on())
             if not holds:
                 self._start_timer()
