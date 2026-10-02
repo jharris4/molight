@@ -292,6 +292,7 @@ from .const import (
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_ACTIVE_SETTINGS_WINDOW,
+    ATTR_MANUAL_OFF_CLEARED,
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
@@ -1019,6 +1020,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._schedule_end_off_pending = (
                     self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF
                     and bool(last.attributes.get(ATTR_SCHEDULE_END_OFF_PENDING))
+                )
+                # A boundary that ended a manual off was observed too.
+                self._manual_off_cleared = bool(
+                    last.attributes.get(ATTR_MANUAL_OFF_CLEARED)
                 )
             # Restore turn-on attribution: a manual off only stands until a
             # later turn-on.
@@ -4001,6 +4006,7 @@ class VirtualLight(LightEntity, RestoreEntity):
                 self._schedule_end_off_pending or bool(owed and owed.end_off)
             )
             attributes[ATTR_STANDBY_SUPPRESSED] = self._standby_suppressed
+            attributes[ATTR_MANUAL_OFF_CLEARED] = self._manual_off_cleared
             attributes[ATTR_ACTIVE_SETTINGS_SCHEDULE] = self._settings_schedule_entity
             attributes[ATTR_ACTIVE_SETTINGS_WINDOW] = self._settings_window()
         return attributes

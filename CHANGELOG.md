@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A restart during an effect or warn stage restores the pre-warning brightness
   and colour on a real light that loads late, instead of keeping the
   warning's.
+- A manual off that a Virtual Scheduled Light's schedule boundary had ended
+  no longer comes back with a restart; the new `manual_off_cleared` attribute
+  records it.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

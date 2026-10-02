@@ -20,6 +20,7 @@ from custom_components.molight.const import (
     ATTR_ACTIVE_SETTINGS,
     ATTR_ACTIVE_SETTINGS_SCHEDULE,
     ATTR_ACTIVE_SETTINGS_WINDOW,
+    ATTR_MANUAL_OFF_CLEARED,
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
@@ -42,6 +43,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_SOURCE,
+    CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
@@ -63,9 +65,12 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import (
+    crash_entries,
+    finish_startup,
     light_targets,
     make_scheduled_light_entry,
     record_service_calls,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -2982,3 +2987,147 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# A boundary that ended a manual off, across restarts
+# ---------------------------------------------------------------------------
+
+_OCCUPANCY = "binary_sensor.shared_occupancy"
+
+
+async def _manual_off_then_boundary(
+    hass: HomeAssistant, freezer, boundary: str, *, standby: bool = False
+) -> MockConfigEntry:
+    """Turn the light off by hand, then cross a boundary with presence unreadable."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(
+        SCHEDULE,
+        "off" if boundary == "start" else "on",
+        {"current_window_start": "w1"},
+    )
+    hass.states.async_set(_OCCUPANCY, "unavailable")
+    profile = {CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: _OCCUPANCY}
+    inside = {**profile, CONF_STANDBY_BRIGHTNESS: 20} if standby else profile
+    entry = make_scheduled_light_entry(outside=profile, inside=inside)
+    await setup_entries(hass, entry)
+    freezer.tick(timedelta(seconds=1))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_MANUAL_OFF_CLEARED] is False
+
+    freezer.tick(timedelta(seconds=1))
+    if boundary != "none":
+        hass.states.async_set(
+            SCHEDULE,
+            "off" if boundary == "end" else "on",
+            {"current_window_start": "w2"},
+        )
+        await settle(hass)
+    return entry
+
+
+def _visit_before_the_off(hass: HomeAssistant) -> None:
+    """Report presence that began before the manual off."""
+    started = (datetime.now(UTC) - timedelta(minutes=10)).isoformat()
+    hass.states.async_set(_OCCUPANCY, "on", {"last_on_time": started})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["start", "end", "touch", "none"])
+@pytest.mark.parametrize("how", ["live", "restart", "crash"])
+async def test_boundary_ending_a_manual_off_stands_across_a_restart(
+    hass: HomeAssistant, freezer, boundary: str, how: str
+) -> None:
+    """A manual off a boundary ended does not come back with a restart."""
+    entry = await _manual_off_then_boundary(hass, freezer, boundary)
+    cleared = boundary != "none"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_MANUAL_OFF_CLEARED] is cleared
+
+    if how != "live":
+        await restart_entries(hass, entry, started=how == "crash")
+    if how == "crash":
+        # Only what Home Assistant saved as it started is left.
+        await crash_entries(hass, entry, started=False)
+    _visit_before_the_off(hass)
+    if how != "live":
+        await finish_startup(hass)
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == ("on" if cleared else "off")
+    assert state.attributes["molight_state"] == (
+        STATE_OCCUPIED if cleared else STATE_IDLE
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["start", "end", "touch"])
+async def test_boundary_missed_while_down_ends_a_manual_off_for_later_restarts(
+    hass: HomeAssistant, freezer, boundary: str
+) -> None:
+    """A boundary crossed while HA was down is remembered by the next restart."""
+    entry = await _manual_off_then_boundary(hass, freezer, "none")
+    hass.states.async_remove(SCHEDULE)
+    hass.states.async_set(
+        SCHEDULE,
+        "off" if boundary == "start" else "on",
+        {"current_window_start": "w1"},
+    )
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(
+        SCHEDULE,
+        "off" if boundary == "end" else "on",
+        {"current_window_start": "w2"},
+    )
+    await finish_startup(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert hass.states.get(VIRTUAL).attributes[ATTR_MANUAL_OFF_CLEARED] is True
+
+    await restart_entries(hass, entry, started=False)
+    _visit_before_the_off(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["live", "restart"])
+async def test_leaving_a_standby_profile_ends_its_manual_off(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """The end boundary ends a standby window's manual off for the outside
+    profile too, which has no standby to scope it."""
+    entry = await _manual_off_then_boundary(hass, freezer, "end", standby=True)
+    if how == "restart":
+        await restart_entries(hass, entry, started=False)
+    _visit_before_the_off(hass)
+    if how == "restart":
+        await finish_startup(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_new_manual_off_after_a_boundary_stands_across_a_restart(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A boundary only ends the off before it, not one made in the new window."""
+    entry = await _manual_off_then_boundary(hass, freezer, "touch")
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    freezer.tick(timedelta(seconds=1))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes[ATTR_MANUAL_OFF_CLEARED] is False
+
+    await restart_entries(hass, entry, started=False)
+    _visit_before_the_off(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
