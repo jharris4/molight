@@ -236,6 +236,40 @@ async def test_maintain_clear_countdown_anchors_to_latest_occupied_time(
     assert _state(hass).state == "off"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("last_clear", [OCC, MAINT])
+@pytest.mark.parametrize("later", [OCC, MAINT])
+async def test_countdown_anchors_to_the_later_of_occupancy_and_maintain(
+    hass: HomeAssistant, freezer, later: str, last_clear: str
+) -> None:
+    """With both sensors clear, the countdown runs from the later of their
+    latest_occupied_time values, whichever sensor clears last."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(MAINT, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, maintain=MAINT))
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(MAINT, "on")
+    await settle(hass)
+    await _tick(hass, freezer, 100)
+
+    now = datetime.now(UTC)
+    lots = {OCC: now - timedelta(seconds=50), MAINT: now - timedelta(seconds=50)}
+    lots[later] = now - timedelta(seconds=10)
+    first_clear = MAINT if last_clear == OCC else OCC
+    for sensor in (first_clear, last_clear):
+        hass.states.async_set(
+            sensor, "off", {"latest_occupied_time": lots[sensor].isoformat()}
+        )
+        await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+    # Off one 60 s timeout after the later visit, 50 s from now.
+    await _tick(hass, freezer, 45)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 6)
+    assert _state(hass).state == "off"
+
+
 # ---------------------------------------------------------------------------
 # False-detection quick off
 # ---------------------------------------------------------------------------
