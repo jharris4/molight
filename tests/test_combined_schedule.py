@@ -41,6 +41,7 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
+    finish_startup,
     light_targets,
     make_light_entry,
     record_service_calls,
@@ -752,14 +753,12 @@ async def test_startup_holds_state_saved_during_an_outage(
     await settle(hass)
     assert hass.states.get("binary_sensor.bedside").state == "unavailable"
 
-    hass.set_state(CoreState.starting)
-    await restart_entries(hass, combined)
+    await restart_entries(hass, combined, started=False)
     state = hass.states.get("binary_sensor.bedside")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == marker
 
-    hass.set_state(CoreState.running)
-    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await finish_startup(hass)
     await settle(hass)
     assert hass.states.get("binary_sensor.bedside").state == "unavailable"
 

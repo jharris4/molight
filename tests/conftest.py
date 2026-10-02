@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 from freezegun import freeze_time
-from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import callback
+from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, callback
+from homeassistant.helpers import restore_state
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
-    async_mock_restore_state_shutdown_restart,
+    async_mock_load_restore_state_from_storage,
 )
 
 from custom_components.molight.const import (
@@ -284,13 +285,48 @@ async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     await hass.async_block_till_done()
 
 
-async def restart_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
-    """Set the entries up again from what Home Assistant saves at shutdown."""
-    await async_mock_restore_state_shutdown_restart(hass)
+async def restart_entries(
+    hass: HomeAssistant, *entries: MockConfigEntry, started: bool = True
+) -> None:
+    """Restart Home Assistant around the entries, from what it saves at shutdown.
+
+    The entries are set up while Home Assistant is starting, so they take
+    their startup paths and not a reload's. With started=False the test
+    finishes startup itself, with finish_startup.
+    """
+    await restore_state.async_get(hass).async_dump_states()
+    await _boot_entries(hass, *entries, started=started)
+
+
+async def crash_entries(
+    hass: HomeAssistant, *entries: MockConfigEntry, started: bool = True
+) -> None:
+    """Restart from what was last saved to disk, with no save at shutdown."""
+    await _boot_entries(hass, *entries, started=started)
+
+
+async def _boot_entries(
+    hass: HomeAssistant, *entries: MockConfigEntry, started: bool
+) -> None:
     for entry in entries:
         assert await hass.config_entries.async_unload(entry.entry_id)
+    # Unloading keeps each entity's live state for a reload; a restart only
+    # has what was saved.
+    await async_mock_load_restore_state_from_storage(hass)
+    hass.set_state(CoreState.starting)
     for entry in entries:
         assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    # Home Assistant saves every entity's state as it fires START.
+    await restore_state.async_get(hass).async_dump_states()
+    if started:
+        await finish_startup(hass)
+
+
+async def finish_startup(hass: HomeAssistant) -> None:
+    """Report Home Assistant as started, which is when the lights seed."""
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await hass.async_block_till_done()
 
 
