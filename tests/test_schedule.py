@@ -64,13 +64,14 @@ def _window(start: str, end: str) -> dict:
     return {"start": {"time": start}, "end": {"time": end}}
 
 
-def _schedule_entry(windows: list) -> MockConfigEntry:
+def _schedule_entry(windows: list, *, invert: bool = False) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: "Night Schedule",
             CONF_TIME_WINDOWS: windows,
+            CONF_SCHEDULE_INVERT: invert,
         },
     )
 
@@ -792,6 +793,7 @@ async def test_source_schedule_saves_marker_while_unavailable(
     assert stored.extra_data.as_dict() == {
         "is_on": True,
         "current_window_start": "2026-07-02T07:00:00+00:00",
+        "period_start": None,
         "source_entity": "binary_sensor.house_mode",
         "invert": False,
     }
@@ -1945,3 +1947,275 @@ async def test_follow_light_manual_off_stands_through_the_midnight_sun(
         await _move(hass, freezer, _local(tz, f"2026-05-{day} 00:00:05"))
         assert hass.states.get("binary_sensor.night_schedule").state == "on"
         assert hass.states.get("light.desk_lamp").state == "off", day
+
+
+# ---------------------------------------------------------------------------
+# A time zone or home location change while the schedule runs
+# ---------------------------------------------------------------------------
+
+NIGHT = "binary_sensor.night_schedule"
+
+
+async def _update_config(hass: HomeAssistant, **changes) -> None:
+    """Change the core configuration as the General settings page does."""
+    await hass.config.async_update(**changes)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+async def test_time_zone_change_ends_the_window_and_arms_the_new_boundary(
+    hass: HomeAssistant, freezer, invert: bool
+) -> None:
+    """18:00 -> 23:00, 20:00 UTC. In Toronto it is 16:00: outside the window
+    at once, back inside at 18:00 there, and the old 23:00 UTC timer is gone."""
+    on, off = ("off", "on") if invert else ("on", "off")
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    entry = _schedule_entry([_window("18:00", "23:00")], invert=invert)
+    await _setup(hass, entry)
+    assert hass.states.get(NIGHT).state == on
+
+    await _update_config(hass, time_zone="America/Toronto")
+    state = hass.states.get(NIGHT)
+    assert state.state == off
+    assert state.attributes["next_transition"] == "2026-07-02T18:00:00-04:00"
+
+    await _move(hass, freezer, datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC))
+    state = hass.states.get(NIGHT)
+    assert state.state == on
+    assert state.attributes["next_transition"] == "2026-07-02T23:00:00-04:00"
+
+    # 23:00 UTC, the old end, is 19:00 in Toronto: nothing happens.
+    await _move(hass, freezer, datetime(2026, 7, 2, 23, 0, 2, tzinfo=UTC))
+    state = hass.states.get(NIGHT)
+    assert state.state == on
+    assert state.attributes["next_transition"] == "2026-07-02T23:00:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_time_zone_change_starts_the_window(hass: HomeAssistant, freezer) -> None:
+    """A schedule that was off comes on, dated from the window's new start."""
+    await hass.config.async_set_time_zone("America/Toronto")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    await _setup(hass, _schedule_entry([_window("18:00", "23:00")]))
+    assert hass.states.get(NIGHT).state == "off"
+
+    await _update_config(hass, time_zone="UTC")
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-02T18:00:00+00:00"
+    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("invert", "window", "marker", "next_transition"),
+    [
+        (False, ("08:00", "22:00"), "2026-07-02T08:00:00+00:00", "T22:00:00-04:00"),
+        (True, ("22:00", "07:00"), "2026-07-02T07:00:00+00:00", "T22:00:00-04:00"),
+    ],
+    ids=["plain", "inverted"],
+)
+async def test_time_zone_change_inside_the_window_keeps_its_marker(
+    hass: HomeAssistant,
+    freezer,
+    invert: bool,
+    window: tuple,
+    marker: str,
+    next_transition: str,
+) -> None:
+    """At 12:00 UTC the window is under way in UTC and in Toronto (08:00).
+    The schedule stays on, so this is the same window with a later end, also
+    after a restart inside it, and the next day's window is a new one."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    entry = _schedule_entry([_window(*window)], invert=invert)
+    await _setup(hass, entry)
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+    await _update_config(hass, time_zone="America/Toronto")
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+    assert state.attributes["next_transition"] == f"2026-07-02{next_transition}"
+
+    # The old boundary (22:00 UTC) passes without effect.
+    await _move(hass, freezer, datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC))
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+    await _restart_at(hass, freezer, entry, "2026-07-02 23:00:00+00:00")
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+    # The window ends at 22:00 in Toronto; tomorrow's is a new one.
+    await _move(hass, freezer, datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC))
+    assert hass.states.get(NIGHT).state == "off"
+    await _move(hass, freezer, datetime(2026, 7, 3, 12, 0, 2, tzinfo=UTC))
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] != marker
+
+
+@pytest.mark.asyncio
+async def test_location_change_reevaluates_a_sun_window(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Ten minutes after sunset in London; 60 degrees west the sun is still
+    up, so the sunset -> 23:59 window has not started there."""
+    await hass.config.async_set_time_zone("UTC")
+    hass.config.latitude = 51.5
+    hass.config.longitude = 0.0
+    sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
+    freezer.move_to(sunset + timedelta(minutes=10))
+    await _setup(hass, _schedule_entry([{"start": _SUNSET, "end": _at("23:59")}]))
+    assert hass.states.get(NIGHT).state == "on"
+
+    await _update_config(hass, latitude=51.5, longitude=-15.0)
+    state = hass.states.get(NIGHT)
+    assert state.state == "off"
+    later_sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
+    assert abs(later_sunset - sunset - timedelta(hours=1)) < timedelta(minutes=2)
+    assert state.attributes["next_transition"] == later_sunset.isoformat()
+
+    await _move(hass, freezer, later_sunset + timedelta(seconds=2))
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == later_sunset.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_location_change_inside_a_sun_window_keeps_its_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Two hours after sunset the sun has set at the new home too: the same
+    window, though its sunset there was an hour later."""
+    await hass.config.async_set_time_zone("UTC")
+    hass.config.latitude = 51.5
+    hass.config.longitude = 0.0
+    sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
+    freezer.move_to(sunset + timedelta(hours=2))
+    entry = _schedule_entry([{"start": _SUNSET, "end": _SUNRISE}])
+    await _setup(hass, entry)
+    assert hass.states.get(NIGHT).attributes["current_window_start"] == (
+        sunset.isoformat()
+    )
+
+    await _update_config(hass, latitude=51.5, longitude=-15.0)
+    state = hass.states.get(NIGHT)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == sunset.isoformat()
+    sunrise = get_astral_event_date(hass, "sunrise", date(2026, 7, 3))
+    assert state.attributes["next_transition"] == sunrise.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_unrelated_core_config_change_leaves_the_schedule_alone(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Changing the currency re-evaluates to the same state and boundaries."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    await _setup(hass, _schedule_entry([_window("00:00", "00:00")]))
+    before = hass.states.get(NIGHT)
+
+    await _update_config(hass, currency="CAD")
+    after = hass.states.get(NIGHT)
+    assert after.state == before.state == "on"
+    assert after.attributes == before.attributes
+
+    # The next day of a 00:00 -> 00:00 window is still a new window.
+    await _move(hass, freezer, datetime(2026, 7, 3, 0, 0, 2, tzinfo=UTC))
+    state = hass.states.get(NIGHT)
+    assert state.attributes["current_window_start"] == "2026-07-03T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_follow_light_manual_off_stands_through_a_time_zone_change(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A light turned off by hand stays off when the time zone is corrected
+    inside the window, at the old boundary and across a restart of both."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("light.real_1", "off")
+    light = make_light_entry(
+        name="Desk Lamp", schedule=NIGHT, schedule_mode=SCHEDULE_MODE_FOLLOW
+    )
+    schedule = _schedule_entry([_window("08:00", "22:00")])
+    await setup_entries(hass, schedule, light)
+    assert hass.states.get("light.desk_lamp").state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    await settle(hass)
+
+    await _update_config(hass, time_zone="America/Toronto")
+    assert hass.states.get(NIGHT).state == "on"
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    await _move(hass, freezer, datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC))
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    await restart_entries(hass, schedule, light)
+    await settle(hass)
+    assert hass.states.get(NIGHT).state == "on"
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_follow_light_follows_a_window_a_time_zone_change_ends_or_starts(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The corrected clock is outside the window: the light goes off with
+    it, and comes on when the window starts on the new clock."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    hass.states.async_set("light.real_1", "off")
+    light = make_light_entry(
+        name="Desk Lamp", schedule=NIGHT, schedule_mode=SCHEDULE_MODE_FOLLOW
+    )
+    await setup_entries(hass, _schedule_entry([_window("18:00", "23:00")]), light)
+    assert hass.states.get("light.desk_lamp").state == "on"
+
+    await _update_config(hass, time_zone="America/Toronto")
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    await _move(hass, freezer, datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC))
+    assert hass.states.get("light.desk_lamp").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_gate_light_follows_a_time_zone_change(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A gate that the corrected clock closes stops occupancy lighting the
+    room, and opens again at the window's start on the new clock."""
+    occupancy = "binary_sensor.room_occupancy"
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    hass.states.async_set("light.real_1", "off")
+    hass.states.async_set(occupancy, "off")
+    light = make_light_entry(
+        name="Desk Lamp",
+        occupancy=occupancy,
+        schedule=NIGHT,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, _schedule_entry([_window("18:00", "23:00")]), light)
+
+    await _update_config(hass, time_zone="America/Toronto")
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+    hass.states.async_set(occupancy, "off")
+    await _move(hass, freezer, datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC))
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    assert hass.states.get("light.desk_lamp").state == "on"

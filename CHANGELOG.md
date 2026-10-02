@@ -215,6 +215,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changed its `current_window_start`, which turned a follow-mode light back
   on after a manual off and gave a Virtual Scheduled Light a new settings
   window.
+- Changing Home Assistant's time zone or home location re-evaluates
+  time-window and combined schedules at once. They kept the old boundary
+  until its timer fired, hours later, and a schedule still `on` then moved
+  its `current_window_start`, which follow-mode lights and Virtual Scheduled
+  Lights took for a new window. A schedule that stays `on` through the change
+  now keeps its window, also across a restart.
 
 ## [1.8.0] - 2026-09-30
 

@@ -33,6 +33,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import (
     ATTR_RESTORED,
+    EVENT_CORE_CONFIG_UPDATE,
     EVENT_HOMEASSISTANT_STARTED,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -1135,6 +1136,18 @@ def _merged_window_intervals(
     return [(start, end) for start, end in merged]
 
 
+# current_window_start of an inverted schedule with no boundary to date it from.
+_INVERTED_MARKER = "inverted"
+
+
+def _restored_marker(value: object) -> datetime | str | None:
+    return value if value == _INVERTED_MARKER else _parse_datetime(value)
+
+
+def _marker_text(marker: datetime | str | None) -> str | None:
+    return marker.isoformat() if isinstance(marker, datetime) else marker
+
+
 async def _restored_schedule_data(entity: RestoreEntity) -> dict:
     """Return a schedule's saved on/off value, marker and source.
 
@@ -1189,6 +1202,9 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._attr_is_on = False
         self._attr_available = self._definition != SCHEDULE_DEFINITION_BINARY_SENSOR
         self._current_window_start: datetime | str | None = None
+        # What the windows date the on-period from. The marker stays behind
+        # it when a time zone or location change moves them under it.
+        self._period_start: datetime | str | None = None
         self._next_transition: datetime | None = None
         self._unsub_transition = None
 
@@ -1223,7 +1239,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             # restart inside the window does not date the window anew.
             saved = await _restored_schedule_data(self)
             restored_start = (
-                _parse_datetime(saved.get("current_window_start"))
+                _restored_marker(saved.get("current_window_start"))
                 if saved.get("is_on") is True
                 and saved.get("source_entity") is None
                 and self._saved_invert_matches(saved)
@@ -1231,6 +1247,15 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             )
             self._attr_is_on = restored_start is not None
             self._current_window_start = restored_start
+            if restored_start is not None:
+                self._period_start = (
+                    _restored_marker(saved.get("period_start")) or restored_start
+                )
+            self.async_on_remove(
+                self.hass.bus.async_listen(
+                    EVENT_CORE_CONFIG_UPDATE, self._handle_core_config_update
+                )
+            )
             self._refresh()
 
     def _saved_invert_matches(self, saved: dict) -> bool:
@@ -1244,20 +1269,37 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self._unsub_transition = None
 
     @callback
-    def _refresh(self, _now: datetime | None = None) -> None:
-        """Evaluate the current window state and schedule the next transition."""
+    def _handle_core_config_update(self, _event: Event) -> None:
+        self._refresh(moved=True)
+
+    @callback
+    def _refresh(self, _now: datetime | None = None, *, moved: bool = False) -> None:
+        """Evaluate the current window state and schedule the next transition.
+
+        moved is set when the time zone or home location changed. That moves
+        the windows, which is no new window to a schedule that stays on.
+        """
         now = dt_util.utcnow()
         was_on = self._attr_is_on
+        if moved:
+            self._period_start = None
         active_start, next_transition = self._evaluate(now)
         raw_is_on = active_start is not None
         self._attr_is_on = raw_is_on != self._invert
-        self._current_window_start = (
+        period_start = (
             active_start
             if self._attr_is_on and not self._invert
             else self._inverted_window_start(now, was_on)
             if self._attr_is_on
             else None
         )
+        if not (
+            self._attr_is_on
+            and was_on
+            and (moved or period_start == self._period_start)
+        ):
+            self._current_window_start = period_start
+        self._period_start = period_start
         self._next_transition = next_transition
         self._attr_available = True
 
@@ -1327,7 +1369,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         windows are complete only from the first trusted day, so an older
         marker is kept unless the schedule went off since then.
         """
-        marker = self._current_window_start
+        marker = self._period_start
         if self._invert or not self._attr_is_on or not isinstance(marker, datetime):
             return None
         known_from = dt_util.start_of_local_day(
@@ -1342,7 +1384,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         merged = _merged_window_intervals(self.hass, self._windows, now, _DAY_OFFSETS)
         ended = [end for _start, end in merged if end <= now]
         latest = max(ended, key=lambda t: t.timestamp(), default=None)
-        marker = self._current_window_start
+        marker = self._period_start
         # Only a later window end begins a new gap. The end that began this
         # one leaves the resolved days when no window follows (polar periods).
         if (
@@ -1360,18 +1402,16 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         # With no resolvable boundaries (for example, a sun-only window during
         # polar day/night), inversion is continuously on. Use a stable marker
         # so Follow mode can apply it once without re-triggering every restart.
-        return latest or "inverted"
+        return latest or _INVERTED_MARKER
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
         """Return what a restore needs even when saved while unavailable."""
-        marker = self._current_window_start
         return RestoredExtraData(
             {
                 "is_on": self._attr_is_on,
-                "current_window_start": (
-                    marker.isoformat() if isinstance(marker, datetime) else marker
-                ),
+                "current_window_start": _marker_text(self._current_window_start),
+                "period_start": _marker_text(self._period_start),
                 "source_entity": self._source,
                 "invert": self._invert,
             }
@@ -1380,13 +1420,9 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         """Return the schedule window attributes."""
-
-        def _fmt(t: datetime | str | None) -> str | None:
-            return t.isoformat() if isinstance(t, datetime) else t
-
         return {
-            "current_window_start": _fmt(self._current_window_start),
-            "next_transition": _fmt(self._next_transition),
+            "current_window_start": _marker_text(self._current_window_start),
+            "next_transition": _marker_text(self._next_transition),
             "source_entity": self._source,
             "inverted": self._invert,
         }
@@ -1606,6 +1642,9 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._input_entities: dict[str, bool] = {}
         self._reload_scheduled = False
         self._current_window_start: str | None = None
+        # As in VirtualScheduleSensor: where the inputs date the on-period from.
+        self._period_start: str | None = None
+        self._windows_moved = False
         self._next_transition: datetime | None = None
         self._restored = False
         self._startup_done = True
@@ -1638,6 +1677,8 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             marker = saved.get("current_window_start")
             if self._attr_is_on and isinstance(marker, str):
                 self._current_window_start = marker
+                period = saved.get("period_start")
+                self._period_start = period if isinstance(period, str) else marker
 
         if tree.source_entities:
             self.async_on_remove(
@@ -1663,11 +1704,23 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 )
             )
 
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                EVENT_CORE_CONFIG_UPDATE, self._handle_core_config_update
+            )
+        )
+
         if self.hass.state is not CoreState.running:
             self._startup_done = False
             self._unsub_started = self.hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
             )
+        self._refresh()
+
+    @callback
+    def _handle_core_config_update(self, _event: Event) -> None:
+        # A new time zone or home location moves every time window.
+        self._windows_moved = True
         self._refresh()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -1794,17 +1847,23 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self._attr_available = not self._startup_done and self._restored
         else:
             self._attr_available = True
-            if value and not self._continues_period(timeline, ts):
+            # Windows that moved are no new window to a period that stays on.
+            moved, self._windows_moved = self._windows_moved, False
+            keep_marker = moved and self._attr_is_on and self._current_window_start
+            if value and (moved or not self._continues_period(timeline, ts)):
                 start = timeline.period_start(ts)
-                self._current_window_start = (
+                self._period_start = (
                     _ALWAYS_ON_MARKER
                     if start == _NEG_INF
                     else dt_util.as_local(
                         datetime.fromtimestamp(start, UTC)
                     ).isoformat()
                 )
+                if not keep_marker:
+                    self._current_window_start = self._period_start
             elif not value:
                 self._current_window_start = None
+                self._period_start = None
             self._attr_is_on = value
 
         change = timeline.next_change(ts)
@@ -1832,7 +1891,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         unknown (a mirror's value before its last change, anything before a
         restart), and a moved marker would re-trigger Follow mode.
         """
-        marker = self._current_window_start
+        marker = self._period_start
         if not (self._attr_is_on and marker):
             return False
         if marker == _ALWAYS_ON_MARKER:
@@ -1850,6 +1909,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             {
                 "is_on": self._attr_is_on,
                 "current_window_start": self._current_window_start,
+                "period_start": self._period_start,
             }
         )
 

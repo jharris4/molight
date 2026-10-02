@@ -1228,3 +1228,206 @@ async def test_inverted_sun_window_keeps_one_marker_through_the_midnight_sun(
             state = hass.states.get(entity_id)
             assert state.state == "on"
             assert state.attributes["current_window_start"] == began, day
+
+
+# ---------------------------------------------------------------------------
+# A time zone or home location change while the combination runs
+# ---------------------------------------------------------------------------
+
+
+async def _update_config(hass: HomeAssistant, **changes) -> None:
+    await hass.config.async_update(**changes)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+async def test_time_zone_change_ends_the_combined_window_and_arms_the_new_boundary(
+    hass: HomeAssistant, freezer
+) -> None:
+    """18:00 -> 23:00 at 20:00 UTC; in Toronto it is 16:00. The combination,
+    one nested on it and its inverse all move to the new clock, and nothing
+    is left armed for the old 23:00 UTC end."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 20:00:00+00:00")
+    await _setup(
+        hass,
+        _time_schedule("Evening", "18:00", "23:00"),
+        _combined("Evenings", ["binary_sensor.evening"]),
+        _combined("Nested", ["binary_sensor.evenings"], operator=SCHEDULE_OPERATOR_ALL),
+        _combined("Not Evenings", ["binary_sensor.evenings"], invert=True),
+    )
+    entities = {
+        "binary_sensor.evenings": "on",
+        "binary_sensor.nested": "on",
+        "binary_sensor.not_evenings": "off",
+    }
+
+    def _assert(inside: bool, next_transition: str) -> None:
+        for entity_id, inside_state in entities.items():
+            state = hass.states.get(entity_id)
+            assert (state.state == inside_state) is inside, entity_id
+            assert state.attributes["next_transition"] == next_transition
+
+    _assert(True, "2026-07-02T23:00:00+00:00")
+    await _update_config(hass, time_zone="America/Toronto")
+    _assert(False, "2026-07-02T18:00:00-04:00")
+
+    await _move_to(hass, freezer, "2026-07-02 22:00:02+00:00")
+    _assert(True, "2026-07-02T23:00:00-04:00")
+    state = hass.states.get("binary_sensor.evenings")
+    assert state.attributes["current_window_start"] == "2026-07-02T18:00:00-04:00"
+
+    # 23:00 UTC, the old end, is 19:00 in Toronto.
+    await _move_to(hass, freezer, "2026-07-02 23:00:02+00:00")
+    _assert(True, "2026-07-02T23:00:00-04:00")
+
+
+@pytest.mark.asyncio
+async def test_time_zone_change_inside_the_combined_window_keeps_its_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """08:00 -> 22:00 is under way at 12:00 UTC and in Toronto (08:00). The
+    combination stays on: one window, through the old boundary, a
+    source-backed input changing, and a restart."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("binary_sensor.guests", "off")
+    await settle(hass)
+    entries = (
+        _time_schedule("Day", "08:00", "22:00"),
+        _mirror_schedule("Guests Here", "binary_sensor.guests"),
+        _combined("Lit", ["binary_sensor.day", "binary_sensor.guests_here"]),
+        _combined("Nested", ["binary_sensor.lit"], operator=SCHEDULE_OPERATOR_ALL),
+    )
+    await _setup(hass, *entries)
+    marker = "2026-07-02T08:00:00+00:00"
+    watched = ("binary_sensor.lit", "binary_sensor.nested")
+
+    def _assert_same_window() -> None:
+        for entity_id in watched:
+            state = hass.states.get(entity_id)
+            assert state.state == "on", entity_id
+            assert state.attributes["current_window_start"] == marker, entity_id
+
+    _assert_same_window()
+    await _update_config(hass, time_zone="America/Toronto")
+    _assert_same_window()
+    state = hass.states.get("binary_sensor.lit")
+    assert state.attributes["next_transition"] == "2026-07-02T22:00:00-04:00"
+
+    for guests in ("on", "off"):
+        freezer.tick(timedelta(minutes=5))
+        hass.states.async_set("binary_sensor.guests", guests)
+        await settle(hass)
+        _assert_same_window()
+
+    await _move_to(hass, freezer, "2026-07-02 22:00:02+00:00")
+    _assert_same_window()
+
+    freezer.move_to("2026-07-02 23:00:00+00:00")
+    await restart_entries(hass, *entries)
+    await settle(hass)
+    _assert_same_window()
+
+    # The window ends at 22:00 in Toronto; tomorrow's is a new one.
+    await _move_to(hass, freezer, "2026-07-03 02:00:02+00:00")
+    assert hass.states.get("binary_sensor.lit").state == "off"
+    await _move_to(hass, freezer, "2026-07-03 12:00:02+00:00")
+    state = hass.states.get("binary_sensor.lit")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-07-03T08:00:00-04:00"
+
+
+@pytest.mark.asyncio
+async def test_time_zone_change_while_an_input_is_out_keeps_the_marker(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With All, an unavailable input leaves the result unknown as the time
+    zone changes. When it is back the window is still the one that began."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 09:00:00+00:00")
+    hass.states.async_set("binary_sensor.guests", "on")
+    await settle(hass)
+    freezer.move_to("2026-07-02 12:30:00+00:00")
+    await _setup(
+        hass,
+        _time_schedule("Day", "08:00", "22:00"),
+        _mirror_schedule("Guests Here", "binary_sensor.guests"),
+        _combined(
+            "Lit",
+            ["binary_sensor.day", "binary_sensor.guests_here"],
+            operator=SCHEDULE_OPERATOR_ALL,
+        ),
+    )
+    marker = hass.states.get("binary_sensor.lit").attributes["current_window_start"]
+    assert marker == "2026-07-02T09:00:00+00:00"
+
+    # In Toronto the day window starts at 12:00 UTC, after the marker.
+    hass.states.async_set("binary_sensor.guests", "unavailable")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.lit").state == "unavailable"
+    await _update_config(hass, time_zone="America/Toronto")
+    hass.states.async_set("binary_sensor.guests", "on")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.lit")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == marker
+
+
+@pytest.mark.asyncio
+async def test_location_change_reevaluates_a_sun_input(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Ten minutes after sunset in London; 15 degrees west the sun sets an
+    hour later, so the input's window has not started at the new home."""
+    await hass.config.async_set_time_zone("UTC")
+    hass.config.latitude = 51.5
+    hass.config.longitude = 0.0
+    sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
+    freezer.move_to(sunset + timedelta(minutes=10))
+    await _setup(
+        hass,
+        _time_schedule("Evening", {"sun": "sunset"}, "23:59"),
+        _combined("Evenings", ["binary_sensor.evening"]),
+        _combined("Not Evenings", ["binary_sensor.evenings"], invert=True),
+    )
+    assert hass.states.get("binary_sensor.evenings").state == "on"
+
+    await _update_config(hass, latitude=51.5, longitude=-15.0)
+    later_sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
+    state = hass.states.get("binary_sensor.evenings")
+    assert state.state == "off"
+    assert datetime.fromisoformat(state.attributes["next_transition"]) == later_sunset
+    assert hass.states.get("binary_sensor.not_evenings").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_follow_light_manual_off_stands_through_a_time_zone_change(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The combination stays on through the change, so the light turned off
+    by hand is not lit again as if a new window had started."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("light.real_1", "off")
+    await _setup(
+        hass,
+        _time_schedule("Day", "08:00", "22:00"),
+        _combined("Lit", ["binary_sensor.day"]),
+        make_light_entry(
+            name="Desk Lamp",
+            schedule="binary_sensor.lit",
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+        ),
+    )
+    assert hass.states.get("light.desk_lamp").state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    await settle(hass)
+
+    await _update_config(hass, time_zone="America/Toronto")
+    assert hass.states.get("binary_sensor.lit").state == "on"
+    assert hass.states.get("light.desk_lamp").state == "off"
+    await _move_to(hass, freezer, "2026-07-02 22:00:02+00:00")
+    assert hass.states.get("light.desk_lamp").state == "off"

@@ -2516,3 +2516,62 @@ async def test_manual_off_stands_through_the_midnight_sun(
         assert hass.states.get(VIRTUAL).state == "off", day
         assert _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window
     assert _light_calls(calls, "turn_on") == []
+
+
+@pytest.mark.asyncio
+async def test_manual_off_stands_through_a_time_zone_change(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The settings schedule stays on through a time zone correction: the
+    same settings window, so a manual off keeps standby off. Once the
+    window ends on the new clock the light takes its outside settings."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Settings Schedule",
+            CONF_TIME_WINDOWS: [{"start": {"time": "08:00"}, "end": {"time": "22:00"}}],
+        },
+    )
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    _record_light_contexts(hass)
+    await setup_entries(hass, schedule, _porch())
+    await settle(hass)
+    await _echo_standby(hass)
+    _assert_standby(hass)
+    window = _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW]
+    assert window == "2026-07-02T08:00:00+00:00"
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _set(hass, REAL, "off")
+    calls.clear()
+
+    await hass.config.async_update(time_zone="America/Toronto")
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == "on"
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window
+
+    # The old 22:00 UTC end passes: still the same window.
+    when = datetime(2026, 7, 2, 22, 0, 2, tzinfo=UTC)
+    freezer.move_to(when)
+    async_fire_time_changed(hass, when)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window
+    assert _light_calls(calls, "turn_on") == []
+
+    # 22:00 in Toronto ends it.
+    when = datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC)
+    freezer.move_to(when)
+    async_fire_time_changed(hass, when)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == "off"
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
