@@ -899,13 +899,32 @@ async def test_follow_light_turns_on_for_each_window(
 
 
 @pytest.mark.asyncio
-async def test_inverted_empty_combination_is_always_on(
+async def test_inverted_empty_combination_is_off(hass: HomeAssistant, freezer) -> None:
+    """With no inputs there is nothing to invert, so it stays off."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    await _setup(hass, _combined("Nothing", [], invert=True))
+    state = hass.states.get("binary_sensor.nothing")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+    assert state.attributes["next_transition"] is None
+
+    await _move_to(hass, freezer, "2026-07-03 00:00:02+00:00")
+    assert hass.states.get("binary_sensor.nothing").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_inverting_an_empty_combination_is_always_on(
     hass: HomeAssistant, freezer
 ) -> None:
     """The only always-on timeline has no start; its marker is a stable literal."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
-    await _setup(hass, _combined("Never Off", [], invert=True))
+    await _setup(
+        hass,
+        _combined("Nothing", []),
+        _combined("Never Off", ["binary_sensor.nothing"], invert=True),
+    )
     state = hass.states.get("binary_sensor.never_off")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "always_on"
@@ -915,6 +934,73 @@ async def test_inverted_empty_combination_is_always_on(
     state = hass.states.get("binary_sensor.never_off")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "always_on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+@pytest.mark.parametrize("operator", [SCHEDULE_OPERATOR_ANY, SCHEDULE_OPERATOR_ALL])
+async def test_deleting_every_input_leaves_the_combination_off(
+    hass: HomeAssistant, freezer, operator: str, invert: bool
+) -> None:
+    """A follow-mode porch on "Not Day" does not come on for good when Day goes."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to(
+        "2026-07-02 03:00:00+00:00" if invert else "2026-07-02 12:00:00+00:00"
+    )
+    day = _time_schedule("Day", "07:00", "22:00")
+    combined = _combined(
+        "Porch Hours", ["binary_sensor.day"], operator=operator, invert=invert
+    )
+    porch = make_light_entry(
+        name="Porch",
+        lights=["light.porch_real"],
+        schedule="binary_sensor.porch_hours",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    hass.states.async_set("light.porch_real", "off")
+    await _setup(hass, day, combined, porch)
+    assert hass.states.get("binary_sensor.porch_hours").state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.porch"}, blocking=True
+    )
+    await _move_to(hass, freezer, "2026-07-02 12:00:00+00:00")
+    assert hass.states.get("binary_sensor.porch_hours").state == (
+        "off" if invert else "on"
+    )
+
+    await hass.config_entries.async_remove(day.entry_id)
+    await settle(hass)
+    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == []
+    state = hass.states.get("binary_sensor.porch_hours")
+    assert state.state == "off"
+    assert state.attributes["next_transition"] is None
+    for when in ("2026-07-02 23:00:02+00:00", "2026-07-03 12:00:02+00:00"):
+        await _move_to(hass, freezer, when)
+        assert hass.states.get("binary_sensor.porch_hours").state == "off"
+        assert hass.states.get("light.porch").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_deleting_one_input_of_an_all_combination_widens_it(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Evening AND Workday without Workday is every evening, weekends included."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-04 19:00:00+00:00")  # a Saturday
+    hass.states.async_set("binary_sensor.workday_sensor", "off")
+    workday = _mirror_schedule("Workday", "binary_sensor.workday_sensor")
+    combined = _combined(
+        "Work Evenings",
+        ["binary_sensor.evening", "binary_sensor.workday"],
+        operator=SCHEDULE_OPERATOR_ALL,
+    )
+    await _setup(hass, _time_schedule("Evening", "18:00", "23:00"), workday, combined)
+    assert hass.states.get("binary_sensor.work_evenings").state == "off"
+
+    await hass.config_entries.async_remove(workday.entry_id)
+    await settle(hass)
+    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.evening"]
+    assert hass.states.get("binary_sensor.work_evenings").state == "on"
 
 
 @pytest.mark.asyncio

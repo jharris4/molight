@@ -1819,13 +1819,12 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         elif node.kind == "source":
             return self._source_timeline(node.entity_id)
         elif node.kind == "combined":
-            timeline = (
-                _Timeline.combine(
-                    node.require_all,
-                    [self._timeline(child, now, known) for child in node.children],
-                )
-                if node.children
-                else _Timeline.constant(False)
+            if not node.children:
+                # Inverted too: deleting the last input must not turn it on for good.
+                return _Timeline.constant(False)
+            timeline = _Timeline.combine(
+                node.require_all,
+                [self._timeline(child, now, known) for child in node.children],
             )
         else:
             return _Timeline.constant(None)

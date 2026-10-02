@@ -352,6 +352,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Two Discover flows submitted at the same moment no longer both wrap the
   same light, occupancy sensor or illuminance sensor, which left two entries
   fighting over it. The second skips the pick, as it does one wrapped earlier.
+- An inverted Virtual Combined Schedule Sensor whose last input is deleted is
+  `off`, as the README says, instead of `on` for good. A follow-mode light
+  on a "Not Day" combination came on and stayed on when "Day" was deleted.
 
 ## [1.8.0] - 2026-09-30
 
