@@ -204,7 +204,7 @@ def container_log(tmp_path, monkeypatch: pytest.MonkeyPatch):
 
 def test_check_logs_passes_a_clean_log_with_every_boot(container_log, capsys) -> None:
     info = _record("INFO", "homeassistant.setup", "Setting up molight")
-    # The container's output keeps Home Assistant's colours.
+    # The container's output keeps Home Assistant's colors.
     container_log.write_text(f"\x1b[33m{BOOT}\x1b[0m\n{info}\n{_boot(1)}\n")
 
     runner.check_logs(2)

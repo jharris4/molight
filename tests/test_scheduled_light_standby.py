@@ -321,7 +321,7 @@ async def test_turn_on_without_a_level_raises_standby(
     hass: HomeAssistant, freezer, asked: int | None
 ) -> None:
     """A turn-on with no brightness raises standby to the auto-on level and
-    colour, as presence would, keeping a colour it names; the timeout then
+    color, as presence would, keeping a color it names; the timeout then
     drops it back to standby."""
     modes = {"supported_color_modes": ["color_temp"]}
     hass.states.async_set(REAL, "off", modes)
@@ -744,7 +744,7 @@ async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
     hass: HomeAssistant, freezer, presence: str, restart: bool, how: str
 ) -> None:
     """A manual on while presence holds the raised light rejoins standby too,
-    as does a dim or recolour at the wall, and says so at once, so a restart
+    as does a dim or recolor at the wall, and says so at once, so a restart
     before they leave keeps it."""
     door = "binary_sensor.porch_door"
     hass.states.async_set(door, "off")
@@ -912,7 +912,7 @@ async def test_false_detection_does_not_cut_a_manual_raise_short(
 async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """Dimming or recolouring a light that occupancy raised from standby makes
+    """Dimming or recoloring a light that occupancy raised from standby makes
     the raise the user's: false motion no longer drops it back quickly."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     await _setup_porch(hass, _porch())
@@ -2434,7 +2434,7 @@ async def test_wall_turn_on_during_a_waiting_standby_keeps_its_level(
 async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
     hass: HomeAssistant, change: str
 ) -> None:
-    """A dim or recolour at the wall while standby is re-sent to a member
+    """A dim or recolor at the wall while standby is re-sent to a member
     that came back is not undone by that re-send."""
     select = _ParkedSelect(hass, park=2)
     calls = await _setup_porch(hass, _porch(inside=_SCENE))

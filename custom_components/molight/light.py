@@ -50,7 +50,7 @@ Effect/warn warning
   of their own (occupancy/maintain/door, a virtual turn-on without an explicit
   brightness, a gate lifting, auto-off becoming held) restore the pre-warning
   brightness so the warning is transparent; a physical turn-on or an external
-  dim brings its own brightness, which is honoured instead of the snapshot.
+  dim brings its own brightness, which is honored instead of the snapshot.
   Bright-forces-off (control mode) and a hard-gate/follow window ending still turn
   the lights off during the sequence, as they would mid-countdown.
   Each stage can also show an optional color, either a color temperature
@@ -468,7 +468,7 @@ async def async_setup_entry(
 
 
 # A member write is our echo only if it is consistent with what we asked for,
-# allowing for bulbs that reply in two parts, in fade steps, quantised, or in
+# allowing for bulbs that reply in two parts, in fade steps, quantized, or in
 # another color mode while the command settles, and for slow bulbs whose full
 # reply arrives much later; a contradiction is human activity at any age.
 # Context alone cannot tell: Home Assistant reuses our service-call context on
@@ -511,7 +511,7 @@ def _state_color(state: State) -> tuple[ColorMode, tuple] | None:
 
 
 def _service_color(color: dict | None) -> tuple[ColorMode, tuple] | None:
-    """Canonicalise turn-on color service data like a member state would."""
+    """Canonicalize turn-on color service data like a member state would."""
     if not color:
         return None
     if ATTR_COLOR_TEMP_KELVIN in color:
@@ -1154,7 +1154,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # Restore the color keyed on the stored color_mode: a color_temp
             # state also stores a derived hs_color (HA computes it for
             # display), so the mode decides which one was authoritative.
-            # _seed_state re-derives capabilities and legalises the mode, so
+            # _seed_state re-derives capabilities and legalizes the mode, so
             # a restore that no longer matches the members is corrected there.
             raw_mode = last.attributes.get(ATTR_COLOR_MODE)
             raw_kelvin = last.attributes.get(ATTR_COLOR_TEMP_KELVIN)
@@ -1588,10 +1588,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._start_settings_for_off_light()
 
     def _seed_state(self) -> None:
-        """Initialise the machine state from current entity states after startup."""
+        """Initialize the machine state from current entity states after startup."""
         # Derive color capabilities from the members before anything mirrors
         # a color (mirroring is a no-op outside the supported modes). Also
-        # legalises a restored color_mode the members no longer support.
+        # legalizes a restored color_mode the members no longer support.
         self._update_capabilities()
         self._drop_restored()
         # A command made before the seed is judged again from here.
@@ -2412,7 +2412,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             STATE_STANDBY,
         ):
             # An external dim or recolor during the warning sequence is a
-            # re-trigger like any other: honour the new brightness/color and
+            # re-trigger like any other: honor the new brightness/color and
             # restart the full timer. Off standby it runs a timer that ends
             # back at standby.
             if self._in_warning():
@@ -2986,7 +2986,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self.async_write_ha_state()
 
     def _resume_after_hold_release(self) -> None:
-        """Return to normal behaviour when the last hold releases.
+        """Return to normal behavior when the last hold releases.
 
         Automatic turn-offs suppressed while held are applied: a follow or
         hard-gate window that ended while held, or bright in control mode,

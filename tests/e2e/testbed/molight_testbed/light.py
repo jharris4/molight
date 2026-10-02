@@ -129,7 +129,7 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @property
     def brightness(self) -> int | None:
-        """Return the reported brightness, quantised to the device's levels."""
+        """Return the reported brightness, quantized to the device's levels."""
         if self.color_mode not in (
             ColorMode.XY,
             ColorMode.RGB,
@@ -164,7 +164,7 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @property
     def color_temp_kelvin(self) -> int | None:
-        """Return the reported colour temperature when that is the advertised mode."""
+        """Return the reported color temperature when that is the advertised mode."""
         if self.color_mode is not ColorMode.COLOR_TEMP:
             return None
         return int(self._reported["attributes"].get(ATTR_COLOR_TEMP_KELVIN, 3000))

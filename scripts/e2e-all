@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run every e2e lane concurrently: the core restart chain, the independent
-# restart scenarios, and the behaviour scenario shards.
+# restart scenarios, and the behavior scenario shards.
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."

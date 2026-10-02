@@ -133,7 +133,7 @@ def run_unless_renamed(
 
     A rename removes the state under the former ID too, possibly before the
     registry has finished announcing it: an ID the registry no longer knows
-    is judged one loop pass later. Returns what cancels that judgement.
+    is judged one loop pass later. Returns what cancels that judgment.
     """
     if er.async_get(hass).async_get(entity_id) is not None:
         action()
@@ -170,7 +170,7 @@ def _judge_lights(
     entity_ids: Sequence[str],
     capable: Callable[[State], bool | None],
 ) -> bool | None:
-    """Tri-state capability judgement across a set of real lights.
+    """Tri-state capability judgment across a set of real lights.
 
     True once any member is capable, False only once every member is judged and
     none is, None while any can't be judged. Shared so the runtime and the

@@ -217,7 +217,7 @@ async def test_schedule_end_off_still_checks_outside_sensors_for_off_light(
 async def test_schedule_end_off_still_checks_outside_door_for_off_light(
     hass: HomeAssistant,
 ) -> None:
-    """turn_off on an already-off light also honours a held-open outside door."""
+    """turn_off on an already-off light also honors a held-open outside door."""
     door = "binary_sensor.outside_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")

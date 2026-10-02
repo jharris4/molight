@@ -1567,7 +1567,7 @@ async def test_remote_options_clears_a_set_preset_color(
 
 @pytest.mark.asyncio
 async def test_unbound_click_is_ignored(hass: HomeAssistant) -> None:
-    """A recognised click with no binding fires nothing: no call, no action."""
+    """A recognized click with no binding fires nothing: no call, no action."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     await setup_entries(hass, remote)
     _seed(hass, "event.pico_on", LUTRON_EVENT_TYPES)

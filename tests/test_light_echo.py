@@ -162,7 +162,7 @@ async def test_two_part_and_stepwise_echo_is_not_physical(
 
 
 @pytest.mark.asyncio
-async def test_quantised_echo_is_not_physical(
+async def test_quantized_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A bulb reporting 151 for 153 is still echoing our command."""

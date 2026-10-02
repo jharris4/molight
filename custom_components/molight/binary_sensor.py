@@ -1051,7 +1051,7 @@ def _edge_clock(edge: dict | None) -> tuple[str, int] | None:
     """Return an edge's kind and its place on the clock, from its settings alone.
 
     The place is in seconds after midnight; a sun offset can push it into a
-    neighbouring day.
+    neighboring day.
     """
     if not isinstance(edge, dict):
         return None
@@ -1113,7 +1113,7 @@ def window_ever_opens(hass: HomeAssistant, window: dict) -> bool:
     )
 
 
-# Sun offsets move edges up to 12h into a neighbouring day, so extra days are
+# Sun offsets move edges up to 12h into a neighboring day, so extra days are
 # resolved and values trusted only from yesterday to the day after tomorrow.
 _DAY_OFFSETS = range(-3, 4)
 _TRUSTED_DAYS = (-1, 2)

@@ -2213,7 +2213,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
 
     Illuminance-dark re-activation grants only the remaining portion of the
     original on-period. When the real light's state then echoes our own
-    service call, that echo must be recognised as self-caused; treating it
+    service call, that echo must be recognized as self-caused; treating it
     as an external turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
     full timer.
     """

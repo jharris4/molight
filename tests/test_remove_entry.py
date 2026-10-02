@@ -512,7 +512,7 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
     """A scheduled light missing a settings side must not be rewritten just to
-    materialise that side as an empty dict; that would differ from its stored
+    materialize that side as an empty dict; that would differ from its stored
     config and force a reload of an entry referencing nothing removed."""
     occupancy = _occupancy_entry()
     partial = MockConfigEntry(

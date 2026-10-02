@@ -246,7 +246,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 ### Example 8: Hallway night light (Virtual Scheduled Light)
 
-Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviours; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below), or two virtual lights would fight over `light.hallway_real`. It's a schedule sensor, then the light's three forms in a row:
+Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviors; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below), or two virtual lights would fight over `light.hallway_real`. It's a schedule sensor, then the light's three forms in a row:
 
 **1. Virtual Schedule Sensor** (the "night" window)
 
@@ -416,7 +416,7 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
 - Switching the porch off by hand turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
-- To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby colour without a brightness.
+- To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby color without a brightness.
 - See the [README](README.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---

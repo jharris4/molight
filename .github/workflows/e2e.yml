@@ -66,7 +66,7 @@ jobs:
           retention-days: 7
 
   scenarios:
-    name: Behaviour scenarios ${{ matrix.shard }} (HA current)
+    name: Behavior scenarios ${{ matrix.shard }} (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
     timeout-minutes: 20
@@ -76,7 +76,7 @@ jobs:
         shard: [a, b, c]
     steps:
       - uses: actions/checkout@v7
-      - name: Run behaviour scenario shard ${{ matrix.shard }}
+      - name: Run behavior scenario shard ${{ matrix.shard }}
         run: npm run test:e2e:scenarios-${{ matrix.shard }}
       - name: Make the retained run directory readable
         if: failure() || cancelled()
