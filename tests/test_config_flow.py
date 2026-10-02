@@ -108,6 +108,7 @@ from custom_components.molight.const import (
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    DEFAULT_SCHEDULE_MODE,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -8421,3 +8422,432 @@ async def test_stage_rules_use_the_whole_seconds_the_light_runs(
     else:
         assert result["type"] == FlowResultType.FORM
         assert result["errors"] == {"base": error}
+
+
+# ---------------------------------------------------------------------------
+# A reference removed or renamed while a form is open
+# ---------------------------------------------------------------------------
+
+
+def _subject_cfg(hass: HomeAssistant) -> dict:
+    """The saved config of the light the shared light forms edit or create."""
+    (entry,) = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
+    ]
+    return molight_config(entry)
+
+
+async def _change_occupancy_sensor(
+    hass: HomeAssistant, entry: MockConfigEntry, change: str
+) -> None:
+    """Delete the occupancy fixture's entry, or rename its entity."""
+    if change == "removed":
+        await hass.config_entries.async_remove(entry.entry_id)
+    else:
+        er.async_get(hass).async_update_entity(
+            "binary_sensor.test_occupancy",
+            new_entity_id="binary_sensor.hall_presence",
+        )
+    await settle(hass)
+
+
+async def _submit_subject_settings(
+    hass: HomeAssistant, form: str, result: dict, settings: dict
+) -> dict:
+    """Submit one light settings form, and the inside side after a create's outside."""
+    submitted = {**EMPTY_LIGHT_SECTIONS, **settings}
+    if form in ("create", "options"):
+        submitted.update({CONF_NAME: "Subject", CONF_LIGHTS: [SUBJECT_MEMBER]})
+    if form == "create":
+        submitted[SECTION_ADVANCED] = {}
+    if form == "scheduled_options":
+        submitted[SECTION_STANDBY] = {}
+    manager = (
+        hass.config_entries.options
+        if form.endswith("options")
+        else hass.config_entries.flow
+    )
+    result = await manager.async_configure(result["flow_id"], submitted)
+    if form == "scheduled_create" and result.get("step_id") == "scheduled_light_inside":
+        result = await manager.async_configure(
+            result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        )
+    await settle(hass)
+    return result
+
+
+_LIGHT_FORMS = [
+    "create",
+    "options",
+    "scheduled_create",
+    "scheduled_options",
+    "discovery",
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _LIGHT_FORMS)
+async def test_light_forms_do_not_save_a_sensor_deleted_while_open(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str
+) -> None:
+    """The final save rejects a sensor the form offered before its entry was deleted."""
+    hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _setup_night_schedule(hass)
+    await setup_entries(hass, occupancy_entry)
+    result = await _reach_light_settings_form(hass, form)
+    await _change_occupancy_sensor(hass, occupancy_entry, "removed")
+
+    result = await _submit_subject_settings(
+        hass,
+        form,
+        result,
+        {
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        },
+    )
+
+    if form in ("create", "scheduled_create"):
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == (
+            "light" if form == "create" else "scheduled_light_outside"
+        )
+        assert result["errors"] == {"base": "reference_removed"}
+    else:
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "reference_removed"
+        assert result["description_placeholders"] == {
+            "entity_id": "binary_sensor.test_occupancy"
+        }
+    configs = [
+        molight_config(e)
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
+    ]
+    assert "binary_sensor.test_occupancy" not in str(configs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _LIGHT_FORMS)
+async def test_light_forms_follow_a_sensor_renamed_while_open(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str
+) -> None:
+    """The former ID validates, timeout guard included, and saves as the new one."""
+    hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _setup_night_schedule(hass)
+    await setup_entries(hass, occupancy_entry)
+    result = await _reach_light_settings_form(hass, form)
+    step_id = result["step_id"]
+    await _change_occupancy_sensor(hass, occupancy_entry, "renamed")
+    sensors = {SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"}}
+
+    result = await _submit_subject_settings(
+        hass, form, result, {CONF_LIGHT_TIMEOUT: 20, **sensors}
+    )
+    assert result["step_id"] == step_id
+    assert result["errors"] == _TOO_SHORT
+
+    result = await _submit_subject_settings(
+        hass, form, result, {CONF_LIGHT_TIMEOUT: 60, **sensors}
+    )
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    assert result.get("reason") in (None, "discovery_done")
+    cfg = _subject_cfg(hass)
+    side = cfg.get(
+        CONF_OUTSIDE_SCHEDULE_SETTINGS
+        if form == "scheduled_create"
+        else CONF_INSIDE_SCHEDULE_SETTINGS,
+        cfg,
+    )
+    assert side[CONF_OCCUPANCY_ENTITY] == "binary_sensor.hall_presence"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+@pytest.mark.parametrize("change", ["removed", "renamed"])
+async def test_scheduled_light_schedule_changed_before_the_last_form(
+    hass: HomeAssistant, flow: str, change: str
+) -> None:
+    """The schedule picked on the first form is checked again when the last is saved."""
+    await _setup_night_schedule(hass)
+    (schedule,) = hass.config_entries.async_entries(DOMAIN)
+    shared = {
+        CONF_NAME: "Subject",
+        CONF_LIGHTS: [SUBJECT_MEMBER],
+        CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+    }
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+        )
+        shared[SECTION_ADVANCED] = {}
+    else:
+        manager = hass.config_entries.options
+        entry = _scheduled_light_entry("Subject", "subject")
+        entry.data[CONF_LIGHTS][:] = [SUBJECT_MEMBER]
+        await setup_entries(hass, entry)
+        result = await manager.async_init(entry.entry_id)
+        shared[CONF_SCHEDULE_END_ACTION] = SCHEDULE_END_ACTION_KEEP
+    result = await manager.async_configure(result["flow_id"], shared)
+    result = await manager.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+
+    if change == "removed":
+        await hass.config_entries.async_remove(schedule.entry_id)
+    else:
+        er.async_get(hass).async_update_entity(
+            "binary_sensor.night_schedule", new_entity_id="binary_sensor.evening"
+        )
+    await settle(hass)
+    result = await manager.async_configure(
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    )
+    await settle(hass)
+
+    if change == "renamed":
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert _subject_cfg(hass)[CONF_SCHEDULE_ENTITY] == "binary_sensor.evening"
+    elif flow == "create":
+        assert result["step_id"] == "scheduled_light"
+        assert result["errors"] == {"base": "reference_removed"}
+    else:
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "reference_removed"
+        assert CONF_SCHEDULE_ENTITY not in _subject_cfg(hass)
+
+
+_ASSIGN_KINDS = {
+    # kind step: (sensor fixture, the form's other fields, the key it writes)
+    "assign_occupancy": (
+        "occupancy_entry",
+        {CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR},
+        CONF_OCCUPANCY_ENTITY,
+    ),
+    "assign_maintain": (
+        "occupancy_entry",
+        {CONF_ASSIGN_ROLE: ASSIGN_ROLE_MAINTAIN},
+        CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    ),
+    "assign_illuminance": (
+        "illuminance_entry",
+        {CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE},
+        CONF_ILLUMINANCE_ENTITY,
+    ),
+    "assign_schedule": (
+        "schedule_entry",
+        {CONF_SCHEDULE_MODE: DEFAULT_SCHEDULE_MODE},
+        CONF_SCHEDULE_ENTITY,
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["removed", "renamed"])
+@pytest.mark.parametrize("kind", list(_ASSIGN_KINDS))
+async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
+    hass: HomeAssistant, request: pytest.FixtureRequest, kind: str, change: str
+) -> None:
+    """A sensor deleted after it was picked is not written; a renamed one is."""
+    fixture, fields, key = _ASSIGN_KINDS[kind]
+    sensor_entry = request.getfixturevalue(fixture)
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, sensor_entry, hall)
+    (sensor,) = [
+        e.entity_id
+        for e in er.async_entries_for_config_entry(
+            er.async_get(hass), sensor_entry.entry_id
+        )
+    ]
+    result = await _reach_assign_kind(
+        hass, "assign_occupancy" if kind == "assign_maintain" else kind
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_SENSOR: sensor, **fields}
+    )
+    assert result["step_id"] == "assign_lights"
+
+    if change == "removed":
+        await hass.config_entries.async_remove(sensor_entry.entry_id)
+    else:
+        er.async_get(hass).async_update_entity(
+            sensor, new_entity_id=f"{sensor}_renamed"
+        )
+    await settle(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
+    )
+    await settle(hass)
+
+    if change == "removed":
+        assert result["reason"] == "reference_removed"
+        assert key not in molight_config(hall)
+    else:
+        assert result["reason"] == "assign_done"
+        assert molight_config(hall)[key] == f"{sensor}_renamed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, flow: str
+) -> None:
+    """A constituent deleted while the form was open is not saved again."""
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Desk Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_2",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    await setup_entries(hass, occupancy_entry, other)
+    submitted = {
+        CONF_NAME: "Both",
+        CONF_TRIGGER_SENSORS: [
+            "binary_sensor.desk_occupancy",
+            "binary_sensor.test_occupancy",
+        ],
+    }
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY}
+        )
+        submitted[SECTION_ADVANCED] = {}
+    else:
+        combined = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+                CONF_NAME: "Both",
+                CONF_TRIGGER_SENSORS: submitted[CONF_TRIGGER_SENSORS],
+            },
+        )
+        await setup_entries(hass, combined)
+        manager = hass.config_entries.options
+        result = await manager.async_init(combined.entry_id)
+
+    await hass.config_entries.async_remove(occupancy_entry.entry_id)
+    await settle(hass)
+    result = await manager.async_configure(result["flow_id"], submitted)
+    await settle(hass)
+
+    if flow == "create":
+        assert result["errors"] == {"base": "reference_removed"}
+    else:
+        assert result["reason"] == "reference_removed"
+        assert molight_config(combined)[CONF_TRIGGER_SENSORS] == [
+            "binary_sensor.desk_occupancy"
+        ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+async def test_remote_does_not_save_a_target_light_deleted_while_open(
+    hass: HomeAssistant, flow: str
+) -> None:
+    """A Virtual Light deleted while the remote's form was open is not saved."""
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    submitted = {
+        CONF_NAME: "Pico",
+        CONF_TARGET_LIGHTS: ["light.hall"],
+        CONF_DIM_STEP: 10,
+        **_REMOTE_BUTTONS,
+    }
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE}
+        )
+    else:
+        remote = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
+                CONF_NAME: "Pico",
+                CONF_TARGET_LIGHTS: ["light.hall"],
+                CONF_DIM_STEP: 10,
+                CONF_ON_BUTTONS_SINGLE: ["event.pico_on"],
+            },
+        )
+        await setup_entries(hass, remote)
+        manager = hass.config_entries.options
+        result = await manager.async_init(remote.entry_id)
+
+    await hass.config_entries.async_remove(hall.entry_id)
+    await settle(hass)
+    result = await manager.async_configure(result["flow_id"], submitted)
+    await settle(hass)
+
+    if flow == "create":
+        assert result["errors"] == {"base": "reference_removed"}
+    else:
+        assert result["reason"] == "reference_removed"
+        assert molight_config(remote)[CONF_TARGET_LIGHTS] == []
+
+
+@pytest.mark.asyncio
+async def test_entity_id_menu_does_not_save_a_sensor_deleted_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Going ahead from the entity ID collision menu checks the references again."""
+    hass.states.async_set("light.hall", "off")
+    await setup_entries(hass, occupancy_entry)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        },
+    )
+    assert result["step_id"] == "confirm_entity_id"
+
+    await hass.config_entries.async_remove(occupancy_entry.entry_id)
+    await settle(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_proceed"}
+    )
+    assert result["reason"] == "reference_removed"
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+@pytest.mark.asyncio
+async def test_an_id_taken_again_after_its_removal_is_accepted(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Only an ID no entity holds counts as removed."""
+    await setup_entries(hass, occupancy_entry)
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    await hass.config_entries.async_remove(occupancy_entry.entry_id)
+    await settle(hass)
+    replacement = MockConfigEntry(domain=DOMAIN, data=dict(occupancy_entry.data))
+    await setup_entries(hass, replacement)
+    assert hass.states.get("binary_sensor.test_occupancy") is not None
+
+    result = await _submit_light_options(
+        hass,
+        result,
+        ["light.hall_real"],
+        {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert molight_config(hall)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntryState
@@ -35,6 +36,7 @@ from .const import (
     DATA_AUTO_OFF_ENABLED,
     DATA_AUTO_OFF_KEPT,
     DATA_PLATFORMS,
+    DATA_REMOVED,
     DATA_RENAMED,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
@@ -46,7 +48,7 @@ from .helpers import molight_config
 from .remote import async_setup_remote
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterator
     from typing import Any
 
     from homeassistant.config_entries import ConfigEntry
@@ -100,6 +102,7 @@ RENAME_SETTLE_SECONDS = 10
 async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Follow entity ID changes for as long as Home Assistant runs."""
     renamed: dict[str, str] = hass.data.setdefault(DATA_RENAMED, {})
+    removed: set[str] = hass.data.setdefault(DATA_REMOVED, set())
     # Renames whose entity has yet to report under its new ID.
     pending: dict[str, str] = {}
 
@@ -117,9 +120,11 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
         if data["action"] == "create":
             # A new entity under a former ID is not the one that was renamed.
             renamed.pop(data["entity_id"], None)
+            removed.discard(data["entity_id"])
         if data["action"] != "update" or "old_entity_id" not in data:
             return
         old_id, new_id = data["old_entity_id"], data["entity_id"]
+        removed.discard(new_id)
         for mapping in (renamed, pending):
             # A second rename moves every earlier ID on to the newest one.
             for former, current in mapping.items():
@@ -184,6 +189,40 @@ def _rename_references(hass: HomeAssistant, mapping: dict[str, str]) -> None:
                 entry.options, mapping, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
             ),
         )
+
+
+def current_references(
+    hass: HomeAssistant, cfg: Mapping[str, Any]
+) -> tuple[dict[str, Any], str | None]:
+    """Return cfg with renamed references at their new IDs, and one since removed.
+
+    A form left open still holds the IDs it showed, which a rename or a
+    removal has since rewritten in every saved entry.
+    """
+    current = _remap_references(
+        cfg, hass.data.get(DATA_RENAMED, {}), _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+    )
+    removed = hass.data.get(DATA_REMOVED, set())
+    return current, next(
+        (entity_id for entity_id in _referenced_ids(current) if entity_id in removed),
+        None,
+    )
+
+
+def _referenced_ids(cfg: Mapping[str, Any]) -> Iterator[str]:
+    """Yield every entity ID cfg stores, in both settings mappings too."""
+    for settings in (
+        cfg,
+        cfg.get(CONF_OUTSIDE_SCHEDULE_SETTINGS),
+        cfg.get(CONF_INSIDE_SCHEDULE_SETTINGS),
+    ):
+        if not isinstance(settings, Mapping):
+            continue
+        for key in _ENTITY_ID_KEYS:
+            if isinstance(value := settings.get(key), str):
+                yield value
+        for key in _ENTITY_ID_LIST_KEYS:
+            yield from settings.get(key) or ()
 
 
 def _remap_references(
@@ -297,6 +336,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     }
     if not removed:
         return
+    hass.data.setdefault(DATA_REMOVED, set()).update(removed)
     # The unload left restored placeholders that read as a reload in
     # progress; drop them now, as HA's registry cleanup would after the
     # reloads below, so the watchers see the removal for what it is.

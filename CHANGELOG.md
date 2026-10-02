@@ -343,6 +343,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ends the on-period brightness cut short. The room going dark in a later
   window, after someone merely walked past while it was bright, resumed it
   and lit an empty room.
+- A create or Configure form left open while a sensor, schedule or light it
+  offers is deleted no longer saves that reference again, which brought back
+  the reference the deletion had just removed. The save is refused, also in
+  bulk assignment, the Discover lights defaults and a Virtual Scheduled
+  Light's later forms. An entity renamed meanwhile is saved under its new ID,
+  and the turn-off timeout and schedule checks still apply to it.
 
 ## [1.8.0] - 2026-09-30
 

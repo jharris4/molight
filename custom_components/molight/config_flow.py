@@ -20,6 +20,7 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
 
+from . import current_references
 from .binary_sensor import window_ever_opens
 from .const import (
     AFFIX_TARGET_ENTITY_ID,
@@ -157,6 +158,7 @@ from .helpers import (
     lights_support_transition,
     match_option,
     molight_config as _molight_cfg,
+    renamed_to,
 )
 from .remote import (
     CLICK_DOUBLE,
@@ -582,6 +584,15 @@ _LIGHT_REF_SELECTORS = {
 }
 
 
+def _registry_entry(hass: HomeAssistant, entity_id: str) -> er.RegistryEntry | None:
+    """Look an entity up by its ID, or by the ID a rename since gave it."""
+    registry = er.async_get(hass)
+    if (reg_entry := registry.async_get(entity_id)) is not None:
+        return reg_entry
+    new_id = renamed_to(hass, entity_id)
+    return registry.async_get(new_id) if new_id else None
+
+
 def _effective_occupancy_timeout(
     hass: HomeAssistant, entity_id: str, _seen: set[str] | None = None
 ) -> int | None:
@@ -599,7 +610,7 @@ def _effective_occupancy_timeout(
     if entity_id in _seen:
         return None
     _seen.add(entity_id)
-    reg_entry = er.async_get(hass).async_get(entity_id)
+    reg_entry = _registry_entry(hass, entity_id)
     if reg_entry is None or reg_entry.config_entry_id is None:
         return None
     entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
@@ -661,7 +672,7 @@ def _molight_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | No
     """Return the MoLight config-entry type backing an entity, if any."""
     if not entity_id:
         return None
-    reg_entry = er.async_get(hass).async_get(entity_id)
+    reg_entry = _registry_entry(hass, entity_id)
     if (
         reg_entry is None
         or reg_entry.domain != "binary_sensor"
@@ -778,7 +789,6 @@ def _combined_creates_cycle(
     back to that entry is either a direct self-reference or an indirect cycle.
     Only entries of the edited entry's own combined type are followed.
     """
-    registry = er.async_get(hass)
     target_entry_id = edited_entry.entry_id
     entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
     inputs = _COMBINED_INPUTS[entity_type]
@@ -786,7 +796,7 @@ def _combined_creates_cycle(
     def _referenced_entries(entity_ids: list[str]) -> list[config_entries.ConfigEntry]:
         entries = []
         for entity_id in entity_ids:
-            reg_entry = registry.async_get(entity_id)
+            reg_entry = _registry_entry(hass, entity_id)
             if reg_entry is None or reg_entry.config_entry_id is None:
                 continue
             entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
@@ -2082,6 +2092,9 @@ class MoLightConfigFlow(
         Returns (result, errors). When errors is non-empty the caller re-shows
         its form; otherwise result is the FlowResult to return.
         """
+        data, removed = current_references(self.hass, data)
+        if removed:
+            return None, {"base": "reference_removed"}
         obj, errors, needs_confirm, candidate = self._resolve_entity_id(
             name, data, entity_id_format
         )
@@ -2116,13 +2129,19 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Create with the name-derived id (Home Assistant appends _2)."""
         pending = self._pending
-        side, errors = _stale_light_timeout(self.hass, pending["data"])
+        data, removed = current_references(self.hass, pending["data"])
+        if removed:
+            return self.async_abort(
+                reason="reference_removed",
+                description_placeholders={"entity_id": removed},
+            )
+        side, errors = _stale_light_timeout(self.hass, data)
         if errors:
             # A sensor's timeout was raised while the menu was open.
             if side is not None:
                 return self._show_scheduled_light_side_form(side, None, errors)
             return self._show_light_form(pending["user_input"], errors)
-        return self.async_create_entry(title=pending["name"], data=pending["data"])
+        return self.async_create_entry(title=pending["name"], data=data)
 
     async def async_step_entity_id_change(
         self, user_input: dict[str, Any] | None = None
@@ -2339,6 +2358,12 @@ class MoLightConfigFlow(
         to run detached, so the reported count is what actually got created and
         a failure is surfaced instead of only reaching the log.
         """
+        overrides, removed = current_references(self.hass, overrides)
+        if removed:
+            return self.async_abort(
+                reason="reference_removed",
+                description_placeholders={"entity_id": removed},
+            )
         disc = self._discovery
         candidates = disc["candidates"]
         # Another flow may have wrapped a pick while this one was open.
@@ -2931,7 +2956,13 @@ class MoLightConfigFlow(
         """
         assign = self._assign
         key = assign["key"]
-        sensor = assign["sensor"]
+        current, removed = current_references(self.hass, {key: assign["sensor"]})
+        if removed:
+            return self.async_abort(
+                reason="reference_removed",
+                description_placeholders={"entity_id": removed},
+            )
+        sensor = current[key]
         lights = _molight_light_entries(self.hass)
         scheduled = set(
             _molight_light_entries(self.hass, (ENTITY_TYPE_SCHEDULED_LIGHT,))
@@ -3604,6 +3635,11 @@ class MoLightConfigFlow(
             **shared,
             **self._scheduled_light_settings,
         }
+        for side in _SCHEDULED_LIGHT_SIDES:
+            if current_references(self.hass, data[side])[1]:
+                return self._show_scheduled_light_side_form(
+                    side, None, {"base": "reference_removed"}
+                )
         side, errors = _stale_light_timeout(self.hass, data)
         if errors:
             # A sensor's timeout was raised while a later page was open.
@@ -3643,6 +3679,9 @@ class MoLightConfigFlow(
             flat = _flatten_remote(user_input)
             errors = _validate_remote(self.hass, flat)
             errors.update(_validate_name(flat))
+            flat, removed = current_references(self.hass, flat)
+            if removed:
+                errors["base"] = "reference_removed"
             if not errors:
                 # Drop empty pickers/values so unbound slots stay absent from
                 # the entry rather than being stored as [] or None.
@@ -3709,10 +3748,17 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
 
         Another light's options may have been saved while a multi-step form
         was open, so the member graph is checked again at the final save; a
-        form opened before the light was converted no longer fits its entry.
+        form opened before the light was converted no longer fits its entry,
+        and one that offers an entity removed since would bring it back.
         """
         if self._entry.data[CONF_ENTITY_TYPE] != self._cfg[CONF_ENTITY_TYPE]:
             return self.async_abort(reason="entry_converted")
+        data, removed = current_references(self.hass, data)
+        if removed:
+            return self.async_abort(
+                reason="reference_removed",
+                description_placeholders={"entity_id": removed},
+            )
         if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES and (
             _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS])
         ):

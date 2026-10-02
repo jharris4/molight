@@ -302,6 +302,9 @@ DATA_AUTO_OFF_KEPT = DOMAIN + "_auto_off_kept"
 # hass.data key of the entity ID changes followed this run, former ID to
 # current one: a state saved under the former ID describes the same entity.
 DATA_RENAMED = DOMAIN + "_renamed"
+# hass.data key of the IDs of entities removed with their entry this run, until
+# another entity takes the ID: a form left open may still offer one.
+DATA_REMOVED = DOMAIN + "_removed"
 # The platforms actually forwarded, so unload matches setup even if the
 # entry type changed in between (a light/scheduled-light conversion).
 DATA_PLATFORMS = "platforms"

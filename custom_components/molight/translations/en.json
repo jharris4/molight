@@ -1052,7 +1052,8 @@
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "confirmation_required": "Confirm the conversion to continue.",
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
-      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby."
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
+      "reference_removed": "A sensor, schedule or light chosen here was deleted while this form was open. Clear it or choose another."
     },
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -1064,7 +1065,8 @@
       "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
       "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
       "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
-      "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved."
+      "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved.",
+      "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Start again to choose another."
     }
   },
   "selector": {
@@ -1786,7 +1788,8 @@
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
-      "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again."
+      "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again.",
+      "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }
   }
 }
