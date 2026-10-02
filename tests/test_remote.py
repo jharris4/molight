@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant import config_entries
+from homeassistant.components.event import EventEntity
 from homeassistant.const import (
     EVENT_CALL_SERVICE,
     EVENT_HOMEASSISTANT_STARTED,
@@ -17,6 +18,7 @@ from homeassistant.const import (
 from homeassistant.core import CoreState, State, callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -57,6 +59,7 @@ from custom_components.molight.const import (
     REMOTE_ACTION_ON,
     REMOTE_ACTION_PRESET_1,
     REMOTE_ACTION_PRESET_2,
+    REMOTE_ACTION_TOGGLE,
     STATE_ACTIVE,
     STATE_EFFECT,
 )
@@ -1310,3 +1313,279 @@ async def test_remote_options_reject_missing_targets(hass: HomeAssistant) -> Non
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "remote"
     assert result["errors"] == {CONF_TARGET_LIGHTS: "target_lights_required"}
+
+
+# ---------------------------------------------------------------------------
+# Native integration vocabularies
+# ---------------------------------------------------------------------------
+
+# Each button's advertised event_types as Home Assistant 2026.9's own
+# integrations build them (the components' event.py unless noted), with the
+# single and double click MoLight must resolve (None: the button has none)
+# and the events that must never fire a binding.
+NATIVE_VOCABULARIES = {
+    # matter: multi-press switch with long press.
+    "matter_multi_press": (
+        ["multi_press_1", "multi_press_2", "long_press", "long_release"],
+        "multi_press_1",
+        "multi_press_2",
+        ["long_press", "long_release"],
+    ),
+    # matter: momentary switch with release and long press, no multi-press.
+    "matter_momentary": (
+        ["initial_press", "short_release", "long_press", "long_release"],
+        "short_release",
+        None,
+        ["initial_press", "long_press", "long_release"],
+    ),
+    # hue: DEFAULT_BUTTON_EVENT_TYPES in hue/const.py.
+    "hue": (HUE_TYPES, "short_release", None, ["initial_press", "repeat"]),
+    # hue: the tap switch override in hue/const.py.
+    "hue_tap_switch": (HUE_TAP_TYPES, "initial_press", None, []),
+    "homekit_controller": (
+        ["single_press", "double_press", "long_press"],
+        "single_press",
+        "double_press",
+        ["long_press"],
+    ),
+    "homekit_controller_single_only": (
+        ["single_press", "long_press"],
+        "single_press",
+        None,
+        ["long_press"],
+    ),
+    "lutron_keypad": (["single_press"], "single_press", None, []),
+    "lutron_raise_lower": (["press", "release"], "press", None, ["release"]),
+    "bthome": (
+        [
+            "press",
+            "double_press",
+            "triple_press",
+            "long_press",
+            "long_double_press",
+            "long_triple_press",
+            "hold_press",
+        ],
+        "press",
+        "double_press",
+        [
+            "triple_press",
+            "long_press",
+            "long_double_press",
+            "long_triple_press",
+            "hold_press",
+        ],
+    ),
+    "xiaomi_ble_button": (
+        ["press", "double_press", "long_press"],
+        "press",
+        "double_press",
+        ["long_press"],
+    ),
+    "xiaomi_ble_dimmer": (
+        [
+            "press",
+            "long_press",
+            "rotate_left",
+            "rotate_right",
+            "rotate_left_pressed",
+            "rotate_right_pressed",
+        ],
+        "press",
+        None,
+        ["long_press", "rotate_left", "rotate_right", "rotate_left_pressed"],
+    ),
+    # shelly: RPC_INPUTS_EVENTS_TYPES in shelly/const.py (a set).
+    "shelly_rpc": (
+        sorted(
+            [
+                "btn_down",
+                "btn_up",
+                "single_push",
+                "double_push",
+                "triple_push",
+                "long_push",
+            ]
+        ),
+        "single_push",
+        "double_push",
+        ["btn_down", "btn_up", "triple_push", "long_push"],
+    ),
+    # shelly: BLOCK_INPUTS_EVENTS_TYPES in shelly/const.py (a set).
+    "shelly_block": (
+        sorted(["single", "double", "triple", "long", "single_long", "long_single"]),
+        "single",
+        "double",
+        ["triple", "long", "single_long", "long_single"],
+    ),
+    # zwave_js: sorted central scene states, named by zwave-js's
+    # CentralSceneKeys.
+    "zwave_js_central_scene": (
+        ["KeyHeldDown", "KeyPressed", "KeyPressed2x", "KeyPressed3x", "KeyReleased"],
+        "KeyPressed",
+        "KeyPressed2x",
+        ["KeyHeldDown", "KeyReleased", "KeyPressed3x"],
+    ),
+    "homematicip_cloud": (
+        ["short_release", "long_press", "long_release"],
+        "short_release",
+        None,
+        ["long_press", "long_release"],
+    ),
+    "govee_ble": (["press"], "press", None, []),
+    "switchbot": (["press"], "press", None, []),
+}
+
+# Event entities with no click at all: a single-click binding is refused.
+NATIVE_NON_CLICK_VOCABULARIES = {
+    "bthome_dimmer": ["rotate_left", "rotate_right"],
+    "bthome_command": ["off", "on", "toggle", "step_up", "step_down"],
+    "xiaomi_ble_cube": ["rotate_left", "rotate_right"],
+    "homekit_controller_doorbell": ["ring", "double_press", "long_press"],
+    "homee_button_state": ["upper", "lower", "released"],
+}
+
+
+class _NativeButton(EventEntity):
+    """A real event entity advertising one integration's vocabulary."""
+
+    _attr_should_poll = False
+
+    def __init__(self, event_types: list[str]) -> None:
+        self._attr_event_types = list(event_types)
+        self.entity_id = "event.native_button"
+
+    def press(self, event_type: str) -> None:
+        self._trigger_event(event_type)
+        self.async_write_ha_state()
+
+
+async def _add_native_button(
+    hass: HomeAssistant, event_types: list[str]
+) -> _NativeButton:
+    assert await async_setup_component(hass, "event", {})
+    button = _NativeButton(event_types)
+    await hass.data["event"].async_add_entities([button])
+    await settle(hass)
+    return button
+
+
+async def _create_remote_through_flow(hass: HomeAssistant, sections: dict) -> dict:
+    result = await _start_remote_create(hass)
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Native Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            **sections,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("integration", list(NATIVE_VOCABULARIES))
+async def test_native_integration_vocabulary(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer, integration: str
+) -> None:
+    """Each native button shape passes setup for the clicks it has, is refused
+    a double click it lacks, and fires each bound click exactly once."""
+    types, single, double, noise = NATIVE_VOCABULARIES[integration]
+    hass.states.async_set("light.living_room", "off")
+    await setup_entries(hass, light_entry)
+    button = await _add_native_button(hass, types)
+    assert hass.states.get("event.native_button").attributes["event_types"] == types
+
+    toggle = {REMOTE_ACTION_TOGGLE: {CONF_TOGGLE_BUTTONS_SINGLE: [button.entity_id]}}
+    off = {REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_DOUBLE: [button.entity_id]}}
+    if double is None:
+        result = await _create_remote_through_flow(hass, {**toggle, **off})
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "double_click_unsupported"}
+        result = await _create_remote_through_flow(hass, toggle)
+    else:
+        result = await _create_remote_through_flow(hass, {**toggle, **off})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+    calls = _record_service_calls(hass)
+
+    def _actions() -> list[str]:
+        return [
+            c["service"]
+            for c in calls
+            if c["service_data"].get("entity_id") == ["light.test_light"]
+        ]
+
+    async def _press(event_type: str) -> None:
+        # Real presses are milliseconds apart, so each is its own state.
+        freezer.tick(timedelta(milliseconds=100))
+        button.press(event_type)
+        await settle(hass)
+
+    for event_type in noise:
+        await _press(event_type)
+    assert _actions() == []
+
+    await _press(single)
+    assert _actions() == ["toggle"]
+    assert _vlight(hass).state == "on"
+    last_action = hass.states.get("sensor.native_remote_last_action")
+    assert last_action.attributes["click"] == "single"
+    assert last_action.attributes["event_type"] == single
+
+    if double is not None:
+        await _press(double)
+        assert _actions() == ["toggle", "turn_off"]
+        assert _vlight(hass).state == "off"
+        last_action = hass.states.get("sensor.native_remote_last_action")
+        assert last_action.attributes["click"] == "double"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("integration", list(NATIVE_NON_CLICK_VOCABULARIES))
+async def test_native_non_click_entity_refuses_a_single_click(
+    hass: HomeAssistant, light_entry: MockConfigEntry, integration: str
+) -> None:
+    """A dial, cube, command or doorbell entity has no single click to bind."""
+    await setup_entries(hass, light_entry)
+    button = await _add_native_button(hass, NATIVE_NON_CLICK_VOCABULARIES[integration])
+
+    result = await _create_remote_through_flow(
+        hass, {REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: [button.entity_id]}}
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "single_click_unsupported"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("has_capabilities", [True, False])
+async def test_button_of_an_unloaded_integration_is_judged_by_its_registry(
+    hass: HomeAssistant, light_entry: MockConfigEntry, has_capabilities: bool
+) -> None:
+    """A button whose integration hasn't loaded shows Home Assistant's restored
+    placeholder: its registered event_types are judged, and without them the
+    capability is unknown and the binding is allowed."""
+    await setup_entries(hass, light_entry)
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create(
+        "event",
+        "homekit_controller",
+        "button-1",
+        suggested_object_id="unloaded_button",
+        capabilities=(
+            {"event_types": ["single_press", "long_press"]}
+            if has_capabilities
+            else None
+        ),
+    )
+    entry.write_unavailable_state(hass)
+
+    result = await _create_remote_through_flow(
+        hass, {REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_DOUBLE: [entry.entity_id]}}
+    )
+    if has_capabilities:
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "double_click_unsupported"}
+    else:
+        assert result["type"] == FlowResultType.CREATE_ENTRY
