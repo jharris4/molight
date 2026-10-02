@@ -262,9 +262,14 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
             # had never fired an event (a freshly paired button), so this
             # first event is genuinely fresh and must not be swallowed.
             return
-        if old_state.state == new_state.state:
-            return  # attribute-only write, not a new button event
         event_type = new_state.attributes.get(ATTR_EVENT_TYPE)
+        # Before HA 2026.8 two events in the same millisecond share a state, so
+        # only a changed event_type tells the second one from an attribute write.
+        if (
+            old_state.state == new_state.state
+            and old_state.attributes.get(ATTR_EVENT_TYPE) == event_type
+        ):
+            return
         supported = new_state.attributes.get(ATTR_EVENT_TYPES) or []
         if event_type == single_click_event_type(supported):
             click = CLICK_SINGLE

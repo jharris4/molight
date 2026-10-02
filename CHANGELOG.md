@@ -256,6 +256,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light's effect or warn stage step from the brightness the light had before
   the warning. They stepped from the warning level, so a light at 80% with a
   10% warning went to 20% on *Brightness up* and off on *Brightness down*.
+- On Home Assistant 2026.7 and earlier, a Virtual Remote click that a button
+  reports in the same millisecond as its previous event, such as a Shelly
+  `single_push` arriving with its `btn_up`, runs its binding. It was ignored,
+  because Home Assistant gave both events the same state.
 
 ## [1.8.0] - 2026-09-30
 

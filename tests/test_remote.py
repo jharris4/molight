@@ -1044,6 +1044,94 @@ async def test_attribute_only_write_never_refires(
 
 
 @pytest.mark.asyncio
+async def test_event_sharing_a_timestamp_with_the_previous_one_still_fires(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """Before HA 2026.8 two events in the same millisecond share a state: a
+    new event_type is still a new event, the same one is not."""
+    types = ["initial_press", "short_release", "long_press", "long_release"]
+    remote = _remote_entry(**{CONF_TOGGLE_BUTTONS_SINGLE: ["event.matter"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.matter", types)
+    await setup_entries(hass, light_entry, remote)
+    stamp = "2026-07-27T11:00:00.000+00:00"
+
+    hass.states.async_set(
+        "event.matter", stamp, {"event_type": "initial_press", "event_types": types}
+    )
+    hass.states.async_set(
+        "event.matter", stamp, {"event_type": "short_release", "event_types": types}
+    )
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+    hass.states.async_set(
+        "event.matter",
+        stamp,
+        {"event_type": "short_release", "event_types": types, "battery": 50},
+    )
+    await settle(hass)
+    assert _vlight(hass).state == "on"  # a second toggle would turn it off
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("event_types", "constituent", "click", "service"),
+    [
+        (
+            ["initial_press", "short_release", "long_press", "long_release"],
+            "initial_press",
+            "short_release",
+            "toggle",
+        ),
+        (
+            ["btn_down", "btn_up", "double_push", "single_push"],
+            "btn_up",
+            "single_push",
+            "toggle",
+        ),
+        (
+            ["btn_down", "btn_up", "double_push", "single_push"],
+            "btn_up",
+            "double_push",
+            "turn_off",
+        ),
+    ],
+    ids=["matter-momentary", "shelly-single", "shelly-double"],
+)
+async def test_click_in_the_same_millisecond_as_a_constituent_fires(
+    hass: HomeAssistant,
+    light_entry: MockConfigEntry,
+    freezer,
+    event_types: list[str],
+    constituent: str,
+    click: str,
+    service: str,
+) -> None:
+    """A real event entity firing a constituent and the click in one
+    millisecond, which share a state before HA 2026.8, still runs the click."""
+    hass.states.async_set("light.living_room", "on")
+    await setup_entries(hass, light_entry)
+    button = await _add_native_button(hass, event_types)
+    sections = {REMOTE_ACTION_TOGGLE: {CONF_TOGGLE_BUTTONS_SINGLE: [button.entity_id]}}
+    if "double_push" in event_types:
+        sections[REMOTE_ACTION_OFF] = {CONF_OFF_BUTTONS_DOUBLE: [button.entity_id]}
+    result = await _create_remote_through_flow(hass, sections)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+    calls = _record_service_calls(hass)
+
+    button.press(constituent)
+    button.press(click)
+    await settle(hass)
+    assert [
+        c["service"]
+        for c in calls
+        if c["service_data"].get("entity_id") == ["light.test_light"]
+    ] == [service]
+
+
+@pytest.mark.asyncio
 async def test_options_rebind_takes_effect_live(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
