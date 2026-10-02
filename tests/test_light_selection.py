@@ -370,6 +370,81 @@ async def test_selection_skipped_when_target_is_missing_or_unavailable(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door", "resend"])
+async def test_selection_applied_when_target_has_no_current_option(
+    hass: HomeAssistant, caplog, trigger: str
+) -> None:
+    """A select with no current option (a WLED preset select after a change
+    in the WLED app) is available and still gets the option."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("select.ambient_theme", "unknown", {"options": ["Cozy"]})
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("binary_sensor.door", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(occupancy="binary_sensor.occ", door="binary_sensor.door"),
+    )
+
+    if trigger in ("manual", "resend"):
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+        )
+    else:
+        sensor = "binary_sensor.occ" if trigger == "occupancy" else "binary_sensor.door"
+        hass.states.async_set(sensor, "on")
+    await settle(hass)
+    if trigger == "resend":
+        hass.states.async_set("light.ambient", "on")
+        await settle(hass)
+        hass.states.async_set("light.ambient", "unavailable")
+        await settle(hass)
+        hass.states.async_set("light.ambient", "off")
+        await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert selected == ["Cozy"] * (2 if trigger == "resend" else 1)
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+    assert state.attributes["last_turn_on_selection_source"] == "fixed"
+    assert "Turn-on selection target" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_window_start_applies_selection_to_a_target_with_no_current_option(
+    hass: HomeAssistant,
+) -> None:
+    """A follow window start applies the option to an unknown select too."""
+    selected: list[str] = []
+
+    async def select_option(call: ServiceCall) -> None:
+        selected.append(call.data["option"])
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("select.ambient_theme", "unknown", {"options": ["Cozy"]})
+    hass.states.async_set("light.ambient", "off")
+    hass.states.async_set("binary_sensor.sched", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched", schedule_mode=SCHEDULE_MODE_FOLLOW
+        ),
+    )
+
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    await settle(hass)
+
+    assert selected == ["Cozy"]
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+@pytest.mark.asyncio
 async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     hass: HomeAssistant, freezer
 ) -> None:

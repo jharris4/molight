@@ -180,12 +180,13 @@ def _assert_standby(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("current", ["Day", "unknown"])
 async def test_schedule_start_turns_an_off_light_on_at_standby(
-    hass: HomeAssistant,
+    hass: HomeAssistant, current: str
 ) -> None:
     """The start boundary lights the porch at standby with the auto-on fade."""
     select = "select.scene"
-    hass.states.async_set(select, "Day", {"options": ["Day", "Night"]})
+    hass.states.async_set(select, current, {"options": ["Day", "Night"]})
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:

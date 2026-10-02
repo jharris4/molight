@@ -166,6 +166,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while standby waits on the select no longer takes the light out of standby.
 - Home Assistant and HACS list MoLight as *Calculated* instead of *Local
   Push*, since it only works from other entities' states.
+- A turn-on select with no option currently chosen (state `unknown`, as a
+  WLED preset select reports after any change in the WLED app) gets the
+  turn-on selection, instead of being skipped like an `unavailable` one.
 
 ## [1.8.0] - 2026-09-30
 

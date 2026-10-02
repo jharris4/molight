@@ -3994,9 +3994,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if not self._turn_on_select_entity:
             return
         target = self.hass.states.get(self._turn_on_select_entity)
-        if target is None or target.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if target is None or target.state == STATE_UNAVAILABLE:
             # HA only logs a call to such a target, so it would otherwise be
-            # recorded as applied.
+            # recorded as applied. An unknown one (no current option) accepts it.
             _LOGGER.warning(
                 "Turn-on selection target %s is %s; turning on the lights without it",
                 self._turn_on_select_entity,
