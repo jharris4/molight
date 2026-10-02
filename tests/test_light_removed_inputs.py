@@ -556,7 +556,7 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
     assert attrs(hass)["last_off_manual"] is None
 
 
-@pytest.mark.parametrize("role", ["occupancy", "maintain", "hold"])
+@pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
 async def test_sensor_whose_entry_is_disabled_stops_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
 ) -> None:
@@ -578,7 +578,10 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
         },
     )
     presence = "binary_sensor.room_occupancy"
-    reference = {"hold_entities": [presence]} if role == "hold" else {role: presence}
+    reference = {
+        "hold": {"hold_entities": [presence]},
+        "door": {"door": presence, "door_mode": DOOR_MODE_OPEN_CLOSE},
+    }.get(role, {role: presence})
     await setup_entries(hass, sensor, make_light_entry(**reference, timeout=60))
     await settle(hass)
     held = dict(attrs(hass))
