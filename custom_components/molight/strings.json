@@ -291,7 +291,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -583,7 +583,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -710,7 +710,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
           },
           "warning": {
@@ -800,7 +800,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
           },
           "warning": {
@@ -1222,7 +1222,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
           },
           "warning": {
@@ -1312,7 +1312,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
           },
           "warning": {
@@ -1572,7 +1572,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is always instant."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, window end). A manual off is unaffected."
             }
           },
           "warning": {
