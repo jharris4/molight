@@ -1005,6 +1005,17 @@ def _fixed_days_after(at: time, anchor: tuple[str, int] | None) -> int:
     return days - 1 if rest == 0 and days > 0 else days
 
 
+def _sun_event(hass: HomeAssistant, event: str, day: date) -> datetime | None:
+    """Return a sun event of the solar day whose noon falls on the local day.
+
+    Home Assistant dates a solar day by its noon in UTC, which is the day
+    before in time zones far ahead of their longitude (Samoa, Kiritimati).
+    """
+    if (noon := get_astral_event_date(hass, "noon", day)) is not None:
+        day += day - dt_util.as_local(noon).date()
+    return get_astral_event_date(hass, event, day)
+
+
 def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime | None:
     """Resolve an edge spec to a concrete datetime on the given day."""
     if not isinstance(edge, dict):
@@ -1023,7 +1034,7 @@ def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime
     if anchor is not None:
         # None on polar days when the event doesn't occur; the fixed
         # time (if any) then stands alone.
-        sun = get_astral_event_date(hass, anchor[0], day)
+        sun = _sun_event(hass, anchor[0], day)
         if sun is not None:
             sun += timedelta(minutes=anchor[1])
 

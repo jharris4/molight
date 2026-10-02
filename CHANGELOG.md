@@ -207,6 +207,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   midnight can pick the fixed time. *End at the later of 4 h after sunset and
   00:00* always ended 4 h after sunset, because the 00:00 was taken as the
   midnight that began the day; it is now the midnight that follows.
+- In time zones a day ahead of their longitude (Samoa, Tonga, Kiritimati, the
+  Chatham Islands) a window pairs a fixed time with the same day's sunrise or
+  sunset. It used the next day's, so *05:00 → sunrise* ran for about 26 hours.
 
 ## [1.8.0] - 2026-09-30
 

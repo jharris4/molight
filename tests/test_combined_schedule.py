@@ -42,6 +42,7 @@ from custom_components.molight.const import (
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
     ANCHORAGE,
+    APIA,
     LONDON,
     TROMSO,
     finish_startup,
@@ -1162,3 +1163,24 @@ async def test_input_ending_at_the_midnight_after_its_sun_event(
     assert hass.states.get("binary_sensor.evenings").state == expected
     assert hass.states.get("binary_sensor.nested").state == expected
     assert hass.states.get("binary_sensor.not_evenings").state == opposite
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("when", "expected"), [("05:30", "on"), ("15:00", "off")])
+async def test_input_pairs_a_fixed_time_with_the_same_days_sun_event_in_samoa(
+    hass: HomeAssistant, freezer, when: str, expected: str
+) -> None:
+    """A 05:00 -> sunrise input in Apia ends at that morning's sunrise."""
+    tz = await set_home(hass, *APIA)
+    freezer.move_to(datetime.fromisoformat(f"2026-06-21 {when}").replace(tzinfo=tz))
+    await _setup(
+        hass,
+        _time_schedule("Early", "05:00", {"sun": "sunrise"}),
+        _combined("Mornings", ["binary_sensor.early"]),
+        _combined("Nested", ["binary_sensor.mornings"], operator=SCHEDULE_OPERATOR_ALL),
+        _combined("Not Mornings", ["binary_sensor.mornings"], invert=True),
+    )
+    opposite = "off" if expected == "on" else "on"
+    assert hass.states.get("binary_sensor.mornings").state == expected
+    assert hass.states.get("binary_sensor.nested").state == expected
+    assert hass.states.get("binary_sensor.not_mornings").state == opposite

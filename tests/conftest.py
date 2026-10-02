@@ -286,6 +286,14 @@ TORONTO = ("America/Toronto", 43.65, -79.38)
 LONDON = ("Europe/London", 51.5, -0.12)
 ANCHORAGE = ("America/Anchorage", 61.22, -149.9)
 TROMSO = ("Europe/Oslo", 69.65, 18.96)
+# Zones a day ahead of their longitude: solar noon in UTC is the day before.
+APIA = ("Pacific/Apia", -13.83, -171.76)
+KIRITIMATI = ("Pacific/Kiritimati", 1.87, -157.4)
+TONGATAPU = ("Pacific/Tongatapu", -21.13, -175.2)
+CHATHAM = ("Pacific/Chatham", -43.95, -176.55)
+AUCKLAND = ("Pacific/Auckland", -36.85, 174.76)
+HONOLULU = ("Pacific/Honolulu", 21.3, -157.85)
+TOKYO = ("Asia/Tokyo", 35.68, 139.69)
 
 
 async def set_home(

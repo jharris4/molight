@@ -10,6 +10,7 @@ import pytest
 from homeassistant.core import State
 from homeassistant.helpers import restore_state
 from homeassistant.helpers.sun import get_astral_event_date
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -20,6 +21,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.binary_sensor import (
     _end_days_after,
     _resolve_window,
+    _sun_event,
 )
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
@@ -37,7 +39,14 @@ from custom_components.molight.const import (
 )
 from tests.conftest import (
     ANCHORAGE,
+    APIA,
+    AUCKLAND,
+    CHATHAM,
+    HONOLULU,
+    KIRITIMATI,
     LONDON,
+    TOKYO,
+    TONGATAPU,
     TORONTO,
     TROMSO,
     make_light_entry,
@@ -1693,6 +1702,79 @@ async def test_polar_day_fixed_time_past_midnight_stands_alone(
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
     assert state.attributes["next_transition"] == "2026-06-22T00:00:00+02:00"
+
+
+# ---------------------------------------------------------------------------
+# Time zones a day ahead of their longitude (across the date line)
+# ---------------------------------------------------------------------------
+
+_DATE_LINE_HOMES = [APIA, KIRITIMATI, TONGATAPU, CHATHAM]
+_ORDINARY_HOMES = [AUCKLAND, HONOLULU, TOKYO, TORONTO, LONDON]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("home", [*_DATE_LINE_HOMES, *_ORDINARY_HOMES])
+async def test_sun_events_are_those_of_the_local_day(
+    hass: HomeAssistant, home: tuple
+) -> None:
+    """Sunrise and sunset for a day fall on that day by the home's clock."""
+    await set_home(hass, *home)
+    for offset in range(0, 365, 7):
+        day = date(2026, 1, 1) + timedelta(days=offset)
+        for event in ("sunrise", "sunset"):
+            at = dt_util.as_local(_sun_event(hass, event, day))
+            assert at.date() == day, (event, day)
+            assert (at.hour < 12) is (event == "sunrise"), (event, day)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("home", [*_DATE_LINE_HOMES, AUCKLAND, HONOLULU])
+@pytest.mark.parametrize(
+    ("edges", "when", "expected"),
+    [
+        # A fixed time with the same day's sun event, not the next day's.
+        ((_at("05:00"), _SUNRISE), "05:30", "on"),
+        ((_at("05:00"), _SUNRISE), "15:00", "off"),
+        ((_SUNSET, _at("23:00")), "22:00", "on"),
+        ((_SUNSET, _at("23:00")), "12:00", "off"),
+        ((_SUNRISE, _at("12:00")), "11:00", "on"),
+        ((_SUNRISE, _at("12:00")), "04:00", "off"),
+        ((_at("13:00"), _SUNSET), "14:00", "on"),
+        ((_at("13:00"), _SUNSET), "22:00", "off"),
+        # A combined edge compares the two on one day.
+        ((_both("05:00", "sunrise", 0, "latest"), _at("11:00")), "05:30", "off"),
+        ((_both("05:00", "sunrise", 0, "latest"), _at("11:00")), "09:00", "on"),
+        # Sun-only windows were right already.
+        ((_SUNSET, _SUNRISE), "02:00", "on"),
+        ((_SUNSET, _SUNRISE), "12:00", "off"),
+    ],
+)
+async def test_fixed_time_pairs_with_the_same_days_sun_event_across_the_date_line(
+    hass: HomeAssistant, freezer, home: tuple, edges: tuple, when: str, expected: str
+) -> None:
+    """05:00 -> sunrise in Samoa is the hour or two before sunrise, not a
+    window running on to the next day's sunrise."""
+    tz = await set_home(hass, *home)
+    freezer.move_to(_local(tz, f"2026-06-21 {when}"))
+    await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
+    assert hass.states.get("binary_sensor.night_schedule").state == expected
+
+
+@pytest.mark.asyncio
+async def test_date_line_window_reports_the_same_days_boundaries(
+    hass: HomeAssistant, freezer
+) -> None:
+    """In Apia the evening window starts at today's sunset and ends at 23:00."""
+    tz = await set_home(hass, *APIA)
+    freezer.move_to(_local(tz, "2026-06-21 22:00"))
+    await _setup(hass, _schedule_entry([{"start": _SUNSET, "end": _at("23:00")}]))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    started = dt_util.as_local(
+        datetime.fromisoformat(state.attributes["current_window_start"])
+    )
+    assert started.strftime("%Y-%m-%d %H") == "2026-06-21 18"
+    assert state.attributes["next_transition"] == "2026-06-21T23:00:00+13:00"
 
 
 # ---------------------------------------------------------------------------
