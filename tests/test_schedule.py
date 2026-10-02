@@ -1818,3 +1818,130 @@ async def test_polar_transition_windows(
     freezer.move_to(_local(tz, when))
     await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
     assert hass.states.get("binary_sensor.night_schedule").state == expected
+
+
+async def _move(hass: HomeAssistant, freezer, when: datetime) -> None:
+    freezer.move_to(when)
+    async_fire_time_changed(hass, when)
+    await settle(hass)
+
+
+def _inverted_entry(start: dict, end: dict) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Night Schedule",
+            CONF_TIME_WINDOWS: [{"start": start, "end": end}],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("edges", "first", "days", "marker"),
+    [
+        # Daytime (not sunset -> sunrise) through the start of the midnight
+        # sun: the last night ended at the 00:57 sunrise on 05-18.
+        ((_SUNSET, _SUNRISE), "2026-05-18 12:00", 40, "2026-05-17T22:57"),
+        # Night-time (not sunrise -> sunset) through the start of the polar
+        # night: the last day ended at the 12:44 sunset on 11-22.
+        ((_SUNRISE, _SUNSET), "2026-11-22 18:00", 40, "2026-11-22T11:44"),
+    ],
+)
+async def test_inverted_sun_schedule_keeps_its_marker_through_a_polar_period(
+    hass: HomeAssistant, freezer, edges: tuple, first: str, days: int, marker: str
+) -> None:
+    """Days into a polar period the window end that began the on-period is
+    out of sight; the period runs on under the marker it began with."""
+    tz = await set_home(hass, *TROMSO)
+    start = _local(tz, first)
+    freezer.move_to(start)
+    await _setup(hass, _inverted_entry(*edges))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    began = state.attributes["current_window_start"]
+    assert began.startswith(marker)
+
+    midnight = datetime.combine(start.date(), datetime.min.time(), tzinfo=tz)
+    for day in range(1, days):
+        for moment in (timedelta(seconds=5), timedelta(hours=12)):
+            await _move(hass, freezer, midnight + timedelta(days=day) + moment)
+            state = hass.states.get("binary_sensor.night_schedule")
+            assert state.state == "on", day
+            assert state.attributes["current_window_start"] == began, day
+
+
+@pytest.mark.asyncio
+async def test_inverted_sun_schedule_dates_a_new_period_after_the_polar_period(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The first night after the midnight sun ends the long day; the next
+    day is a new on-period, dated from that night's sunrise."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(_local(tz, "2026-07-20 12:00"))
+    await _setup(hass, _inverted_entry(_SUNSET, _SUNRISE))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    # Nothing in sight to date the period from.
+    assert state.attributes["current_window_start"] == "inverted"
+
+    for day in range(21, 26):
+        await _move(hass, freezer, _local(tz, f"2026-07-{day} 00:00:05"))
+        state = hass.states.get("binary_sensor.night_schedule")
+        assert state.state == "on"
+        assert state.attributes["current_window_start"] == "inverted"
+
+    sunrise = get_astral_event_date(hass, "sunrise", date(2026, 7, 26))
+    await _move(hass, freezer, _local(tz, "2026-07-26 00:50"))
+    assert hass.states.get("binary_sensor.night_schedule").state == "off"
+    await _move(hass, freezer, sunrise + timedelta(seconds=2))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == sunrise.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_inverted_sun_schedule_keeps_its_marker_across_a_polar_restart(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A restart a week into the midnight sun restores the marker."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(_local(tz, "2026-05-18 12:00"))
+    entry = _inverted_entry(_SUNSET, _SUNRISE)
+    await _setup(hass, entry)
+    began = hass.states.get("binary_sensor.night_schedule").attributes[
+        "current_window_start"
+    ]
+
+    await _restart_at(hass, freezer, entry, _local(tz, "2026-05-25 12:00"))
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == began
+
+
+@pytest.mark.asyncio
+async def test_follow_light_manual_off_stands_through_the_midnight_sun(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A light turned off by hand in a daytime window stays off: three days
+    on, the daily re-check must not read as a new window."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(_local(tz, "2026-05-18 12:00"))
+    light = make_light_entry(
+        name="Desk Lamp",
+        schedule="binary_sensor.night_schedule",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    await setup_entries(hass, _inverted_entry(_SUNSET, _SUNRISE), light)
+    assert hass.states.get("light.desk_lamp").state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.desk_lamp"}, blocking=True
+    )
+    await settle(hass)
+
+    for day in range(19, 30):
+        await _move(hass, freezer, _local(tz, f"2026-05-{day} 00:00:05"))
+        assert hass.states.get("binary_sensor.night_schedule").state == "on"
+        assert hass.states.get("light.desk_lamp").state == "off", day

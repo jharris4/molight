@@ -50,6 +50,7 @@ from custom_components.molight.const import (
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_SCHEDULE_INPUTS,
+    CONF_SCHEDULE_INVERT,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
@@ -78,9 +79,11 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import (
+    TROMSO,
     make_scheduled_light_entry,
     record_service_calls,
     restart_entries,
+    set_home,
     settle,
     setup_entries,
 )
@@ -2465,3 +2468,51 @@ async def test_what_the_inside_settings_come_on_at(
         assert _attrs(hass)["brightness"] == BOOST
     else:
         _assert_standby(hass)
+
+
+@pytest.mark.asyncio
+async def test_manual_off_stands_through_the_midnight_sun(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A daytime (not sunset -> sunrise) settings schedule in Tromso is one
+    window for the whole midnight sun: a manual off keeps standby off, where
+    the daily re-check used to read as a new window three days in."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(datetime(2026, 5, 18, 12, 0, tzinfo=tz))
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Settings Schedule",
+            CONF_TIME_WINDOWS: [
+                {"start": {"sun": "sunset"}, "end": {"sun": "sunrise"}}
+            ],
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    _record_light_contexts(hass)
+    await setup_entries(hass, schedule, _porch())
+    await settle(hass)
+    await _echo_standby(hass)
+    _assert_standby(hass)
+    window = _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW]
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _set(hass, REAL, "off")
+    assert hass.states.get(VIRTUAL).state == "off"
+    calls.clear()
+
+    for day in range(19, 26):
+        when = datetime(2026, 5, day, 0, 0, 5, tzinfo=tz)
+        freezer.move_to(when)
+        async_fire_time_changed(hass, when)
+        await settle(hass)
+        assert hass.states.get(SCHEDULE).state == "on"
+        assert hass.states.get(VIRTUAL).state == "off", day
+        assert _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window
+    assert _light_calls(calls, "turn_on") == []

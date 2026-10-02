@@ -1247,13 +1247,14 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     def _refresh(self, _now: datetime | None = None) -> None:
         """Evaluate the current window state and schedule the next transition."""
         now = dt_util.utcnow()
+        was_on = self._attr_is_on
         active_start, next_transition = self._evaluate(now)
         raw_is_on = active_start is not None
         self._attr_is_on = raw_is_on != self._invert
         self._current_window_start = (
             active_start
             if self._attr_is_on and not self._invert
-            else self._inverted_window_start(now)
+            else self._inverted_window_start(now, was_on)
             if self._attr_is_on
             else None
         )
@@ -1336,14 +1337,30 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             return marker
         return None
 
-    def _inverted_window_start(self, now: datetime) -> datetime | str:
+    def _inverted_window_start(self, now: datetime, was_on: bool) -> datetime | str:
         """Return when the current gap between configured windows began."""
         merged = _merged_window_intervals(self.hass, self._windows, now, _DAY_OFFSETS)
         ended = [end for _start, end in merged if end <= now]
+        latest = max(ended, key=lambda t: t.timestamp(), default=None)
+        marker = self._current_window_start
+        # Only a later window end begins a new gap. The end that began this
+        # one leaves the resolved days when no window follows (polar periods).
+        if (
+            was_on
+            and marker is not None
+            and (
+                latest is None
+                or (
+                    isinstance(marker, datetime)
+                    and latest.timestamp() <= marker.timestamp()
+                )
+            )
+        ):
+            return marker
         # With no resolvable boundaries (for example, a sun-only window during
         # polar day/night), inversion is continuously on. Use a stable marker
         # so Follow mode can apply it once without re-triggering every restart.
-        return max(ended, key=lambda t: t.timestamp(), default="inverted")
+        return latest or "inverted"
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:

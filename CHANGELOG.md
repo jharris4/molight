@@ -210,6 +210,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In time zones a day ahead of their longitude (Samoa, Tonga, Kiritimati, the
   Chatham Islands) a window pairs a fixed time with the same day's sunrise or
   sunset. It used the next day's, so *05:00 → sunrise* ran for about 26 hours.
+- An inverted sun schedule is one window for the whole of a polar period.
+  Three days into the midnight sun an inverted *sunset → sunrise* schedule
+  changed its `current_window_start`, which turned a follow-mode light back
+  on after a manual off and gave a Virtual Scheduled Light a new settings
+  window.
 
 ## [1.8.0] - 2026-09-30
 

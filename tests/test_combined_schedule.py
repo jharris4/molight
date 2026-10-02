@@ -1184,3 +1184,47 @@ async def test_input_pairs_a_fixed_time_with_the_same_days_sun_event_in_samoa(
     assert hass.states.get("binary_sensor.mornings").state == expected
     assert hass.states.get("binary_sensor.nested").state == expected
     assert hass.states.get("binary_sensor.not_mornings").state == opposite
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("combined", "entity_id"),
+    [
+        (
+            _combined("Day", ["binary_sensor.night"], invert=True),
+            "binary_sensor.day",
+        ),
+        (
+            _combined("Day", ["binary_sensor.not_night"]),
+            "binary_sensor.day",
+        ),
+    ],
+    ids=["inverted combination", "combination of an inverted schedule"],
+)
+async def test_inverted_sun_window_keeps_one_marker_through_the_midnight_sun(
+    hass: HomeAssistant, freezer, combined: MockConfigEntry, entity_id: str
+) -> None:
+    """Daytime in Tromso is one on-period from the last sunrise on 05-18,
+    however many days the sun then stays up."""
+    await set_home(hass, *TROMSO)
+    freezer.move_to("2026-05-18 12:00:00+02:00")
+    night = _time_schedule("Night", {"sun": "sunset"}, {"sun": "sunrise"})
+    not_night = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_time_schedule("Not Night", {"sun": "sunset"}, {"sun": "sunrise"}).data,
+            CONF_SCHEDULE_INVERT: True,
+        },
+    )
+    await _setup(hass, night, not_night, combined)
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    began = state.attributes["current_window_start"]
+    assert began.startswith("2026-05-18T00:57")
+
+    for day in range(19, 31):
+        for moment in ("00:00:05", "12:00:00"):
+            await _move_to(hass, freezer, f"2026-05-{day} {moment}+02:00")
+            state = hass.states.get(entity_id)
+            assert state.state == "on"
+            assert state.attributes["current_window_start"] == began, day
