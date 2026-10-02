@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -35,7 +37,9 @@ CHANGELOG_TEXT = f"""# Changelog
 """
 
 
-def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run a command in a temporary test repository."""
     return subprocess.run(  # noqa: S603 - arguments are fixed test inputs
         command,
@@ -43,6 +47,7 @@ def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         check=False,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -54,9 +59,11 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return result
 
 
-def _release(repo: Path, version: str, *args: str) -> subprocess.CompletedProcess[str]:
+def _release(
+    repo: Path, version: str, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Invoke the copied release script."""
-    return _run([sys.executable, "scripts/release", version, *args], repo)
+    return _run([sys.executable, "scripts/release", version, *args], repo, env)
 
 
 @pytest.fixture
@@ -138,6 +145,32 @@ def test_release_preview_and_write(release_repo: Path) -> None:
 [1.5.0]: https://github.com/jharris4/molight/releases/tag/v1.5.0
 """
     )
+    assert json.loads(manifest) == {"version": "1.6.0"}
+
+
+# UTC+14 and UTC-12 are 26 hours apart, so at least one differs from the UTC date.
+@pytest.mark.real_clock
+@pytest.mark.parametrize("zone", ["Etc/GMT-14", "Etc/GMT+12"])
+def test_release_stamps_the_local_date(release_repo: Path, zone: str) -> None:
+    """The changelog heading carries the maintainer's local date, not UTC's."""
+    earliest = datetime.now(ZoneInfo(zone)).date().isoformat()
+    written = _release(release_repo, "1.6.0", "--write", env={**os.environ, "TZ": zone})
+    latest = datetime.now(ZoneInfo(zone)).date().isoformat()
+
+    assert written.returncode == 0, written.stderr
+    changelog, _ = _release_files(release_repo)
+    stamp = re.search(r"^## \[1\.6\.0\] - (\S+)$", changelog, re.MULTILINE)
+    assert stamp is not None
+    assert stamp.group(1) in (earliest, latest)
+
+
+def test_release_applies_with_write_before_the_version(release_repo: Path) -> None:
+    """--write applies the release wherever it appears on the command line."""
+    result = _run([sys.executable, "scripts/release", "--write", "1.6.0"], release_repo)
+
+    assert result.returncode == 0, result.stderr
+    assert "git tag v1.6.0 && git push origin v1.6.0" in result.stdout
+    _, manifest = _release_files(release_repo)
     assert json.loads(manifest) == {"version": "1.6.0"}
 
 
@@ -266,6 +299,47 @@ def test_release_rejects_non_increasing_version(
 
     assert result.returncode != 0
     assert "must be greater than the current version 1.5.0" in result.stderr
+
+
+def _set_current_version(repo: Path, version: str) -> None:
+    """Make the given version the latest release in the changelog and manifest."""
+    path = repo / "CHANGELOG.md"
+    path.write_text(path.read_text().replace("1.5.0", version))
+    manifest = repo / "custom_components" / "molight" / "manifest.json"
+    manifest.write_text(json.dumps({"version": version}, indent=2) + "\n")
+    _commit_and_push(repo)
+
+
+@pytest.mark.parametrize(
+    ("current", "version"),
+    [("1.9.0", "1.10.0"), ("1.5.9", "1.5.10"), ("9.0.0", "10.0.0")],
+)
+def test_release_orders_versions_numerically(
+    release_repo: Path, current: str, version: str
+) -> None:
+    """A two-digit component sorts after a one-digit one."""
+    _set_current_version(release_repo, current)
+
+    result = _release(release_repo, version)
+
+    assert result.returncode == 0, result.stderr
+    assert f"manifest.json  {current} -> {version}" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("current", "version"),
+    [("1.10.0", "1.9.0"), ("1.5.10", "1.5.9"), ("10.0.0", "9.0.0")],
+)
+def test_release_rejects_a_numerically_older_version(
+    release_repo: Path, current: str, version: str
+) -> None:
+    """A version that only sorts higher as text is still older."""
+    _set_current_version(release_repo, current)
+
+    result = _release(release_repo, version)
+
+    assert result.returncode != 0
+    assert f"must be greater than the current version {current}" in result.stderr
 
 
 def test_release_rejects_wrong_branch(release_repo: Path) -> None:
