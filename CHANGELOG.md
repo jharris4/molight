@@ -164,6 +164,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   select call is still in progress, taken for a turn-on at the wall, which
   dropped the automatic brightness and colour. A preset that lights the light
   while standby waits on the select no longer takes the light out of standby.
+- Home Assistant and HACS list MoLight as *Calculated* instead of *Local
+  Push*, since it only works from other entities' states.
 
 ## [1.8.0] - 2026-09-30
 

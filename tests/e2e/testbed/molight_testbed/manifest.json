@@ -4,7 +4,7 @@
   "codeowners": [],
   "config_flow": true,
   "documentation": "https://github.com/jharris4/molight",
-  "iot_class": "local_push",
+  "iot_class": "calculated",
   "requirements": [],
   "version": "1.0.0"
 }
