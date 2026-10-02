@@ -888,6 +888,41 @@ async def test_options_edit_to_another_gate_mode_drops_a_held_gate_end(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_gate_switch_end_into_bright_control_respects_a_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A Gate and switch state end recalculating a held light while bright in
+    control mode keeps it on; releasing the hold applies the brightness."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(ILLUM, "on")
+    hass.states.async_set(HOLD, "on")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE_SWITCH,
+            illuminance=ILLUM,
+            hold_entities=[HOLD],
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_hold_suppresses_false_detection_quick_off(
     hass: HomeAssistant, freezer
 ) -> None:

@@ -848,6 +848,46 @@ async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
 
 
 @pytest.mark.asyncio
+async def test_schedule_end_switch_into_bright_control_respects_a_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A held light crossing a Switch state end into a bright control profile
+    stays on; releasing the hold applies the brightness."""
+    illuminance = "binary_sensor.outside_illuminance"
+    hold = "input_boolean.keep_on"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(illuminance, "on")
+    hass.states.async_set(hold, "on")
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+        outside={
+            CONF_LIGHT_TIMEOUT: 30,
+            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+            CONF_HOLD_ENTITIES: [hold],
+        },
+        inside={CONF_LIGHT_TIMEOUT: 300, CONF_HOLD_ENTITIES: [hold]},
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+    assert light_targets(calls, "turn_off") == []
+    assert state.state == "on"
+
+    hass.states.async_set(hold, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.asyncio
 async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
     hass: HomeAssistant, freezer
 ) -> None:
