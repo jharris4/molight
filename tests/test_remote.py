@@ -36,6 +36,7 @@ from custom_components.molight.const import (
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
+    CONF_OFF_BUTTONS_DOUBLE,
     CONF_OFF_BUTTONS_SINGLE,
     CONF_ON_BUTTONS_DOUBLE,
     CONF_ON_BUTTONS_SINGLE,
@@ -239,6 +240,123 @@ async def test_lutron_event_entity_single_vs_double_click(
     assert _vlight(hass).state == "off"
 
     _fire(hass, "event.closet_pico_on", "multi_tap", LUTRON_EVENT_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+
+
+# Device-resolved vocabularies: (event_types, single, double, events that
+# must never fire: constituents, long, held and triple presses).
+DEVICE_RESOLVED_VOCABULARIES = {
+    "homekit": (
+        ["single_press", "double_press", "long_press"],
+        "single_press",
+        "double_press",
+        ["long_press"],
+    ),
+    "shelly_rpc": (
+        [
+            "btn_down",
+            "btn_up",
+            "single_push",
+            "double_push",
+            "triple_push",
+            "long_push",
+        ],
+        "single_push",
+        "double_push",
+        ["btn_down", "btn_up", "triple_push", "long_push"],
+    ),
+    "zwave_central_scene": (
+        ["KeyHeldDown", "KeyPressed", "KeyPressed2x", "KeyPressed3x", "KeyReleased"],
+        "KeyPressed",
+        "KeyPressed2x",
+        ["KeyHeldDown", "KeyReleased", "KeyPressed3x"],
+    ),
+    "bthome": (
+        [
+            "press",
+            "double_press",
+            "triple_press",
+            "long_press",
+            "long_double_press",
+            "long_triple_press",
+            "hold_press",
+        ],
+        "press",
+        "double_press",
+        [
+            "triple_press",
+            "long_press",
+            "long_double_press",
+            "long_triple_press",
+            "hold_press",
+        ],
+    ),
+    "xiaomi_ble": (
+        ["press", "double_press", "long_press"],
+        "press",
+        "double_press",
+        ["long_press"],
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vocabulary", list(DEVICE_RESOLVED_VOCABULARIES))
+async def test_device_resolved_click_vocabularies(
+    hass: HomeAssistant, light_entry: MockConfigEntry, vocabulary: str
+) -> None:
+    """single_press/double_press and their siblings each fire their binding
+    exactly once; constituent, long, held and triple presses fire nothing."""
+    types, single, double, noise = DEVICE_RESOLVED_VOCABULARIES[vocabulary]
+    remote = _remote_entry(
+        **{
+            CONF_TOGGLE_BUTTONS_SINGLE: ["event.button"],
+            CONF_OFF_BUTTONS_DOUBLE: ["event.button"],
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.button", types)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    def _actions() -> list[str]:
+        return [
+            c["service"]
+            for c in calls
+            if c["service_data"].get("entity_id") == ["light.test_light"]
+        ]
+
+    for event_type in noise:
+        _fire(hass, "event.button", event_type, types)
+        await settle(hass)
+    assert _actions() == []
+
+    _fire(hass, "event.button", single, types)
+    await settle(hass)
+    assert _actions() == ["toggle"]
+    assert _vlight(hass).state == "on"
+
+    _fire(hass, "event.button", double, types)
+    await settle(hass)
+    assert _actions() == ["toggle", "turn_off"]
+    assert _vlight(hass).state == "off"
+    last_action = hass.states.get("sensor.test_remote_last_action")
+    assert last_action.attributes["click"] == "double"
+    assert last_action.attributes["event_type"] == double
+
+
+@pytest.mark.asyncio
+async def test_native_lutron_keypad_single_press(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A native lutron keypad button advertises only single_press."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.keypad_button"]})
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.keypad_button", ["single_press"])
+    await setup_entries(hass, light_entry, remote)
+
+    _fire(hass, "event.keypad_button", "single_press", ["single_press"])
     await settle(hass)
     assert _vlight(hass).state == "on"
 
@@ -969,6 +1087,84 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("click", "event_types", "error"),
+    [
+        ("single", ["rotate_left", "rotate_right"], "single_click_unsupported"),
+        ("single", ["ring", "double_press", "long_press"], "single_click_unsupported"),
+        ("single", ["upper", "lower", "released"], "single_click_unsupported"),
+        ("single", [], "single_click_unsupported"),
+        ("single", ["single_press", "double_press", "long_press"], None),
+        ("single", ["single_press"], None),
+        ("single", ["btn_down", "btn_up", "single_push", "double_push"], None),
+        ("single", ["KeyPressed", "KeyReleased"], None),
+        ("single", None, None),
+        ("double", ["single_press"], "double_click_unsupported"),
+        ("double", ["single_press", "double_press", "long_press"], None),
+        ("double", ["press", "double_press", "long_press"], None),
+        ("double", ["btn_down", "btn_up", "single_push", "double_push"], None),
+        ("double", ["KeyPressed", "KeyPressed2x"], None),
+        ("double", None, None),
+    ],
+)
+async def test_click_binding_judged_on_advertised_vocabulary(
+    hass: HomeAssistant,
+    click: str,
+    event_types: list[str] | None,
+    error: str | None,
+) -> None:
+    """A binding is rejected only when the button advertises event types and
+    none of them is that click. A button with no event_types (a state but
+    no capability yet) or no state at all can't be judged and is allowed."""
+    attributes = {} if event_types is None else {"event_types": event_types}
+    hass.states.async_set("event.button", "unknown", attributes)
+    key = CONF_ON_BUTTONS_SINGLE if click == "single" else CONF_ON_BUTTONS_DOUBLE
+    user_input = {
+        CONF_NAME: "Vocab Remote",
+        CONF_TARGET_LIGHTS: ["light.test_light"],
+        CONF_DIM_STEP: 10,
+        **EMPTY_REMOTE_SECTIONS,
+        REMOTE_ACTION_ON: {key: ["event.button", "event.never_seen"]},
+    }
+    result = await _start_remote_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    if error is None:
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+    else:
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": error}
+
+
+@pytest.mark.asyncio
+async def test_options_reject_a_single_click_on_a_button_without_one(
+    hass: HomeAssistant,
+) -> None:
+    """Configure judges single clicks too: a rotary dial can't be bound."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    hass.states.async_set(
+        "event.dial", "unknown", {"event_types": ["rotate_left", "rotate_right"]}
+    )
+    await setup_entries(hass, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on", "event.dial"]},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "single_click_unsupported"}
 
 
 @pytest.mark.asyncio

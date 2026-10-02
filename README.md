@@ -453,7 +453,7 @@ Converting a Virtual Scheduled Light to a gated Virtual Light drops its standby 
 
 ### Virtual Remote
 
-Drives lights from the buttons of a remote control: a Lutron Pico, an IKEA Bilresa, or any remote whose buttons Home Assistant exposes as `event` entities. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
+Drives lights from the buttons of a remote control: a Lutron Pico, an IKEA Bilresa, a HomeKit or Z-Wave scene controller, or any remote whose buttons Home Assistant exposes as `event` entities with one of the click spellings listed below. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
 
 > **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration. It exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
 
@@ -474,9 +474,15 @@ Each button may appear in several actions, as long as no *(button, click)* pair 
 **How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is resolved per button from the event entity's advertised `event_types`:
 
 - Buttons that announce `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
-- Zigbee2MQTT-style buttons with literal `single`/`double` map directly.
+- Zigbee2MQTT-style and Shelly Gen1 buttons with literal `single`/`double` map directly.
+- HomeKit controller buttons announce `single_press`/`double_press`, and native Lutron (RadioRA 2) keypad buttons `single_press`: single = `single_press`, double = `double_press`.
+- Shelly Gen2 and later inputs announce `single_push`/`double_push`; their `btn_down`/`btn_up` never fire a binding.
+- Z-Wave scene controllers announce `KeyPressed`/`KeyPressed2x`: single = `KeyPressed`, double = `KeyPressed2x`.
+- BTHome and Xiaomi BLE buttons announce `press`/`double_press`: single = `press`, double = `double_press`. SwitchBot, Govee BLE and native Lutron raise/lower buttons announce `press` alone.
 - Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps; a double-click binding is accepted but only fires if the bridge does.
 - Hue-style buttons (and Matter without multi-press): single = `short_release`, falling back to `initial_press` for buttons that announce nothing better (it is last in priority because it also precedes a long press).
+
+Long, held and triple presses never fire a binding. A click whose spelling a button doesn't announce is rejected at setup (a rotary dial or a doorbell has no single click), while a button that advertises no event types yet (one Home Assistant has never loaded) is accepted and fires once it reports a matching event.
 
 Two things worth knowing:
 

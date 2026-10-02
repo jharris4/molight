@@ -333,7 +333,7 @@ Brightness up   → Single-click buttons:  event.living_room_buttons_button_1
 Brightness down → Single-click buttons:  event.living_room_buttons_button_2
 ```
 
-Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Lutron buttons), so there's nothing to configure, and binding a double click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
+Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Lutron buttons, `single_press` vs. `double_press` on HomeKit buttons), so there's nothing to configure, and binding a click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
 
 ---
 

@@ -158,7 +158,12 @@ from .helpers import (
     match_option,
     molight_config as _molight_cfg,
 )
-from .remote import CLICK_DOUBLE, CLICK_SINGLE, entity_double_click_supported
+from .remote import (
+    CLICK_DOUBLE,
+    CLICK_SINGLE,
+    entity_double_click_supported,
+    entity_single_click_supported,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Sequence
@@ -1047,6 +1052,11 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
                 if (entity_id, click) in seen:
                     return {"base": "button_click_conflict"}
                 seen.add((entity_id, click))
+                if (
+                    click == CLICK_SINGLE
+                    and entity_single_click_supported(hass, entity_id) is False
+                ):
+                    return {"base": "single_click_unsupported"}
                 if (
                     click == CLICK_DOUBLE
                     and entity_double_click_supported(hass, entity_id) is False

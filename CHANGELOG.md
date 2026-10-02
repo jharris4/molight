@@ -245,6 +245,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its `current_window_start`, which follow-mode lights and Virtual Scheduled
   Lights took for a new window. A schedule that stays `on` through the change
   now keeps its window, also across a restart.
+- Virtual Remote buttons from HomeKit controller, native Lutron, Shelly Gen2
+  and later, and Z-Wave scene controllers work: their `single_press`,
+  `single_push` and `KeyPressed` clicks were ignored. Double clicks on those
+  and on BTHome and Xiaomi BLE buttons are accepted and fire instead of being
+  rejected at setup, and a single click on a button that has none, such as a
+  rotary dial or a doorbell, is now rejected at setup instead of saving a
+  binding that never fires.
 
 ## [1.8.0] - 2026-09-30
 

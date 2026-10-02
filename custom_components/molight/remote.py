@@ -19,13 +19,21 @@ of which only one may fire the binding:
   - multi-press capable (Matter with MSM, e.g. Bilresa): a completed single
     click is `multi_press_1`, a double is `multi_press_2`; the constituent
     initial_press/short_release events are ignored.
-  - Zigbee2MQTT-style: literal `single` / `double`.
+  - Zigbee2MQTT-style and Shelly Gen1: literal `single` / `double`.
+  - HomeKit controller, native Lutron keypads: `single_press` /
+    `double_press`.
+  - Shelly Gen2+: `single_push` / `double_push` (btn_down/btn_up ignored).
+  - Z-Wave central scene: `KeyPressed` / `KeyPressed2x`.
   - Lutron Caséta buttons (event entities provided by the companion
     lutron-caseta-events integration; HA's own lutron_caseta creates
     none): single = `press` (`release` is ignored), double = `multi_tap`
     where the bridge reports multi-taps.
+  - BTHome, Xiaomi BLE, SwitchBot, Govee BLE, native Lutron raise/lower:
+    single = `press`, double = `double_press` where advertised.
   - Hue-style / Matter without MSM: `short_release` (preferred over
     `initial_press`, which also precedes a long press). No double click.
+
+Long, held and triple presses never fire a binding.
 """
 
 from __future__ import annotations
@@ -75,13 +83,23 @@ CLICK_DOUBLE = "double"
 _SINGLE_EVENT_TYPES = (
     "multi_press_1",
     "single",
+    "single_press",
+    "single_push",
+    "KeyPressed",
     "press",
     "short_release",
     "initial_press",
 )
 # multi_tap is how Lutron buttons re-exposed as event entities (the
 # lutron-caseta-events integration) spell a double click.
-_DOUBLE_EVENT_TYPES = ("multi_press_2", "double", "multi_tap")
+_DOUBLE_EVENT_TYPES = (
+    "multi_press_2",
+    "double",
+    "double_press",
+    "double_push",
+    "KeyPressed2x",
+    "multi_tap",
+)
 
 
 def single_click_event_type(event_types: list[str]) -> str | None:
@@ -94,18 +112,37 @@ def double_click_event_type(event_types: list[str]) -> str | None:
     return next((t for t in _DOUBLE_EVENT_TYPES if t in event_types), None)
 
 
+def _advertised_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | None:
+    """Return the event_types an event entity advertises, or None if unknown.
+
+    An absent state, or one without the event_types capability, can't be
+    judged; an advertised list, even an empty one, can.
+    """
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    return state.attributes.get(ATTR_EVENT_TYPES)
+
+
+def entity_single_click_supported(hass: HomeAssistant, entity_id: str) -> bool | None:
+    """Whether this event entity can report a single click; None if unknown."""
+    event_types = _advertised_event_types(hass, entity_id)
+    if event_types is None:
+        return None
+    return single_click_event_type(event_types) is not None
+
+
 def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool | None:
     """Whether this event entity can report a double click; None if unknown.
 
     Resolved from the advertised event_types of the entity's current state,
     so the config flow can reject a double-click binding on a button that
-    will never emit one. An absent state can't be judged, so the binding is
-    allowed and simply never fires until the entity proves itself.
+    will never emit one. An unknown capability can't be judged, so the
+    binding is allowed and simply never fires until the entity proves itself.
     """
-    state = hass.states.get(entity_id)
-    if state is None:
+    event_types = _advertised_event_types(hass, entity_id)
+    if event_types is None:
         return None
-    event_types = state.attributes.get(ATTR_EVENT_TYPES) or []
     return double_click_event_type(event_types) is not None
 
 
