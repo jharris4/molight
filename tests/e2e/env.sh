@@ -16,6 +16,21 @@ if [ "${MOLIGHT_E2E_HA_IMAGE:-}" = floor ]; then
 fi
 export MOLIGHT_E2E_HA_IMAGE="${MOLIGHT_E2E_HA_IMAGE:-ghcr.io/home-assistant/home-assistant:$MOLIGHT_E2E_HA_VERSION}"
 
+export MOLIGHT_E2E_RUNNER_IMAGE=python:3.14-slim
+
+# Delete directories the containers wrote to. Docker on a Linux host leaves
+# their files owned by root, so what rm cannot delete goes through a container.
+remove_dirs() {
+    rm -rf "$@" 2>/dev/null && return
+    local dir
+    for dir in "$@"; do
+        [ -d "$dir" ] || continue
+        docker run --rm --network none --volume "$dir:/remove" \
+            "$MOLIGHT_E2E_RUNNER_IMAGE" find /remove -mindepth 1 -delete
+    done
+    rm -rf "$@"
+}
+
 # Check every boot's logs; the argument is how many boots the lane made. The
 # runner cannot reach the container's output, which unlike home-assistant.log
 # keeps them all, so save it where it can.

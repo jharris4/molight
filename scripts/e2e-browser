@@ -17,7 +17,7 @@ export MOLIGHT_E2E_BROWSER_ARTIFACT_DIR="$PWD/tests/e2e/artifacts/browser"
 export COMPOSE_PROJECT_NAME="molight-e2e-browser-$$"
 mkdir -p "$MOLIGHT_E2E_CONFIG_DIR"
 cp tests/e2e/configuration.yaml "$MOLIGHT_E2E_CONFIG_DIR/configuration.yaml"
-rm -rf "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+remove_dirs "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
 mkdir -p "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
 
 compose() {
@@ -30,7 +30,7 @@ cleanup() {
     compose logs --no-color > "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR/docker-compose.log" 2>&1
     compose down --volumes --remove-orphans >/dev/null 2>&1
     if [ "$status" -eq 0 ]; then
-        rm -rf "$RUN_ROOT" "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
+        remove_dirs "$RUN_ROOT" "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR"
     else
         cp -R "$MOLIGHT_E2E_CONFIG_DIR" "$MOLIGHT_E2E_BROWSER_ARTIFACT_DIR/ha-config"
         echo ""

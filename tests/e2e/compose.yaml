@@ -21,7 +21,7 @@ services:
       - ./testbed/molight_testbed:/config/custom_components/molight_testbed:ro
 
   runner:
-    image: python:3.14-slim
+    image: ${MOLIGHT_E2E_RUNNER_IMAGE:?set by tests/e2e/env.sh}
     working_dir: /e2e
     environment:
       MOLIGHT_E2E_HA_URL: http://homeassistant.e2e.invalid:8123

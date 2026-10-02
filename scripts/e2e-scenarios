@@ -27,7 +27,7 @@ cleanup() {
     compose logs --no-color > "$RUN_ROOT/docker-compose.log" 2>&1
     compose down --volumes --remove-orphans >/dev/null 2>&1
     if [ "$status" -eq 0 ]; then
-        rm -rf "$RUN_ROOT"
+        remove_dirs "$RUN_ROOT"
     else
         echo ""
         echo "E2E scenarios failure artifacts retained at: $RUN_ROOT"
