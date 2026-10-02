@@ -49,6 +49,7 @@ DOOR = "binary_sensor.door"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 SCHED_B = "binary_sensor.sched_b"
+HOLD = "input_boolean.keep_on"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
@@ -499,6 +500,37 @@ async def test_restart_missed_window_end_with_lights_already_off(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_restart_missed_window_end_held_with_lights_off_drops_the_window(
+    hass: HomeAssistant,
+) -> None:
+    """With the lights off a hold has nothing to keep: the window is over and
+    the sensors are live again, as when it ends at runtime."""
+    mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(OCC, "off")
+    entry = make_light_entry(
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+        hold_entities=[HOLD],
+        occupancy=OCC,
+    )
+    await setup_entries(hass, entry)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["schedule_window_start"] is None
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
 
 async def _edit_options(hass: HomeAssistant, entry, **overrides) -> None:
