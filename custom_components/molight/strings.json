@@ -837,7 +837,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. For no standby, leave the brightness blank and set the color mode to None.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the next schedule boundary: a window starting or ending, including one window starting as another ends and midnight on an all-day schedule. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1354,7 +1354,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the schedule next starts or ends. For no standby, leave the brightness blank and set the color mode to None.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the next schedule boundary: a window starting or ending, including one window starting as another ends and midnight on an all-day schedule. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
