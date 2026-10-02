@@ -1056,6 +1056,17 @@ def trigger_and_assert(
     source: str = SOURCE_SELECT,
 ) -> None:
     """Trigger occupancy and assert routed light/select service effects."""
+    # Move the target off the expected option and note the last occupancy turn-on,
+    # so neither wait below can pass on what an earlier turn-on left behind.
+    options = client.state(TARGET_SELECT)["attributes"]["options"]
+    decoy = next(option for option in options if option != selection)
+    client.call_service(
+        "select", "select_option", {"entity_id": TARGET_SELECT, "option": decoy}
+    )
+    client.wait_state(TARGET_SELECT, lambda state: state["state"] == decoy, decoy)
+    occupancy_on_before = client.state(VIRTUAL_LIGHT)["attributes"].get(
+        "last_on_occupancy"
+    )
     client.set_state(RAW_MOTION, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
     client.wait_state(
@@ -1077,9 +1088,11 @@ def trigger_and_assert(
         lambda state: (
             state["attributes"].get("last_turn_on_selection_option") == selection
             and state["attributes"].get("last_turn_on_selection_source") == source
-            and state["attributes"].get("last_on_occupancy") is not None
+            and state["attributes"].get("last_on_occupancy")
+            not in (None, occupancy_on_before)
         ),
-        f"reporting the {selection!r} selection from {source} and an occupancy turn-on",
+        f"reporting the {selection!r} selection from {source} and a new occupancy "
+        "turn-on",
     )
 
 

@@ -251,3 +251,90 @@ def test_main_needs_one_boot_count_for_the_log_check(
 
     with pytest.raises(SystemExit, match="logs <expected boots>"):
         runner.main()
+
+
+class _SelectionHass(runner.HomeAssistantClient):
+    """Fakes the states one turn-on selection call reads, after a previous call.
+
+    The previous call left the light reporting a Cozy turn-on from the fixed
+    option; an occupancy turn-on applies the selection only when asked to.
+    """
+
+    def __init__(self, *, applies: bool, stamps: bool = True) -> None:
+        super().__init__()
+        self.applies = applies
+        self.stamps = stamps
+        self.states: dict[str, dict[str, Any]] = {
+            runner.VIRTUAL_OCCUPANCY: {"state": "off", "attributes": {}},
+            runner.RAW_LIGHT: {"state": "off", "attributes": {}},
+            runner.TARGET_SELECT: {
+                "state": "Cozy",
+                "attributes": {"options": ["Cozy", "Focus", "Night"]},
+            },
+            runner.VIRTUAL_LIGHT: {
+                "state": "off",
+                "attributes": {
+                    "last_turn_on_selection_option": "Cozy",
+                    "last_turn_on_selection_source": "fixed",
+                    "last_on_occupancy": "2026-10-01T00:00:00+00:00",
+                },
+            },
+        }
+
+    def state(self, entity_id: str) -> dict[str, Any]:
+        return self.states[entity_id]
+
+    def call_service(self, domain: str, service: str, data: dict[str, Any]) -> Any:
+        assert (domain, service) == ("select", "select_option")
+        self.states[data["entity_id"]]["state"] = data["option"]
+
+    def set_state(
+        self,
+        entity_id: str,
+        state: str | float | bool,
+        attributes: dict[str, Any] | None = None,
+    ) -> None:
+        assert (entity_id, state) == (runner.RAW_MOTION, "on")
+        self.states[runner.VIRTUAL_OCCUPANCY]["state"] = "on"
+        self.states[runner.RAW_LIGHT] = {
+            "state": "on",
+            "attributes": {
+                "brightness": runner.pct(30),
+                "testbed_last_command": {"data": {"transition": 1}},
+            },
+        }
+        light = self.states[runner.VIRTUAL_LIGHT]["attributes"]
+        if self.stamps:
+            light["last_on_occupancy"] = "2026-10-01T00:01:00+00:00"
+        if self.applies:
+            self.states[runner.TARGET_SELECT]["state"] = "Cozy"
+            light["last_turn_on_selection_option"] = "Cozy"
+            light["last_turn_on_selection_source"] = "fixed"
+
+
+def test_trigger_and_assert_passes_when_the_selection_is_applied(
+    clock: _Clock,
+) -> None:
+    runner.trigger_and_assert(
+        _SelectionHass(applies=True), runner.pct(30), "Cozy", source="fixed"
+    )
+
+
+def test_trigger_and_assert_fails_when_no_selection_is_applied(clock: _Clock) -> None:
+    """The target and attributes already show Cozy from the previous call."""
+    with pytest.raises(AssertionError, match=runner.TARGET_SELECT):
+        runner.trigger_and_assert(
+            _SelectionHass(applies=False), runner.pct(30), "Cozy", source="fixed"
+        )
+
+
+def test_trigger_and_assert_fails_without_a_new_occupancy_turn_on(
+    clock: _Clock,
+) -> None:
+    with pytest.raises(AssertionError, match="a new occupancy turn-on"):
+        runner.trigger_and_assert(
+            _SelectionHass(applies=True, stamps=False),
+            runner.pct(30),
+            "Cozy",
+            source="fixed",
+        )
