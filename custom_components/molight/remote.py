@@ -47,6 +47,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import CoreState, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
@@ -55,6 +56,7 @@ from .const import (
     CONF_DIM_STEP,
     CONF_TARGET_LIGHTS,
     DEFAULT_DIM_STEP,
+    DOMAIN,
     REMOTE_ACTION_BRIGHTNESS_DOWN,
     REMOTE_ACTION_BRIGHTNESS_UP,
     REMOTE_ACTION_FIELDS,
@@ -178,6 +180,42 @@ def _action_call(
     return ("turn_on", {})  # REMOTE_ACTION_ON
 
 
+def _warning_step_level(hass: HomeAssistant, entity_id: str, step: int) -> int | None:
+    """Return the brightness % a step lands on for a MoLight light mid-warning.
+
+    The light reports its effect/warn stage level, which Home Assistant would
+    step from, so step from the pre-warning brightness and never reach off.
+    None for any other light, which takes the plain step.
+    """
+    state = hass.states.get(entity_id)
+    if state is None or not state.attributes.get("warning_active"):
+        return None
+    pre_warn = state.attributes.get("pre_warn_brightness")
+    if pre_warn is None:
+        return None
+    entry = er.async_get(hass).async_get(entity_id)
+    if entry is None or entry.platform != DOMAIN:
+        return None
+    return max(1, min(100, round(pre_warn / 255 * 100) + step))
+
+
+def _brightness_step_calls(
+    hass: HomeAssistant, targets: list[str], data: dict[str, Any]
+) -> list[tuple[list[str], dict[str, Any]]]:
+    """Split a brightness step into (targets, service data) calls."""
+    stepping: list[str] = []
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+    for entity_id in targets:
+        level = _warning_step_level(hass, entity_id, data["brightness_step_pct"])
+        if level is None:
+            stepping.append(entity_id)
+        else:
+            calls.append(([entity_id], {"brightness_pct": level}))
+    if stepping:
+        calls.insert(0, (stepping, data))
+    return calls
+
+
 @callback
 def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE:
     """Wire up a Virtual Remote entry; returns its teardown callback.
@@ -238,11 +276,20 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         if binding is None:
             return
         action, service, data = binding
-        hass.async_create_task(
-            hass.services.async_call(
-                "light", service, {"entity_id": targets, **data}, blocking=False
-            )
+        calls = (
+            _brightness_step_calls(hass, targets, data)
+            if action in (REMOTE_ACTION_BRIGHTNESS_UP, REMOTE_ACTION_BRIGHTNESS_DOWN)
+            else [(targets, data)]
         )
+        for call_targets, call_data in calls:
+            hass.async_create_task(
+                hass.services.async_call(
+                    "light",
+                    service,
+                    {"entity_id": call_targets, **call_data},
+                    blocking=False,
+                )
+            )
         # Announce the executed binding to the entry's Last Action sensor.
         async_dispatcher_send(
             hass,

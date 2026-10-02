@@ -62,6 +62,7 @@ from custom_components.molight.const import (
     REMOTE_ACTION_TOGGLE,
     STATE_ACTIVE,
     STATE_EFFECT,
+    STATE_WARN,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import make_light_entry, settle, setup_entries
@@ -535,6 +536,156 @@ async def test_brightness_step_up_and_down(
     await settle(hass)
     assert _vlight(hass).state == "on"
     assert _vlight(hass).attributes["brightness"] <= 26
+
+
+# Stage settings for a brightness step mid-warning: (light kwargs, the stage
+# state, the level the light reports during it).
+WARNING_STAGES = {
+    "warn": ({"warn_timeout": 30, "warn_brightness": 10}, STATE_WARN, 26),
+    "effect": ({"effect_timeout": 10, "effect_brightness": 30}, STATE_EFFECT, 76),
+    "blink_effect": (
+        {"effect_timeout": 10, "effect_brightness": 0},
+        STATE_EFFECT,
+        None,
+    ),
+}
+
+
+async def _step_mid_warning(
+    hass: HomeAssistant,
+    freezer,
+    stage: str,
+    before: int,
+    dim_step: int,
+    button: str,
+    extra_targets: list[str] | None = None,
+) -> list[dict]:
+    """Bring light.matrix_light into a stage from `before`, press `button`, and
+    return the remote's light calls."""
+    light_kwargs, stage_state, stage_level = WARNING_STAGES[stage]
+    hass.states.async_set("light.real_1", "off")
+    remote = _remote_entry(
+        **{
+            CONF_TARGET_LIGHTS: ["light.matrix_light", *(extra_targets or [])],
+            CONF_DIM_STEP: dim_step,
+            CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
+            CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE: ["event.pico_lower"],
+        }
+    )
+    _seed(hass, "event.pico_raise", PICO_TYPES)
+    _seed(hass, "event.pico_lower", PICO_TYPES)
+    await setup_entries(hass, make_light_entry(timeout=60, **light_kwargs), remote)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.matrix_light", "brightness": before},
+        blocking=True,
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = hass.states.get("light.matrix_light")
+    assert state.attributes["molight_state"] == stage_state
+    assert state.attributes["warning_active"] is True
+    assert state.attributes["pre_warn_brightness"] == before
+    if stage_level is not None:
+        # The light still reports its stage level; only the step changes.
+        assert state.attributes["brightness"] == stage_level
+
+    calls = _record_service_calls(hass)
+    _fire(hass, button, "press", PICO_TYPES)
+    await settle(hass)
+    return [
+        {**c["service_data"], "service": c["service"]}
+        for c in calls
+        if c["domain"] == "light"
+        and c["service_data"].get("entity_id") != ["light.real_1"]
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("stage", list(WARNING_STAGES))
+@pytest.mark.parametrize(
+    ("button", "before", "dim_step", "expected_pct", "expected_brightness"),
+    [
+        ("event.pico_raise", 200, 10, 88, 224),
+        ("event.pico_lower", 200, 10, 68, 173),
+        ("event.pico_raise", 250, 10, 100, 255),
+        ("event.pico_lower", 77, 50, 1, 3),
+    ],
+    ids=["up", "down", "up-clamped-100", "down-clamped-1"],
+)
+async def test_brightness_step_mid_warning_steps_from_pre_warning_level(
+    hass: HomeAssistant,
+    freezer,
+    stage: str,
+    button: str,
+    before: int,
+    dim_step: int,
+    expected_pct: int,
+    expected_brightness: int,
+) -> None:
+    """A remote's brightness step during the effect or warn stage steps from
+    the pre-warning brightness, clamped to 1 to 100 %, never turning the light
+    off, and restarts the full timer like any other press."""
+    calls = await _step_mid_warning(hass, freezer, stage, before, dim_step, button)
+
+    assert calls == [
+        {
+            "entity_id": ["light.matrix_light"],
+            "brightness_pct": expected_pct,
+            "service": "turn_on",
+        }
+    ]
+    state = hass.states.get("light.matrix_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == expected_brightness
+    assert state.attributes["warning_active"] is False
+
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").attributes["molight_state"] == (
+        STATE_ACTIVE
+    )
+
+
+@pytest.mark.asyncio
+async def test_brightness_step_mid_warning_leaves_other_targets_stepping(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Only the MoLight light mid-warning gets a fixed level: another light,
+    even one carrying look-alike attributes, still takes the plain step."""
+    hass.states.async_set(
+        "light.other",
+        "on",
+        {"brightness": 26, "warning_active": True, "pre_warn_brightness": 200},
+    )
+    calls = await _step_mid_warning(
+        hass,
+        freezer,
+        "warn",
+        200,
+        10,
+        "event.pico_raise",
+        extra_targets=["light.other", "light.missing"],
+    )
+
+    assert sorted(calls, key=lambda c: c["entity_id"]) == [
+        {
+            "entity_id": ["light.matrix_light"],
+            "brightness_pct": 88,
+            "service": "turn_on",
+        },
+        {
+            "entity_id": ["light.other", "light.missing"],
+            "brightness_step_pct": 10,
+            "service": "turn_on",
+        },
+    ]
 
 
 @pytest.mark.asyncio

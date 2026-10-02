@@ -252,6 +252,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected at setup, and a single click on a button that has none, such as a
   rotary dial or a doorbell, is now rejected at setup instead of saving a
   binding that never fires.
+- A Virtual Remote's *Brightness up* and *Brightness down* during a MoLight
+  light's effect or warn stage step from the brightness the light had before
+  the warning. They stepped from the warning level, so a light at 80% with a
+  10% warning went to 20% on *Brightness up* and off on *Brightness down*.
 
 ## [1.8.0] - 2026-09-30
 
