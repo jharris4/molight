@@ -1012,17 +1012,18 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     """Check each stage fade fits inside its stage: transition <= timeout.
 
     A disabled stage has timeout 0, so setting a fade for it fails the same
-    rule rather than being silently ignored. The offending fields live inside
-    a collapsed section, where the frontend can't anchor a field error, so the
-    first violation is reported as a base error.
+    rule rather than being silently ignored. Timeouts are whole seconds, as
+    the light runs them. The offending fields live inside a collapsed
+    section, where the frontend can't anchor a field error, so the first
+    violation is reported as a base error.
     """
     for transition_key, timeout_key, error in (
         (CONF_EFFECT_TRANSITION, CONF_EFFECT_TIMEOUT, "effect_transition_too_long"),
         (CONF_WARN_TRANSITION, CONF_WARN_TIMEOUT, "warn_transition_too_long"),
     ):
         transition = user_input.get(transition_key)
-        if transition is not None and float(transition) > float(
-            user_input.get(timeout_key, 0)
+        if transition is not None and float(transition) > int(
+            user_input.get(timeout_key) or 0
         ):
             return {"base": error}
     return {}
@@ -1097,11 +1098,12 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     )
     if effect_color and not int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0):
         return {"base": "effect_color_requires_brightness"}
-    if effect_color and not float(user_input.get(CONF_EFFECT_TIMEOUT) or 0):
+    # Stage timeouts are whole seconds, as the light runs them.
+    if effect_color and not int(user_input.get(CONF_EFFECT_TIMEOUT) or 0):
         return {"base": "effect_color_requires_timeout"}
     # 0 is the default and the blink-fully-off cue, so only a positive value
     # on a disabled stage is a mistake.
-    if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not float(
+    if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not int(
         user_input.get(CONF_EFFECT_TIMEOUT) or 0
     ):
         return {"base": "effect_brightness_requires_timeout"}
@@ -1109,7 +1111,7 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
         user_input.get(CONF_WARN_BRIGHTNESS)
         or user_input.get(CONF_WARN_COLOR_TEMP)
         or user_input.get(CONF_WARN_RGB_COLOR)
-    ) and not float(user_input.get(CONF_WARN_TIMEOUT) or 0):
+    ) and not int(user_input.get(CONF_WARN_TIMEOUT) or 0):
         return {"base": "warn_values_require_timeout"}
     return {}
 

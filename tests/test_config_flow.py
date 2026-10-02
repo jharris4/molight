@@ -8234,3 +8234,77 @@ async def test_every_form_strips_the_name(
     else:
         assert entry.title == "Hall"
         assert molight_config(entry)[CONF_NAME] == "Hall"
+
+
+# ---------------------------------------------------------------------------
+# Stage timeouts: whole seconds, as the light runs them
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("form", "flow"),
+    [
+        ("light", "create"),
+        ("light", "options"),
+        ("scheduled_light", "create"),
+        ("scheduled_light", "options"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("warning", "error"),
+    [
+        (
+            {CONF_EFFECT_TIMEOUT: 2.5, CONF_EFFECT_TRANSITION: 2.5},
+            "effect_transition_too_long",
+        ),
+        (
+            {CONF_WARN_TIMEOUT: 2.5, CONF_WARN_TRANSITION: 2.5},
+            "warn_transition_too_long",
+        ),
+        (
+            {CONF_EFFECT_TIMEOUT: 0.5, CONF_EFFECT_BRIGHTNESS: 50},
+            "effect_brightness_requires_timeout",
+        ),
+        (
+            {
+                CONF_EFFECT_TIMEOUT: 0.5,
+                CONF_EFFECT_BRIGHTNESS: 30,
+                CONF_EFFECT_RGB_COLOR: [255, 0, 0],
+            },
+            "effect_color_requires_timeout",
+        ),
+        (
+            {CONF_WARN_TIMEOUT: 0.5, CONF_WARN_BRIGHTNESS: 50},
+            "warn_values_require_timeout",
+        ),
+        ({CONF_EFFECT_TIMEOUT: 2.5, CONF_EFFECT_TRANSITION: 2}, None),
+    ],
+    ids=[
+        "effect_fade",
+        "warn_fade",
+        "effect_brightness",
+        "effect_color",
+        "warn_values",
+        "fade_within_whole_seconds",
+    ],
+)
+async def test_stage_rules_use_the_whole_seconds_the_light_runs(
+    hass: HomeAssistant, form: str, flow: str, warning: dict, error: str | None
+) -> None:
+    """A 0.5 s stage is disabled and a 2.5 s one runs 2 s, so judge them so."""
+    result, manager, values, _entry = await _open_name_form(hass, form, flow)
+    values[CONF_NAME] = "Den"
+    if form == "scheduled_light":
+        result = await manager.async_configure(result["flow_id"], values)
+        assert result["step_id"] == "scheduled_light_outside"
+        values = _form_values(result["data_schema"])
+    values[SECTION_WARNING] = {**values.get(SECTION_WARNING, {}), **warning}
+
+    result = await manager.async_configure(result["flow_id"], values)
+
+    if error is None:
+        assert not result.get("errors")
+    else:
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": error}

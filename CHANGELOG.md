@@ -186,6 +186,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every create and Configure form rejects a blank Name, which gave an entry
   with no title and an entity ID such as `light.unknown`. Spaces around a
   name are dropped.
+- The Configure forms judge effect and warn stage timeouts in whole seconds,
+  as the light runs them. A fractional timeout could pass a check for a stage
+  the light then ran shorter or not at all, such as a 0.5 s effect stage with
+  a brightness the light ignored, or a 2.5 s fade on a stage that ran 2 s.
 
 ## [1.8.0] - 2026-09-30
 
