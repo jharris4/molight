@@ -3122,7 +3122,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                 # The whole cycle was a false detection and nobody else
                 # asked for these lights, so turn them off quickly.
-                self._start_timer(self._false_off_delay)
+                self._start_timer(self._false_off_countdown())
             else:
                 self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
@@ -3164,7 +3164,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # Both sensors flagged their clears false: the whole episode
                 # was a false detection; a genuine presence on either side
                 # earns the normal countdown instead.
-                self._start_timer(self._false_off_delay)
+                self._start_timer(self._false_off_countdown())
             else:
                 self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
@@ -3500,6 +3500,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # Control mode kept standby off while bright.
                 self._last_on_illuminance = datetime.now(UTC)
                 self._enter_standby(self._auto_on_transition, selection=True)
+
+    def _false_off_countdown(self) -> int:
+        """Return the false-detection off delay, capped at the turn-off timeout."""
+        return min(self._false_off_delay, self._light_timeout)
 
     def _compute_occupancy_countdown(self) -> int:
         """Seconds to wait after occupancy clears before turning lights off.

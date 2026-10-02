@@ -1929,6 +1929,43 @@ async def _assert_false_blip_keeps_the_visits_countdown(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("hold", ["occupancy", "maintain"])
+@pytest.mark.parametrize(("delay", "off_after"), [(300, 60), (30, 30)])
+async def test_false_off_delay_never_outlasts_the_turn_off_timeout(
+    hass: HomeAssistant, freezer, hold: str, delay: int, off_after: int
+) -> None:
+    """A false detection's light goes off after the off delay, or after the
+    turn-off timeout when that is shorter, on either quick-off path."""
+    old = (datetime.now(UTC) - timedelta(seconds=600)).isoformat()
+    sensors = (OCC, MAINT) if hold == "maintain" else (OCC,)
+    _real_light_reports(hass)
+    hass.states.async_set(REAL, "off")
+    for sensor in sensors:
+        hass.states.async_set(sensor, "off", {"latest_occupied_time": old})
+    await setup_entries(
+        hass,
+        make_light_entry(
+            timeout=60,
+            false_off_delay=delay,
+            occupancy=OCC,
+            maintain=MAINT if hold == "maintain" else None,
+        ),
+    )
+    for sensor in sensors:
+        hass.states.async_set(sensor, "on", {"latest_occupied_time": old})
+    await settle(hass)
+    freezer.tick(timedelta(seconds=31))
+    for sensor in sensors:
+        hass.states.async_set(
+            sensor,
+            "off",
+            {"latest_occupied_time": old, "last_clear_false_detection": True},
+        )
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, off_after)
+
+
+@pytest.mark.asyncio
 async def test_false_clear_after_genuine_maintain_presence_keeps_its_countdown(
     hass: HomeAssistant, freezer
 ) -> None:

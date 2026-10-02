@@ -114,6 +114,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
+- A false-detection off delay longer than the turn-off timeout no longer keeps
+  a false detection's light on past that timeout. With a 60 s timeout and a
+  300 s delay, the light stayed on for 300 s; it now turns off after 60 s.
 - Outside a *Gate and turn off* schedule window, a light that is on ignores an
   `open_close` door, as the README says. A door already standing open held a
   light turned on by hand or at the wall, or found on at startup, with no

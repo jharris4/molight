@@ -284,7 +284,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
@@ -576,7 +576,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
@@ -703,7 +703,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -793,7 +793,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -1214,7 +1214,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -1304,7 +1304,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
@@ -1564,7 +1564,7 @@
               "auto_off_transition": "Auto-off fade"
             },
             "data_description": {
-              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout. Manually turned-on lights are never cut short.",
+              "false_detection_off_delay": "When occupancy clears flagged as a false trigger, lights lit by that cycle turn off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
               "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
