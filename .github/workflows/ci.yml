@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-  # The latest leg tracks upstream, which moves without a change here.
+  # The newest leg tracks upstream, which moves without a change here.
   schedule:
     - cron: "0 0 * * *"
   # Release tags run this too; see release.yml.
@@ -32,7 +32,7 @@ jobs:
   test:
     name: pytest (${{ matrix.label }})
     runs-on: ubuntu-latest
-    # The latest leg reports an upstream break without turning the build red.
+    # The newest leg reports an upstream break without turning the build red.
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
@@ -48,7 +48,8 @@ jobs:
             python: "3.14"
             spec: -r requirements_test.txt
             experimental: false
-          - label: HA latest
+          # Whatever the newest test package targets, often a beta.
+          - label: HA newest
             python: "3.14"
             spec: pytest-homeassistant-custom-component
             experimental: true

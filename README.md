@@ -507,7 +507,7 @@ npm run dev:up      # start the devcontainer (fast after first build)
 npm test
 ```
 
-`npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13) and the latest release (advisory) too, so a test that passes locally can still fail on the minimum version.
+`npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13), so a test that passes locally can still fail there, and, as an advisory leg, on the newest version `pytest-homeassistant-custom-component` targets, which is often a beta.
 
 ### Releasing
 
