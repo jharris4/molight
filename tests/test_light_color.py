@@ -21,12 +21,21 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    CONF_LIGHT_TIMEOUT,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_STANDBY_COLOR_TEMP,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_OCCUPIED,
+    STATE_STANDBY,
     STATE_WARN,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import (
+    make_light_entry,
+    make_scheduled_light_entry,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -810,3 +819,167 @@ async def test_onoff_light_effect_blink_off_still_works(
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
     assert hass.states.get(REAL).state == "off"  # blinked off
     assert _state(hass).state == "on"  # logically still on
+
+
+# ---------------------------------------------------------------------------
+# Color temperatures outside the range the real lights span
+# ---------------------------------------------------------------------------
+
+NARROW_CAPS = {
+    "supported_color_modes": ["color_temp"],
+    "min_color_temp_kelvin": 2700,
+    "max_color_temp_kelvin": 6000,
+}
+KELVINS = [(2000, 2700), (6500, 6000), (3000, 3000)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
+@pytest.mark.parametrize("source", ["auto_on", "effect", "warn", "caller"])
+async def test_reported_color_temp_stays_in_the_advertised_range(
+    hass: HomeAssistant, freezer, source: str, kelvin: int, reported: int
+) -> None:
+    """The real lights are sent the kelvin as configured and come on at the
+    nearest one they have, which is what the virtual light reports."""
+    hass.states.async_set(REAL, "off", NARROW_CAPS)
+    hass.states.async_set(OCC, "off")
+    stage = {
+        f"{source}_timeout": 30,
+        f"{source}_brightness": 50,
+        f"{source}_color_temp": kelvin,
+    }
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            auto_on_color_temp=kelvin if source == "auto_on" else None,
+            **(stage if source in ("effect", "warn") else {}),
+        ),
+    )
+    calls = _record_service_calls(hass)
+
+    if source == "auto_on":
+        hass.states.async_set(OCC, "on")
+        await settle(hass)
+    else:
+        data = {"color_temp_kelvin": kelvin} if source == "caller" else {}
+        await _turn_on_virtual(hass, brightness=200, **data)
+    if source in ("effect", "warn"):
+        freezer.tick(timedelta(seconds=61))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == source
+
+    assert _real_on_calls(calls)[-1]["service_data"]["color_temp_kelvin"] == kelvin
+    attrs = _state(hass).attributes
+    assert (attrs["min_color_temp_kelvin"], attrs["max_color_temp_kelvin"]) == (
+        2700,
+        6000,
+    )
+    assert attrs["color_temp_kelvin"] == reported
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
+async def test_reported_standby_color_temp_stays_in_the_advertised_range(
+    hass: HomeAssistant, kelvin: int, reported: int
+) -> None:
+    """Standby is one more level with a color temperature of its own."""
+    hass.states.async_set(REAL, "off", NARROW_CAPS)
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    calls = _record_service_calls(hass)
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Matrix Light",
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_STANDBY_COLOR_TEMP: kelvin,
+            },
+        ),
+    )
+    await settle(hass)
+
+    assert _state(hass).attributes["molight_state"] == STATE_STANDBY
+    assert _real_on_calls(calls)[-1]["service_data"]["color_temp_kelvin"] == kelvin
+    assert _state(hass).attributes["color_temp_kelvin"] == reported
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
+async def test_pre_warn_snapshot_keeps_the_reported_color_temp(
+    hass: HomeAssistant, freezer, kelvin: int, reported: int
+) -> None:
+    """The warning remembers, and a re-trigger restores, the kelvin the light
+    was reporting, not one outside its range."""
+    hass.states.async_set(REAL, "off", NARROW_CAPS)
+    hass.states.async_set(OCC, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            auto_on_color_temp=kelvin,
+            warn_timeout=15,
+            warn_color_temp=4000,
+        ),
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    attrs = _state(hass).attributes
+    assert attrs["molight_state"] == STATE_WARN
+    assert attrs["pre_warn_color"] == {"color_temp_kelvin": reported}
+    calls = _record_service_calls(hass)
+
+    await _turn_on_virtual(hass)
+
+    assert _real_on_calls(calls)[-1]["service_data"]["color_temp_kelvin"] == reported
+    assert _state(hass).attributes["color_temp_kelvin"] == reported
+
+
+@pytest.mark.asyncio
+async def test_reported_color_temp_follows_a_range_that_arrives_late(
+    hass: HomeAssistant,
+) -> None:
+    """A real light still loading has no range to hold the kelvin to; its
+    first report brings one."""
+    hass.states.async_set(REAL, "unavailable")
+    hass.states.async_set(OCC, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_color_temp=2000))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    hass.states.async_set(
+        REAL,
+        "on",
+        {**NARROW_CAPS, "color_mode": "color_temp", "color_temp_kelvin": 2700},
+    )
+    await settle(hass)
+
+    attrs = _state(hass).attributes
+    assert attrs["min_color_temp_kelvin"] == 2700
+    assert attrs["color_temp_kelvin"] == 2700
+    assert attrs["last_color_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_reported_color_temp_is_as_asked_when_one_light_reaches_it(
+    hass: HomeAssistant,
+) -> None:
+    """The range spans every real light: 2000 K is in it when one of them
+    reaches it, though the other shows its warmest."""
+    hass.states.async_set(REAL, "off", NARROW_CAPS)
+    hass.states.async_set(REAL_2, "off", {**NARROW_CAPS, "min_color_temp_kelvin": 2000})
+    await setup_entries(hass, make_light_entry(lights=[REAL, REAL_2]))
+
+    await _turn_on_virtual(hass, color_temp_kelvin=2000)
+
+    attrs = _state(hass).attributes
+    assert attrs["min_color_temp_kelvin"] == 2000
+    assert attrs["color_temp_kelvin"] == 2000

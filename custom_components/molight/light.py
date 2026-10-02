@@ -2491,6 +2491,21 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._attr_hs_color = tuple(value)
             self._attr_color_temp_kelvin = None
 
+    @property
+    def color_temp_kelvin(self) -> int | None:
+        """Return the color temperature, within the range the real lights span.
+
+        A kelvin outside it is still sent as configured; no real light shows
+        it, and the nearest end of the range is what they come on at.
+        """
+        kelvin = self._attr_color_temp_kelvin
+        if kelvin is None:
+            return None
+        return min(
+            max(kelvin, self._attr_min_color_temp_kelvin),
+            self._attr_max_color_temp_kelvin,
+        )
+
     def _adopt_color_data(self, color: dict) -> None:
         """Mirror turn-on color service data into this light's own state."""
         if ATTR_COLOR_TEMP_KELVIN in color:
@@ -2511,7 +2526,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         exposed as the pre_warn_color attribute to survive restarts.
         """
         if self._attr_color_mode == ColorMode.COLOR_TEMP and (
-            kelvin := self._attr_color_temp_kelvin
+            kelvin := self.color_temp_kelvin
         ):
             return {ATTR_COLOR_TEMP_KELVIN: kelvin}
         if self._attr_color_mode == ColorMode.HS and (hs := self._attr_hs_color):

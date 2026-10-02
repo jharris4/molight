@@ -86,6 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which MoLight did not expect back: an automatic turn-on with a colour was
   recorded as a turn-on at the wall and lost the false-detection quick off,
   and a coloured warning stage cancelled itself and restarted the timeout.
+- A colour temperature outside the range a virtual light's real lights span,
+  such as an auto-on, stage or standby colour temperature of 2000 K on lights
+  that start at 2700 K, is reported as the nearest one in the range, which is
+  what the real lights show. The virtual light reported 2000 K, below its own
+  `min_color_temp_kelvin`, and remembered that through a warning.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming
