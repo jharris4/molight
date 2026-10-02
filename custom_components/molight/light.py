@@ -621,6 +621,8 @@ class _EchoExpectation:
     issued: float
     # A later command flipped power: only a reply while settling is its echo.
     overtaken: bool = False
+    # A command to only some members leaves what it did not name as reported.
+    mirror: bool = True
 
     def moved(self, old_state: State | None, new_state: State) -> bool:
         """Whether a report changed anything this command asked for."""
@@ -1974,6 +1976,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # A member reporting in was not turned off.
                 manual=not member_recovered,
                 claim=claim,
+                touched=entity_id,
             )
             return
         if same_state:
@@ -2207,10 +2210,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         *,
         manual: bool = True,
         claim: bool = True,
+        touched: str | None = None,
     ) -> None:
         """Handle a real light being turned on/off externally.
 
-        claim is False for a turn-on our own select call caused.
+        claim is False for a turn-on our own select call caused. touched is
+        the real light that changed.
         """
         if state == "on" and brightness == 0:
             # "On" at brightness 0 is an off in disguise, matching the dimming
@@ -2228,6 +2233,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if claim:
                 self._last_on_physical = datetime.now(UTC)
                 self._claim_on_period()
+            if touched is not None and self._in_warning():
+                self._restore_untouched(touched)
             self._transition_on()
         elif self._all_lights_off():
             self._go_idle(manual=manual)
@@ -2296,12 +2303,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # The re-trigger brought only one of brightness and color:
                 # restore the other to its pre-warning value so the stage
                 # leaves no trace, exactly as a virtual re-trigger does.
+                touched = new_state.entity_id
                 brightness = None if brightness_changed else self._pre_warn_brightness
                 color = None if color_changed else self._pre_warn_color
                 if brightness is not None or color is not None:
                     self.hass.async_create_task(
-                        self._set_lights(True, brightness=brightness, color=color)
+                        self._set_lights(
+                            True, brightness=brightness, color=color, members=[touched]
+                        )
                     )
+                self._restore_untouched(touched)
             self._warning_active = False
             self._pre_warn_brightness = None
             self._pre_warn_color = None
@@ -2325,6 +2336,25 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._occupancy_lit_lights = False
         self._standby_suppressed = False
         self._command_generation += 1
+
+    def _restore_untouched(self, touched: str) -> None:
+        """Undo the warning on the real lights a change at the wall left alone.
+
+        The change cancels the warning for all of them, so the others go
+        back to their pre-warning look, as after any other re-trigger. The
+        virtual light keeps reporting what the changed one shows.
+        """
+        others = [entity_id for entity_id in self._lights if entity_id != touched]
+        if others:
+            self.hass.async_create_task(
+                self._set_lights(
+                    True,
+                    brightness=self._pre_warn_brightness,
+                    color=self._pre_warn_color,
+                    members=others,
+                    adopt=False,
+                )
+            )
 
     def _mirror_member(self, state: State) -> None:
         """Report a real light's brightness and color without acting on them."""
@@ -2543,21 +2573,23 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         brightness: int | None,
         color: dict | None,
         transition: float | None,
+        members: list[str] | None = None,
     ) -> None:
-        """Record what every member should report back for our own command."""
+        """Record what the members commanded (all, by default) should report."""
         expectation = _EchoExpectation(
             on,
             brightness if on else None,
             _service_color(color) if on else None,
             float(transition or 0),
             self.hass.loop.time(),
+            mirror=members is None,
         )
         for expectations in self._echo_expectations.values():
             for earlier in expectations:
                 if earlier.on != on:
                     earlier.overtaken = True
         plain = expectation.brightness is None and expectation.color is None
-        for entity_id in self._lights:
+        for entity_id in self._lights if members is None else members:
             # A member already there has nothing to report, and the unanswered
             # expectation would pass a later human change off as its echo.
             if plain and self._member_is_lit(entity_id) is on:
@@ -2717,7 +2749,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         named color we could not report when it was sent (a late member
         brings its color modes with its reply) is adopted now.
         """
-        if not expectation.on:
+        if not expectation.on or not expectation.mirror:
             return
         commands = [expectation, *waiting]
         brightness = color = None
@@ -4041,6 +4073,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         force_selection: bool = False,
         manual: bool = False,
         auto_level: bool = False,
+        members: list[str] | None = None,
+        adopt: bool = True,
     ) -> bool:
         """Command the real lights; False when a newer command overtook it.
 
@@ -4052,7 +4086,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         automatic turn-on issued while a manual one waits is dropped. An
         automatic turn-on at the auto-on or standby level (auto_level) also
         overtakes an older automatic one still waiting, so the level chosen
-        last is the one the lights end at.
+        last is the one the lights end at. members limits the command to some
+        of the real lights; without adopt, the virtual light does not report
+        the brightness and color it names.
         """
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
@@ -4106,21 +4142,24 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     stage_brightness, stage_transition, stage_color or color
                 )
                 return False
-        service_data: dict = {"entity_id": self._lights}
+        targets = self._lights if members is None else members
+        service_data: dict = {"entity_id": targets}
         if transition is not None:
             service_data[ATTR_TRANSITION] = transition
         if on and brightness is not None:
             service_data[ATTR_BRIGHTNESS] = brightness
             # Mirror the commanded brightness so the virtual light reports it
             # (the echo is only mirrored for a command that named none).
-            self._attr_brightness = brightness
+            if adopt:
+                self._attr_brightness = brightness
         if on and color:
             # One call carries the color to every member; HA filters/converts
             # it per real light, so mixed-capability members each show what
             # they can.
             service_data.update(color)
-            self._adopt_color_data(color)
-        self._expect_echo(on, brightness, color, transition)
+            if adopt:
+                self._adopt_color_data(color)
+        self._expect_echo(on, brightness, color, transition, members)
         # Set before the call: a member may answer inside it.
         self._attr_is_on = on
         await self.hass.services.async_call(

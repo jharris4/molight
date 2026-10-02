@@ -29,6 +29,7 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
+from tests.real_entities import FadingLight, add_real
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -879,3 +880,171 @@ async def test_retrigger_after_plain_auto_on_restores_real_brightness(
     await settle(hass)
     assert _mstate(hass) == STATE_OCCUPIED
     assert _real_calls(calls, "turn_on")[-1]["service_data"]["brightness"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Several real lights: a change at the wall on one cancels the warning for all
+# ---------------------------------------------------------------------------
+
+GREEN, BLUE, STAGE_RED = (120.0, 100.0), (240.0, 100.0), [255, 0, 0]
+WALL_KEYS = (
+    "last_on_physical",
+    "last_brightness_change_physical",
+    "last_color_change_physical",
+    "last_off_manual",
+)
+
+
+async def _pair_in_stage(
+    hass: HomeAssistant, freezer, touched: int, **stages
+) -> tuple[FadingLight, FadingLight, list[dict]]:
+    """Two real lights, green at 200, taken into a stage.
+
+    Returns the one about to be changed at the wall, the other, and the
+    light commands sent from here on.
+    """
+    pair = [
+        FadingLight(name, on=True, brightness=200, hs=GREEN)
+        for name in ("real_1", "real_2")
+    ]
+    await add_real(hass, *pair)
+    await setup_entries(
+        hass, make_light_entry(lights=["light.real_1", "light.real_2"], **stages)
+    )
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["warning_active"] is True
+    assert _state(hass).attributes["pre_warn_brightness"] == 200
+    calls = _record_service_calls(hass)
+    return pair[touched], pair[1 - touched], calls
+
+
+def _wall_stamps(hass: HomeAssistant) -> list[str]:
+    attrs = _state(hass).attributes
+    return [key for key in WALL_KEYS if attrs[key] is not None]
+
+
+def _commands_to(calls: list[dict], light: FadingLight) -> list[dict]:
+    """What each light command named for a real light, target left out."""
+    return [
+        {k: v for k, v in d["service_data"].items() if k != "entity_id"}
+        for d in calls
+        if d["domain"] == "light" and light.entity_id in d["service_data"]["entity_id"]
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("touched", [0, 1])
+async def test_wall_turn_on_during_blink_off_relights_the_other_light(
+    hass: HomeAssistant, freezer, touched: int
+) -> None:
+    """One switch flipped back on during the blink: the other light comes
+    back at its pre-warning look, not left dark for the new on-period."""
+    one, other, calls = await _pair_in_stage(
+        hass, freezer, touched, effect_timeout=10, effect_brightness=0
+    )
+    assert not one.is_on
+    assert not other.is_on
+
+    one.wall(brightness=180)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert _wall_stamps(hass) == ["last_on_physical"]
+    assert _state(hass).attributes["brightness"] == 180
+    assert (other.is_on, other.brightness, other.hs_color) == (True, 200, GREEN)
+    assert one.brightness == 180
+    assert _commands_to(calls, one) == []
+    assert _commands_to(calls, other) == [{"brightness": 200, "hs_color": list(GREEN)}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("touched", [0, 1])
+@pytest.mark.parametrize("stage", ["effect", "warn"])
+@pytest.mark.parametrize(
+    ("change", "keeps"),
+    [
+        ({"brightness": 150}, (150, GREEN)),
+        ({"hs_color": BLUE}, (200, BLUE)),
+        ({"brightness": 150, "hs_color": BLUE}, (150, BLUE)),
+    ],
+    ids=["dim", "recolor", "both"],
+)
+async def test_wall_change_during_a_stage_restores_the_other_light(
+    hass: HomeAssistant, freezer, touched: int, stage: str, change: dict, keeps: tuple
+) -> None:
+    """The light changed at the wall keeps what was changed on it and gets
+    the rest of its pre-warning look back; the other gets all of it."""
+    stages = {
+        f"{stage}_timeout": 30,
+        f"{stage}_brightness": 10,
+        f"{stage}_rgb_color": STAGE_RED,
+    }
+    one, other, _ = await _pair_in_stage(hass, freezer, touched, **stages)
+    assert (other.brightness, other.hs_color) == (26, (0.0, 100.0))
+
+    one.wall(**change)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert _wall_stamps(hass) == [
+        f"last_{name}_change_physical"
+        for name, key in (("brightness", "brightness"), ("color", "hs_color"))
+        if key in change
+    ]
+    assert (other.brightness, other.hs_color) == (200, GREEN)
+    assert (one.brightness, one.hs_color) == keeps
+    attrs = _state(hass).attributes
+    assert (attrs["brightness"], tuple(attrs["hs_color"])) == keeps
+    assert attrs["warning_active"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("touched", [0, 1])
+async def test_wall_off_and_on_during_a_stage_restores_the_other_light(
+    hass: HomeAssistant, freezer, touched: int
+) -> None:
+    """One light switched off at the wall leaves the warning running on the
+    other; switched back on, it cancels it for both."""
+    one, other, _ = await _pair_in_stage(
+        hass, freezer, touched, warn_timeout=30, warn_brightness=10
+    )
+
+    one.wall(on=False)
+    await settle(hass)
+    assert _mstate(hass) == STATE_WARN
+    assert other.brightness == 26
+
+    one.wall(brightness=180)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert (other.is_on, other.brightness) == (True, 200)
+    assert one.brightness == 180
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("touched", [0, 1])
+async def test_wall_change_outside_a_warning_leaves_the_other_light_alone(
+    hass: HomeAssistant, freezer, touched: int
+) -> None:
+    """Real lights are not kept in step: only a warning's cancelling sends
+    the others anything."""
+    pair = [FadingLight(name, on=True, brightness=200) for name in ("real_1", "real_2")]
+    await add_real(hass, *pair)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            lights=["light.real_1", "light.real_2"], warn_timeout=30, warn_brightness=10
+        ),
+    )
+    calls = _record_service_calls(hass)
+
+    pair[touched].wall(brightness=150)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert _wall_stamps(hass) == ["last_brightness_change_physical"]
+    assert pair[1 - touched].brightness == 200
+    assert [d for d in calls if d["domain"] == "light"] == []

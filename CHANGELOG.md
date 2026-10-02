@@ -91,6 +91,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that start at 2700 K, is reported as the nearest one in the range, which is
   what the real lights show. The virtual light reported 2000 K, below its own
   `min_color_temp_kelvin`, and remembered that through a warning.
+- Cancelling a warning at the wall on one of several real lights restores
+  the others too. Turning one light back on during a blink-off effect left
+  the rest off for the whole new on-period, and dimming or recolouring one
+  during a stage left the rest at the stage's brightness and colour.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming
