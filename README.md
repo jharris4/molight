@@ -496,7 +496,7 @@ Local development uses **two independent containers**, each with a distinct job.
 | **Dev container** (`dev:*`) | generic Debian + Python 3.14 | Your toolchain: editing, `pytest`, `ruff`. VS Code attaches here. HA is pip-installed into a venv (`/opt/molight-venv`) as a library. |
 | **HA runtime** (`hass:*`) | official `home-assistant:stable` | The real Home Assistant app, for manual/UI testing. Your integration is mounted read-only. |
 
-npm scripts follow a `<target>:<action>` naming scheme so the prefix tells you which container you're touching.
+The npm scripts prefixed `dev:` and `hass:` act on these two containers. `test`, `lint` and `format` run inside the dev container, while `release`, `lint:sh` and the `test:e2e` scripts run on the host, the last two in throwaway containers of their own.
 
 ### Running the tests
 
