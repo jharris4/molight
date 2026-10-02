@@ -978,17 +978,49 @@ def _picks_latest(edge: dict) -> bool:
     return edge.get(EDGE_COMBINE, COMBINE_LATEST) == COMBINE_LATEST
 
 
+_DAY = 24 * 3600
+_HALF_DAY = _DAY // 2
+# Where a sun event sits on the clock, for what is judged from settings (seconds).
+_SUN_CLOCK = {"sunrise": 6 * 3600, "sunset": 18 * 3600}
+
+
+def _time_clock(at: time) -> int:
+    return at.hour * 3600 + at.minute * 60 + at.second
+
+
+def _sun_clock(anchor: tuple[str, int]) -> int:
+    return _SUN_CLOCK[anchor[0]] + anchor[1] * 60
+
+
+def _fixed_days_after(at: time, anchor: tuple[str, int] | None) -> int:
+    """Return which day a fixed time paired with a sun event falls on.
+
+    Counted in days after the event's day: the occurrence nearest the event's
+    place on the clock, so the later of sunset + 4 h and 00:00 is the midnight
+    that follows. A tie stays on the event's day.
+    """
+    if anchor is None:
+        return 0
+    days, rest = divmod(_sun_clock(anchor) - _time_clock(at) + _HALF_DAY, _DAY)
+    return days - 1 if rest == 0 and days > 0 else days
+
+
 def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime | None:
     """Resolve an edge spec to a concrete datetime on the given day."""
     if not isinstance(edge, dict):
         return None
+    at, anchor = _edge_time(edge), _edge_sun(edge)
 
     fixed: datetime | None = None
-    if (at := _edge_time(edge)) is not None:
-        fixed = datetime.combine(day, at, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    if at is not None:
+        fixed = datetime.combine(
+            day + timedelta(days=_fixed_days_after(at, anchor)),
+            at,
+            tzinfo=dt_util.DEFAULT_TIME_ZONE,
+        )
 
     sun: datetime | None = None
-    if (anchor := _edge_sun(edge)) is not None:
+    if anchor is not None:
         # None on polar days when the event doesn't occur; the fixed
         # time (if any) then stands alone.
         sun = get_astral_event_date(hass, anchor[0], day)
@@ -1003,12 +1035,6 @@ def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime
     return max(candidates) if _picks_latest(edge) else min(candidates)
 
 
-_DAY = 24 * 3600
-_HALF_DAY = _DAY // 2
-# Where a sun event sits on the clock when judging overnight windows (seconds).
-_SUN_CLOCK = {"sunrise": 6 * 3600, "sunset": 18 * 3600}
-
-
 def _edge_clock(edge: dict | None) -> tuple[str, int] | None:
     """Return an edge's kind and its place on the clock, from its settings alone.
 
@@ -1018,12 +1044,12 @@ def _edge_clock(edge: dict | None) -> tuple[str, int] | None:
     if not isinstance(edge, dict):
         return None
     at, anchor = _edge_time(edge), _edge_sun(edge)
-    fixed = None if at is None else at.hour * 3600 + at.minute * 60 + at.second
     if anchor is None:
-        return None if fixed is None else ("time", fixed)
-    sun = _SUN_CLOCK[anchor[0]] + anchor[1] * 60
-    if fixed is None:
+        return None if at is None else ("time", _time_clock(at))
+    sun = _sun_clock(anchor)
+    if at is None:
         return (anchor[0], sun)
+    fixed = _time_clock(at) + _fixed_days_after(at, anchor) * _DAY
     return ("both", max(fixed, sun) if _picks_latest(edge) else min(fixed, sun))
 
 

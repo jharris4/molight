@@ -42,6 +42,7 @@ from custom_components.molight.const import (
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
     ANCHORAGE,
+    LONDON,
     TROMSO,
     finish_startup,
     light_targets,
@@ -1128,3 +1129,36 @@ async def test_polar_transition_windows_in_a_combination(
     assert hass.states.get("binary_sensor.nights").state == expected
     opposite = "off" if expected == "on" else "on"
     assert hass.states.get("binary_sensor.days").state == opposite
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("when", "expected"),
+    [
+        # Sunset is about 15:55, so sunset + 4 h is before midnight.
+        ("2026-12-01 22:00", "on"),
+        ("2026-12-02 00:10", "off"),
+    ],
+)
+async def test_input_ending_at_the_midnight_after_its_sun_event(
+    hass: HomeAssistant, freezer, when: str, expected: str
+) -> None:
+    """An input that ends at the later of sunset + 4 h and 00:00 runs to the
+    midnight that follows, in a combination and in one nested or inverted."""
+    tz = await set_home(hass, *LONDON)
+    freezer.move_to(datetime.fromisoformat(when).replace(tzinfo=tz))
+    await _setup(
+        hass,
+        _time_schedule(
+            "Evening",
+            {"sun": "sunset"},
+            {"time": "00:00", "sun": "sunset", "offset": 240, "combine": "latest"},
+        ),
+        _combined("Evenings", ["binary_sensor.evening"]),
+        _combined("Nested", ["binary_sensor.evenings"], operator=SCHEDULE_OPERATOR_ALL),
+        _combined("Not Evenings", ["binary_sensor.evenings"], invert=True),
+    )
+    opposite = "off" if expected == "on" else "on"
+    assert hass.states.get("binary_sensor.evenings").state == expected
+    assert hass.states.get("binary_sensor.nested").state == expected
+    assert hass.states.get("binary_sensor.not_evenings").state == opposite

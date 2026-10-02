@@ -1290,6 +1290,10 @@ def _sun(event: str, offset: int) -> dict:
     return {"sun": event, "offset": offset}
 
 
+def _both(at: str, event: str, offset: int, combine: str) -> dict:
+    return {"time": at, "sun": event, "offset": offset, "combine": combine}
+
+
 @pytest.mark.parametrize(
     ("start", "end", "days"),
     [
@@ -1342,6 +1346,11 @@ def _sun(event: str, offset: int) -> dict:
             _at("23:30"),
             0,
         ),
+        # A fixed time past midnight paired with an evening sun event.
+        (_SUNSET, _both("00:00", "sunset", 240, "latest"), 0),
+        (_SUNSET, _both("01:00", "sunset", 300, "earliest"), 0),
+        (_both("00:30", "sunset", 60, "latest"), _at("07:00"), 1),
+        (_at("20:00"), _both("23:30", "sunrise", -300, "earliest"), 1),
         # Offsets move a sun edge into another half-day, or another day.
         (_sun("sunset", 480), _at("07:00"), 1),
         (_sun("sunset", 720), _sun("sunrise", -720), 2),
@@ -1544,6 +1553,146 @@ async def test_gate_light_stays_gated_by_a_sunset_past_the_fixed_end(
     state = hass.states.get("light.desk_lamp")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
+
+
+# ---------------------------------------------------------------------------
+# A combined edge whose fixed time and sun event are either side of midnight
+# ---------------------------------------------------------------------------
+
+
+# London: sunset is about 15:55 on 12-01 and 21:21 on 06-22; sunrise 07:44
+# and 04:43. Each row: window, a local time, the state then.
+_TO_MIDNIGHT = (_SUNSET, _both("00:00", "sunset", 240, "latest"))
+_TO_ONE = (_SUNSET, _both("01:00", "sunset", 300, "earliest"))
+_FROM_HALF_PAST = (_both("00:30", "sunset", 60, "latest"), _at("07:00"))
+_TO_LATE_EVENING = (_at("20:00"), _both("23:30", "sunrise", -300, "earliest"))
+_PORCH = (_both("21:00", "sunset", -15, "latest"), _at("07:00"))
+_TO_DAWN = (_at("22:00"), _both("07:00", "sunrise", 0, "earliest"))
+_MIDNIGHT_CASES = [
+    # End at the later of sunset + 4 h and 00:00: the midnight that follows.
+    (_TO_MIDNIGHT, "2026-12-01 22:00", "on"),
+    (_TO_MIDNIGHT, "2026-12-02 00:10", "off"),
+    (_TO_MIDNIGHT, "2026-06-23 01:00", "on"),
+    (_TO_MIDNIGHT, "2026-06-23 01:30", "off"),
+    # End at the earlier of sunset + 5 h and 01:00.
+    (_TO_ONE, "2026-12-01 20:30", "on"),
+    (_TO_ONE, "2026-12-01 21:30", "off"),
+    (_TO_ONE, "2026-06-23 00:30", "on"),
+    (_TO_ONE, "2026-06-23 01:10", "off"),
+    # Start at the later of sunset + 1 h and 00:30.
+    (_FROM_HALF_PAST, "2026-12-01 23:00", "off"),
+    (_FROM_HALF_PAST, "2026-12-02 01:00", "on"),
+    (_FROM_HALF_PAST, "2026-12-02 07:30", "off"),
+    # End at the earlier of 23:30 and 5 h before sunrise: the evening before.
+    (_TO_LATE_EVENING, "2026-12-01 23:00", "on"),
+    (_TO_LATE_EVENING, "2026-12-01 23:40", "off"),
+    # Both on the same side of midnight: as before.
+    (_PORCH, "2026-06-22 21:03", "off"),
+    (_PORCH, "2026-06-22 21:10", "on"),
+    (_PORCH, "2026-12-01 20:00", "off"),
+    (_PORCH, "2026-12-01 21:01", "on"),
+    (_TO_DAWN, "2026-06-23 04:30", "on"),
+    (_TO_DAWN, "2026-06-23 05:00", "off"),
+    (_TO_DAWN, "2026-12-02 06:59", "on"),
+    (_TO_DAWN, "2026-12-02 07:01", "off"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("edges", "when", "expected"), _MIDNIGHT_CASES)
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+async def test_combined_edge_takes_the_fixed_time_nearest_its_sun_event(
+    hass: HomeAssistant, freezer, edges: tuple, when: str, expected: str, invert: bool
+) -> None:
+    """A fixed time just past midnight, paired with an evening sun event, is
+    the one that follows the event, not the one that began its day."""
+    tz = await set_home(hass, *LONDON)
+    freezer.move_to(_local(tz, when))
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Night Schedule",
+            CONF_TIME_WINDOWS: [{"start": edges[0], "end": edges[1]}],
+            CONF_SCHEDULE_INVERT: invert,
+        },
+    )
+    await _setup(hass, entry)
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert (state.state == expected) is not invert
+
+
+@pytest.mark.asyncio
+async def test_combined_edge_past_midnight_reports_its_boundaries(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The window ends at the midnight after sunset, and the next one starts
+    at the next sunset."""
+    tz = await set_home(hass, *LONDON)
+    freezer.move_to(_local(tz, "2026-12-01 22:00"))
+    await _setup(
+        hass,
+        _schedule_entry(
+            [{"start": _SUNSET, "end": _both("00:00", "sunset", 240, "latest")}]
+        ),
+    )
+    state = hass.states.get("binary_sensor.night_schedule")
+    sunset = get_astral_event_date(hass, "sunset", date(2026, 12, 1))
+    assert state.attributes["current_window_start"] == sunset.isoformat()
+    assert state.attributes["next_transition"] == "2026-12-02T00:00:00+00:00"
+
+    t = _local(tz, "2026-12-02 00:00:02")
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await hass.async_block_till_done()
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "off"
+    next_sunset = get_astral_event_date(hass, "sunset", date(2026, 12, 2))
+    assert state.attributes["next_transition"] == next_sunset.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_follow_light_stays_on_until_the_midnight_after_sunset(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A follow light keeps the window to midnight, past sunset + 4 h."""
+    tz = await set_home(hass, *LONDON)
+    freezer.move_to(_local(tz, "2026-12-01 22:00"))
+    hass.states.async_set("light.real_1", "off")
+    light = make_light_entry(
+        name="Desk Lamp",
+        schedule="binary_sensor.night_schedule",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    schedule = _schedule_entry(
+        [{"start": _SUNSET, "end": _both("00:00", "sunset", 240, "latest")}]
+    )
+    await setup_entries(hass, schedule, light)
+    assert hass.states.get("light.desk_lamp").state == "on"
+
+    t = _local(tz, "2026-12-02 00:00:02")
+    freezer.move_to(t)
+    async_fire_time_changed(hass, t)
+    await settle(hass)
+    assert hass.states.get("light.desk_lamp").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_polar_day_fixed_time_past_midnight_stands_alone(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no sunset that day the fixed half still means the midnight after."""
+    tz = await set_home(hass, *TROMSO)
+    freezer.move_to(_local(tz, "2026-06-21 22:00"))
+    await _setup(
+        hass,
+        _schedule_entry(
+            [{"start": _at("20:00"), "end": _both("00:00", "sunset", 240, "latest")}]
+        ),
+    )
+    state = hass.states.get("binary_sensor.night_schedule")
+    assert state.state == "on"
+    assert state.attributes["next_transition"] == "2026-06-22T00:00:00+02:00"
 
 
 # ---------------------------------------------------------------------------

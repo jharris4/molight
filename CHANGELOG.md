@@ -203,6 +203,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The nights next to a polar period are no longer skipped: the first short
   night after the midnight sun, and an evening window that ends at the first
   sunrise after the polar night.
+- A window edge that combines a sun event with a fixed time just past
+  midnight can pick the fixed time. *End at the later of 4 h after sunset and
+  00:00* always ended 4 h after sunset, because the 00:00 was taken as the
+  midnight that began the day; it is now the midnight that follows.
 
 ## [1.8.0] - 2026-09-30
 
