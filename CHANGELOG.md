@@ -271,6 +271,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reporting `on` with the room dark for as long as the call hung. The call is
   now cancelled, a warning is logged and the lights come on without the
   selection.
+- A Virtual Scheduled Light that switches settings while a turn-on selection
+  is still being applied no longer takes the preset lighting its own device's
+  light for a turn-on at the wall. It read the device from the settings now
+  active, so the waiting turn-on was dropped, the light stayed at the
+  preset's brightness and `last_on_physical` was stamped. A failed selection
+  is also logged under the select entity that was called.
 
 ## [1.8.0] - 2026-09-30
 

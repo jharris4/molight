@@ -707,6 +707,18 @@ class _Owed:
         return self.end_off or self.end_switch or self.window is not None
 
 
+@dataclass(frozen=True)
+class _WaitingTurnOn:
+    """A turn-on waiting for its select call."""
+
+    # The command generation it was issued at.
+    generation: int
+    # Its level generation; None for a manual turn-on.
+    auto_level: int | None
+    # Device of the select entity it called, whatever the settings are now.
+    device_id: str | None
+
+
 _MACHINE_STATES = frozenset(
     {
         STATE_IDLE,
@@ -879,9 +891,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # waiting instead.
         self._command_generation = 0
         # Turn-ons waiting for their selection, by the context of the select
-        # call: the command generation each was issued at and, for an
-        # automatic one, its level generation.
-        self._waiting_turn_ons: dict[str, tuple[int, int | None]] = {}
+        # call.
+        self._waiting_turn_ons: dict[str, _WaitingTurnOn] = {}
         # Counts automatic turn-ons at the auto-on or standby level, so one
         # that waited for its selection yields to the level chosen since.
         self._auto_level_generation = 0
@@ -2296,19 +2307,23 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Return True while a select call runs on this member's own device.
 
         A preset that lights its device's light is reported by a push of the
-        device's, under a context of its own.
+        device's, under a context of its own. Each call speaks for the device
+        it was made on, also once the settings name another select entity.
         """
-        if not self._waiting_turn_ons or not self._turn_on_select_entity:
+        member = er.async_get(self.hass).async_get(entity_id)
+        if member is None or member.device_id is None:
             return False
-        registry = er.async_get(self.hass)
-        member = registry.async_get(entity_id)
-        target = registry.async_get(self._turn_on_select_entity)
-        return (
-            member is not None
-            and target is not None
-            and member.device_id is not None
-            and member.device_id == target.device_id
+        return any(
+            waiting.device_id == member.device_id
+            for waiting in self._waiting_turn_ons.values()
         )
+
+    def _turn_on_select_device(self) -> str | None:
+        """Return the device of the active settings' select entity, if any."""
+        if not self._turn_on_select_entity:
+            return None
+        target = er.async_get(self.hass).async_get(self._turn_on_select_entity)
+        return target.device_id if target is not None else None
 
     def _all_lights_off(self) -> bool:
         """Return True when every real light is off (brightness 0 is off)."""
@@ -2547,10 +2562,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             or self._turn_on_waiting()
         )
 
-    def _overtaken(self, generation: int, auto_level: int | None) -> bool:
-        """Return True when a newer command replaced one issued at these counts."""
-        return generation != self._command_generation or (
-            auto_level is not None and auto_level != self._auto_level_generation
+    def _overtaken(self, waiting: _WaitingTurnOn) -> bool:
+        """Return True when a newer command replaced a waiting turn-on."""
+        return waiting.generation != self._command_generation or (
+            waiting.auto_level is not None
+            and waiting.auto_level != self._auto_level_generation
         )
 
     def _turn_on_waiting(self, *, manual: bool = False) -> bool:
@@ -2559,9 +2575,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         With manual, only one the user made through this entity counts.
         """
         return any(
-            not self._overtaken(generation, auto_level)
-            for generation, auto_level in self._waiting_turn_ons.values()
-            if auto_level is None or not manual
+            not self._overtaken(waiting)
+            for waiting in self._waiting_turn_ons.values()
+            if waiting.auto_level is None or not manual
         )
 
     def _member_is_lit(self, entity_id: str) -> bool | None:
@@ -3985,7 +4001,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if not manual and self._turn_on_waiting(manual=True):
                 self._occupancy_lit_lights = False  # the user's on-period
                 return False
-            waiting = (generation, None if manual else auto_level_generation)
+            waiting = _WaitingTurnOn(
+                generation,
+                None if manual else auto_level_generation,
+                self._turn_on_select_device(),
+            )
             self._waiting_turn_ons[context.id] = waiting
             # Reported on, at the level asked for, while the select call runs.
             if brightness is not None:
@@ -3997,7 +4017,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 await self._apply_turn_on_selection(context)
             finally:
                 del self._waiting_turn_ons[context.id]
-            if self._overtaken(*waiting):
+            if self._overtaken(waiting):
                 # An off, a newer manual command, a newer automatic level or
                 # a change at the wall landed while the select call was
                 # awaited; it stands.
@@ -4031,15 +4051,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
     async def _apply_turn_on_selection(self, context: Context) -> None:
         """Apply the configured select option before an off-to-on command."""
-        if not self._turn_on_select_entity:
+        # The settings may name another select entity by the time it answers.
+        select_entity = self._turn_on_select_entity
+        if not select_entity:
             return
-        target = self.hass.states.get(self._turn_on_select_entity)
+        target = self.hass.states.get(select_entity)
         if target is None or target.state == STATE_UNAVAILABLE:
             # HA only logs a call to such a target, so it would otherwise be
             # recorded as applied. An unknown one (no current option) accepts it.
             _LOGGER.warning(
                 "Turn-on selection target %s is %s; turning on the lights without it",
-                self._turn_on_select_entity,
+                select_entity,
                 "missing" if target is None else target.state,
             )
             return
@@ -4053,7 +4075,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             _LOGGER.warning(
                 "Unable to resolve a turn-on selection option for %s: %s; "
                 "turning on the lights without one",
-                self._turn_on_select_entity,
+                select_entity,
                 " and ".join(parts) + " yielded no option the target currently offers"
                 if parts
                 else "no source or fixed fallback is configured",
@@ -4065,7 +4087,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     "select",
                     SERVICE_SELECT_OPTION,
                     {
-                        "entity_id": self._turn_on_select_entity,
+                        "entity_id": select_entity,
                         ATTR_OPTION: option,
                     },
                     blocking=True,
@@ -4080,7 +4102,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 "Unable to apply turn-on selection option %r using %s; turning on the "
                 "lights without it",
                 option,
-                self._turn_on_select_entity,
+                select_entity,
                 exc_info=True,
             )
         else:

@@ -2046,3 +2046,161 @@ async def test_wall_turn_on_of_another_member_during_a_device_selection_overtake
     assert [call for call in calls if call["domain"] == "light"] == []
     assert state.attributes["brightness"] == 200
     assert state.attributes["last_on_physical"] is not None
+
+
+_SCHEDULE = "binary_sensor.settings_schedule"
+_PRESET = {
+    CONF_LIGHT_TIMEOUT: 60,
+    CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
+    CONF_TURN_ON_SELECT_OPTION: "Cozy",
+}
+_OTHER_SELECT = {
+    CONF_LIGHT_TIMEOUT: 60,
+    CONF_TURN_ON_SELECT_ENTITY: "select.other_theme",
+    CONF_TURN_ON_SELECT_OPTION: "Cozy",
+}
+_OTHER_SETTINGS = {
+    "no_selection": {CONF_LIGHT_TIMEOUT: 60},
+    "another_device": _OTHER_SELECT,
+    "no_device": _OTHER_SELECT,
+}
+
+
+async def _begin_scheduled_turn_on(
+    hass: HomeAssistant,
+    select: _SlowSelect,
+    *,
+    inside: bool,
+    active: dict,
+    other: dict,
+) -> asyncio.Task:
+    """Start a manual turn-on of a Virtual Scheduled Light under its active
+    settings, and return once it waits for the select call."""
+    hass.states.async_set("select.other_theme", "Normal")
+    hass.states.async_set("light.ambient", "off")
+    hass.states.async_set(_SCHEDULE, "on" if inside else "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            lights=["light.ambient"],
+            inside=active if inside else other,
+            outside=other if inside else active,
+        ),
+    )
+    task = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.scheduled_light", "brightness": 200},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    return task
+
+
+async def _switch_settings(hass: HomeAssistant, *, inside: bool) -> None:
+    """Cross the settings schedule's boundary while a select call is parked."""
+    hass.states.async_set(_SCHEDULE, "on" if inside else "off")
+    await _drain(hass)
+    state = hass.states.get("light.scheduled_light")
+    assert state.attributes["active_settings"] == (
+        "inside_schedule" if inside else "outside_schedule"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("inside", [False, True], ids=["outside", "inside"])
+@pytest.mark.parametrize("other", ["no_selection", "another_device", "no_device"])
+@pytest.mark.parametrize("switch", [False, True], ids=["stay", "switch"])
+async def test_device_push_after_a_settings_switch_is_still_the_selection(
+    hass: HomeAssistant, inside: bool, other: str, switch: bool
+) -> None:
+    """A select call in progress speaks for the device it was made on, also
+    after the schedule switched to settings that select nothing, or something
+    on another device: the preset lighting the light is no change at the
+    wall, and the turn-on is still sent."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    if other == "another_device":
+        _one_device(hass, "select.other_theme")
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_scheduled_turn_on(
+        hass, select, inside=inside, active=_PRESET, other=_OTHER_SETTINGS[other]
+    )
+
+    if switch:
+        await _switch_settings(hass, inside=not inside)
+    for brightness in (77, 100):
+        hass.states.async_set("light.ambient", "on", {"brightness": brightness})
+        await _drain(hass)
+    assert calls == []
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.scheduled_light")
+    assert calls == [("turn_on", 200)]
+    assert state.attributes["brightness"] == 200
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["last_on_physical"] is None
+    assert state.attributes["last_brightness_change_physical"] is None
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("inside", [False, True], ids=["outside", "inside"])
+@pytest.mark.parametrize("active", ["another_device", "no_device"])
+@pytest.mark.parametrize("switch", [False, True], ids=["stay", "switch"])
+async def test_wall_turn_on_after_a_switch_to_a_device_selection_overtakes(
+    hass: HomeAssistant, inside: bool, active: str, switch: bool
+) -> None:
+    """Settings that select on the light's own device speak for no select
+    call they did not make: a call in progress on another device leaves a
+    turn-on of the light a change at the wall."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    if active == "another_device":
+        _one_device(hass, "select.other_theme")
+    select = _SlowSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_scheduled_turn_on(
+        hass, select, inside=inside, active=_OTHER_SELECT, other=_PRESET
+    )
+
+    if switch:
+        await _switch_settings(hass, inside=not inside)
+    hass.states.async_set("light.ambient", "on", {"brightness": 77})
+    await _drain(hass)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.scheduled_light")
+    assert calls == []
+    assert state.attributes["brightness"] == 77
+    assert state.attributes["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("other", ["no_selection", "another_device"])
+async def test_failed_select_call_is_named_after_a_settings_switch(
+    hass: HomeAssistant, caplog, other: str
+) -> None:
+    """The warning names the select entity that was called, not the one the
+    settings switched to meanwhile."""
+    select = _FailingSelect(hass, HomeAssistantError("device offline"))
+    calls = _light_calls(hass)
+    turn_on = await _begin_scheduled_turn_on(
+        hass, select, inside=False, active=_PRESET, other=_OTHER_SETTINGS[other]
+    )
+
+    await _switch_settings(hass, inside=True)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    assert calls == [("turn_on", 200)]
+    assert "'Cozy' using select.ambient_theme;" in caplog.text
