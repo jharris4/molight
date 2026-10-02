@@ -277,6 +277,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   active, so the waiting turn-on was dropped, the light stayed at the
   preset's brightness and `last_on_physical` was stamped. A failed selection
   is also logged under the select entity that was called.
+- A real light that comes back from `unavailable` shortly before a warning no
+  longer hides it. The settings sent to it again waited for the turn-on
+  selection and then went out as they were before the warning: the lights
+  jumped back to full brightness while the light reported the effect or warn
+  stage, a stage that blinks the lights off was relit, and a stage's colour
+  was replaced. The stage the light is in when the select call finishes is
+  now what is sent, and after a warning that occupancy ended meanwhile, the
+  restored brightness and colour. An automatic turn-on that waits into a
+  warning does the same; a manual turn-on still wins over the stage.
 
 ## [1.8.0] - 2026-09-30
 

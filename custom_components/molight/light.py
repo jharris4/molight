@@ -896,6 +896,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Counts automatic turn-ons at the auto-on or standby level, so one
         # that waited for its selection yields to the level chosen since.
         self._auto_level_generation = 0
+        # Brightness, fade and color of the stage shown last: an automatic
+        # turn-on that waited for its selection into a stage sends these.
+        self._stage_look: tuple[int, float | None, dict | None] | None = None
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -3063,12 +3066,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """
         if self._machine_state == STATE_EFFECT and not self._effect_brightness:
             return
+        brightness, color = self._attr_brightness, self._current_color()
+        if self._in_warning():
+            # During a stage the stage is what is sent; should the warning
+            # end while the select call runs, this is the look restored.
+            brightness, color = self._pre_warn_brightness, self._pre_warn_color
         self.hass.async_create_task(
             self._set_lights(
                 True,
-                brightness=self._attr_brightness,
+                brightness=brightness,
                 transition=self._auto_on_transition,
-                color=self._current_color(),
+                color=color,
                 apply_turn_on_selection=True,
                 force_selection=True,
             )
@@ -3759,12 +3767,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
-            self.hass.async_create_task(
-                self._set_stage_lights(
-                    self._effect_brightness,
-                    self._effect_transition,
-                    self._effect_color,
-                )
+            self._show_stage(
+                self._effect_brightness, self._effect_transition, self._effect_color
             )
             self._start_timer(self._effect_timeout)
             self.async_write_ha_state()
@@ -3789,9 +3793,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             color = self._warn_color
             if color is None and effect_recolored:
                 color = self._pre_warn_color
-            self.hass.async_create_task(
-                self._set_stage_lights(brightness, self._warn_transition, color)
-            )
+            self._show_stage(brightness, self._warn_transition, color)
             self._start_timer(self._warn_timeout)
             self.async_write_ha_state()
             return
@@ -3875,6 +3877,15 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._pre_warn_color = None
         self.hass.async_create_task(
             self._set_lights(True, brightness=brightness, color=color)
+        )
+
+    def _show_stage(
+        self, brightness: int, transition: float | None, color: dict | None
+    ) -> None:
+        """Show an effect/warn stage, keeping its look for a waiting turn-on."""
+        self._stage_look = (brightness, transition, color)
+        self.hass.async_create_task(
+            self._set_stage_lights(brightness, transition, color)
         )
 
     async def _set_stage_lights(
@@ -3973,12 +3984,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Command the real lights; False when a newer command overtook it.
 
         Only an off, a newer manual turn-on or a change at the wall overtakes
-        a turn-on waiting for its selection: a stage the timer reaches
-        meanwhile is simply replaced, and an automatic turn-on issued while a
-        manual one waits is dropped, as the user's command lights the room
-        with the user's settings. An automatic turn-on at the auto-on or
-        standby level (auto_level) also overtakes an older automatic one
-        still waiting, so the level chosen last is the one the lights end at.
+        a turn-on waiting for its selection. A stage the timer reaches
+        meanwhile is replaced by a manual turn-on, as the user's command
+        lights the room with the user's settings; an automatic turn-on, or a
+        re-send, sends that stage instead of the look it was issued with. An
+        automatic turn-on issued while a manual one waits is dropped. An
+        automatic turn-on at the auto-on or standby level (auto_level) also
+        overtakes an older automatic one still waiting, so the level chosen
+        last is the one the lights end at.
         """
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
@@ -4007,11 +4020,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._turn_on_select_device(),
             )
             self._waiting_turn_ons[context.id] = waiting
-            # Reported on, at the level asked for, while the select call runs.
-            if brightness is not None:
-                self._attr_brightness = brightness
-            if color:
-                self._adopt_color_data(color)
+            # Reported on, at the level asked for, while the select call
+            # runs; a re-send during a stage leaves the stage reported.
+            if manual or not self._in_warning():
+                if brightness is not None:
+                    self._attr_brightness = brightness
+                if color:
+                    self._adopt_color_data(color)
             self.async_write_ha_state()
             try:
                 await self._apply_turn_on_selection(context)
@@ -4021,6 +4036,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # An off, a newer manual command, a newer automatic level or
                 # a change at the wall landed while the select call was
                 # awaited; it stands.
+                return False
+            if not manual and self._in_warning() and self._stage_look is not None:
+                # The light is at a stage, maybe reached during the wait: the
+                # members show it, in the color asked for if it names none.
+                stage_brightness, stage_transition, stage_color = self._stage_look
+                await self._set_stage_lights(
+                    stage_brightness, stage_transition, stage_color or color
+                )
                 return False
         service_data: dict = {"entity_id": self._lights}
         if transition is not None:

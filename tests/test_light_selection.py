@@ -21,6 +21,8 @@ from custom_components.molight.const import (
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    CONF_WARN_BRIGHTNESS,
+    CONF_WARN_TIMEOUT,
     DOMAIN,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -2299,3 +2301,378 @@ async def test_failed_select_call_is_named_after_a_settings_switch(
 
     assert calls == [("turn_on", 200)]
     assert "'Cozy' using select.ambient_theme;" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# A re-send or an automatic turn-on waiting for its selection across a stage
+# ---------------------------------------------------------------------------
+
+_COLOR_CAPS = {
+    "supported_color_modes": ["hs", "color_temp"],
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6500,
+}
+
+
+def _light_commands(hass: HomeAssistant) -> list[dict]:
+    """Record each command to the real light, without its target."""
+    commands: list[dict] = []
+
+    @callback
+    def record_call(event: Event) -> None:
+        data = dict(event.data["service_data"])
+        if event.data["domain"] == "light" and data.pop("entity_id") == [
+            "light.ambient"
+        ]:
+            commands.append({"service": event.data["service"], **data})
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_call)
+    return commands
+
+
+async def _lit_light(
+    hass: HomeAssistant, select: _SlowSelect, *, kelvin: int | None = None, **kwargs
+) -> None:
+    """Turn the light on at 200 through the virtual light; its member replies."""
+    hass.states.async_set("binary_sensor.occ", "off")
+    hass.states.async_set("light.ambient", "off", _COLOR_CAPS if kelvin else {})
+    await setup_entries(hass, _selection_entry(occupancy="binary_sensor.occ", **kwargs))
+    contexts: list[Context] = []
+
+    @callback
+    def record_context(event: Event) -> None:
+        if event.data["service_data"]["entity_id"] == ["light.ambient"]:
+            contexts.append(event.context)
+
+    unsub = hass.bus.async_listen(EVENT_CALL_SERVICE, record_context)
+    select.release.set()
+    color = {"color_temp_kelvin": kelvin} if kelvin else {}
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.selection_light", "brightness": 200, **color},
+        blocking=True,
+    )
+    await settle(hass)
+    reply = {"brightness": 200}
+    if kelvin:
+        reply |= {**_COLOR_CAPS, "color_mode": "color_temp", **color}
+    hass.states.async_set("light.ambient", "on", reply, context=contexts[-1])
+    await settle(hass)
+    unsub()
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["last_on_physical"] is None
+
+
+async def _park_resend(hass: HomeAssistant, select: _SlowSelect) -> None:
+    """The member drops out and comes back off; the re-send waits for its
+    select call."""
+    select.started.clear()
+    select.release.clear()
+    attributes = dict(hass.states.get("light.ambient").attributes)
+    capabilities = {k: v for k, v in attributes.items() if k in _COLOR_CAPS}
+    hass.states.async_set("light.ambient", "unavailable")
+    await _drain(hass)
+    hass.states.async_set("light.ambient", "off", capabilities)
+    await asyncio.wait_for(select.started.wait(), 2)
+
+
+def _molight_state(hass: HomeAssistant) -> str:
+    return hass.states.get("light.selection_light").attributes["molight_state"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["effect", "warn"])
+async def test_resend_waiting_into_a_stage_sends_the_stage(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """A re-send that waited for its select call while the timer reached a
+    stage sends that stage, not the brightness the light had before, and the
+    warning runs on to the off."""
+    select = _SlowSelect(hass)
+    stages = {"effect_timeout": 5, "effect_brightness": 20} if stage == "effect" else {}
+    await _lit_light(hass, select, warn_timeout=10, warn_brightness=20, **stages)
+    await _pass(hass, freezer, 57)
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+
+    await _pass(hass, freezer, 4)
+    assert _molight_state(hass) == stage
+    assert commands == [{"service": "turn_on", "brightness": 51}]
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_on", "brightness": 51}] * 2
+    assert state.attributes["molight_state"] == stage
+    assert state.attributes["brightness"] == 51
+    assert state.attributes["pre_warn_brightness"] == 200
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+
+    for seconds in (6, 11):
+        await _pass(hass, freezer, seconds)
+        await settle(hass)
+    assert hass.states.get("light.selection_light").state == "off"
+    assert commands[-1] == {"service": "turn_off"}
+
+
+@pytest.mark.asyncio
+async def test_resend_waiting_into_a_blink_off_does_not_relight_it(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A stage that blinks the lights off is sent again as an off."""
+    select = _SlowSelect(hass)
+    await _lit_light(
+        hass, select, effect_timeout=5, effect_brightness=0, warn_timeout=10
+    )
+    await _pass(hass, freezer, 57)
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+
+    await _pass(hass, freezer, 4)
+    assert _molight_state(hass) == "effect"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_off"}] * 2
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "effect"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_color", [False, True], ids=["plain", "colored"])
+async def test_resend_waiting_into_a_stage_sends_the_stage_color(
+    hass: HomeAssistant, freezer, stage_color: bool
+) -> None:
+    """A stage's own color is sent, not the color the light had before; a
+    stage that names none is sent in the light's color, so the real light
+    that came back shows what the others show."""
+    select = _SlowSelect(hass)
+    color = {"warn_rgb_color": [255, 0, 0]} if stage_color else {}
+    await _lit_light(
+        hass, select, kelvin=3000, warn_timeout=10, warn_brightness=20, **color
+    )
+    await _pass(hass, freezer, 57)
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+
+    await _pass(hass, freezer, 4)
+    assert _molight_state(hass) == "warn"
+    select.release.set()
+    await settle(hass)
+
+    stage = {"service": "turn_on", "brightness": 51}
+    if stage_color:
+        assert commands == [{**stage, "rgb_color": (255, 0, 0)}] * 2
+    else:
+        assert commands == [stage, {**stage, "color_temp_kelvin": 3000}]
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["brightness"] == 51
+    assert state.attributes["pre_warn_color"] == {"color_temp_kelvin": 3000}
+
+
+@pytest.mark.asyncio
+async def test_resend_started_in_a_stage_sends_the_stage_reached_since(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Effect at 20% when the re-send starts, warn at 40% when it is sent."""
+    select = _SlowSelect(hass)
+    await _lit_light(
+        hass,
+        select,
+        effect_timeout=5,
+        effect_brightness=20,
+        warn_timeout=10,
+        warn_brightness=40,
+    )
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+    assert _molight_state(hass) == "effect"
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+    assert hass.states.get("light.selection_light").attributes["brightness"] == 51
+
+    await _pass(hass, freezer, 6)
+    assert _molight_state(hass) == "warn"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_on", "brightness": 102}] * 2
+    assert state.attributes["brightness"] == 102
+    assert state.attributes["pre_warn_brightness"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ending", ["stays", "occupancy", "expires"])
+async def test_resend_started_in_a_stage_follows_how_the_stage_ends(
+    hass: HomeAssistant, freezer, ending: str
+) -> None:
+    """A re-send that starts during a warning reports the warning while it
+    waits. It sends the warning if that still shows, the brightness restored
+    if occupancy ended the warning meanwhile, and nothing after the off."""
+    select = _SlowSelect(hass)
+    await _lit_light(hass, select, warn_timeout=5, warn_brightness=20)
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+    assert _molight_state(hass) == "warn"
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["brightness"] == 51
+    assert state.attributes["molight_state"] == "warn"
+
+    if ending == "occupancy":
+        hass.states.async_set("binary_sensor.occ", "on")
+        await _drain(hass)
+        assert commands == [{"service": "turn_on", "brightness": 200}]
+    elif ending == "expires":
+        await _pass(hass, freezer, 6)
+        assert commands == [{"service": "turn_off"}]
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    if ending == "stays":
+        assert commands == [{"service": "turn_on", "brightness": 51}]
+        assert state.attributes["molight_state"] == "warn"
+        assert state.attributes["brightness"] == 51
+        assert state.attributes["pre_warn_brightness"] == 200
+    elif ending == "occupancy":
+        assert commands == [{"service": "turn_on", "brightness": 200}] * 2
+        assert state.attributes["molight_state"] == "occupied"
+        assert state.attributes["brightness"] == 200
+        assert state.attributes["warning_active"] is False
+    else:
+        assert commands == [{"service": "turn_off"}]
+        assert state.state == "off"
+
+
+@pytest.mark.asyncio
+async def test_preset_push_during_a_resend_into_a_stage_keeps_the_warning(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The preset of a re-send lighting its own device's light during a
+    warning is no change at the wall: the warning carries on, and its
+    brightness is sent over the preset's."""
+    _one_device(hass, "select.ambient_theme", "light.ambient")
+    select = _SlowSelect(hass)
+    await _lit_light(hass, select, warn_timeout=10, warn_brightness=20)
+    await _pass(hass, freezer, 57)
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+
+    await _pass(hass, freezer, 4)
+    assert _molight_state(hass) == "warn"
+    hass.states.async_set("light.ambient", "on", {"brightness": 128})
+    await _drain(hass)
+    assert _molight_state(hass) == "warn"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_on", "brightness": 51}] * 2
+    assert state.attributes["molight_state"] == "warn"
+    assert state.attributes["brightness"] == 51
+    assert state.attributes["pre_warn_brightness"] == 200
+    assert state.attributes["last_brightness_change_physical"] is None
+
+
+@pytest.mark.asyncio
+async def test_automatic_turn_on_waiting_into_a_stage_sends_the_stage(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Motion lights the room, a false detection ends it and its quick off
+    reaches the warning while the select call still runs: the warning is
+    what the lights show, not the level motion asked for."""
+    select = await _park_automatic_turn_on(
+        hass,
+        auto_on_brightness=40,
+        false_off_delay=5,
+        warn_timeout=10,
+        warn_brightness=20,
+    )
+    commands = _light_commands(hass)
+    hass.states.async_set(
+        "binary_sensor.occ", "off", {"last_clear_false_detection": True}
+    )
+    await _drain(hass)
+
+    await _pass(hass, freezer, 6)
+    assert _molight_state(hass) == "warn"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_on", "brightness": 51}] * 2
+    assert state.attributes["molight_state"] == "warn"
+    assert state.attributes["brightness"] == 51
+    assert state.attributes["pre_warn_brightness"] == 102
+
+    await _pass(hass, freezer, 11)
+    await settle(hass)
+    assert hass.states.get("light.selection_light").state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_resend_started_in_a_stage_yields_to_standby(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warning that ends at standby while a re-send waits leaves the lights
+    at standby: the level chosen last stands."""
+    select = _SlowSelect(hass)
+    select.release.set()
+    hass.states.async_set(_SCHEDULE, "on")
+    hass.states.async_set("light.ambient", "off")
+    contexts: list[Context] = []
+
+    @callback
+    def record_context(event: Event) -> None:
+        if event.data["service_data"]["entity_id"] == ["light.ambient"]:
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_context)
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={
+                **_PRESET,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_WARN_TIMEOUT: 5,
+                CONF_WARN_BRIGHTNESS: 40,
+            },
+        ),
+    )
+    await settle(hass)
+    assert _molight_state(hass) == "standby"
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.selection_light", "brightness": 200},
+        blocking=True,
+    )
+    await settle(hass)
+    hass.states.async_set(
+        "light.ambient", "on", {"brightness": 200}, context=contexts[-1]
+    )
+    await settle(hass)
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+    assert _molight_state(hass) == "warn"
+    await _park_resend(hass, select)
+    commands = _light_commands(hass)
+
+    await _pass(hass, freezer, 6)
+    assert _molight_state(hass) == "standby"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert commands == [{"service": "turn_on", "brightness": 51}]
+    assert state.attributes["molight_state"] == "standby"
+    assert state.attributes["brightness"] == 51
