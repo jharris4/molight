@@ -305,6 +305,8 @@ DATA_RENAMED = DOMAIN + "_renamed"
 # hass.data key of the IDs of entities removed with their entry this run, until
 # another entity takes the ID: a form left open may still offer one.
 DATA_REMOVED = DOMAIN + "_removed"
+# hass.data key of the sources a Discover flow is wrapping right now.
+DATA_DISCOVERY_RESERVED = DOMAIN + "_discovery_reserved"
 # The platforms actually forwarded, so unload matches setup even if the
 # entry type changed in between (a light/scheduled-light conversion).
 DATA_PLATFORMS = "platforms"

@@ -349,6 +349,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bulk assignment, the Discover lights defaults and a Virtual Scheduled
   Light's later forms. An entity renamed meanwhile is saved under its new ID,
   and the turn-off timeout and schedule checks still apply to it.
+- Two Discover flows submitted at the same moment no longer both wrap the
+  same light, occupancy sensor or illuminance sensor, which left two entries
+  fighting over it. The second skips the pick, as it does one wrapped earlier.
 
 ## [1.8.0] - 2026-09-30
 

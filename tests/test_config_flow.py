@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
@@ -108,6 +109,7 @@ from custom_components.molight.const import (
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    DATA_DISCOVERY_RESERVED,
     DEFAULT_SCHEDULE_MODE,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
@@ -6725,6 +6727,44 @@ _DISCOVERY_WRAPPERS = {
         CONF_LIGHT_TIMEOUT: 60,
     },
 }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", list(_DISCOVERY_KINDS))
+async def test_discovery_flows_submitted_together_wrap_a_pick_once(
+    hass: HomeAssistant, kind: str
+) -> None:
+    """Two flows that pick the same source create one wrapper; the other skips it."""
+    domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
+    pick = f"{domain}.desk"
+    hass.states.async_set(pick, "off", attrs)
+    flows = []
+    for _ in range(2):
+        result = await _reach_discovery_select(hass, f"discover_{kind}")
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_SELECTED_ENTITIES: [pick]}
+        )
+        assert result["step_id"] == f"discover_{kind}_defaults"
+        flows.append(result["flow_id"])
+
+    results = await asyncio.gather(
+        *(
+            hass.config_entries.flow.async_configure(flow, dict(defaults))
+            for flow in flows
+        )
+    )
+    await hass.async_block_till_done()
+
+    assert sorted(
+        (r["reason"], r["description_placeholders"]["count"]) for r in results
+    ) == [("discovery_done", "1"), ("discovery_done_skipped", "0")]
+    wrapped = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(key) in (pick, [pick])
+    ]
+    assert len(wrapped) == 1
+    assert not hass.data[DATA_DISCOVERY_RESERVED]
 
 
 @pytest.mark.asyncio

@@ -99,6 +99,7 @@ from .const import (
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    DATA_DISCOVERY_RESERVED,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     DEFAULT_DIM_STEP,
     DEFAULT_DOOR_MODE,
@@ -2357,6 +2358,9 @@ class MoLightConfigFlow(
         reporting how many were made. The imports are awaited rather than left
         to run detached, so the reported count is what actually got created and
         a failure is surfaced instead of only reaching the log.
+
+        The picks are reserved from the eligibility check until their entries
+        exist, so a second flow submitted meanwhile skips them.
         """
         overrides, removed = current_references(self.hass, overrides)
         if removed:
@@ -2368,7 +2372,9 @@ class MoLightConfigFlow(
         candidates = disc["candidates"]
         # Another flow may have wrapped a pick while this one was open.
         eligible = _discovery_candidates(self.hass, *disc["scan"])
-        selected = [e for e in disc["selected"] if e in eligible]
+        reserved: set[str] = self.hass.data.setdefault(DATA_DISCOVERY_RESERVED, set())
+        selected = [e for e in disc["selected"] if e in eligible and e not in reserved]
+        reserved.update(selected)
         skipped = len(disc["selected"]) - len(selected)
         prefix, suffix, target = disc["prefix"], disc["suffix"], disc["target"]
         # Drop cleared optional fields so they stay absent from the entry
@@ -2398,7 +2404,10 @@ class MoLightConfigFlow(
                 )
             )
 
-        results = await asyncio.gather(*flows, return_exceptions=True)
+        try:
+            results = await asyncio.gather(*flows, return_exceptions=True)
+        finally:
+            reserved.difference_update(selected)
         created = 0
         for entity_id, result in zip(selected, results, strict=True):
             if isinstance(result, BaseException):
