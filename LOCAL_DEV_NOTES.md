@@ -13,10 +13,11 @@ python3.14 -m venv .venv
 .venv/bin/python -m pip install -r requirements_test.txt
 ```
 
-The repository's `.vscode/settings.json` configures VS Code to use
-`.venv/bin/python` by default. If VS Code has already remembered a different
-interpreter for this workspace, run **Python: Select Interpreter** from the
-Command Palette and select `.venv/bin/python`.
+VS Code's Python extension picks up a `.venv` in the workspace folder on its
+own. If it has already remembered a different interpreter for this workspace,
+run **Python: Select Interpreter** from the Command Palette and select
+`.venv/bin/python`. Inside the dev container, VS Code uses
+`/opt/molight-venv/bin/python` instead.
 
 This local environment is only for import resolution, type checking, and editor
 features. Continue to use the `npm` scripts for testing, linting, formatting,

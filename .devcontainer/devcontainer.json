@@ -29,6 +29,7 @@
                 "ms-python.debugpy"
             ],
             "settings": {
+                "python.defaultInterpreterPath": "/opt/molight-venv/bin/python",
                 "editor.formatOnSave": true,
                 "[python]": {
                     "editor.defaultFormatter": "charliermarsh.ruff",
