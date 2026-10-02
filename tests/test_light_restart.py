@@ -405,20 +405,31 @@ async def test_member_reporting_in_off_over_presence_is_lit_across_a_restart(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("turn_on", ["virtual", "physical", "door"])
 async def test_restart_lights_a_light_turned_on_again_after_its_manual_off(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, turn_on: str
 ) -> None:
     """A turn-on after the manual off ends it: presence that began before the
     off lights the room when it is dark at startup, after a brightness off."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(ILLUM, "off")
+    hass.states.async_set(DOOR, "off")
     hass.states.async_set(REAL, "off")
-    entry = make_light_entry(occupancy=OCC, illuminance=ILLUM)
+    entry = make_light_entry(occupancy=OCC, illuminance=ILLUM, door=DOOR)
     await _manual_off_while_present(hass, freezer, entry)
-    await hass.services.async_call(
-        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
-    )
+    if turn_on == "virtual":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+        )
+    elif turn_on == "physical":
+        hass.states.async_set(REAL, "on")
+    else:
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+        hass.states.async_set(DOOR, "off")
     await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes[f"last_on_{turn_on}"] is not None
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).state == "off"
