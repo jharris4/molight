@@ -9385,3 +9385,59 @@ async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
     )
     assert result["reason"] == "assign_done"
     assert result["description_placeholders"]["assigned"] == "1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+@pytest.mark.parametrize(
+    ("standby", "modes", "error"),
+    [
+        ({CONF_STANDBY_COLOR_TEMP: 3000}, ["brightness"], "color_temp_unsupported"),
+        ({CONF_STANDBY_RGB_COLOR: [255, 0, 0]}, ["brightness"], "color_unsupported"),
+        ({CONF_STANDBY_RGB_COLOR: [255, 0, 0]}, ["color_temp"], "color_unsupported"),
+        ({CONF_STANDBY_COLOR_TEMP: 3000}, ["color_temp"], None),
+        ({CONF_STANDBY_RGB_COLOR: [255, 0, 0]}, ["rgb"], None),
+    ],
+    ids=["temp_on_dimmer", "rgb_on_dimmer", "rgb_on_tunable", "temp", "rgb"],
+)
+async def test_standby_color_needs_a_light_that_can_show_it(
+    hass: HomeAssistant, flow: str, standby: dict, modes: list[str], error: str | None
+) -> None:
+    """A standby color no chosen light can show is refused, as other colors are."""
+    hass.states.async_set("light.porch_real", "off", {"supported_color_modes": modes})
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _reach_scheduled_light_inside(hass)
+    else:
+        await _setup_night_schedule(hass)
+        entry = _scheduled_light_entry("Porch", "porch")
+        await setup_entries(hass, entry)
+        manager = hass.config_entries.options
+        result = await manager.async_init(entry.entry_id)
+        result = await manager.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Porch",
+                CONF_LIGHTS: ["light.porch_real"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        result = await manager.async_configure(
+            result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        )
+    assert result["step_id"] == "scheduled_light_inside"
+
+    result = await manager.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_INSIDE_LIGHT_SECTIONS,
+            CONF_LIGHT_TIMEOUT: 30,
+            SECTION_STANDBY: {CONF_STANDBY_BRIGHTNESS: 1, **standby},
+        },
+    )
+    if error:
+        assert result["step_id"] == "scheduled_light_inside"
+        assert result["errors"] == {"base": error}
+    else:
+        assert result["type"] == FlowResultType.CREATE_ENTRY
