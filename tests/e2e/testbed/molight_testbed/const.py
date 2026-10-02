@@ -33,7 +33,7 @@ STORAGE_VERSION: Final = 1
 DEFAULT_BEHAVIOR: Final = {
     "latency": 0.0,  # seconds before the first report after a command
     "report_steps": False,  # report power first, attributes 0.3 s later
-    "transition_steps": 0,  # intermediate brightness reports across a fade
+    "transition_steps": 0,  # reports on the way across a fade, to off too
     "brightness_levels": 0,  # quantise reported brightness to N device levels
     "xy_color": False,  # advertise and report XY instead of RGB
     "reject": False,  # raise on every command (an unreachable bulb)

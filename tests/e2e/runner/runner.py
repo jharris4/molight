@@ -149,6 +149,9 @@ PRESET_REMOTE_LAST_ACTION = "sensor.e2e_preset_remote_last_action"
 PARK_LIGHT = "light.e2e_park"
 PARK_SCHEDULE = "binary_sensor.e2e_park_schedule"
 PARK_SCHEDULED_LIGHT = "light.e2e_park_scheduled"
+FADE_LIGHT = "light.e2e_fade"
+FADE_SCHEDULE = "binary_sensor.e2e_fade_schedule"
+FADE_SCHEDULED_LIGHT = "light.e2e_fade_scheduled"
 PROFILE_OUTSIDE = "outside_schedule"
 PROFILE_INSIDE = "inside_schedule"
 
@@ -8714,6 +8717,199 @@ def run_timer_scenarios(client: HomeAssistantClient) -> None:
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
 
 
+# Longer than the 5 s Home Assistant keeps a command's context on a light.
+LONG_FADE = 7
+# What a change at the wall leaves on a virtual light.
+WALL_STAMPS = (
+    "last_on_physical",
+    "last_brightness_change_physical",
+    "last_color_change_physical",
+    "last_off_manual",
+)
+
+
+def wall_stamps(state: dict[str, Any]) -> dict[str, Any]:
+    """Return a virtual light's records of changes at the wall."""
+    return {name: state["attributes"].get(name) for name in WALL_STAMPS}
+
+
+def watch_long_fade(
+    client: HomeAssistantClient,
+    light: str,
+    stamps: dict[str, Any],
+    machine_state: str,
+    brightness: int | None,
+    rgb: list[int] | None = None,
+) -> dict[str, Any]:
+    """Watch a long fade to its end on the RGB member, reported in steps.
+
+    The virtual light keeps its state and records no change at the wall, and
+    the member ends at the brightness and colour asked for, or off for None.
+    Returns the virtual light's records for the next fade.
+    """
+    seen = set()
+    deadline = time.monotonic() + LONG_FADE + 0.6
+    while time.monotonic() < deadline:
+        state = client.state(light)
+        if (
+            state["attributes"].get("molight_state") != machine_state
+            or wall_stamps(state) != stamps
+        ):
+            raise AssertionError(
+                f"Expected {light} to stay {machine_state} with {stamps} "
+                f"through its own fade; observed {state}"
+            )
+        member = client.state(RAW_MULTI_RGB)
+        seen.add((member["state"], member["attributes"].get("brightness")))
+        time.sleep(0.2)
+    if len(seen) < 4:
+        raise AssertionError(f"The fade was not reported in steps: {sorted(seen)}")
+    member = wait_member(client, RAW_MULTI_RGB, brightness)
+    if rgb is not None and list(member["attributes"].get("rgb_color") or []) != rgb:
+        raise AssertionError(f"The fade ended at another colour than {rgb}: {member}")
+    return wall_stamps(wait_machine_state(client, machine_state, light))
+
+
+def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
+    """Fades that outlast Home Assistant's command context, reported in steps."""
+    blue, green, magenta = [0, 0, 255], [0, 255, 0], [255, 0, 255]
+    client.set_behavior(RAW_MULTI_RGB, transition_steps=3)
+    entry_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Fade",
+            "lights": [RAW_MULTI_RGB],
+            "light_timeout": 10,
+            **EMPTY_LIGHT_SECTIONS,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {
+                "auto_on_brightness": 80,
+                "auto_on_rgb_color": blue,
+                "auto_on_transition": LONG_FADE,
+                "auto_off_transition": LONG_FADE,
+            },
+            "warning": {
+                "effect_timeout": 9,
+                "effect_brightness": 40,
+                "effect_rgb_color": green,
+                "effect_transition": LONG_FADE,
+                "warn_timeout": 11,
+                "warn_brightness": 20,
+                "warn_rgb_color": magenta,
+                "warn_transition": LONG_FADE,
+            },
+            "advanced": {"entity_id": "e2e_fade"},
+        },
+        "Fade light",
+    )
+    assert_entry_loaded(client, entry_id)
+    stamps = wall_stamps(client.state(FADE_LIGHT))
+
+    set_timer_motion(client, True)
+    wait_machine_state(client, "occupied", FADE_LIGHT)
+    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "occupied", pct(80), blue)
+    checkpoint("a 7 s automatic fade in, reported in steps, stayed the sensor's")
+
+    # Complementary stage colours fade through grey; neither is a recolour.
+    set_timer_motion(client, False)
+    wait_machine_state(client, "effect", FADE_LIGHT)
+    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "effect", pct(40), green)
+    wait_machine_state(client, "warn", FADE_LIGHT)
+    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "warn", pct(20), magenta)
+    checkpoint("7 s effect and warn fades kept the warning running")
+
+    # A turn-on restores the pre-warning look over the caller's own fade.
+    client.call_service(
+        "light", "turn_on", {"entity_id": FADE_LIGHT, "transition": LONG_FADE}
+    )
+    wait_machine_state(client, "active", FADE_LIGHT)
+    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "active", pct(80), blue)
+    checkpoint("a 7 s fade back to the pre-warning look was not a change at the wall")
+
+    # Late in the next stage's fade, brighter at the wall is still a person.
+    wait_machine_state(client, "effect", FADE_LIGHT)
+    time.sleep(5.6)
+    shown = client.state(RAW_MULTI_RGB)["attributes"]["rgb_color"]
+    client.set_state(RAW_MULTI_RGB, "on", {"brightness": 250, "rgb_color": list(shown)})
+    client.wait_state(
+        FADE_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("brightness") == 250
+            and state["attributes"].get("last_brightness_change_physical")
+            != stamps["last_brightness_change_physical"]
+        ),
+        "active at the wall's 250, the warning cancelled",
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: list(state["attributes"].get("rgb_color") or []) == blue,
+        "back at the pre-warning blue",
+    )
+    stamps = wall_stamps(client.state(FADE_LIGHT))
+    checkpoint("brighter at the wall 5.6 s into a stage's fade cancelled the warning")
+
+    # The whole sequence again, to the fade to off: dimmer steps, then off.
+    wait_machine_state(client, "effect", FADE_LIGHT)
+    wait_machine_state(client, "warn", FADE_LIGHT)
+    client.wait_state(FADE_LIGHT, lambda state: state["state"] == "off", "off")
+    watch_long_fade(client, FADE_LIGHT, stamps, "idle", None)
+    assert_state_stays(
+        client,
+        FADE_LIGHT,
+        lambda state: state["state"] == "off" and wall_stamps(state) == stamps,
+        "off, with no off at the wall recorded for its own fade",
+        duration=1,
+    )
+    remove_entry_and_entity(client, entry_id, FADE_LIGHT)
+    checkpoint("a 7 s automatic fade to off neither relit the light nor was manual")
+
+    # Standby: on at it from off, raised by presence, and dropped back to it.
+    schedule_entry_id = create_virtual_schedule(
+        client, "E2E Fade Schedule", "e2e_fade_schedule", source=RAW_REMOVAL_MOTION
+    )
+    assert_entry_loaded(client, schedule_entry_id)
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    client.wait_state(FADE_SCHEDULE, lambda state: state["state"] == "off", "off")
+    scheduled_entry_id = create_two_profile_light(
+        client,
+        "E2E Fade Scheduled",
+        "e2e_fade_scheduled",
+        RAW_MULTI_RGB,
+        FADE_SCHEDULE,
+        "turn_off",
+        {"light_timeout": 30},
+        {
+            "light_timeout": 4,
+            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "behavior": {
+                "auto_on_brightness": 80,
+                "auto_on_transition": LONG_FADE,
+                "auto_off_transition": LONG_FADE,
+            },
+            "standby": {"standby_brightness": 10},
+        },
+    )
+    assert_entry_loaded(client, scheduled_entry_id)
+    stamps = wall_stamps(client.state(FADE_SCHEDULED_LIGHT))
+    client.set_state(RAW_REMOVAL_MOTION, "on")
+    wait_machine_state(client, "standby", FADE_SCHEDULED_LIGHT)
+    stamps = watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "standby", pct(10))
+    set_timer_motion(client, True)
+    wait_machine_state(client, "occupied", FADE_SCHEDULED_LIGHT)
+    stamps = watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "occupied", pct(80))
+    set_timer_motion(client, False)
+    wait_machine_state(client, "standby", FADE_SCHEDULED_LIGHT)
+    watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "standby", pct(10))
+    client.set_state(RAW_REMOVAL_MOTION, "off")
+    wait_member(client, RAW_MULTI_RGB, None)
+    remove_entry_and_entity(client, scheduled_entry_id, FADE_SCHEDULED_LIGHT)
+    remove_entry_and_entity(client, schedule_entry_id, FADE_SCHEDULE)
+    client.set_behavior(RAW_MULTI_RGB, transition_steps=0)
+    print("PASS: fades longer than Home Assistant's command context, in steps")
+
+
 def wait_parked_calls(client: HomeAssistantClient, calls: int) -> None:
     """Wait until the parked target select holds this many select calls."""
     client.wait_state(
@@ -9048,6 +9244,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
     "a": [
         run_cold_illuminance_scenario,
         run_timer_scenarios,
+        run_long_fade_scenarios,
         run_physical_change_scenarios,
         run_fast_physical_scenarios,
         run_effect_color_scenarios,

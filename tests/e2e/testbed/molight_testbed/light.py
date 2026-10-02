@@ -36,6 +36,16 @@ from .const import (
 from .entity import TestbedEntity, async_add_with_startup_delays
 
 REPORT_STEP_GAP = 0.3  # seconds between a piecewise power and attribute report
+# What a fade reports on its way, each blended from where it started.
+FADED = (ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_XY_COLOR, ATTR_COLOR_TEMP_KELVIN)
+
+
+def _blend(start: Any, goal: Any, fraction: float) -> Any:
+    """Return the value a fraction of the way from start to goal."""
+    if isinstance(start, list):
+        return [_blend(a, b, fraction) for a, b in zip(start, goal, strict=True)]
+    value = start + (goal - start) * fraction
+    return round(value) if isinstance(start, int) else value
 
 
 class TestbedLight(TestbedEntity, LightEntity):
@@ -174,7 +184,7 @@ class TestbedLight(TestbedEntity, LightEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Apply and persist a turn-on command, then report it per behavior."""
         self._reject_if_asked()
-        previous = int(self.record["attributes"].get(ATTR_BRIGHTNESS, 0) or 0)
+        start = self._fade_start()
         self.record["state"] = "on"
         if ATTR_BRIGHTNESS in kwargs:
             self.record["attributes"][ATTR_BRIGHTNESS] = kwargs[ATTR_BRIGHTNESS]
@@ -190,19 +200,49 @@ class TestbedLight(TestbedEntity, LightEntity):
         self.record["last_command"] = {"service": "turn_on", "data": kwargs}
         self.record["commands"] = self.record.get("commands", 0) + 1
         await self.controller.async_save()
-        self._schedule_reports(previous, kwargs.get(ATTR_TRANSITION))
+        self._schedule_reports(start, kwargs.get(ATTR_TRANSITION))
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Apply and persist a turn-off command, then report it per behavior."""
         self._reject_if_asked()
+        start = self._fade_start()
         self.record["state"] = "off"
         self.record["last_command"] = {"service": "turn_off", "data": kwargs}
         self.record["commands"] = self.record.get("commands", 0) + 1
         await self.controller.async_save()
-        self._schedule_reports(None, None)
+        self._schedule_reports(start, kwargs.get(ATTR_TRANSITION))
+
+    def _fade_start(self) -> dict[str, Any]:
+        """Return what the light shows before a command: dark when it is off."""
+        attributes = self.record["attributes"]
+        start = {key: deepcopy(attributes[key]) for key in FADED if key in attributes}
+        if self.record["state"] != "on":
+            start[ATTR_BRIGHTNESS] = 0
+        return start
+
+    def _fade_steps(self, start: dict[str, Any], steps: int) -> list[dict[str, Any]]:
+        """Return what a fade from start to the record reports on its way.
+
+        Brightness and color are blended in a straight line. A fade to off
+        dims at the color the light had, and stays on until its end.
+        """
+        goal = self.record["attributes"]
+        if self.record["state"] != "on":
+            goal = {**start, ATTR_BRIGHTNESS: 0}
+        fading = [
+            key
+            for key in FADED
+            if key in start and key in goal and start[key] != goal[key]
+        ]
+        if not fading:
+            return []
+        return [
+            {key: _blend(start[key], goal[key], index / (steps + 1)) for key in fading}
+            for index in range(1, steps + 1)
+        ]
 
     def _schedule_reports(
-        self, previous_brightness: int | None, transition: float | None
+        self, start: dict[str, Any], transition: float | None
     ) -> None:
         """Publish the record now, or as the delayed/piecewise reports behavior asks."""
         self._cancel_pending()
@@ -218,22 +258,22 @@ class TestbedLight(TestbedEntity, LightEntity):
             return
         reports: list[tuple[float, dict[str, Any] | None]] = []
         due = latency
+        fade = self._fade_steps(start, steps) if steps else []
         if piecewise:
-            reports.append((due, {"state": "on"}))
+            power: dict[str, Any] = {"state": "on"}
+            if fade and start.get(ATTR_BRIGHTNESS) == 0:
+                # Fading in from dark: on, with no level to show yet.
+                power["attributes"] = {ATTR_BRIGHTNESS: 0}
+            reports.append((due, power))
             due += REPORT_STEP_GAP
-        target = int(self.record["attributes"].get(ATTR_BRIGHTNESS, 0) or 0)
-        if steps and previous_brightness is not None and target != previous_brightness:
-            for index in range(1, steps + 1):
-                fraction = index / (steps + 1)
-                level = round(
-                    previous_brightness + (target - previous_brightness) * fraction
+        for index, attributes in enumerate(fade, 1):
+            reports.append(
+                (
+                    due + float(transition) * index / (steps + 1),
+                    {"state": "on", "attributes": attributes},
                 )
-                reports.append(
-                    (
-                        due + float(transition) * fraction,
-                        {"attributes": {ATTR_BRIGHTNESS: level}},
-                    )
-                )
+            )
+        if fade:
             due += float(transition)
         reports.append((due, None))
         for delay, partial_report in reports:
