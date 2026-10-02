@@ -1888,6 +1888,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             if entity_id == self._door_entity and self._door_open:
                 self._start_door_dropout()
+            if (
+                entity_id == self._illuminance_entity
+                and new_state.state == STATE_UNAVAILABLE
+                and not new_state.attributes.get(ATTR_RESTORED)
+            ):
+                # The sensor holds through outages: it has no reading at all.
+                self._illuminance_gone()
             return
         same_state = old_state is not None and old_state.state == new_state.state
 
@@ -2119,8 +2126,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Apply the startup rules to an entity deleted or disabled while running.
 
         Startup counts a missing keep-on entity as not holding, a missing
-        door as closed and missing presence as clear; the entity cannot
-        report any of that itself anymore.
+        door as closed, missing presence as clear and a missing illuminance
+        sensor as dark; the entity cannot report any of that itself anymore.
         """
         if not entity_gone(self.hass, entity_id):
             return
@@ -2140,6 +2147,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._go_idle()
         if entity_id == self._occupancy_entity:
             self._occupancy_last_on = None
+        if entity_id == self._illuminance_entity:
+            self._illuminance_gone()
         if entity_id == self._door_entity:
             self._cancel_door_dropout()
             self._door_open = False
@@ -2152,6 +2161,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._hold_states.get(entity_id):
             self._hold_states[entity_id] = False
             self._refresh_hold()
+
+    def _illuminance_gone(self) -> None:
+        """Count an illuminance sensor left with no reading as going dark."""
+        if self._illuminance_last_bright:
+            self._illuminance_last_bright = False
+            self._on_illuminance_change(False)
 
     def _release_presence(self) -> None:
         """Give a light whose presence hold went missing a full timeout.
@@ -3410,11 +3425,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _gate_lifted_since(self, since: datetime) -> bool:
         """Return True when a turn-on gate opened at or after `since`.
 
-        Illuminance going dark, a gate-mode window starting, or a scheduled
-        light switching profiles each re-read occupancy live, and an
-        unreadable sensor counted as clear then.
+        Illuminance going dark or losing its reading, a gate-mode window
+        starting, or a scheduled light switching profiles each re-read
+        occupancy live, and an unreadable sensor counted as clear then.
         """
-        checks = [(self._illuminance_entity, ("off",))]
+        checks = [(self._illuminance_entity, ("off", STATE_UNAVAILABLE))]
         if self._schedule_mode in (
             SCHEDULE_MODE_GATE,
             SCHEDULE_MODE_GATE_SWITCH,
@@ -3428,6 +3443,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 state is not None
                 and state.state in lifted_states
                 and state.last_changed >= since
+                and not state.attributes.get(ATTR_RESTORED)
             ):
                 return True
         return False

@@ -1689,7 +1689,8 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
 
     A manual turn-on while steadily bright stands (control mode only forces
     off on the bright edge); the sensor recovering to the same value is not
-    that edge.
+    that edge. The sensor holds through its source's outages, so its blip is
+    the placeholder of its entry reloading.
     """
     illum = "binary_sensor.illum"
     hass.states.async_set(illum, "on")  # bright
@@ -1702,7 +1703,7 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    hass.states.async_set(illum, "unavailable")
+    hass.states.async_set(illum, "unavailable", {ATTR_RESTORED: True})
     await settle(hass)
     hass.states.async_set(illum, "on")
     await settle(hass)

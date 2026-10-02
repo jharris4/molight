@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from homeassistant.const import EVENT_CALL_SERVICE
+from homeassistant.const import ATTR_RESTORED, EVENT_CALL_SERVICE
 from homeassistant.core import HomeAssistant, ServiceCall, State
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -3072,7 +3072,8 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    hass.states.async_set(illuminance, "unavailable")
+    # The sensor's entry reloading; it holds through its source's outages.
+    hass.states.async_set(illuminance, "unavailable", {ATTR_RESTORED: True})
     await settle(hass)
     hass.states.async_set(SCHEDULE, "on")  # cross the boundary mid-outage
     await settle(hass)

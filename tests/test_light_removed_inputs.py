@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -23,14 +24,20 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
+    ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    ILLUMINANCE_MODE_CONTROL,
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
+    STATE_COUNTDOWN,
     STATE_IDLE,
     STATE_OCCUPIED,
 )
@@ -46,12 +53,15 @@ from tests.conftest import (
 from tests.real_entities import (
     RealBinary,
     RealLight,
+    RealLux,
     RealToggle,
     add_real,
+    add_real_with_entry,
     start_slow_rename,
 )
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
 VIRTUAL = "light.matrix_light"
@@ -613,3 +623,195 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
     await expect_fresh_timeout(hass, freezer)
     assert not member.is_on
+
+
+# ---------------------------------------------------------------------------
+# An illuminance sensor left with no reading
+# ---------------------------------------------------------------------------
+
+LUX = "sensor.lux"
+ROOM_LUX = "binary_sensor.room_lux"
+OCC = "binary_sensor.occ"
+LUX_GONE = ["deleted", "disabled", "entry_disabled", "unregistered"]
+
+
+def lux_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Room Lux",
+            CONF_ILLUMINANCE_SENSOR: LUX,
+            CONF_ILLUMINANCE_THRESHOLD: 10.0,
+        },
+    )
+
+
+async def provide_lux(hass: HomeAssistant, how: str, lux: float) -> ConfigEntry | None:
+    """Add sensor.lux as a bare state, or registered from its own entry."""
+    if how == "unregistered":
+        hass.states.async_set(LUX, str(lux))
+        return None
+    return await add_real_with_entry(hass, lambda: RealLux("lux", lux))
+
+
+async def remove_lux(hass: HomeAssistant, how: str, source: ConfigEntry | None) -> None:
+    if how == "entry_disabled":
+        await hass.config_entries.async_set_disabled_by(
+            source.entry_id, ConfigEntryDisabler.USER
+        )
+        await settle(hass)
+    else:
+        await remove(hass, how, LUX)
+    assert hass.states.get(ROOM_LUX).state == "unavailable"
+
+
+async def bright_occupied_room(
+    hass: HomeAssistant, how: str = "deleted", **light
+) -> tuple[ConfigEntry | None, MockConfigEntry, MockConfigEntry]:
+    """A room occupied while bright, so its light is off."""
+    source = await provide_lux(hass, how, 100)
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(MEMBER, "off")
+    sensor = lux_entry()
+    entry = make_light_entry(occupancy=OCC, illuminance=ROOM_LUX, **light)
+    await setup_entries(hass, sensor, entry)
+    await settle(hass)
+    assert hass.states.get(ROOM_LUX).state == "on"
+    assert hass.states.get(VIRTUAL).state == "off"
+    return source, sensor, entry
+
+
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("how", LUX_GONE)
+async def test_illuminance_source_that_goes_missing_lights_an_occupied_room(
+    hass: HomeAssistant, virtual_light_behavior_variant, how: str, mode: str
+) -> None:
+    """A bright sensor left with no reading is no longer bright, so the
+    occupied room it kept dark lights, as when the room goes dark."""
+    source, _, _ = await bright_occupied_room(hass, how, illuminance_mode=mode)
+    calls = record_service_calls(hass)
+    await remove_lux(hass, how, source)
+    assert light_targets(calls, "turn_on") == [[MEMBER]]
+    assert attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+
+async def test_illuminance_source_that_goes_missing_resumes_a_bright_off(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """An on-period brightness cut short resumes for the time it had left."""
+    source = await provide_lux(hass, "deleted", 0)
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(
+        hass, lux_entry(), make_light_entry(occupancy=OCC, illuminance=ROOM_LUX)
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(LUX, "100")
+    await settle(hass)
+    assert attrs(hass)["bright_forced_off"] is True
+    hass.states.async_set(
+        OCC, "off", {"latest_occupied_time": dt_util.utcnow().isoformat()}
+    )
+    await settle(hass)
+
+    await remove_lux(hass, "deleted", source)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert attrs(hass)["molight_state"] == STATE_COUNTDOWN
+    await expect_fresh_timeout(hass, freezer)
+
+
+async def test_illuminance_sensor_losing_a_dark_reading_changes_nothing(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """Dark already: a light turned off by hand stays off."""
+    source = await provide_lux(hass, "deleted", 0)
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(
+        hass, lux_entry(), make_light_entry(occupancy=OCC, illuminance=ROOM_LUX)
+    )
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    calls = record_service_calls(hass)
+    await remove_lux(hass, "deleted", source)
+    hass.states.async_set(LUX, "0")  # a source back is a first reading
+    await settle(hass)
+    assert light_targets(calls, "turn_on") == []
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+@pytest.mark.parametrize("how", ["deleted", "disabled", "entry_disabled", "removed"])
+async def test_illuminance_sensor_that_goes_missing_lights_an_occupied_room(
+    hass: HomeAssistant, virtual_light_behavior_variant, how: str
+) -> None:
+    """The illuminance sensor itself deleted or disabled counts as dark."""
+    _, sensor, _ = await bright_occupied_room(hass)
+    calls = record_service_calls(hass)
+    if how == "entry_disabled":
+        await hass.config_entries.async_set_disabled_by(
+            sensor.entry_id, ConfigEntryDisabler.USER
+        )
+    elif how == "removed":
+        assert await hass.config_entries.async_remove(sensor.entry_id)
+    else:
+        await remove(hass, how, ROOM_LUX)
+    await settle(hass)
+    assert light_targets(calls, "turn_on") == [[MEMBER]]
+    assert attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+
+async def test_illuminance_entry_reloading_keeps_the_room_dark(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """The placeholder of a reloading illuminance entry is no lost reading."""
+    _, sensor, _ = await bright_occupied_room(hass)
+    calls = record_service_calls(hass)
+    assert await hass.config_entries.async_reload(sensor.entry_id)
+    await settle(hass)
+    assert hass.states.get(ROOM_LUX).state == "on"
+    assert light_targets(calls, "turn_on") == []
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+async def test_illuminance_source_change_to_one_not_reporting_lights_the_room(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """Accepted: the sensor has no reading until the new source reports, so an
+    occupied room lights, and goes off again if that reading is bright."""
+    _, sensor, _ = await bright_occupied_room(hass)
+    calls = record_service_calls(hass)
+    options = {k: v for k, v in sensor.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(
+        sensor, options={**options, CONF_ILLUMINANCE_SENSOR: "sensor.new_lux"}
+    )
+    await settle(hass)
+    assert hass.states.get(ROOM_LUX).state == "unavailable"
+    assert light_targets(calls, "turn_on") == [[MEMBER]]
+    assert attrs(hass)["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set("sensor.new_lux", "100")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[MEMBER]]
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+async def test_occupancy_back_after_the_lux_reading_was_lost_lights_the_room(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """Losing the reading while occupancy was unreadable lifted the gate; the
+    occupancy that returns lights the room."""
+    source, _, _ = await bright_occupied_room(hass)
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+    await remove_lux(hass, "deleted", source)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert light_targets(calls, "turn_on") == [[MEMBER]]
+    assert attrs(hass)["molight_state"] == STATE_OCCUPIED

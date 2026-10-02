@@ -235,6 +235,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reading for good, across restarts too. A light gated by a sensor stuck
   bright that way never came on for presence or a door again. A source whose
   entity ID changes, or whose integration reloads, still keeps the reading.
+  A light the sensor kept dark reacts at once, as to the room going dark: an
+  occupied room lights, and an on-period brightness cut short resumes. So
+  does a light whose illuminance sensor is itself deleted or disabled, or
+  switched to a source that has not reported yet.
 - A turn-on selection option with leading or trailing spaces (WLED preset
   names are free text) can be chosen. It was rejected as not offered, or, when
   the target also offered the option without the spaces, silently replaced by
