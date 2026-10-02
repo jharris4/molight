@@ -362,6 +362,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   includes the virtual light, directly or through another Virtual Light. Such
   a light never lit its bulbs, and turning it off called itself until Home
   Assistant gave up with an error.
+  A light saved that way, or whose group is changed to include it later,
+  stops controlling that group and logs a warning.
 - A Virtual Light's keep-on entities can no longer be one of its own lights,
   or a light or light group that includes it or shares one of its lights.
   Each is on whenever the light is, and a member's hold stayed as it was at

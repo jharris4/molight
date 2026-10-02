@@ -15,7 +15,7 @@ from homeassistant.components.light import (
     ENTITY_ID_FORMAT as LIGHT_ENTITY_ID_FORMAT,
 )
 from homeassistant.components.select import ATTR_OPTIONS
-from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import split_entity_id
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
@@ -154,12 +154,16 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
+    MEMBER_LIGHT_TYPES as _MEMBER_LIGHT_TYPES,
+    light_descendants as _light_descendants,
+    light_member_ids as _light_member_ids,
     lights_support_brightness,
     lights_support_color,
     lights_support_color_temp,
     lights_support_transition,
     match_option,
     molight_config as _molight_cfg,
+    molight_light_entries as _molight_light_entries,
     renamed_to,
 )
 from .remote import (
@@ -1715,67 +1719,6 @@ def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
         CONF_SCHEDULE_MODE: DEFAULT_SCHEDULE_MODE,
         CONF_DOOR_MODE: DEFAULT_DOOR_MODE,
     }
-
-
-def _molight_light_entries(
-    hass: HomeAssistant, entity_types: tuple[str, ...] = (ENTITY_TYPE_LIGHT,)
-) -> dict[str, config_entries.ConfigEntry]:
-    """Map each virtual light's entity_id to its config entry.
-
-    Only entries that have actually registered a light entity appear: the
-    entity_id is what the bulk-assign light picker stores, and what a light's
-    sensor references are keyed against.
-    """
-    registry = er.async_get(hass)
-    result: dict[str, config_entries.ConfigEntry] = {}
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in entity_types:
-            continue
-        for ent in er.async_entries_for_config_entry(registry, entry.entry_id):
-            if ent.domain == "light":
-                result[ent.entity_id] = entry
-                break
-    return result
-
-
-_MEMBER_LIGHT_TYPES = (ENTITY_TYPE_LIGHT, ENTITY_TYPE_SCHEDULED_LIGHT)
-
-
-def _light_member_ids(
-    hass: HomeAssistant,
-    entity_id: str,
-    lights: dict[str, config_entries.ConfigEntry],
-) -> list[str]:
-    """Return the members of a virtual light or a light group."""
-    if (entry := lights.get(entity_id)) is not None:
-        return _molight_cfg(entry).get(CONF_LIGHTS, [])
-    if (state := hass.states.get(entity_id)) is not None:
-        for key in (ATTR_ENTITY_ID, "group_entities"):
-            if isinstance(members := state.attributes.get(key), (list, tuple)):
-                return [m for m in members if isinstance(m, str)]
-    # An unavailable or unloaded group helper still names them in its options.
-    reg_entry = er.async_get(hass).async_get(entity_id)
-    if reg_entry is None or reg_entry.platform != "group":
-        return []
-    group = hass.config_entries.async_get_entry(reg_entry.config_entry_id or "")
-    return list(group.options.get("entities", [])) if group is not None else []
-
-
-def _light_descendants(
-    hass: HomeAssistant,
-    entity_ids: Sequence[str],
-    lights: dict[str, config_entries.ConfigEntry],
-) -> set[str]:
-    """Return the given lights and every light under them, through any nesting."""
-    found: set[str] = set()
-    pending = list(entity_ids)
-    while pending:
-        entity_id = pending.pop()
-        entity_id = renamed_to(hass, entity_id) or entity_id
-        if entity_id not in found:
-            found.add(entity_id)
-            pending.extend(_light_member_ids(hass, entity_id, lights))
-    return found
 
 
 def _light_members_create_cycle(

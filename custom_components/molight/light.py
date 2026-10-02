@@ -269,6 +269,7 @@ from homeassistant.components.light import (
 )
 from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import (
+    ATTR_ENTITY_ID,
     ATTR_OPTION,
     ATTR_RESTORED,
     EVENT_HOMEASSISTANT_STARTED,
@@ -376,12 +377,15 @@ from .const import (
     STATE_WARN,
 )
 from .helpers import (
+    MEMBER_LIGHT_TYPES,
     RenamableRestoreEntity,
     entity_gone,
+    light_descendants,
     lights_support_brightness,
     lights_support_transition,
     match_option,
     molight_config,
+    molight_light_entries,
     run_unless_renamed,
     same_entity,
     suggested_entity_id,
@@ -395,6 +399,14 @@ if TYPE_CHECKING:
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _group_members(state: State | None) -> object:
+    """Return the members a light group reports, to notice when they change."""
+    if state is None:
+        return None
+    return state.attributes.get(ATTR_ENTITY_ID), state.attributes.get("group_entities")
+
 
 # Member color modes an hs command can drive (HA converts hs to each member's
 # native mode); any of them lets the virtual light advertise HS itself. Shared
@@ -1217,6 +1229,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     self._on_auto_off_toggled,
                 )
             )
+            self._drop_member_cycles()
             self._select_initial_settings()
             self._seed_state()
 
@@ -1235,6 +1248,29 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     unsub_start()
 
             self.async_on_remove(_cancel_start)
+
+    @callback
+    def _drop_member_cycles(self) -> bool:
+        """Stop driving a member that includes this light, so it can't call itself.
+
+        The flows refuse one, but a light group can change, or predate the check.
+        """
+        lights = molight_light_entries(self.hass, MEMBER_LIGHT_TYPES)
+        cyclic = [
+            member
+            for member in self._lights
+            if self.entity_id in light_descendants(self.hass, [member], lights)
+        ]
+        for member in cyclic:
+            _LOGGER.warning(
+                "%s does not control %s, which includes %s itself; remove it from "
+                "the lights in Configure",
+                self.entity_id,
+                member,
+                self.entity_id,
+            )
+        self._lights = [m for m in self._lights if m not in cyclic]
+        return bool(cyclic)
 
     def _show_restored(self, last: State) -> None:
         """Report the restored state until the light seeds.
@@ -1896,6 +1932,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return
         same_state = old_state is not None and old_state.state == new_state.state
 
+        if (
+            entity_id in self._lights
+            and _group_members(new_state) != _group_members(old_state)
+            and self._drop_member_cycles()
+            and entity_id not in self._lights
+        ):
+            return
         if entity_id in self._lights:
             member_seen = entity_id in self._members_seen
             if new_state.state in ("on", "off"):
