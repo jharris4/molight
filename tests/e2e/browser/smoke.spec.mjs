@@ -374,3 +374,57 @@ test("a light with a turn-on selection gets the selection page", async ({ page }
   const state = await entityState(page, "light.browser_selected");
   expect(state.attributes.friendly_name).toBe("Browser Selected");
 });
+
+// Opens the scheduled light's inside-schedule form and its Standby section.
+async function openStandby(page, name) {
+  const card = await entryCard(page, name);
+  await card.getByRole("button", { name: /configure/i }).click();
+  await expectFlowTitle(page, "Virtual Scheduled Light");
+  await submit(page);
+  await expectFlowTitle(page, "Outside-schedule settings");
+  await submit(page);
+  await expectFlowTitle(page, "Inside-schedule settings");
+  return sectionPanel(page, "Standby");
+}
+
+function standbyBrightness(page) {
+  return page.getByRole("spinbutton", { name: /^Standby brightness/ });
+}
+
+function standbyColor(standby) {
+  return standby.locator("ha-selector-color_rgb input");
+}
+
+async function saveOptions(page) {
+  await submit(page);
+  await expect(page.getByText(/options successfully saved/i)).toBeVisible();
+  await page.getByRole("button", { name: /finish/i }).click();
+}
+
+test("set and clear a standby brightness and color", async ({ page }) => {
+  await login(page);
+  let standby = await openStandby(page, EDITED_LIGHT_NAME);
+  await selectHaOption(page, "Standby color mode", "Color");
+  await standbyColor(standby).fill("#ff8000");
+  await submit(page);
+  // The section's rule is reported for the form, and the form keeps the color.
+  await expect(page.getByText(/standby color needs a standby brightness/i)).toBeVisible();
+  standby = await sectionPanel(page, "Standby");
+  await expect(standbyColor(standby)).toHaveValue("#ff8000");
+  await standbyBrightness(page).fill("5");
+  await saveOptions(page);
+
+  standby = await openStandby(page, EDITED_LIGHT_NAME);
+  await expect(standbyBrightness(page)).toHaveValue("5");
+  await expect(standbyColor(standby)).toHaveValue("#ff8000");
+  // Clearing takes a blank brightness and the color mode set to None.
+  await selectHaOption(page, "Standby color mode", "None");
+  await standbyBrightness(page).fill("");
+  await saveOptions(page);
+
+  standby = await openStandby(page, EDITED_LIGHT_NAME);
+  await expect(standbyBrightness(page)).toHaveValue("");
+  await expect(standbyColor(standby)).not.toHaveValue("#ff8000");
+  await page.getByRole("button", { name: "Close", exact: true }).filter({ visible: true }).last().click();
+  await expect(visibleText(page, "Inside-schedule settings")).toBeHidden();
+});
