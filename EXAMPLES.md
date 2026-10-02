@@ -240,7 +240,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 - Pick **`open`** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In `open_close` mode, if the room turns dark while the door is still standing open, the light comes on then.
-- In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor (or a keep-on entity is holding auto-off) and it still sees someone, the lights stay on instead of dropping on a person who just shut the door behind them.
+- In `open_close` mode, closing the door **defers to presence**: if you also wired an occupancy sensor and it still sees someone (or a keep-on entity is holding auto-off), the lights stay on instead of dropping on a person who just shut the door behind them. With an illuminance sensor, occupancy only counts while it's dark, as for turning the light on.
 
 ---
 
