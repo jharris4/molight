@@ -349,6 +349,9 @@ ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
 # That schedule's window marker while its inside settings are active, so a
 # restart can tell the window it left from a later one.
 ATTR_ACTIVE_SETTINGS_WINDOW = "active_settings_window_start"
+# The follow schedule a light's schedule_window_start was saved for; a marker
+# only belongs to the schedule that set it.
+ATTR_SCHEDULE_WINDOW_SCHEDULE = "schedule_window_schedule"
 SCHEDULE_END_ACTION_KEEP = "keep"
 SCHEDULE_END_ACTION_SWITCH = "switch"
 SCHEDULE_END_ACTION_TURN_OFF = "turn_off"

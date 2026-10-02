@@ -20,6 +20,10 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    ATTR_SCHEDULE_WINDOW_SCHEDULE,
+    CONF_ENTITY_TYPE,
+    CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_MODE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -28,7 +32,15 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
+from tests.conftest import (
+    finish_startup,
+    light_targets,
+    make_light_entry,
+    record_service_calls,
+    restart_entries,
+    settle,
+    setup_entries,
+)
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -36,6 +48,7 @@ OCC = "binary_sensor.occ"
 DOOR = "binary_sensor.door"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
+SCHED_B = "binary_sensor.sched_b"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
@@ -486,6 +499,126 @@ async def test_restart_missed_window_end_with_lights_already_off(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
+
+
+async def _edit_options(hass: HomeAssistant, entry, **overrides) -> None:
+    options = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(entry, options={**options, **overrides})
+    await hass.async_block_till_done()
+    await settle(hass)
+
+
+async def _lit_in_follow_window(hass: HomeAssistant):
+    """A follow light lit by its window, with the member reporting on."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(SCHED_B, "off")
+    hass.states.async_set(REAL, "off")
+    entry = _follow_entry()
+    await setup_entries(hass, entry)
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    attrs = _state(hass).attributes
+    assert attrs["schedule_window_start"] == MARKER
+    assert attrs[ATTR_SCHEDULE_WINDOW_SCHEDULE] == SCHED
+    return entry
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("other", ["off", "on", "unavailable"])
+async def test_swapping_the_follow_schedule_leaves_the_old_marker_behind(
+    hass: HomeAssistant, other: str
+) -> None:
+    """A lit light switched to another schedule crossed none of its boundaries."""
+    entry = await _lit_in_follow_window(hass)
+    marker_b = "2026-07-02T22:00:00+00:00"
+    attrs = {"current_window_start": marker_b} if other == "on" else {}
+    hass.states.async_set(SCHED_B, other, attrs)
+
+    calls = record_service_calls(hass)
+    await _edit_options(hass, entry, **{CONF_SCHEDULE_ENTITY: SCHED_B})
+    assert light_targets(calls, "turn_off") == []
+    state = _state(hass)
+    assert state.state == "on"
+    # The new schedule's own window claims the light; otherwise it is adopted.
+    assert state.attributes["molight_state"] == (
+        STATE_SCHEDULED if other == "on" else STATE_ACTIVE
+    )
+    assert state.attributes["schedule_window_start"] == (
+        marker_b if other == "on" else None
+    )
+    assert state.attributes[ATTR_SCHEDULE_WINDOW_SCHEDULE] == (
+        SCHED_B if other == "on" else None
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_follow_marker_does_not_survive_a_spell_in_gate_mode(
+    hass: HomeAssistant,
+) -> None:
+    """A light lit by hand after its window ended in gate mode is not turned
+    off when it is switched back to follow mode."""
+    entry = await _lit_in_follow_window(hass)
+    await _edit_options(hass, entry, **{CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE})
+    assert _state(hass).attributes["schedule_window_start"] is None
+
+    hass.states.async_set(SCHED, "off")  # the gate end turns it off
+    await settle(hass)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    calls = record_service_calls(hass)
+    await _edit_options(hass, entry, **{CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW})
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("saved_for", "kept"), [(None, True), (SCHED, True), (SCHED_B, False)]
+)
+async def test_restored_marker_belongs_to_the_schedule_it_was_saved_for(
+    hass: HomeAssistant, saved_for: str | None, kept: bool
+) -> None:
+    """A save from before the schedule was recorded is trusted; one made for
+    another schedule is not a missed end of this one."""
+    attrs = {"schedule_window_start": MARKER}
+    if saved_for:
+        attrs[ATTR_SCHEDULE_WINDOW_SCHEDULE] = saved_for
+    mock_restore_cache(hass, [State(VIRTUAL, "on", attrs)])
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "on")
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _follow_entry())
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if kept else [])
+    assert _state(hass).state == ("off" if kept else "on")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_restart_keeps_the_marker_of_the_same_follow_schedule(
+    hass: HomeAssistant,
+) -> None:
+    """The same schedule across a real restart still gets its missed end."""
+    entry = await _lit_in_follow_window(hass)
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "off")
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio

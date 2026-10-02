@@ -294,6 +294,7 @@ from .const import (
     ATTR_ACTIVE_SETTINGS_WINDOW,
     ATTR_MANUAL_OFF_CLEARED,
     ATTR_SCHEDULE_END_OFF_PENDING,
+    ATTR_SCHEDULE_WINDOW_SCHEDULE,
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
@@ -1032,7 +1033,17 @@ class VirtualLight(LightEntity, RestoreEntity):
                 if raw:
                     with contextlib.suppress(ValueError, TypeError):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
-            self._schedule_window_applied = last.attributes.get("schedule_window_start")
+            # A marker only belongs to the follow schedule that set it. A
+            # save that predates the schedule record is trusted.
+            if (
+                self._schedule_entity
+                and self._schedule_mode == SCHEDULE_MODE_FOLLOW
+                and last.attributes.get(ATTR_SCHEDULE_WINDOW_SCHEDULE)
+                in (None, self._schedule_entity)
+            ):
+                self._schedule_window_applied = last.attributes.get(
+                    "schedule_window_start"
+                )
             self._bright_forced_off = bool(last.attributes.get("bright_forced_off"))
             if self._bright_forced_off:
                 with contextlib.suppress(ValueError, TypeError):
@@ -3993,6 +4004,7 @@ class VirtualLight(LightEntity, RestoreEntity):
             "pre_warn_brightness": look[0] if look else self._pre_warn_brightness,
             "pre_warn_color": look[1] if look else self._pre_warn_color,
             "schedule_window_start": window,
+            ATTR_SCHEDULE_WINDOW_SCHEDULE: self._schedule_entity if window else None,
             "bright_forced_off": self._bright_forced_off,
             "bright_resume_until": _fmt(self._bright_resume_until),
         }

@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A manual off that a Virtual Scheduled Light's schedule boundary had ended
   no longer comes back with a restart; the new `manual_off_cleared` attribute
   records it.
+- Changing a follow-mode light's schedule, or its schedule mode, no longer
+  turns it off as if the old schedule's window had ended. The new
+  `schedule_window_schedule` attribute records which schedule the window
+  marker belongs to.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming
