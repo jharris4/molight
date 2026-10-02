@@ -1020,6 +1020,26 @@ async def test_turn_off_echo_mirrors_nothing(
     assert _attrs(hass)["molight_state"] == STATE_IDLE
 
 
+@pytest.mark.asyncio
+async def test_automatic_off_echo_at_brightness_zero_is_no_manual_off(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The timer's off echoed as on at brightness 0 is no turn-off by hand,
+    which would keep the light off over presence after a restart."""
+    await _setup(hass, make_light_entry(name="Test Light", lights=[MEMBER], timeout=60))
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    await _write(hass, "on", contexts[-1], brightness=0)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert _attrs(hass)["last_off_manual"] is None
+
+
 async def _into_warn(
     hass: HomeAssistant, freezer, **entry_kwargs
 ) -> tuple[Context, Context]:

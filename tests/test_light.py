@@ -625,6 +625,8 @@ async def test_brightness_zero_treated_as_off(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_brightness_change_physical"] == dimmed
+    # A dim to 0 at the wall is a turn-off by hand.
+    assert state.attributes["last_off_manual"] == dimmed
 
     # 0 → non-zero is a turn-on in disguise: back to ACTIVE with physical
     # attribution.
