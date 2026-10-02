@@ -4284,7 +4284,7 @@ def run_restart_warning_verify() -> None:
 
 
 LOG_RECORD = re.compile(
-    r"^\d{4}-\d{2}-\d{2} \S+ (?P<level>[A-Z]+) \(.*?\) \[(?P<logger>[^\]]+)\] "
+    r"^(?P<at>\d{4}-\d{2}-\d{2} \S+) (?P<level>[A-Z]+) \(.*?\) \[(?P<logger>[^\]]+)\] "
 )
 MOLIGHT_LOG = re.compile(r"molight", re.IGNORECASE)
 MOLIGHT_TRACEBACK = re.compile(r"custom_components/molight")
@@ -8730,16 +8730,24 @@ def run_scenarios(shard: str) -> None:
 # keeps every boot, while home-assistant.log rolls at each start and keeps one.
 CONTAINER_LOG = Path("/ha-config/e2e-container.log")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
-# Logged once by every boot, so it counts the boots the check covered.
+# Logged by every boot, so it counts the boots the check covered.
 BOOT_LINE = "We found a custom integration molight which"
+# Some releases (2026.1) log it twice within milliseconds; a restart takes seconds.
+BOOT_LINE_REPEAT = timedelta(seconds=1)
 
 
 def log_boots(content: str) -> int:
     """Count the boots whose records the parser could read."""
-    return sum(
-        level == "WARNING" and BOOT_LINE in first
-        for level, first, _ in log_records(content)
-    )
+    boots = 0
+    last: datetime | None = None
+    for level, first, _ in log_records(content):
+        if level != "WARNING" or BOOT_LINE not in first:
+            continue
+        at = datetime.fromisoformat(LOG_RECORD.match(first)["at"])
+        if last is None or at - last > BOOT_LINE_REPEAT:
+            boots += 1
+        last = at
+    return boots
 
 
 def check_logs(expected_boots: int) -> None:

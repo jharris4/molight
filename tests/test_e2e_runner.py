@@ -95,6 +95,11 @@ TRACEBACK = (
 )
 
 
+def _boot(minute: int) -> str:
+    """The boot line of a boot that started the given number of minutes later."""
+    return BOOT.replace("19:37:", f"19:{37 + minute}:")
+
+
 def test_log_records_groups_continuation_lines() -> None:
     """A traceback belongs to the record above it; text before any record is dropped."""
     first = _record("ERROR", "homeassistant.core", "Error doing job")
@@ -175,10 +180,19 @@ def test_log_failures_reports_every_failure_once() -> None:
 
 
 def test_log_boots_counts_only_parsed_boot_records() -> None:
-    unparsed = BOOT.replace("2026-10-01 ", "2026-10-01T")
+    unparsed = _boot(2).replace("2026-10-01 ", "2026-10-01T")
     info = _record("INFO", "homeassistant.loader", runner.BOOT_LINE)
 
-    assert runner.log_boots(f"{BOOT}\n{BOOT}\n{unparsed}\n{info}\n") == 2
+    assert runner.log_boots(f"{BOOT}\n{_boot(1)}\n{unparsed}\n{info}\n") == 2
+
+
+def test_log_boots_counts_a_boot_line_logged_twice_once() -> None:
+    """Home Assistant 2026.1 logs the boot line twice, milliseconds apart."""
+    again = BOOT.replace(":40.123", ":40.125")
+    later = BOOT.replace(":40.123", ":41.124")
+
+    assert runner.log_boots(f"{BOOT}\n{again}\n{_boot(1)}\n") == 2
+    assert runner.log_boots(f"{BOOT}\n{later}\n") == 2
 
 
 @pytest.fixture
@@ -191,7 +205,7 @@ def container_log(tmp_path, monkeypatch: pytest.MonkeyPatch):
 def test_check_logs_passes_a_clean_log_with_every_boot(container_log, capsys) -> None:
     info = _record("INFO", "homeassistant.setup", "Setting up molight")
     # The container's output keeps Home Assistant's colours.
-    container_log.write_text(f"\x1b[33m{BOOT}\x1b[0m\n{info}\n{BOOT}\n")
+    container_log.write_text(f"\x1b[33m{BOOT}\x1b[0m\n{info}\n{_boot(1)}\n")
 
     runner.check_logs(2)
 
@@ -201,7 +215,7 @@ def test_check_logs_passes_a_clean_log_with_every_boot(container_log, capsys) ->
 @pytest.mark.parametrize("boots", [0, 1, 3])
 def test_check_logs_fails_on_another_boot_count(container_log, boots: int) -> None:
     """Fewer boots leave part of the run unchecked; more mean an unplanned restart."""
-    container_log.write_text("".join(f"{BOOT}\n" for _ in range(boots)))
+    container_log.write_text("".join(f"{_boot(n)}\n" for n in range(boots)))
 
     with pytest.raises(AssertionError, match=f"Parsed {boots} Home Assistant boot"):
         runner.check_logs(2)
