@@ -44,6 +44,7 @@ pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 DOOR = "binary_sensor.door"
 OCC = "binary_sensor.occ"
+MAINT = "binary_sensor.maint"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 HOLD = "input_boolean.guest"
@@ -277,21 +278,25 @@ async def test_open_close_close_defers_to_occupancy(hass: HomeAssistant) -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sensor", [OCC, MAINT], ids=["occupancy", "maintain"])
 async def test_open_close_occupancy_clear_defers_to_open_door(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, sensor: str
 ) -> None:
-    """Occupancy clearing while the door is still open keeps the light held."""
-    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
+    """Occupancy or maintain clearing while the door is still open keeps the
+    light held."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC, maintain=MAINT
+    )
     await setup_entries(hass, entry)
 
     hass.states.async_set(DOOR, "on")
     await settle(hass)
-    hass.states.async_set(OCC, "on")
+    hass.states.async_set(sensor, "on")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Occupancy clears but the door is still open → still held, no countdown.
-    hass.states.async_set(OCC, "off")
+    # The sensor clears but the door is still open → still held, no countdown.
+    hass.states.async_set(sensor, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -457,15 +462,14 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
     """Only a gate window that has ended makes the door ignored: through a
     blip of the schedule the open door still holds, and its close still
     starts the countdown."""
-    maintain = "binary_sensor.maint"
     hass.states.async_set(SCHED, "on")
-    hass.states.async_set(maintain, "on")
+    hass.states.async_set(MAINT, "on")
     await setup_entries(
         hass,
         make_light_entry(
             door=DOOR,
             door_mode=DOOR_MODE_OPEN_CLOSE,
-            maintain=maintain,
+            maintain=MAINT,
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_GATE,
         ),
@@ -474,12 +478,12 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
     if event == "door_closes":
-        hass.states.async_set(maintain, "off")
+        hass.states.async_set(MAINT, "off")
         await settle(hass)
 
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
-    hass.states.async_set(maintain if event == "maintain_clears" else DOOR, "off")
+    hass.states.async_set(MAINT if event == "maintain_clears" else DOOR, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == (
         STATE_OCCUPIED if event == "maintain_clears" else STATE_COUNTDOWN

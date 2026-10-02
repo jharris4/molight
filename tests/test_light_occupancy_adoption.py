@@ -19,6 +19,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 OCC = "binary_sensor.occ"
+DOOR = "binary_sensor.door"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
@@ -120,23 +122,33 @@ async def test_manual_on_while_bright_does_not_adopt_occupancy(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("standing", [OCC, DOOR], ids=["occupancy", "door"])
 async def test_dark_adopts_active_occupancy_into_on_light(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, standing: str
 ) -> None:
-    """Illuminance turning dark lifts the gate: an on light becomes OCCUPIED."""
+    """Illuminance turning dark lifts the gate: an on light becomes OCCUPIED,
+    for active occupancy or an open open_close door alike."""
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_GATE
+            occupancy=OCC,
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE,
         ),
     )
     hass.states.async_set(ILLUM, "on")  # bright
-    hass.states.async_set(OCC, "on")  # suppressed
+    hass.states.async_set(OCC, "on" if standing == OCC else "off")  # suppressed
     await settle(hass)
 
     # User turns the light on regardless: ACTIVE with a timer (still bright).
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
+    if standing == DOOR:
+        # Opened afterwards: brightness gates the opening, not an open door.
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     # It gets dark while the room is occupied: adopt, cancel the timer.
@@ -147,7 +159,7 @@ async def test_dark_adopts_active_occupancy_into_on_light(
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    hass.states.async_set(OCC, "off")
+    hass.states.async_set(standing, "off")
     await settle(hass)
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
@@ -172,18 +184,24 @@ async def test_dark_without_occupancy_keeps_timer(hass: HomeAssistant, freezer) 
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("standing", [OCC, DOOR], ids=["occupancy", "door"])
 async def test_gate_window_start_adopts_active_occupancy(
-    hass: HomeAssistant, freezer
+    hass: HomeAssistant, freezer, standing: str
 ) -> None:
-    """A gate-mode window opening over an on light adopts active occupancy."""
+    """A gate-mode window opening over an on light adopts active occupancy or
+    an open open_close door."""
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE
+            occupancy=OCC,
+            door=DOOR,
+            door_mode=DOOR_MODE_OPEN_CLOSE,
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
         ),
     )
     hass.states.async_set(SCHED, "off")  # outside the window
-    hass.states.async_set(OCC, "on")  # suppressed
+    hass.states.async_set(standing, "on")  # suppressed
     await settle(hass)
     assert _state(hass).state == "off"
 
