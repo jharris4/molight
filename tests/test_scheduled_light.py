@@ -2871,6 +2871,33 @@ async def test_boundary_keeps_door_hold_through_unavailable_blip(
 
 
 @pytest.mark.asyncio
+async def test_boundary_does_not_carry_one_door_hold_onto_another_door(
+    hass: HomeAssistant,
+) -> None:
+    """Only the same door keeps its cached open through a blip at the
+    boundary; a different door reading unavailable counts as closed."""
+    door_a = "binary_sensor.outside_door"
+    door_b = "binary_sensor.inside_door"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(door_a, "off")
+    hass.states.async_set(door_b, "unavailable")
+    side = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    entry = make_scheduled_light_entry(
+        outside=side | {CONF_DOOR_ENTITY: door_a},
+        inside=side | {CONF_DOOR_ENTITY: door_b},
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(door_a, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("inside_door", ["same", "other"])
 async def test_boundary_and_a_door_unavailable_for_a_minute(
     hass: HomeAssistant, freezer, inside_door: str
