@@ -14,7 +14,7 @@ env:
 jobs:
   guard:
     name: Release guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -49,7 +49,7 @@ jobs:
     # The tagged commit normally already passed these on push, but a tag cut
     # from a commit that never went through a push run would otherwise skip them.
     name: Live E2E (${{ matrix.ha.label }}, ${{ matrix.suite }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -100,7 +100,7 @@ jobs:
     # from a tag that failed its checks.
     name: Release notes
     needs: [guard, ci, validate, suites]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Put the release notes in the job summary

@@ -16,7 +16,7 @@ permissions:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -31,7 +31,7 @@ jobs:
 
   test:
     name: pytest (${{ matrix.label }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # The newest leg reports an upstream break without turning the build red.
     continue-on-error: ${{ matrix.experimental }}
     strategy:

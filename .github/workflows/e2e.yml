@@ -23,7 +23,7 @@ jobs:
   current:
     name: Live E2E (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +46,7 @@ jobs:
   restarts:
     name: Restart scenarios (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -68,7 +68,7 @@ jobs:
   scenarios:
     name: Behaviour scenarios ${{ matrix.shard }} (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -94,7 +94,7 @@ jobs:
   browser:
     name: Browser smoke (HA current)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -125,7 +125,7 @@ jobs:
   compatibility:
     name: Live E2E (${{ matrix.ref && format('{0}, ', matrix.ref) }}${{ matrix.ha.label }}, ${{ matrix.suite }})
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     continue-on-error: ${{ matrix.ha.experimental }}
     strategy:
