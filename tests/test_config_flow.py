@@ -9040,3 +9040,153 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
     )
     assert not result.get("errors")
     assert result.get("step_id") in (None, "scheduled_light_outside")
+
+
+# ---------------------------------------------------------------------------
+# Keep-on entities that would always hold, or never could
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _LIGHT_FORMS)
+@pytest.mark.parametrize(
+    ("hold", "error"),
+    [
+        (SUBJECT_MEMBER, "hold_entity_own"),
+        ("media_player.tv", "hold_entity_never_on"),
+        ("person.alex", "hold_entity_never_on"),
+    ],
+    ids=["member", "media_player", "person"],
+)
+async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
+    hass: HomeAssistant, form: str, hold: str, error: str
+) -> None:
+    """A member is on whenever the light is; a media player never reads on."""
+    hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _setup_night_schedule(hass)
+    result = await _reach_light_settings_form(hass, form)
+    step_id = result["step_id"]
+    excluded = _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ]
+
+    if hold in excluded:
+        # Where the members are known by now, the picker leaves them out.
+        assert form not in ("create", "discovery")
+    else:
+        result = await _submit_subject_settings(
+            hass,
+            form,
+            result,
+            {CONF_LIGHT_TIMEOUT: 300, SECTION_SENSORS: {CONF_HOLD_ENTITIES: [hold]}},
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == step_id
+        assert result["errors"] == {"base": error}
+
+    result = await _submit_subject_settings(
+        hass,
+        form,
+        result,
+        {
+            CONF_LIGHT_TIMEOUT: 300,
+            SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["input_boolean.guest"]},
+        },
+    )
+    assert not result.get("errors")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_keep_on_lights_that_are_on_whenever_the_light_is(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """Lights sharing a member at any depth, or including it, never let it off."""
+    await _setup_night_schedule(hass)
+    inner = _light_entry("Inner", "inner")  # wraps light.inner_real
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    hall.data[CONF_LIGHTS][:] = ["light.hall_real", "light.inner"]
+    outer = _light_entry("Outer", "outer")
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    elsewhere = _light_entry("Elsewhere", "elsewhere")
+    for real in ("light.hall_real", "light.inner_real", "light.elsewhere_real"):
+        hass.states.async_set(real, "off")
+    await setup_entries(hass, inner, hall, outer, elsewhere)
+    group = await _light_group(hass, "Downstairs", ["light.hall_real", "light.lamp"])
+    lit_with = [group, "light.inner", "light.inner_real", "light.outer"]
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    shared = {
+        CONF_NAME: "Hall",
+        CONF_LIGHTS: ["light.hall_real", "light.inner"],
+        CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+        CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+    }
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], shared
+        )
+    excluded = _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ]
+    assert set(lit_with) <= set(excluded)
+    assert "light.elsewhere" not in excluded
+    (domains,) = [
+        f["domain"]
+        for f in _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+            "filter"
+        ]
+    ]
+    assert {"input_boolean", "switch", "binary_sensor", "light"} <= set(domains)
+    assert not {"media_player", "person", "climate"} & set(domains)
+
+    for hold in lit_with:
+        # Saved before the check existed: the picker still offers what is stored.
+        hass.config_entries.async_update_entry(
+            hall,
+            options={
+                k: v for k, v in molight_config(hall).items() if k != CONF_ENTITY_TYPE
+            }
+            | ({} if scheduled else {CONF_HOLD_ENTITIES: [hold]}),
+        )
+        if scheduled:
+            hass.config_entries.async_update_entry(
+                hall,
+                options={
+                    **hall.options,
+                    CONF_INSIDE_SCHEDULE_SETTINGS: {
+                        CONF_LIGHT_TIMEOUT: 60,
+                        CONF_HOLD_ENTITIES: [hold],
+                    },
+                },
+            )
+        await hass.async_block_till_done()
+        opened = await hass.config_entries.options.async_init(hall.entry_id)
+        if scheduled:
+            opened = await hass.config_entries.options.async_configure(
+                opened["flow_id"], shared
+            )
+            opened = await hass.config_entries.options.async_configure(
+                opened["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+            )
+            assert opened["step_id"] == "scheduled_light_inside"
+            submitted = await hass.config_entries.options.async_configure(
+                opened["flow_id"],
+                {
+                    **EMPTY_INSIDE_LIGHT_SECTIONS,
+                    CONF_LIGHT_TIMEOUT: 300,
+                    SECTION_SENSORS: {CONF_HOLD_ENTITIES: [hold]},
+                },
+            )
+        else:
+            submitted = await _submit_light_options(
+                hass,
+                opened,
+                ["light.hall_real", "light.inner"],
+                {CONF_HOLD_ENTITIES: [hold]},
+            )
+        assert submitted["errors"] == {"base": "hold_entity_own"}, hold

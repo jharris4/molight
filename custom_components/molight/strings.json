@@ -267,7 +267,7 @@
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -559,7 +559,7 @@
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -686,7 +686,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -776,7 +776,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -1054,7 +1054,9 @@
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
       "reference_removed": "A sensor, schedule or light chosen here was deleted while this form was open. Clear it or choose another.",
-      "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it."
+      "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
+      "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or light group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
+      "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
     },
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
@@ -1201,7 +1203,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -1291,7 +1293,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -1551,7 +1553,7 @@
               "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
-              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work."
+              "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
           "behavior": {
@@ -1745,7 +1747,7 @@
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly or through another combined sensor.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly or through another combined schedule.",
       "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
-      "hold_entity_own": "A light cannot be kept on by itself or by its own Auto-off switch. Remove them from the keep-on entities.",
+      "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or light group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",
@@ -1785,7 +1787,8 @@
       "preset_color_conflict": "Set only one of a preset's color temperature and color, or use its color mode to choose which applies.",
       "preset_values_required": "A preset with buttons bound needs a brightness, a color temperature, or a color.",
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
-      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby."
+      "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
+      "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",

@@ -16,6 +16,7 @@ from homeassistant.components.light import (
 )
 from homeassistant.components.select import ATTR_OPTIONS
 from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import split_entity_id
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import device_registry as dr, entity_registry as er, selector
 from homeassistant.util import slugify
@@ -169,7 +170,7 @@ from .remote import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import Awaitable, Callable, Iterable, Sequence
 
     from homeassistant.core import HomeAssistant
 
@@ -557,6 +558,24 @@ def _schedule_edge_fields() -> dict:
 # restricted to MoLight, only to door-ish binary_sensor device classes.
 # Keep-on entities can be anything with an on/off state (input_boolean,
 # switch, binary_sensor, ...), so that picker is not narrowed at all.
+# A keep-on entity holds while it is "on", so only these domains can hold.
+_HOLD_ENTITY_DOMAINS = [
+    "alert",
+    "automation",
+    "binary_sensor",
+    "calendar",
+    "fan",
+    "group",
+    "humidifier",
+    "input_boolean",
+    "light",
+    "remote",
+    "schedule",
+    "script",
+    "siren",
+    "switch",
+    "update",
+]
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -581,7 +600,9 @@ _LIGHT_REF_SELECTORS = {
         device_class=["door", "garage_door", "opening", "window"],
         multiple=False,
     ),
-    CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(multiple=True),
+    CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(
+        filter={"domain": _HOLD_ENTITY_DOMAINS}, multiple=True
+    ),
 }
 
 
@@ -1765,18 +1786,22 @@ def _light_members_create_cycle(
     return not own.isdisjoint(_light_descendants(hass, members, lights))
 
 
+def _all_light_ids(hass: HomeAssistant) -> set[str]:
+    """Every light entity ID with a state or a registry entry."""
+    return set(hass.states.async_entity_ids("light")).union(
+        e.entity_id for e in er.async_get(hass).entities.values() if e.domain == "light"
+    )
+
+
 def _light_member_cycle_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
 ) -> list[str]:
     """Light entity ids that would make the edited light a member of itself."""
     lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
     own = {e for e, entry in lights.items() if entry.entry_id == edited_entry.entry_id}
-    candidates = set(hass.states.async_entity_ids("light")).union(
-        e.entity_id for e in er.async_get(hass).entities.values() if e.domain == "light"
-    )
     return sorted(
         entity_id
-        for entity_id in candidates
+        for entity_id in _all_light_ids(hass)
         if not own.isdisjoint(_light_descendants(hass, [entity_id], lights))
     )
 
@@ -1813,12 +1838,52 @@ def _picker_exclusions(
     return [entity_id for entity_id in exclusions if entity_id not in (stored or ())]
 
 
+def _lights_lit_with(
+    hass: HomeAssistant,
+    own_entities: Sequence[str],
+    members: Sequence[str],
+    candidates: Iterable[str],
+) -> set[str]:
+    """Of the candidates, the lights that are on whenever this light is lit.
+
+    That is a light sharing a member with it, at any depth, or one that
+    includes it.
+    """
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lit = _light_descendants(hass, members, lights).union(own_entities)
+    return {
+        entity_id
+        for entity_id in candidates
+        if entity_id.startswith("light.")
+        and not lit.isdisjoint(_light_descendants(hass, [entity_id], lights))
+    }
+
+
+def _hold_picker_exclusions(
+    hass: HomeAssistant, own_entities: Sequence[str], members: Sequence[str]
+) -> list[str]:
+    """Entities that would hold the light whenever it is lit."""
+    return sorted(
+        _lights_lit_with(hass, own_entities, members, _all_light_ids(hass)).union(
+            own_entities
+        )
+    )
+
+
 def _validate_hold_entities(
-    settings: dict[str, Any], own_entities: Sequence[str]
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+    own_entities: Sequence[str],
+    members: Sequence[str],
 ) -> dict[str, str]:
-    """Reject keep-on entities that the light itself provides."""
-    if set(settings.get(CONF_HOLD_ENTITIES) or ()) & set(own_entities):
+    """Reject keep-on entities that are on whenever the light is, or never on."""
+    holds = settings.get(CONF_HOLD_ENTITIES) or []
+    if set(holds) & _lights_lit_with(hass, own_entities, members, holds).union(
+        own_entities
+    ):
         return {"base": "hold_entity_own"}
+    if any(split_entity_id(e)[0] not in _HOLD_ENTITY_DOMAINS for e in holds):
+        return {"base": "hold_entity_never_on"}
     return {}
 
 
@@ -1925,7 +1990,14 @@ class _ScheduledLightSettingsSteps:
                 flat,
                 (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
             )
-            errors.update(_validate_hold_entities(flat, self._hold_exclusions()))
+            errors.update(
+                _validate_hold_entities(
+                    self.hass,
+                    flat,
+                    self._hold_exclusions(),
+                    (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
+                )
+            )
             if not errors:
                 _carry_turn_on_selection(flat, previous)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
@@ -1952,7 +2024,13 @@ class _ScheduledLightSettingsSteps:
                         with_schedule=False,
                         with_standby=side == CONF_INSIDE_SCHEDULE_SETTINGS,
                         hold_exclusions=_picker_exclusions(
-                            self._hold_exclusions(),
+                            _hold_picker_exclusions(
+                                self.hass,
+                                self._hold_exclusions(),
+                                (self._scheduled_light_shared or {}).get(
+                                    CONF_LIGHTS, []
+                                ),
+                            ),
                             (previous or {}).get(CONF_HOLD_ENTITIES),
                         ),
                     )
@@ -2598,6 +2676,11 @@ class MoLightConfigFlow(
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
+            errors.update(
+                _validate_hold_entities(
+                    self.hass, flat, [], self._discovery.get("selected", [])
+                )
+            )
             # Each pick becomes its own single-light entry, so the capability
             # checks must hold per pick; pooled, one capable pick would let a
             # setting through that another pick's entry could never apply.
@@ -3508,6 +3591,9 @@ class MoLightConfigFlow(
             else:
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_name(flat))
+            errors.update(
+                _validate_hold_entities(self.hass, flat, [], flat.get(CONF_LIGHTS, []))
+            )
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
             errors.update(
@@ -4187,7 +4273,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self.hass, self._entry, flat[CONF_LIGHTS]
                 ):
                     errors[CONF_LIGHTS] = "light_member_cycle"
-            errors.update(_validate_hold_entities(flat, self._hold_exclusions()))
+            errors.update(
+                _validate_hold_entities(
+                    self.hass, flat, self._hold_exclusions(), flat.get(CONF_LIGHTS, [])
+                )
+            )
             errors.update(_validate_name(flat))
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
@@ -4244,7 +4334,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self.hass,
                     legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY),
                     hold_exclusions=_picker_exclusions(
-                        self._hold_exclusions(), cfg.get(CONF_HOLD_ENTITIES)
+                        _hold_picker_exclusions(
+                            self.hass, self._hold_exclusions(), cfg.get(CONF_LIGHTS, [])
+                        ),
+                        cfg.get(CONF_HOLD_ENTITIES),
                     ),
                 ),
             }
