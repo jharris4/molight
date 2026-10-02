@@ -22,8 +22,10 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_RGB_COLOR,
+    CONF_AUTO_ON_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
@@ -51,7 +53,7 @@ from .conftest import (
     settle,
     setup_entries,
 )
-from .real_entities import InstantLight, RealLight, add_real
+from .real_entities import FadingLight, InstantLight, RealLight, add_real
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity import Entity
@@ -1919,3 +1921,368 @@ async def test_wrapping_light_sees_no_off_from_the_light_it_wraps(
         assert [state for state, _ in seen if state != "on"] == []
     assert _attrs_of(hass, "light.outer")["last_off_manual"] is None
     assert _attrs_of(hass, "light.outer")["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# Fades longer than Home Assistant keeps a command's context
+#
+# Five seconds after a command, Home Assistant stops tagging the member's
+# reports with it, so the rest of a longer fade arrives under contexts of the
+# member's own. A fade of 4 s is the control: all of it is under ours.
+# ---------------------------------------------------------------------------
+
+FADES = [4, 10]
+PHYSICAL = (
+    "last_on_physical",
+    "last_brightness_change_physical",
+    "last_color_change_physical",
+    "last_off_manual",
+)
+
+
+def _stamps(hass: HomeAssistant) -> dict:
+    """The marks a change at the wall leaves on the virtual light."""
+    attrs = _attrs_of(hass, INSTANT)
+    return {name: attrs[name] for name in PHYSICAL if attrs[name] is not None}
+
+
+async def _run(hass: HomeAssistant, freezer, seconds: int) -> None:
+    """Let time pass a second at a time, as a fade's reports come in."""
+    for _ in range(seconds):
+        await _tick(hass, freezer, 1)
+
+
+async def _fading_light(hass: HomeAssistant, entry: MockConfigEntry, **member):
+    """Set up the light over a fading member that is on at 200."""
+    light = FadingLight("real_1", on=True, brightness=200, **member)
+    await add_real(hass, light)
+    await setup_entries(hass, entry)
+    return light
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("stage", ["effect", "warn"])
+async def test_stage_fade_is_not_a_dim_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int, stage: str
+) -> None:
+    """A stage's fade, reported in steps, runs to its end and the light goes off."""
+    stages = {f"{stage}_timeout": 30, f"{stage}_brightness": 20}
+    member = await _fading_light(
+        hass, make_light_entry(**stages, **{f"{stage}_transition": fade})
+    )
+    await _run(hass, freezer, 61)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == stage
+
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 51
+    assert _attrs_of(hass, INSTANT)["molight_state"] == stage
+    assert _attrs_of(hass, INSTANT)["brightness"] == 51
+    assert _stamps(hass) == {}
+    await _run(hass, freezer, 30)
+    assert hass.states.get(INSTANT).state == "off"
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_blink_off_fade_is_not_an_off_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """A blink that fades out reports dimmer, then off: the stage stands."""
+    member = await _fading_light(
+        hass,
+        make_light_entry(
+            effect_timeout=30, effect_brightness=0, effect_transition=fade
+        ),
+    )
+    await _run(hass, freezer, 61)
+
+    await _run(hass, freezer, fade + 1)
+
+    assert not member.is_on
+    assert hass.states.get(INSTANT).state == "on"
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_EFFECT
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """An automatic turn-on fading in stays the sensor's on-period."""
+    hass.states.async_set("binary_sensor.occ", "off")
+    member = FadingLight("real_1", brightness=200)
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy="binary_sensor.occ",
+            auto_on_brightness=80,
+            auto_on_transition=fade,
+        ),
+    )
+
+    hass.states.async_set("binary_sensor.occ", "on")
+    await settle(hass)
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
+    assert _attrs_of(hass, INSTANT)["brightness"] == 204
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_auto_off_fade_is_not_a_change_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """An automatic off fading out neither relights the light nor counts as
+    an off at the wall."""
+    member = await _fading_light(hass, make_light_entry(auto_off_transition=fade))
+    seen = _reports_of(hass, INSTANT)
+    await _run(hass, freezer, 61)
+    assert hass.states.get(INSTANT).state == "off"
+
+    await _run(hass, freezer, fade + 1)
+
+    assert not member.is_on
+    assert [state for state, _ in seen if state != "off"] == []
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_IDLE
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("start", ["off", "active"])
+async def test_standby_fade_is_not_a_change_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int, start: str
+) -> None:
+    """Coming on at standby, or dropping back to it, over a fade."""
+    schedule = "binary_sensor.settings_schedule"
+    hass.states.async_set(schedule, "off" if start == "off" else "on")
+    member = FadingLight("real_1", on=start == "active", brightness=200)
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Matrix Light",
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_AUTO_ON_TRANSITION: fade,
+                CONF_AUTO_OFF_TRANSITION: fade,
+            },
+        ),
+    )
+    if start == "off":
+        hass.states.async_set(schedule, "on")
+        await settle(hass)
+    else:
+        assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+        await _run(hass, freezer, 61)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
+
+    await _run(hass, freezer, fade + 1)
+
+    assert member.is_on
+    assert member.brightness == 51
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
+    assert _attrs_of(hass, INSTANT)["brightness"] == 51
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("service", ["turn_on", "turn_off"])
+async def test_caller_fade_is_not_a_change_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int, service: str
+) -> None:
+    """A fade the caller asked for is the caller's command all the way."""
+    member = await _fading_light(hass, make_light_entry())
+    data = {"brightness": 50} if service == "turn_on" else {}
+    seen = _reports_of(hass, INSTANT)
+
+    await hass.services.async_call(
+        "light", service, {"entity_id": INSTANT, "transition": fade, **data}
+    )
+    await settle(hass)
+    await _run(hass, freezer, fade + 1)
+
+    stamps = _stamps(hass)
+    if service == "turn_on":
+        assert member.brightness == 50
+        assert _attrs_of(hass, INSTANT)["brightness"] == 50
+        assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+    else:
+        assert not member.is_on
+        assert [state for state, _ in seen if state != "off"] == []
+        assert stamps.pop("last_off_manual") is not None  # the caller's off
+    assert stamps == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """A turn-on during the warning restores the old level over its own fade."""
+    member = await _fading_light(
+        hass, make_light_entry(warn_timeout=30, warn_brightness=20)
+    )
+    await _run(hass, freezer, 62)
+    assert member.brightness == 51
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": INSTANT, "transition": fade}
+    )
+    await settle(hass)
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 200
+    assert _attrs_of(hass, INSTANT)["brightness"] == 200
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_stage_color_fade_is_not_a_recolor_at_the_wall(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """A stage fading from red to cyan and dimmer, reported in steps."""
+    member = await _fading_light(
+        hass,
+        make_light_entry(
+            warn_timeout=30,
+            warn_brightness=20,
+            warn_rgb_color=[0, 255, 255],
+            warn_transition=fade,
+        ),
+        hs=RED,
+        steps=(0.3, 0.6, 0.9),
+    )
+    await _run(hass, freezer, 61)
+
+    await _run(hass, freezer, fade + 1)
+
+    assert member.hs_color == CYAN
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
+    assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == CYAN
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("change", ["brighter", "off", "recolor", "command"])
+async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
+    hass: HomeAssistant, freezer, change: str
+) -> None:
+    """Seven seconds into a 10 s fade to the warning level, the member's
+    reports carry no context of ours; one that is no step of the fade is
+    still a person's."""
+    member = await _fading_light(
+        hass,
+        make_light_entry(warn_timeout=30, warn_brightness=20, warn_transition=10),
+        hs=RED,
+    )
+    await _run(hass, freezer, 61 + 7)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
+    assert _stamps(hass) == {}
+
+    if change == "brighter":
+        member.wall(brightness=230)
+    elif change == "off":
+        member.wall(on=False)
+    elif change == "recolor":
+        member.wall(hs_color=GREEN)
+    else:
+        # Dimmer, as the fade is, but by an automation's command to the member.
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.real_1", "brightness": 100},
+            blocking=True,
+            context=Context(parent_id=Context().id),
+        )
+    await settle(hass)
+
+    attrs = _attrs_of(hass, INSTANT)
+    stamp = {
+        "brighter": "last_brightness_change_physical",
+        "off": "last_off_manual",
+        "recolor": "last_color_change_physical",
+        "command": "last_brightness_change_physical",
+    }[change]
+    assert list(_stamps(hass)) == [stamp]
+    assert attrs["warning_active"] is False
+    if change == "off":
+        assert hass.states.get(INSTANT).state == "off"
+    else:
+        assert attrs["molight_state"] == STATE_ACTIVE
+    if change == "recolor":
+        assert tuple(attrs["hs_color"]) == GREEN
+        assert attrs["brightness"] == 200  # the pre-warning level, restored
+    if change in ("brighter", "command"):
+        assert attrs["brightness"] == member.brightness
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("when", ["during", "after"])
+async def test_turn_on_at_the_wall_late_in_an_off_fade_is_a_turn_on(
+    hass: HomeAssistant, freezer, when: str
+) -> None:
+    """Brighter during a 10 s fade to off, or back on just after it."""
+    member = await _fading_light(hass, make_light_entry(auto_off_transition=10))
+    await _run(hass, freezer, 61 + (7 if when == "during" else 11))
+    assert hass.states.get(INSTANT).state == "off"
+    assert member.is_on is (when == "during")
+    assert _stamps(hass) == {}
+
+    member.wall(brightness=180)
+    await settle(hass)
+
+    assert hass.states.get(INSTANT).state == "on"
+    assert _attrs_of(hass, INSTANT)["brightness"] == 180
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+    assert _attrs_of(hass, INSTANT)["last_on_physical"] is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Late in a 10 s fade from red to cyan, green by way of blue is a step;
+    purple, the other way round the wheel, is someone's choice."""
+    member = await _fading_light(
+        hass,
+        make_light_entry(
+            warn_timeout=30,
+            warn_brightness=20,
+            warn_rgb_color=[0, 255, 255],
+            warn_transition=10,
+        ),
+        hs=RED,
+    )
+    await _run(hass, freezer, 61 + 7)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
+    assert _stamps(hass) == {}
+
+    member.wall(hs_color=PURPLE)
+    await settle(hass)
+
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+    assert list(_stamps(hass)) == ["last_color_change_physical"]
+    assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == PURPLE

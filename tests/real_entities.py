@@ -8,17 +8,23 @@ Home Assistant removes it, and for a new ID adds the same object again.
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.event import EventEntity
-from homeassistant.components.light import ColorMode, LightEntity
+from homeassistant.components.light import (
+    ColorMode,
+    LightEntity,
+    LightEntityFeature,
+)
 from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_call_later
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -33,8 +39,10 @@ from tests.conftest import settle
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
     from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import CALLBACK_TYPE
     from homeassistant.helpers.entity import Entity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -99,6 +107,95 @@ class InstantLight(RealLight):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off, replying at once."""
         self._attr_is_on = False
+        self.async_write_ha_state()
+
+
+class FadingLight(RealLight):
+    """A registered real light that reports a fade as it runs.
+
+    A fade publishes where it has got to at each of steps (fractions of its
+    length), then where it ends. With hs it shows a color and blends that too.
+    """
+
+    _attr_supported_features = LightEntityFeature.TRANSITION
+
+    def __init__(
+        self,
+        object_id: str,
+        *,
+        steps: tuple[float, ...] = (0.6,),
+        hs: tuple[float, float] | None = None,
+        **kwargs: Any,
+    ):
+        """Create the light."""
+        super().__init__(object_id, **kwargs)
+        self._steps = steps
+        self._reports: list[CALLBACK_TYPE] = []
+        if hs is not None:
+            self._attr_color_mode = ColorMode.HS
+            self._attr_supported_color_modes = {ColorMode.HS}
+            self._attr_hs_color = hs
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Fade to the brightness and color asked for."""
+        self._fade(
+            kwargs.get("brightness", self._attr_brightness),
+            kwargs.get("hs_color", self._attr_hs_color),
+            kwargs.get("transition"),
+        )
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Fade out."""
+        self._fade(0, self._attr_hs_color, kwargs.get("transition"))
+
+    def _fade(
+        self, brightness: int, hs: tuple[float, float] | None, length: float | None
+    ) -> None:
+        self._cancel_reports()
+        # Off keeps the level to come back on at.
+        rest, start_hs = self._attr_brightness, self._attr_hs_color
+        start = rest if self._attr_is_on else 0
+        for fraction in (*self._steps, 1) if length else (1,):
+            level = round(start + (brightness - start) * fraction)
+            color = hs
+            if hs is not None and start_hs is not None:
+                turn = (hs[0] - start_hs[0] + 180) % 360 - 180
+                color = (
+                    (start_hs[0] + turn * fraction) % 360,
+                    start_hs[1] + (hs[1] - start_hs[1]) * fraction,
+                )
+            report = partial(self._report, level or rest, color, on=bool(level))
+            if not length:
+                report(None)
+                return
+            self._reports.append(async_call_later(self.hass, length * fraction, report))
+
+    @callback
+    def _report(
+        self,
+        brightness: int,
+        hs: tuple[float, float] | None,
+        _now: datetime | None,
+        *,
+        on: bool,
+    ) -> None:
+        self._attr_is_on = on
+        self._attr_brightness = brightness
+        self._attr_hs_color = hs
+        self.async_write_ha_state()
+
+    def _cancel_reports(self) -> None:
+        for cancel in self._reports:
+            cancel()
+        self._reports.clear()
+
+    @callback
+    def wall(self, *, on: bool = True, **attributes: Any) -> None:
+        """Change the light at the wall, which ends any fade."""
+        self._cancel_reports()
+        self._attr_is_on = on
+        for name, value in attributes.items():
+            setattr(self, f"_attr_{name}", value)
         self.async_write_ha_state()
 
 

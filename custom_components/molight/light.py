@@ -281,6 +281,7 @@ from homeassistant.core import (
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import CONTEXT_RECENT_TIME_SECONDS
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_entity_registry_updated_event,
@@ -621,6 +622,19 @@ class _EchoExpectation:
     # A later command flipped power: only a reply while settling is its echo.
     overtaken: bool = False
 
+    def moved(self, old_state: State | None, new_state: State) -> bool:
+        """Whether a report changed anything this command asked for."""
+        if old_state is None or old_state.state != new_state.state:
+            return True
+        old, new = old_state.attributes, new_state.attributes
+        if (self.brightness is not None or not self.on) and (
+            old.get(ATTR_BRIGHTNESS) != new.get(ATTR_BRIGHTNESS)
+        ):
+            return True
+        return self.color is not None and _state_color(old_state) != _state_color(
+            new_state
+        )
+
     def judge(
         self, old_state: State | None, new_state: State, *, settling: bool
     ) -> str:
@@ -631,17 +645,23 @@ class _EchoExpectation:
         """
         attrs = new_state.attributes
         powered = new_state.state == "on"
+        was_on = old_state is not None and old_state.state == "on"
         if not self.on:
             # On at brightness 0 is off in disguise, as the state machine reads it.
-            lit = powered and attrs.get(ATTR_BRIGHTNESS) != 0
-            return "match" if not lit else "contradiction"
+            new_b = attrs.get(ATTR_BRIGHTNESS)
+            if not powered or new_b == 0:
+                return "match"
+            # A fade to off reports dimmer levels on its way there.
+            old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
+            if settling and old_b and new_b and new_b < old_b:
+                return "pending"
+            return "contradiction"
         if not powered:
             return "contradiction"
         # A member may report on at brightness 0 first (a dimmer with no level
         # yet): only power contradicts an on command; brightness is judged below.
         # Before the member was on we cannot judge its attributes: a bulb that
         # reports power first still carries its previous brightness and color.
-        was_on = old_state is not None and old_state.state == "on"
         settled = True
         if self.brightness is not None:
             new_b = attrs.get(ATTR_BRIGHTNESS)
@@ -1874,6 +1894,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 member_recovered and self._machine_state == STATE_STANDBY
             )
             own_context = event.context.id in self._self_context_ids
+            # A report no user or automation is named for: the member's own.
+            unprompted = (
+                event.context.user_id is None and event.context.parent_id is None
+            )
             lit = (
                 new_state.state == "on" and new_state.attributes.get("brightness") != 0
             )
@@ -1884,7 +1908,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             ):
                 return
             if self._is_own_echo(
-                entity_id, old_state, new_state, own_context=own_context
+                entity_id,
+                old_state,
+                new_state,
+                own_context=own_context,
+                unprompted=unprompted,
             ):
                 # A member back at the level an unanswered command asked for
                 # may still have lost its selection: re-send like any other.
@@ -2597,15 +2625,19 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         new_state: State,
         *,
         own_context: bool,
+        unprompted: bool,
     ) -> bool:
         """Judge a member write against our recent commands to it.
 
         While a command settles, only a write under our own context that is
         consistent with what we asked for is its echo (Home Assistant reuses
-        that context for the member's reply). Later, a slow bulb's reply
-        arrives under its own context, so a write fully matching the command
-        still counts; anything else (stale, missing, contradicted) is a real
-        change. A reply to an earlier command may arrive after a newer one
+        that context for the member's reply). It stops doing so after five
+        seconds, so from then on a longer fade's steps count under a context
+        of the member's own (unprompted), when they change something we
+        asked for. Later, a slow bulb's reply arrives under its own context,
+        so a write fully matching the command still counts; anything else
+        (stale, missing, contradicted) is a real change. A reply to an
+        earlier command may arrive after a newer one
         was sent, so each command still awaiting its reply is tried, newest
         first. Once a newer command flipped power, the older one's reply only
         counts while it settles, or a manual flip back would pass as it.
@@ -2624,8 +2656,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 contradicted.append(expectation)
                 continue
             if settling and not own_context:
-                waiting.append(expectation)
-                continue
+                fade_step = (
+                    unprompted
+                    and age > CONTEXT_RECENT_TIME_SECONDS
+                    and expectation.moved(old_state, new_state)
+                )
+                if not fade_step:
+                    waiting.append(expectation)
+                    continue
             verdict = expectation.judge(old_state, new_state, settling=settling)
             if verdict == "match":
                 matched = expectation
