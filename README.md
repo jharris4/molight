@@ -506,6 +506,8 @@ MoLight writes no debug logs. It logs a warning only when it cannot do what it w
 
 ## Development
 
+Prerequisites on the host: Node.js 20 or newer and Docker. `npm install` brings the Dev Containers CLI and Playwright, and `npm run release` also needs Python 3.9 or newer.
+
 Local development uses **two independent containers**, each with a distinct job. They are unrelated (no shared network or startup dependency), but both bind port `8123`, so only one can run at a time.
 
 | Container | Image | What it's for |
