@@ -957,10 +957,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         # Brightness (0-255) for automatic turn-ons, converted from the stored
         # percentage with HA's own percent→brightness scaling. None leaves
-        # automatic turn-ons unqualified.
-        pct = cfg.get(CONF_AUTO_ON_BRIGHTNESS)
+        # automatic turn-ons unqualified, as does a percentage below 1.
+        pct = int(cfg.get(CONF_AUTO_ON_BRIGHTNESS) or 0)
         self._auto_on_brightness = (
-            round(percentage_to_ranged_value((1, 255), int(pct))) if pct else None
+            round(percentage_to_ranged_value((1, 255), pct)) if pct else None
         )
         # Optional color for automatic turn-ons, as turn-on service data.
         # None leaves automatic turn-ons uncolored, like auto_on_brightness.
@@ -969,9 +969,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
         # Level an expired timer drops to instead of off; None disables
         # standby. Only a scheduled light's inside settings can set it.
-        standby_pct = cfg.get(CONF_STANDBY_BRIGHTNESS)
+        standby_pct = int(cfg.get(CONF_STANDBY_BRIGHTNESS) or 0)
         self._standby_brightness = (
-            round(percentage_to_ranged_value((1, 255), int(standby_pct)))
+            round(percentage_to_ranged_value((1, 255), standby_pct))
             if standby_pct
             else None
         )
@@ -994,11 +994,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
         )
         self._warn_timeout = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
-        warn_pct = cfg.get(CONF_WARN_BRIGHTNESS)
+        warn_pct = int(cfg.get(CONF_WARN_BRIGHTNESS) or 0)
         self._warn_brightness = (
-            round(percentage_to_ranged_value((1, 255), int(warn_pct)))
-            if warn_pct
-            else None
+            round(percentage_to_ranged_value((1, 255), warn_pct)) if warn_pct else None
         )
         # Optional stage colors, as turn-on service data. None sends no color:
         # the effect stage then only changes brightness, and the warn stage

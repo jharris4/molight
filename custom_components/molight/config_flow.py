@@ -1100,11 +1100,13 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
         value_keys = REMOTE_PRESET_VALUE_KEYS.get(action)
         if value_keys is None:
             continue
-        _brightness_key, color_temp_key, rgb_key = value_keys
+        brightness_key, color_temp_key, rgb_key = value_keys
         if cfg.get(color_temp_key) and cfg.get(rgb_key):
             return {"base": "preset_color_conflict"}
         has_buttons = cfg.get(single_key) or cfg.get(double_key)
-        has_values = any(cfg.get(k) not in (None, []) for k in value_keys)
+        has_values = int(cfg.get(brightness_key) or 0) or any(
+            cfg.get(k) not in (None, []) for k in (color_temp_key, rgb_key)
+        )
         if has_buttons and not has_values:
             return {"base": "preset_values_required"}
     return {}
@@ -1133,7 +1135,7 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     if (
         user_input.get(CONF_STANDBY_COLOR_TEMP)
         or user_input.get(CONF_STANDBY_RGB_COLOR)
-    ) and not user_input.get(CONF_STANDBY_BRIGHTNESS):
+    ) and not int(user_input.get(CONF_STANDBY_BRIGHTNESS) or 0):
         # The brightness is what turns standby on.
         return {"base": "standby_color_requires_brightness"}
     effect_color = user_input.get(CONF_EFFECT_COLOR_TEMP) or user_input.get(
@@ -1151,7 +1153,7 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     ):
         return {"base": "effect_brightness_requires_timeout"}
     if (
-        user_input.get(CONF_WARN_BRIGHTNESS)
+        int(user_input.get(CONF_WARN_BRIGHTNESS) or 0)
         or user_input.get(CONF_WARN_COLOR_TEMP)
         or user_input.get(CONF_WARN_RGB_COLOR)
     ) and not int(user_input.get(CONF_WARN_TIMEOUT) or 0):
@@ -1196,7 +1198,8 @@ def _validate_brightness_support(
         CONF_WARN_BRIGHTNESS,
         CONF_STANDBY_BRIGHTNESS,
     )
-    if not any(user_input.get(key) for key in keys):
+    # Whole percent, as the light runs them: below 1 is unset.
+    if not any(int(user_input.get(key) or 0) for key in keys):
         return {}
     if lights_support_brightness(hass, lights) is False:
         return {"base": "brightness_unsupported"}

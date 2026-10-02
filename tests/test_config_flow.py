@@ -33,6 +33,9 @@ from custom_components.molight.config_flow import (
     SECTION_STANDBY,
     SECTION_WARNING,
     MoLightConfigFlow,
+    _validate_brightness_support,
+    _validate_colors,
+    _validate_remote,
     _validate_turn_on_selection,
 )
 from custom_components.molight.const import (
@@ -86,6 +89,8 @@ from custom_components.molight.const import (
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
+    CONF_PRESET_1_BRIGHTNESS,
+    CONF_PRESET_1_BUTTONS_SINGLE,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
@@ -9190,3 +9195,62 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
                 {CONF_HOLD_ENTITIES: [hold]},
             )
         assert submitted["errors"] == {"base": "hold_entity_own"}, hold
+
+
+# ---------------------------------------------------------------------------
+# A brightness percentage below 1 is unset
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("settings", "expected"),
+    [
+        (
+            {CONF_STANDBY_BRIGHTNESS: 0.5, CONF_STANDBY_COLOR_TEMP: 2700},
+            {"base": "standby_color_requires_brightness"},
+        ),
+        ({CONF_WARN_BRIGHTNESS: 0.5, CONF_WARN_TIMEOUT: 0}, {}),
+        ({CONF_EFFECT_BRIGHTNESS: 0.5, CONF_EFFECT_TIMEOUT: 0}, {}),
+    ],
+    ids=["standby_color", "warn", "effect"],
+)
+def test_color_rules_treat_a_brightness_below_one_percent_as_unset(
+    settings: dict, expected: dict
+) -> None:
+    """The light truncates the percentage, so the rules judge it truncated."""
+    assert _validate_colors(settings) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key",
+    [
+        CONF_AUTO_ON_BRIGHTNESS,
+        CONF_EFFECT_BRIGHTNESS,
+        CONF_WARN_BRIGHTNESS,
+        CONF_STANDBY_BRIGHTNESS,
+    ],
+)
+async def test_brightness_support_ignores_a_brightness_below_one_percent(
+    hass: HomeAssistant, key: str
+) -> None:
+    """An on/off-only light can take a brightness the light will never send."""
+    hass.states.async_set(PLAIN, "off", {"supported_color_modes": ["onoff"]})
+    assert _validate_brightness_support(hass, {key: 0.5}, [PLAIN]) == {}
+    assert _validate_brightness_support(hass, {key: 1}, [PLAIN]) == {
+        "base": "brightness_unsupported"
+    }
+
+
+@pytest.mark.asyncio
+async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
+    hass: HomeAssistant,
+) -> None:
+    """A preset whose only value truncates to 0% has nothing to send."""
+    cfg = {
+        CONF_TARGET_LIGHTS: ["light.hall"],
+        CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"],
+        CONF_PRESET_1_BRIGHTNESS: 0.5,
+    }
+    assert _validate_remote(hass, cfg) == {"base": "preset_values_required"}
+    assert _validate_remote(hass, {**cfg, CONF_PRESET_1_BRIGHTNESS: 1}) == {}

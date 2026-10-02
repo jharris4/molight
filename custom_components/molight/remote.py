@@ -168,8 +168,9 @@ def _action_call(
     if action in REMOTE_PRESET_VALUE_KEYS:
         brightness_key, color_temp_key, rgb_key = REMOTE_PRESET_VALUE_KEYS[action]
         data: dict[str, Any] = {}
-        if cfg.get(brightness_key) is not None:
-            data["brightness_pct"] = int(cfg[brightness_key])
+        # Below 1% is unset, not a turn-off.
+        if brightness_pct := int(cfg.get(brightness_key) or 0):
+            data["brightness_pct"] = brightness_pct
         if cfg.get(color_temp_key):
             data["color_temp_kelvin"] = int(cfg[color_temp_key])
         elif cfg.get(rgb_key):
@@ -227,7 +228,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     """
     cfg = molight_config(entry)
     targets: list[str] = cfg.get(CONF_TARGET_LIGHTS, [])
-    dim_step = int(cfg.get(CONF_DIM_STEP, DEFAULT_DIM_STEP))
+    dim_step = int(cfg.get(CONF_DIM_STEP) or 0) or DEFAULT_DIM_STEP
 
     # (button entity_id, click) -> (action, service, service data)
     bindings: dict[tuple[str, str], tuple[str, str, dict[str, Any]]] = {}

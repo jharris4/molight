@@ -365,6 +365,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the last restart or reload: held for good, or never. Nor can they be an
   entity that never reads `on`, such as a media player or a person, which
   silently never held.
+- A brightness percentage below 1, which only a hand-edited or programmatic
+  configuration can hold, counts as unset at runtime and in the form checks.
+  An auto-on, standby or warn brightness of 0.5% sent brightness 0, turning
+  the lights off or blinking them; a Virtual Remote preset of 0.5% turned
+  them off, and a dim step of 0.5% made its buttons do nothing (it now uses
+  the default step).
 
 ## [1.8.0] - 2026-09-30
 

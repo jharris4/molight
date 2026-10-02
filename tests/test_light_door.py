@@ -817,6 +817,32 @@ async def test_door_open_applies_auto_on_brightness_and_transition(
 
 
 @pytest.mark.asyncio
+async def test_auto_on_brightness_below_one_percent_is_unset(
+    hass: HomeAssistant,
+) -> None:
+    """A percentage that truncates to 0 turns on unqualified, not at brightness 0."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN, auto_on_brightness=0.5
+    )
+    await setup_entries(hass, entry)
+    calls = _record_service_calls(hass)
+
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+
+    assert _state(hass).state == "on"
+    on_calls = [
+        d
+        for d in calls
+        if d["domain"] == "light"
+        and d["service"] == "turn_on"
+        and REAL in d["service_data"].get("entity_id", [])
+    ]
+    assert on_calls
+    assert "brightness" not in on_calls[-1]["service_data"]
+
+
+@pytest.mark.asyncio
 async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> None:
     """A door opened under a bright gate never lit the room; closing it must
     not start a countdown from IDLE."""

@@ -197,6 +197,30 @@ async def test_effect_dim_stage_commands_stage_brightness(
 
 
 @pytest.mark.asyncio
+async def test_warn_brightness_below_one_percent_keeps_the_level(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A warn brightness that truncates to 0% is unset, not a blink off."""
+    entry = make_light_entry(warn_timeout=20, warn_brightness=0.5)
+    await setup_entries(hass, entry)
+    await _turn_on_virtual(hass, brightness=200)
+    calls = _record_service_calls(hass)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_WARN
+    assert state.attributes["brightness"] == 200
+    assert not _real_calls(calls, "turn_off")
+    assert all(
+        d["service_data"].get("brightness") != 0 for d in _real_calls(calls, "turn_on")
+    )
+
+
+@pytest.mark.asyncio
 async def test_warn_defaults_to_full_brightness_without_history(
     hass: HomeAssistant, freezer
 ) -> None:

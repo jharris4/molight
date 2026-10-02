@@ -50,6 +50,7 @@ from custom_components.molight.const import (
     CONF_PRESET_2_BUTTONS_SINGLE,
     CONF_TARGET_LIGHTS,
     CONF_TOGGLE_BUTTONS_SINGLE,
+    DEFAULT_DIM_STEP,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_REMOTE,
@@ -482,6 +483,25 @@ async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
 
 
 @pytest.mark.asyncio
+async def test_dim_step_below_one_percent_uses_the_default(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A dim step that truncates to 0% would make the buttons do nothing."""
+    remote = _remote_entry(
+        **{CONF_DIM_STEP: 0.5, CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"]}
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_raise", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_raise", "press", PICO_TYPES)
+    await settle(hass)
+    step_calls = [d for d in calls if "brightness_step_pct" in d["service_data"]]
+    assert step_calls[-1]["service_data"]["brightness_step_pct"] == DEFAULT_DIM_STEP
+
+
+@pytest.mark.asyncio
 async def test_brightness_step_up_and_down(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
@@ -719,6 +739,30 @@ async def test_preset_turns_on_with_values(
     assert preset_calls
     assert preset_calls[-1]["service_data"]["brightness_pct"] == 60
     assert preset_calls[-1]["service_data"]["color_temp_kelvin"] == 2700
+
+
+@pytest.mark.asyncio
+async def test_preset_brightness_below_one_percent_is_unset(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A preset brightness that truncates to 0% sends its color alone, never 0%."""
+    remote = _remote_entry(
+        **{
+            CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"],
+            CONF_PRESET_1_BRIGHTNESS: 0.5,
+            CONF_PRESET_1_COLOR_TEMP: 2700,
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.pico_fav", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_fav", "press", PICO_TYPES)
+    await settle(hass)
+    preset_calls = [d for d in calls if "color_temp_kelvin" in d["service_data"]]
+    assert preset_calls
+    assert "brightness_pct" not in preset_calls[-1]["service_data"]
 
 
 @pytest.mark.asyncio

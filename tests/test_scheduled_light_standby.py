@@ -223,6 +223,20 @@ async def test_schedule_start_turns_an_off_light_on_at_standby(
 
 
 @pytest.mark.asyncio
+async def test_standby_below_one_percent_is_no_standby(hass: HomeAssistant) -> None:
+    """A standby brightness that truncates to 0% leaves standby off."""
+    calls = await _setup_porch(
+        hass, _porch(inside={CONF_STANDBY_BRIGHTNESS: 0.5}), schedule="off"
+    )
+
+    await _set(hass, SCHEDULE, "on")
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_IDLE
+    assert _light_calls(calls, "turn_on") == []
+
+
+@pytest.mark.asyncio
 async def test_occupancy_raises_standby_and_the_timeout_returns_to_it(
     hass: HomeAssistant, freezer
 ) -> None:
