@@ -494,7 +494,7 @@ Deleting a virtual light strips it from every remote's target list, like any oth
 
 ## Troubleshooting
 
-MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, a combined schedule that includes itself, a Virtual Light whose member light group includes it (it stops controlling that group), and an error when discovery fails to create an entry. To see why a light did what it did, read these attributes in **Developer tools → States**:
+MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, a combined schedule that includes itself, a Virtual Light whose member light group includes it (it stops controlling that group), a keep-on entity saved before the form refused it (it stays as it was), and an error when discovery fails to create an entry. To see why a light did what it did, read these attributes in **Developer tools → States**:
 
 - `molight_state` on the virtual light: its [state-machine](#state-machine) state.
 - `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.

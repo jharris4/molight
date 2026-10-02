@@ -369,7 +369,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Each is on whenever the light is, and a member's hold stayed as it was at
   the last restart or reload: held for good, or never. Nor can they be an
   entity that never reads `on`, such as a media player or a person, which
-  silently never held.
+  silently never held. A light saved with one logs a warning naming it.
 - A brightness percentage below 1, which only a hand-edited or programmatic
   configuration can hold, counts as unset at runtime and in the form checks.
   An auto-on, standby or warn brightness of 0.5% sent brightness 0, turning

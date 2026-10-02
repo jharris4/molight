@@ -283,6 +283,7 @@ from homeassistant.core import (
     CoreState,
     HomeAssistant,
     callback,
+    split_entity_id,
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -377,10 +378,12 @@ from .const import (
     STATE_WARN,
 )
 from .helpers import (
+    HOLD_ENTITY_DOMAINS,
     MEMBER_LIGHT_TYPES,
     RenamableRestoreEntity,
     entity_gone,
     light_descendants,
+    lights_lit_with,
     lights_support_brightness,
     lights_support_transition,
     match_option,
@@ -1230,6 +1233,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 )
             )
             self._drop_member_cycles()
+            self._warn_refused_holds()
             self._select_initial_settings()
             self._seed_state()
 
@@ -1271,6 +1275,35 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
         self._lights = [m for m in self._lights if m not in cyclic]
         return bool(cyclic)
+
+    @callback
+    def _warn_refused_holds(self) -> None:
+        """Name keep-on entities the form now refuses; they never act as one.
+
+        A light that is on whenever this one is holds it for good, or, as a
+        member, never; an entity that never reads on never holds.
+        """
+        holds = list(
+            dict.fromkeys(
+                entity_id
+                for settings in self._settings_sets
+                for entity_id in settings.get(CONF_HOLD_ENTITIES, [])
+            )
+        )
+        always = lights_lit_with(self.hass, [self.entity_id], self._lights, holds)
+        for entity_id in holds:
+            if entity_id in always:
+                reason = "is on whenever this light is"
+            elif split_entity_id(entity_id)[0] not in HOLD_ENTITY_DOMAINS:
+                reason = "never reads on"
+            else:
+                continue
+            _LOGGER.warning(
+                "%s keeps %s as a keep-on entity, but it %s; change it in Configure",
+                self.entity_id,
+                entity_id,
+                reason,
+            )
 
     def _show_restored(self, last: State) -> None:
         """Report the restored state until the light seeds.

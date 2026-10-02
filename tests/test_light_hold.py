@@ -23,6 +23,8 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_ENTITY_TYPE,
+    CONF_HOLD_ENTITIES,
+    CONF_LIGHT_TIMEOUT,
     CONF_SCHEDULE_MODE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
@@ -40,6 +42,7 @@ from tests.conftest import (
     crash_entries,
     light_targets,
     make_light_entry,
+    make_scheduled_light_entry,
     record_service_calls,
     restart_entries,
     settle,
@@ -1064,3 +1067,59 @@ async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# Keep-on entities saved before the form refused them
+# ---------------------------------------------------------------------------
+
+
+_ALWAYS = "is on whenever this light is"
+_NEVER = "never reads on"
+
+
+def _refused_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
+    """The (light, keep-on entity, reason) of each refused keep-on warning."""
+    return [
+        record.args
+        for record in caplog.records
+        if record.msg.startswith("%s keeps %s as a keep-on entity")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Each is named once, with why it never acts as a keep-on entity."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set("light.downstairs", "off", {"entity_id": [REAL, "light.x"]})
+    outer = make_light_entry(name="Outer", lights=[VIRTUAL])
+    holds = [REAL, "light.downstairs", "light.outer", "media_player.tv", HOLD]
+    # At startup every entry has loaded before the lights subscribe.
+    await setup_entries(
+        hass, outer, make_light_entry(lights=[REAL], hold_entities=holds)
+    )
+    await settle(hass)
+
+    assert _refused_holds(caplog) == [
+        (VIRTUAL, REAL, _ALWAYS),
+        (VIRTUAL, "light.downstairs", _ALWAYS),
+        (VIRTUAL, "light.outer", _ALWAYS),
+        (VIRTUAL, "media_player.tv", _NEVER),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_warns_once_for_a_keep_on_entity_on_both_scheduled_sides(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A scheduled light checks both settings sides, naming each entity once."""
+    hass.states.async_set(REAL, "off")
+    hold = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
+    await setup_entries(
+        hass, make_scheduled_light_entry(lights=[REAL], outside=hold, inside=hold)
+    )
+    await settle(hass)
+
+    assert _refused_holds(caplog) == [("light.scheduled_light", "person.alex", _NEVER)]

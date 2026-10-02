@@ -154,9 +154,11 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
+    HOLD_ENTITY_DOMAINS as _HOLD_ENTITY_DOMAINS,
     MEMBER_LIGHT_TYPES as _MEMBER_LIGHT_TYPES,
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
+    lights_lit_with as _lights_lit_with,
     lights_support_brightness,
     lights_support_color,
     lights_support_color_temp,
@@ -174,7 +176,7 @@ from .remote import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Iterable, Sequence
+    from collections.abc import Awaitable, Callable, Sequence
 
     from homeassistant.core import HomeAssistant
 
@@ -562,24 +564,6 @@ def _schedule_edge_fields() -> dict:
 # restricted to MoLight, only to door-ish binary_sensor device classes.
 # Keep-on entities can be anything with an on/off state (input_boolean,
 # switch, binary_sensor, ...), so that picker is not narrowed at all.
-# A keep-on entity holds while it is "on", so only these domains can hold.
-_HOLD_ENTITY_DOMAINS = [
-    "alert",
-    "automation",
-    "binary_sensor",
-    "calendar",
-    "fan",
-    "group",
-    "humidifier",
-    "input_boolean",
-    "light",
-    "remote",
-    "schedule",
-    "script",
-    "siren",
-    "switch",
-    "update",
-]
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -1782,27 +1766,6 @@ def _picker_exclusions(
     selectable and the check reports it in a friendly error.
     """
     return [entity_id for entity_id in exclusions if entity_id not in (stored or ())]
-
-
-def _lights_lit_with(
-    hass: HomeAssistant,
-    own_entities: Sequence[str],
-    members: Sequence[str],
-    candidates: Iterable[str],
-) -> set[str]:
-    """Of the candidates, the lights that are on whenever this light is lit.
-
-    That is a light sharing a member with it, at any depth, or one that
-    includes it.
-    """
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
-    lit = _light_descendants(hass, members, lights).union(own_entities)
-    return {
-        entity_id
-        for entity_id in candidates
-        if entity_id.startswith("light.")
-        and not lit.isdisjoint(_light_descendants(hass, [entity_id], lights))
-    }
 
 
 def _hold_picker_exclusions(

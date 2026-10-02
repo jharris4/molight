@@ -33,7 +33,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State
@@ -319,3 +319,44 @@ def light_descendants(
             found.add(entity_id)
             pending.extend(light_member_ids(hass, entity_id, lights))
     return found
+
+
+# A keep-on entity holds while it is "on", so only these domains can hold.
+HOLD_ENTITY_DOMAINS = [
+    "alert",
+    "automation",
+    "binary_sensor",
+    "calendar",
+    "fan",
+    "group",
+    "humidifier",
+    "input_boolean",
+    "light",
+    "remote",
+    "schedule",
+    "script",
+    "siren",
+    "switch",
+    "update",
+]
+
+
+def lights_lit_with(
+    hass: HomeAssistant,
+    own_entities: Sequence[str],
+    members: Sequence[str],
+    candidates: Iterable[str],
+) -> set[str]:
+    """Of the candidates, the lights that are on whenever this light is lit.
+
+    That is a light sharing a member with it, at any depth, or one that
+    includes it.
+    """
+    lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
+    lit = light_descendants(hass, members, lights).union(own_entities)
+    return {
+        entity_id
+        for entity_id in candidates
+        if entity_id.startswith("light.")
+        and not lit.isdisjoint(light_descendants(hass, [entity_id], lights))
+    }
