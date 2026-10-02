@@ -17,6 +17,10 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    CONF_LIGHT_TIMEOUT,
+    CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     DOMAIN,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -25,6 +29,7 @@ from custom_components.molight.const import (
 from tests.conftest import (
     light_targets,
     make_light_entry,
+    make_scheduled_light_entry,
     record_service_calls,
     settle,
     setup_entries,
@@ -709,7 +714,7 @@ async def test_manual_on_during_blink_off_survives_the_stage_ending(
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
         hass,
-        _selection_entry(effect_timeout=10, effect_brightness=0, warn_timeout=30),
+        _selection_entry(effect_timeout=5, effect_brightness=0, warn_timeout=30),
     )
     turn_on = hass.async_create_task(
         hass.services.async_call(
@@ -742,7 +747,7 @@ async def test_manual_on_during_blink_off_survives_the_stage_ending(
         )
     )
     await asyncio.wait_for(select.started.wait(), 2)
-    freezer.tick(timedelta(seconds=11))
+    freezer.tick(timedelta(seconds=6))  # short of the select call's time limit
     async_fire_time_changed(hass)
     for _ in range(4):  # settle() would wait for the select call
         await asyncio.sleep(0)
@@ -1399,6 +1404,222 @@ async def test_waiting_turn_on_whose_selection_fails_still_lights_the_room(
     assert state.state == "on"
     assert state.attributes["brightness"] == _LEVEL[trigger]
     assert "Unable to apply turn-on selection" in caplog.text
+
+
+class _HangingSelect(_SlowSelect):
+    """A select service that never answers, and records being given up on."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        super().__init__(hass)
+        self.cancelled = 0
+
+    async def _select(self, call: ServiceCall) -> None:
+        try:
+            await super()._select(call)
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+
+
+async def _pass(hass: HomeAssistant, freezer, seconds: float) -> None:
+    """Let time pass while a select call may be parked."""
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await _drain(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+async def test_select_call_that_never_answers_still_lights_the_room(
+    hass: HomeAssistant, freezer, caplog, trigger: str
+) -> None:
+    """A turn-on waits for its select call for ten seconds, then gives up on
+    it and lights the room without the selection."""
+    select = _HangingSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, trigger)
+
+    await _pass(hass, freezer, 9)
+    assert calls == []
+    assert select.cancelled == 0
+    assert hass.states.get("light.selection_light").state == "on"
+
+    await _pass(hass, freezer, 2)
+    if turn_on:
+        await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert select.cancelled == 1
+    assert state.state == "on"
+    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["molight_state"] == (
+        "occupied" if trigger == "occupancy" else "active"
+    )
+    assert state.attributes["last_turn_on_selection_option"] is None
+    assert "Unable to apply turn-on selection" in caplog.text
+    assert "TimeoutError" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_select_call_answering_within_the_limit_is_applied(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """Nine seconds is slow, not stuck: the selection counts as applied."""
+    select = _HangingSelect(hass)
+    calls = _light_calls(hass)
+    turn_on = await _begin_turn_on(hass, select, "manual")
+
+    await _pass(hass, freezer, 9)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+    await _pass(hass, freezer, 2)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 200)]
+    assert select.cancelled == 0
+    assert state.attributes["last_turn_on_selection_option"] == "Cozy"
+    assert "Unable to apply turn-on selection" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overtaker", ["off", "wall"])
+async def test_select_call_given_up_on_after_an_off_lights_nothing(
+    hass: HomeAssistant, freezer, overtaker: str
+) -> None:
+    """Giving up on the select call does not revive a turn-on that an off or
+    a change at the wall overtook while it waited."""
+    select = _HangingSelect(hass)
+    turn_on = await _begin_turn_on(hass, select, "manual")
+    if overtaker == "off":
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+        )
+    else:
+        hass.states.async_set("light.ambient", "on", {"brightness": 77})
+        await _drain(hass)
+    calls = _light_calls(hass)
+
+    await _pass(hass, freezer, 11)
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert select.cancelled == 1
+    assert state.state == ("off" if overtaker == "off" else "on")
+    if overtaker == "wall":
+        assert state.attributes["brightness"] == 77
+
+
+@pytest.mark.asyncio
+async def test_resend_whose_select_call_never_answers_is_still_sent(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A real light back from an outage as off gets the light's settings
+    again even when the select call of that re-send never answers."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry(timeout=600))
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+    hass.states.async_set("light.ambient", "on", {"brightness": 200})
+    await settle(hass)
+    select.started.clear()
+    select.release.clear()
+    calls = _light_calls(hass)
+
+    hass.states.async_set("light.ambient", "unavailable")
+    await _drain(hass)
+    hass.states.async_set("light.ambient", "off")
+    await asyncio.wait_for(select.started.wait(), 2)
+    await _pass(hass, freezer, 9)
+    assert calls == []
+    await _pass(hass, freezer, 2)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 200)]
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "active"
+    assert state.attributes["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_window_start_whose_select_call_never_answers_still_lights(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A follow window start is a turn-on like any other."""
+    select = _HangingSelect(hass)
+    hass.states.async_set("binary_sensor.sched", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        _selection_entry(
+            schedule="binary_sensor.sched",
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            auto_on_brightness=40,
+        ),
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    await _pass(hass, freezer, 11)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 102)]
+    assert select.cancelled == 1
+    assert state.attributes["molight_state"] == "scheduled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_standby_whose_select_call_never_answers_still_comes_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Coming on at standby waits for its select call no longer either."""
+    select = _HangingSelect(hass)
+    hass.states.async_set("binary_sensor.settings_schedule", "off")
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
+                CONF_TURN_ON_SELECT_OPTION: "Cozy",
+            },
+        ),
+    )
+    calls = _light_calls(hass)
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    await _pass(hass, freezer, 11)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 51)]
+    assert select.cancelled == 1
+    assert state.attributes["molight_state"] == "standby"
 
 
 @pytest.mark.asyncio

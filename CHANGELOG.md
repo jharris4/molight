@@ -265,6 +265,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   LightwaveRF lights, a light group of them and another MoLight light do. An
   automation watching the light saw on, off, on, and a virtual light wrapping
   that one recorded a manual off.
+- A turn-on waits at most 10 seconds for its turn-on selection. A select that
+  never answered, such as a template select whose action waits or an
+  integration stuck on an unreachable device, left the virtual light
+  reporting `on` with the room dark for as long as the call hung. The call is
+  now cancelled, a warning is logged and the lights come on without the
+  selection.
 
 ## [1.8.0] - 2026-09-30
 

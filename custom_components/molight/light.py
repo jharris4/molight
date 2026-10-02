@@ -236,6 +236,7 @@ Door handling (when a door entity is configured), per door_mode:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 from collections import deque
@@ -451,6 +452,7 @@ async def async_setup_entry(
 # reply arrives much later; a contradiction is human activity at any age.
 # Context alone cannot tell: Home Assistant reuses our service-call context on
 # a member for 5 s, and a slow bulb's genuine reply arrives under its own.
+TURN_ON_SELECT_TIMEOUT = 10.0  # seconds a turn-on waits for its select call
 ECHO_SETTLE_SECONDS = 3.0  # partial replies (power first, fade steps) count
 ECHO_LATE_SECONDS = 30.0  # only a reply matching the command still counts
 ECHO_HISTORY = 8  # commands per member whose reply may still be on its way
@@ -4058,20 +4060,22 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
             return
         try:
-            await self.hass.services.async_call(
-                "select",
-                SERVICE_SELECT_OPTION,
-                {
-                    "entity_id": self._turn_on_select_entity,
-                    ATTR_OPTION: option,
-                },
-                blocking=True,
-                context=context,
-            )
+            async with asyncio.timeout(TURN_ON_SELECT_TIMEOUT):
+                await self.hass.services.async_call(
+                    "select",
+                    SERVICE_SELECT_OPTION,
+                    {
+                        "entity_id": self._turn_on_select_entity,
+                        ATTR_OPTION: option,
+                    },
+                    blocking=True,
+                    context=context,
+                )
         except Exception:
             # Turn-on selections are an enhancement; a missing select, a
-            # renamed option or a failing integration must never leave the
-            # room dark, or the light reporting on with nothing lit.
+            # renamed option, a failing integration or one that never answers
+            # must never leave the room dark, or the light reporting on with
+            # nothing lit.
             _LOGGER.warning(
                 "Unable to apply turn-on selection option %r using %s; turning on the "
                 "lights without it",
