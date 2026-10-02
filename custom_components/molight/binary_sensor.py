@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import math
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -903,6 +904,8 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
             value = float(state_value)
         except (ValueError, TypeError):
             return  # unparsable reading: hold last known value
+        if not math.isfinite(value):
+            return  # nan or inf is no reading either
         if not self._attr_available:
             # First-ever reading: there is no held state to apply the
             # hysteresis band to, so judge the bare threshold.

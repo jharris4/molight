@@ -2339,6 +2339,38 @@ async def test_illuminance_holds_state_on_unparsable_reading(
     assert hass.states.get("binary_sensor.test_illuminance").state == "off"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reading", ["nan", "NaN", "inf", "-inf", "Infinity"])
+async def test_illuminance_non_finite_first_reading_is_no_reading(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, reading: str
+) -> None:
+    """nan or inf as a first reading asserts neither darkness nor brightness."""
+    hass.states.async_set("sensor.lux_1", reading)
+    await setup_entries(hass, illuminance_entry)
+    assert hass.states.get("binary_sensor.test_illuminance").state == "unavailable"
+
+    hass.states.async_set("sensor.lux_1", "5")
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reading", ["nan", "inf", "-inf"])
+@pytest.mark.parametrize("held", ["5", "500"])
+async def test_illuminance_non_finite_reading_holds_state(
+    hass: HomeAssistant, illuminance_entry: MockConfigEntry, reading: str, held: str
+) -> None:
+    """A later nan or inf holds the last known state, like an unparsable one."""
+    await setup_entries(hass, illuminance_entry)
+    hass.states.async_set("sensor.lux_1", held)
+    await hass.async_block_till_done()
+    expected = hass.states.get("binary_sensor.test_illuminance").state
+
+    hass.states.async_set("sensor.lux_1", reading)
+    await hass.async_block_till_done()
+    assert hass.states.get("binary_sensor.test_illuminance").state == expected
+
+
 # ---------------------------------------------------------------------------
 # Restore robustness: corrupt attributes must never break setup
 # ---------------------------------------------------------------------------
