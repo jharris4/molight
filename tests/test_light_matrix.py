@@ -1742,7 +1742,12 @@ async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    freezer.tick(timedelta(seconds=61))
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "off"

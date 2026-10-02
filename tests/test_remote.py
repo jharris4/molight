@@ -672,6 +672,11 @@ async def test_brightness_step_mid_warning_steps_from_pre_warning_level(
         STATE_ACTIVE
     )
 
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.matrix_light").attributes["warning_active"] is True
+
 
 @pytest.mark.asyncio
 async def test_brightness_step_mid_warning_leaves_other_targets_stepping(

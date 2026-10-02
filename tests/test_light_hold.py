@@ -195,7 +195,9 @@ async def test_hold_entity_holds_and_release_restarts_timer(
     hass.states.async_set(HOLD, "off")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is False
-    await _tick(hass, freezer, 61)
+    await _tick(hass, freezer, 59)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
     assert _state(hass).state == "off"
 
 

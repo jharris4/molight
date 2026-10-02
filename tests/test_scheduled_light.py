@@ -1613,7 +1613,11 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     state = hass.states.get(VIRTUAL)
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
     assert state.attributes["auto_off_held"] is False
-    freezer.tick(timedelta(seconds=11))
+    freezer.tick(timedelta(seconds=9))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -1649,7 +1653,11 @@ async def test_schedule_change_hold_cancels_running_timer(
     # Releasing the hold under the new side starts a fresh full timeout.
     hass.states.async_set(hold, "off")
     await settle(hass)
-    freezer.tick(timedelta(seconds=11))
+    freezer.tick(timedelta(seconds=9))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"

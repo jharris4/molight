@@ -77,7 +77,12 @@ async def test_restart_adopts_burning_lights_with_timer(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
-    freezer.tick(timedelta(seconds=61))
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
 
@@ -257,7 +262,12 @@ async def test_restart_mid_countdown_adopts_active_with_full_timer(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
-    freezer.tick(timedelta(seconds=61))
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "off"
@@ -853,7 +863,12 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
     assert state.attributes["pre_warn_brightness"] is None
 
     # A fresh full timer (60s) runs, then the warn stage, then off.
-    freezer.tick(timedelta(seconds=61))
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_WARN

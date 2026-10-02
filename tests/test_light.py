@@ -1567,11 +1567,16 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 80
 
-    # The full timer restarted: still on well past the old warn window.
-    freezer.tick(timedelta(seconds=40))
+    # The full timer restarted: still active well past the old warn window.
+    freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await _settle(hass)
-    assert hass.states.get("light.test_light").state == "on"
+    assert _mstate(hass) == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await _settle(hass)
+    assert _mstate(hass) == STATE_WARN
 
 
 @pytest.mark.asyncio

@@ -426,7 +426,12 @@ async def test_manual_on_during_warn_restores_pre_warn_brightness(
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await settle(hass)
-    assert _state(hass).state == "on"
+    assert _mstate(hass) == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_WARN
 
 
 @pytest.mark.asyncio
@@ -596,7 +601,12 @@ async def test_external_dim_during_warning_honors_new_brightness(
 
     # The full timer restarted: the warning comes back around, snapshotting
     # the dimmed brightness this time.
-    freezer.tick(timedelta(seconds=61))
+    freezer.tick(timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _mstate(hass) == STATE_ACTIVE
+
+    freezer.tick(timedelta(seconds=2))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _mstate(hass) == STATE_EFFECT
