@@ -22,12 +22,14 @@ from .const import (
     ATTR_AVAILABLE,
     ATTR_BEHAVIOR,
     ATTR_EVENT_TYPE,
+    ATTR_NEW_ENTITY_ID,
     ATTR_SECONDS,
     DATA_CONTROLLER,
     DEFAULT_STATES,
     DOMAIN,
     PLATFORMS,
     SERVICE_FIRE_EVENT,
+    SERVICE_RENAME_ENTITY,
     SERVICE_SET_AVAILABLE,
     SERVICE_SET_BEHAVIOR,
     SERVICE_SET_STARTUP_DELAY,
@@ -63,6 +65,12 @@ SET_STARTUP_DELAY_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required(ATTR_SECONDS): vol.Coerce(float),
+    }
+)
+RENAME_ENTITY_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_NEW_ENTITY_ID): cv.entity_id,
     }
 )
 FIRE_EVENT_SCHEMA = vol.Schema(
@@ -206,6 +214,13 @@ async def async_setup_entry(
         )
 
     @callback
+    def _rename_entity(call: ServiceCall) -> None:
+        # Any registered entity, as the entity settings dialog would.
+        er.async_get(hass).async_update_entity(
+            call.data[ATTR_ENTITY_ID], new_entity_id=call.data[ATTR_NEW_ENTITY_ID]
+        )
+
+    @callback
     def _fire_event(call: ServiceCall) -> None:
         controller.fire_event(
             call.data[ATTR_ENTITY_ID],
@@ -230,6 +245,9 @@ async def async_setup_entry(
         SERVICE_SET_STARTUP_DELAY,
         _set_startup_delay,
         schema=SET_STARTUP_DELAY_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RENAME_ENTITY, _rename_entity, schema=RENAME_ENTITY_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, SERVICE_FIRE_EVENT, _fire_event, schema=FIRE_EVENT_SCHEMA

@@ -89,7 +89,13 @@ from .const import (
     SCHEDULE_OPERATOR_ALL,
     SUN_EVENTS,
 )
-from .helpers import molight_config, suggested_entity_id
+from .helpers import (
+    molight_config,
+    renamed_to,
+    run_unless_renamed,
+    same_entity,
+    suggested_entity_id,
+)
 
 if TYPE_CHECKING:
     import asyncio
@@ -239,7 +245,9 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
         # is trusted.
         extra = await self.async_get_last_extra_data()
         saved_source = extra.as_dict().get("source") if extra is not None else None
-        same_source = saved_source in (None, self._source_sensor)
+        same_source = saved_source is None or same_entity(
+            self.hass, saved_source, self._source_sensor
+        )
         if last is not None:
             with contextlib.suppress(ValueError, TypeError):
                 self._false_count = int(
@@ -298,7 +306,16 @@ class VirtualOccupancySensor(BinarySensorEntity, RestoreEntity):
     @callback
     def _handle_sensor_change(self, event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+        if new_state is None:
+            # A renamed source did not drop out: this sensor is about to
+            # reload with the new ID.
+            self.async_on_remove(
+                run_unless_renamed(
+                    self.hass, self._source_sensor, self._on_source_unavailable
+                )
+            )
+            return
+        if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             self._on_source_unavailable()
             return
         if not _real_state_change(event):
@@ -490,10 +507,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
                 )
             # A clear's classification describes these constituents; an edit
             # leaves it behind. A save that predates the record is trusted.
-            if last.state == "off" and saved.get("constituents") in (
-                None,
-                self._constituents(),
-            ):
+            if last.state == "off" and self._saved_for_constituents(saved):
                 self._last_clear_false = bool(
                     last.attributes.get("last_clear_false_detection")
                 )
@@ -603,6 +617,18 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
         entity_id = event.data["entity_id"]
         if cancel := self._reloading.pop(entity_id, None):
             cancel()
+        if event.data.get("new_state") is None:
+            # A renamed constituent did not drop out: this sensor is about to
+            # reload with the new ID.
+            dropout = datetime.now(UTC)
+            self.async_on_remove(
+                run_unless_renamed(
+                    self.hass,
+                    entity_id,
+                    lambda: self._reevaluate_on_dropout(event, dropout),
+                )
+            )
+            return
         if not _real_state_change(event):
             self._hold_through_reload(event)
             self._reevaluate_on_dropout(event, datetime.now(UTC))
@@ -738,6 +764,22 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RestoreEntity):
             "trigger": sorted(set(self._trigger_sensors)),
             "maintain": sorted(set(self._maintain_sensors)),
         }
+
+    def _saved_for_constituents(self, saved: dict) -> bool:
+        """Return whether a save describes the current constituents.
+
+        A save that predates the record is trusted, and one made before a
+        constituent was renamed names its former ID.
+        """
+        constituents = saved.get("constituents")
+        if constituents is None:
+            return True
+        if not isinstance(constituents, dict):
+            return False
+        return {
+            role: sorted({renamed_to(self.hass, e) or e for e in entity_ids})
+            for role, entity_ids in constituents.items()
+        } == self._constituents()
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
@@ -1014,7 +1056,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RestoreEntity):
             saved = await _restored_schedule_data(self)
             restored_start = (
                 _parse_datetime(saved.get("current_window_start"))
-                if saved.get("source_entity") == self._source
+                if same_entity(self.hass, saved.get("source_entity"), self._source)
                 and self._saved_invert_matches(saved)
                 else None
             )

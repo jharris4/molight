@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_RESTORED
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import callback
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 
 from .const import (
     CONF_DOOR_ENTITY,
@@ -14,32 +17,43 @@ from .const import (
     CONF_ENTITY_TYPE,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     DATA_AUTO_OFF_ENABLED,
     DATA_AUTO_OFF_KEPT,
     DATA_PLATFORMS,
+    DATA_RENAMED,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
-    ENTITY_TYPE_SCHEDULED_LIGHT,
     PLATFORMS,
     PLATFORMS_BY_ENTITY_TYPE,
+    REMOTE_ACTION_FIELDS,
 )
 from .helpers import molight_config
 from .remote import async_setup_remote
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+    from typing import Any
+
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import Event, HomeAssistant
+    from homeassistant.helpers.typing import ConfigType
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # Config keys under which one MoLight entry may reference another entry's
 # entities. Cleaned up when the referenced entry is removed: a dangling
@@ -66,6 +80,153 @@ _REFERENCE_LIST_KEYS = (
     # light on forever.
     CONF_LIGHTS,
 )
+# Every key that stores an entity ID. The further ones only ever name
+# entities MoLight does not create, so a removed entry cannot leave them.
+_ENTITY_ID_KEYS = (
+    *_REFERENCE_KEYS,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+)
+_ENTITY_ID_LIST_KEYS = (
+    *_REFERENCE_LIST_KEYS,
+    *(key for single, double, _ in REMOTE_ACTION_FIELDS for key in (single, double)),
+)
+# How long a renamed entity may take to report under its new ID (seconds).
+RENAME_SETTLE_SECONDS = 10
+
+
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+    """Follow entity ID changes for as long as Home Assistant runs."""
+    renamed: dict[str, str] = hass.data.setdefault(DATA_RENAMED, {})
+    # Renames whose entity has yet to report under its new ID.
+    pending: dict[str, str] = {}
+
+    @callback
+    def _rewrite(entity_id: str) -> None:
+        mapping = {old: new for old, new in pending.items() if new == entity_id}
+        for old in mapping:
+            del pending[old]
+        if mapping:
+            _rename_references(hass, mapping)
+
+    @callback
+    def _on_registry_updated(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
+        data = event.data
+        if data["action"] == "create":
+            # A new entity under a former ID is not the one that was renamed.
+            renamed.pop(data["entity_id"], None)
+        if data["action"] != "update" or "old_entity_id" not in data:
+            return
+        old_id, new_id = data["old_entity_id"], data["entity_id"]
+        for mapping in (renamed, pending):
+            # A second rename moves every earlier ID on to the newest one.
+            for former, current in mapping.items():
+                if current == old_id:
+                    mapping[former] = new_id
+            mapping[old_id] = new_id
+            mapping.pop(new_id, None)
+        _when_reporting(hass, new_id, _rewrite)
+
+    hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _on_registry_updated)
+    return True
+
+
+@callback
+def _when_reporting(
+    hass: HomeAssistant, entity_id: str, action: Callable[[str], None]
+) -> None:
+    """Run action once the entity has a state, or at once if none is due.
+
+    A renamed entity is removed and added again under its new ID. The entries
+    that reference it reload when their reference is rewritten, and one that
+    reloads before the entity is back would find, say, its real light gone.
+    """
+    registry_entry = er.async_get(hass).async_get(entity_id)
+    entry = (
+        hass.config_entries.async_get_entry(registry_entry.config_entry_id)
+        if registry_entry is not None and registry_entry.config_entry_id
+        else None
+    )
+    if (
+        hass.states.get(entity_id) is not None
+        or registry_entry is None
+        or registry_entry.disabled
+        or (entry is not None and entry.state is not ConfigEntryState.LOADED)
+    ):
+        action(entity_id)
+        return
+
+    @callback
+    def _done(_event: object) -> None:
+        unsub_state()
+        unsub_timer()
+        action(entity_id)
+
+    unsub_state = async_track_state_change_event(hass, [entity_id], _done)
+    unsub_timer = async_call_later(hass, RENAME_SETTLE_SECONDS, _done)
+
+
+@callback
+def _rename_references(hass: HomeAssistant, mapping: dict[str, str]) -> None:
+    """Point every entry's references to renamed entities at their new IDs.
+
+    Data and options are both rewritten; an entry that changed reloads.
+    """
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        hass.config_entries.async_update_entry(
+            entry,
+            data=_remap_references(
+                entry.data, mapping, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+            ),
+            options=_remap_references(
+                entry.options, mapping, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+            ),
+        )
+
+
+def _remap_references(
+    cfg: Mapping[str, Any],
+    mapping: Mapping[str, str | None],
+    keys: tuple[str, ...],
+    list_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    """Return cfg with each mapped entity ID replaced, or dropped if mapped to None.
+
+    Covers the top level and both settings mappings of a scheduled light.
+    """
+    remapped = _remap_settings(cfg, mapping, keys, list_keys)
+    for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
+        if isinstance(settings := remapped.get(side), dict):
+            remapped[side] = _remap_settings(settings, mapping, keys, list_keys)
+    return remapped
+
+
+def _remap_settings(
+    cfg: Mapping[str, Any],
+    mapping: Mapping[str, str | None],
+    keys: tuple[str, ...],
+    list_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    remapped = dict(cfg)
+    for key in keys:
+        value = remapped.get(key)
+        if isinstance(value, str) and value in mapping:
+            if mapping[value] is None:
+                del remapped[key]
+            else:
+                remapped[key] = mapping[value]
+    for key in list_keys:
+        values = remapped.get(key)
+        if values and any(e in mapping for e in values):
+            # A list that already held the new ID must not hold it twice.
+            remapped[key] = list(
+                dict.fromkeys(
+                    new for e in values if (new := mapping.get(e, e)) is not None
+                )
+            )
+    return remapped
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -152,28 +313,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if other.entry_id == entry.entry_id:
             continue
         cfg = molight_config(other)
-        cleaned = dict(cfg)
-        for key in _REFERENCE_KEYS:
-            if cleaned.get(key) in removed:
-                del cleaned[key]
-        for key in _REFERENCE_LIST_KEYS:
-            values = cleaned.get(key)
-            if values and any(e in removed for e in values):
-                cleaned[key] = [e for e in values if e not in removed]
-        if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT:
-            for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
-                settings = dict(cleaned.get(side, {}))
-                for key in _REFERENCE_KEYS:
-                    if settings.get(key) in removed:
-                        del settings[key]
-                for key in _REFERENCE_LIST_KEYS:
-                    values = settings.get(key)
-                    if values and any(e in removed for e in values):
-                        settings[key] = [e for e in values if e not in removed]
-                # Materialising an absent side would differ from cfg and
-                # force a needless reload.
-                if side in cleaned or settings:
-                    cleaned[side] = settings
+        cleaned = _remap_references(
+            cfg, dict.fromkeys(removed), _REFERENCE_KEYS, _REFERENCE_LIST_KEYS
+        )
         if cleaned == cfg:
             continue
         # Stored options fully replace data; authoritative entity_type and the

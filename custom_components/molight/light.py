@@ -370,6 +370,7 @@ from .helpers import (
     lights_support_brightness,
     lights_support_transition,
     molight_config,
+    same_entity,
     suggested_entity_id,
 )
 
@@ -991,9 +992,10 @@ class VirtualLight(LightEntity, RestoreEntity):
                 # A restored choice only belongs to the currently configured
                 # schedule; a reload that switched schedules discards it here
                 # so no consumer can act on the stale value.
-                if (
-                    last.attributes.get(ATTR_ACTIVE_SETTINGS_SCHEDULE)
-                    == self._settings_schedule_entity
+                if same_entity(
+                    self.hass,
+                    last.attributes.get(ATTR_ACTIVE_SETTINGS_SCHEDULE),
+                    self._settings_schedule_entity,
                 ):
                     active = last.attributes.get(ATTR_ACTIVE_SETTINGS)
                     if active in (ACTIVE_SETTINGS_INSIDE, ACTIVE_SETTINGS_OUTSIDE):
@@ -1035,11 +1037,14 @@ class VirtualLight(LightEntity, RestoreEntity):
                         setattr(self, f"_last_on_{source}", datetime.fromisoformat(raw))
             # A marker only belongs to the follow schedule that set it. A
             # save that predates the schedule record is trusted.
+            saved_schedule = last.attributes.get(ATTR_SCHEDULE_WINDOW_SCHEDULE)
             if (
                 self._schedule_entity
                 and self._schedule_mode == SCHEDULE_MODE_FOLLOW
-                and last.attributes.get(ATTR_SCHEDULE_WINDOW_SCHEDULE)
-                in (None, self._schedule_entity)
+                and (
+                    saved_schedule is None
+                    or same_entity(self.hass, saved_schedule, self._schedule_entity)
+                )
             ):
                 self._schedule_window_applied = last.attributes.get(
                     "schedule_window_start"

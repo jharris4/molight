@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   turns it off as if the old schedule's window had ended. The new
   `schedule_window_schedule` attribute records which schedule the window
   marker belongs to.
+- Changing an entity ID in Home Assistant's entity settings is now followed.
+  Every MoLight entry that referenced the entity, real or virtual, kept the
+  old ID and quietly stopped working: a light no longer reacted to its
+  renamed occupancy sensor, a renamed gate schedule read as a gate that never
+  opens, and a remote lost its buttons or its lights. The entries are
+  rewritten and reload, without the rename being taken for a manual off, a
+  new visit or a new schedule window.
 - A *Switch state* schedule end also recalculates a turn-on still waiting on
   a slow select, instead of letting it light the room afterwards.
 - A manual off while brightness already has the light off stops it coming

@@ -12,15 +12,17 @@ from homeassistant.components.light import (
     LightEntityFeature,
 )
 from homeassistant.const import ATTR_SUPPORTED_FEATURES
+from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import async_generate_entity_id
 
-from .const import CONF_ENTITY_ID, CONF_ENTITY_TYPE
+from .const import CONF_ENTITY_ID, CONF_ENTITY_TYPE, DATA_RENAMED
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant, State
+    from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State
 
 
 def molight_config(entry: ConfigEntry) -> dict:
@@ -55,6 +57,47 @@ def suggested_entity_id(
     if not obj:
         return None
     return async_generate_entity_id(entity_id_format, f"{obj}{suffix}", hass=hass)
+
+
+def renamed_to(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return the ID an entity was renamed to since Home Assistant started."""
+    return hass.data.get(DATA_RENAMED, {}).get(entity_id)
+
+
+def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> bool:
+    """Return whether a saved entity ID names the current entity.
+
+    A state saved before a rename carries the former ID.
+    """
+    if saved == current:
+        return True
+    return (
+        saved is not None
+        and current is not None
+        and (renamed_to(hass, saved) == current)
+    )
+
+
+@callback
+def run_unless_renamed(
+    hass: HomeAssistant, entity_id: str, action: Callable[[], None]
+) -> CALLBACK_TYPE:
+    """Run action for an entity whose state was removed, unless it was renamed.
+
+    A rename removes the state under the former ID too, possibly before the
+    registry has finished announcing it: an ID the registry no longer knows
+    is judged one loop pass later. Returns what cancels that judgement.
+    """
+    if er.async_get(hass).async_get(entity_id) is not None:
+        action()
+        return lambda: None
+
+    @callback
+    def _judge() -> None:
+        if hass.states.get(entity_id) is None and renamed_to(hass, entity_id) is None:
+            action()
+
+    return hass.loop.call_soon(_judge).cancel
 
 
 def _judge_lights(

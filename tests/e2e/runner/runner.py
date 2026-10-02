@@ -133,6 +133,11 @@ VIRTUAL_AUTO_OFF_LIGHT = "light.e2e_auto_off"
 AUTO_OFF_SWITCH = "switch.e2e_auto_off_auto_off"
 VIRTUAL_RESTART_WARNING_LIGHT = "light.e2e_restart_warning"
 RESTART_WARNING_SWITCH = "switch.e2e_restart_warning_auto_off"
+RENAME_OCCUPANCY = "binary_sensor.e2e_rn_occupancy"
+RENAME_PRESENCE = "binary_sensor.e2e_rn_presence"
+RENAME_MOTION = "binary_sensor.e2e_rn_motion"
+RENAME_BULB = "light.e2e_rn_bulb"
+RENAME_LIGHT = "light.e2e_rn"
 REMOVAL_OCCUPANCY = "binary_sensor.e2e_removed_occupancy"
 REMOVAL_LIGHT = "light.e2e_removal_light"
 REMOTE_LAST_ACTION = "sensor.e2e_remote_last_action"
@@ -438,6 +443,14 @@ class HomeAssistantClient:
             "molight_testbed",
             "set_startup_delay",
             {"entity_id": entity_id, "seconds": seconds},
+        )
+
+    def rename_entity(self, entity_id: str, new_entity_id: str) -> None:
+        """Change an entity's ID, as the entity settings dialog does."""
+        self.call_service(
+            "molight_testbed",
+            "rename_entity",
+            {"entity_id": entity_id, "new_entity_id": new_entity_id},
         )
 
     def fire_event(
@@ -5915,6 +5928,136 @@ def run_entity_id_change_scenario(client: HomeAssistantClient) -> None:
     print("PASS: changing a taken entity ID returned the prefilled form")
 
 
+def run_entity_rename_scenarios(client: HomeAssistantClient) -> None:
+    """Entity IDs changed in the registry are followed, without acting on the room."""
+    client.set_state(RAW_MOTION, "off")
+    occupancy_id = create_virtual_occupancy(
+        client, "E2E Rn Occupancy", RAW_MOTION, "e2e_rn_occupancy"
+    )
+    light_id = create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Rn",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 3,
+            "sensors": {"occupancy_entity": RENAME_OCCUPANCY},
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {},
+            "advanced": {"entity_id": "e2e_rn"},
+        },
+        "Rename light",
+    )
+    for entry_id in (occupancy_id, light_id):
+        assert_entry_loaded(client, entry_id)
+
+    def renamed(old_id: str, new_id: str, expected: str) -> None:
+        client.rename_entity(old_id, new_id)
+        client.wait_state(
+            new_id, lambda state: state["state"] == expected, f"{expected} as {new_id}"
+        )
+        wait_entity_absent(client, old_id)
+
+    # The occupancy sensor changes ID mid-visit: the light stays occupied and
+    # hears the clear under the new ID.
+    client.set_state(RAW_MOTION, "on")
+    wait_machine_state(client, "occupied", RENAME_LIGHT)
+    renamed(RENAME_OCCUPANCY, RENAME_PRESENCE, "on")
+    wait_stored_entry(
+        light_id,
+        lambda config: config.get("occupancy_entity") == RENAME_PRESENCE,
+        "rewritten to the renamed occupancy sensor",
+    )
+    wait_machine_state(client, "occupied", RENAME_LIGHT)
+    assert_state_stays(
+        client,
+        RENAME_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "occupied"
+            and state["attributes"].get("last_off_manual") is None
+        ),
+        "on and occupied through its occupancy sensor's rename",
+        duration=2,
+    )
+    client.set_state(RAW_MOTION, "off")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "off",
+        "off after the clear heard under the new ID",
+        timeout=15,
+    )
+    wait_machine_state(client, "idle", RENAME_LIGHT)
+
+    # A light turned off by hand in an occupied room stays off while its real
+    # light, the motion source and the occupancy sensor all change ID.
+    client.set_state(RAW_MOTION, "on")
+    wait_machine_state(client, "occupied", RENAME_LIGHT)
+    client.call_service("light", "turn_off", {"entity_id": RENAME_LIGHT})
+    client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
+    turned_off = wait_machine_state(client, "idle", RENAME_LIGHT)["attributes"][
+        "last_off_manual"
+    ]
+    renamed(RAW_TIMER_LIGHT, RENAME_BULB, "off")
+    renamed(RAW_MOTION, RENAME_MOTION, "on")
+    renamed(RENAME_PRESENCE, RENAME_OCCUPANCY, "on")
+    wait_stored_entry(
+        light_id,
+        lambda config: (
+            config.get("lights") == [RENAME_BULB]
+            and config.get("occupancy_entity") == RENAME_OCCUPANCY
+        ),
+        "rewritten to the renamed real light and sensor",
+    )
+    wait_stored_entry(
+        occupancy_id,
+        lambda config: config.get("occupancy_sensor") == RENAME_MOTION,
+        "rewritten to the renamed motion source",
+    )
+    wait_machine_state(client, "idle", RENAME_LIGHT)
+    assert_state_stays(
+        client,
+        RENAME_BULB,
+        lambda state: state["state"] == "off",
+        "off: a rename is not a new visit",
+        duration=3,
+    )
+    state = client.state(RENAME_LIGHT)
+    if state["attributes"].get("last_off_manual") != turned_off:
+        raise AssertionError(f"The renames moved the manual off: {state}")
+    if client.state(RENAME_OCCUPANCY)["state"] != "on":
+        raise AssertionError("The occupancy sensor lost its visit to the renames")
+
+    # The next visit arrives through the new IDs and lights the renamed bulb.
+    client.set_state(RENAME_MOTION, "off")
+    client.wait_state(RENAME_OCCUPANCY, lambda state: state["state"] == "off", "clear")
+    client.set_state(RENAME_MOTION, "on")
+    client.wait_state(
+        RENAME_BULB,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
+        ),
+        "lit under its new ID by the next visit",
+    )
+    wait_machine_state(client, "occupied", RENAME_LIGHT)
+    client.set_state(RENAME_MOTION, "off")
+    client.wait_state(
+        RENAME_BULB, lambda state: state["state"] == "off", "off", timeout=15
+    )
+
+    # Back to the IDs the other scenarios use.
+    renamed(RENAME_BULB, RAW_TIMER_LIGHT, "off")
+    renamed(RENAME_MOTION, RAW_MOTION, "off")
+    wait_stored_entry(
+        light_id,
+        lambda config: config.get("lights") == [RAW_TIMER_LIGHT],
+        "rewritten back to the real light's first ID",
+    )
+    remove_entry_and_entity(client, light_id, RENAME_LIGHT)
+    remove_entry_and_entity(client, occupancy_id, RENAME_OCCUPANCY)
+    print("PASS: renamed entities were followed without acting on the room")
+
+
 def create_sun_schedule(
     client: HomeAssistantClient,
     name: str,
@@ -8415,6 +8558,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         # First, while nothing else wraps the lux sensor.
         run_illuminance_discovery_scenario,
         run_entity_id_change_scenario,
+        run_entity_rename_scenarios,
         run_dark_arrival_scenarios,
         run_scheduled_light_depth_scenarios,
         run_time_window_scenario,

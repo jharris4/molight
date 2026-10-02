@@ -88,3 +88,18 @@ set_startup_delay:
         number:
           min: 0
           max: 300
+
+rename_entity:
+  name: Change an entity ID
+  description: Change the entity ID of any registered entity, as the entity settings dialog does.
+  fields:
+    entity_id:
+      name: Entity
+      required: true
+      selector:
+        entity: {}
+    new_entity_id:
+      name: New entity ID
+      required: true
+      selector:
+        text: {}
