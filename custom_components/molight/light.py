@@ -736,6 +736,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     # Fail open until the first capability derivation (which at boot waits for
     # EVENT_HOMEASSISTANT_STARTED): a startup caller must not lose their fade.
     _attr_supported_features = LightEntityFeature.TRANSITION
+    # Home Assistant 2026.1 defaults these to None and warns of mireds when a
+    # restored color_temp light reports before its first derivation.
+    _attr_min_color_temp_kelvin = DEFAULT_MIN_KELVIN
+    _attr_max_color_temp_kelvin = DEFAULT_MAX_KELVIN
     _attr_should_poll = False
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:

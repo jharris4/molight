@@ -12,6 +12,11 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
+from homeassistant.components.light import (
+    DEFAULT_MAX_KELVIN,
+    DEFAULT_MIN_KELVIN,
+    LightEntity,
+)
 from homeassistant.const import ATTR_RESTORED, EVENT_CALL_SERVICE, EVENT_STATE_CHANGED
 from homeassistant.core import (
     Context,
@@ -71,6 +76,11 @@ OCC = "binary_sensor.occ"
 MARKER = "2026-01-14T09:00:00-08:00"
 MARKER2 = "2026-01-14T11:00:00-08:00"
 HS_CAPS = {"supported_color_modes": ["hs"]}
+CT_CAPS = {
+    "supported_color_modes": ["color_temp"],
+    "min_color_temp_kelvin": 2700,
+    "max_color_temp_kelvin": 6500,
+}
 BLUE = (240.0, 100.0)
 
 
@@ -207,6 +217,32 @@ async def test_colored_light_reports_its_restored_state_until_it_seeds(
     await finish_startup(hass)
     await settle(hass)
     assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_color_temp_light_reports_a_kelvin_range_until_it_seeds(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, caplog
+) -> None:
+    """Home Assistant 2026.1 has no default range and warns of mireds without one."""
+    for attr in ("__attr_min_color_temp_kelvin", "__attr_max_color_temp_kelvin"):
+        monkeypatch.setattr(LightEntity, attr, None)
+    real = _Members(hass, [REAL], CT_CAPS)
+    entry = make_light_entry()
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": VIRTUAL, "color_temp_kelvin": 3000},
+        blocking=True,
+    )
+    await settle(hass)
+
+    await restart_entries(hass, entry, started=False)
+    real.boot(REAL, "placeholder")
+    assert _attrs(hass)["color_mode"] == "color_temp"
+    assert _attrs(hass)["min_color_temp_kelvin"] == DEFAULT_MIN_KELVIN
+    assert _attrs(hass)["max_color_temp_kelvin"] == DEFAULT_MAX_KELVIN
+    assert not [r for r in caplog.records if r.name == "homeassistant.helpers.frame"]
 
 
 @pytest.mark.asyncio
