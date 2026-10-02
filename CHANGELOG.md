@@ -114,6 +114,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A maintain occupancy sensor's `latest_occupied_time` counts toward that
   remaining time like an occupancy sensor's, and a light that presence was
   holding comes back within one timeout of brightness turning it off.
+- An `open_close` door whose sensor goes `unavailable` while the door is open,
+  such as a battery contact sensor that dies, no longer holds the light on
+  until Home Assistant restarts. After 60 seconds it counts as closed, as it
+  would at startup, and the countdown starts; a shorter blip still keeps the
+  hold. A door counted closed this way no longer lights the room when it gets
+  dark or a gate schedule window starts, and an open door it reports later is
+  treated like one first seen at startup.
 - A false detection only turns off quickly a light that its own cycle lit. A
   blip during the countdown after a genuine visit, or after the maintain
   sensor saw someone, turned the light off 5 s later instead of when the

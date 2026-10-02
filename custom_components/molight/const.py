@@ -382,6 +382,9 @@ DOOR_MODE_OPEN = "open"
 DOOR_MODE_OPEN_CLOSE = "open_close"
 DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
 DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
+# An open door whose sensor stays unavailable/unknown this long counts as
+# closed, as an occupancy sensor clears after its default unavailable timeout.
+DOOR_UNAVAILABLE_TIMEOUT = 60
 
 # --- Virtual Remote ---
 # A Virtual Remote entry drives one or more lights from the buttons of a

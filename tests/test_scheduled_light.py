@@ -2871,6 +2871,42 @@ async def test_boundary_keeps_door_hold_through_unavailable_blip(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("inside_door", ["same", "other"])
+async def test_boundary_and_a_door_unavailable_for_a_minute(
+    hass: HomeAssistant, freezer, inside_door: str
+) -> None:
+    """The same door's outage runs on across the boundary and counts it closed
+    60 s after it began; another door, open on the new side, keeps holding."""
+    door = "binary_sensor.outside_door"
+    other = "binary_sensor.inside_door"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(door, "off")
+    hass.states.async_set(other, "on")
+    side = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    entry = make_scheduled_light_entry(
+        outside=side | {CONF_DOOR_ENTITY: door},
+        inside=side | {CONF_DOOR_ENTITY: door if inside_door == "same" else other},
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(door, "on")
+    await settle(hass)
+    hass.states.async_set(door, "unavailable")
+    await settle(hass)
+
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set(SCHEDULE, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == (
+        STATE_COUNTDOWN if inside_door == "same" else STATE_OCCUPIED
+    )
+
+
+@pytest.mark.asyncio
 async def test_boundary_off_defers_to_unavailable_keep_on_hold(
     hass: HomeAssistant,
 ) -> None:

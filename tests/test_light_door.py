@@ -56,6 +56,12 @@ def _state(hass: HomeAssistant):
     return hass.states.get(VIRTUAL)
 
 
+async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
 def _record_service_calls(hass: HomeAssistant) -> list[dict]:
     calls: list[dict] = []
 
@@ -468,14 +474,156 @@ async def test_open_close_unavailable_door_keeps_holding(
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    freezer.tick(timedelta(seconds=300))
-    async_fire_time_changed(hass)
-    await settle(hass)
-    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 59)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     hass.states.async_set(DOOR, "off")  # recovers closed: countdown starts
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dead", ["unavailable", "unknown"])
+async def test_open_close_door_unavailable_for_a_minute_counts_as_closed(
+    hass: HomeAssistant, freezer, dead: str
+) -> None:
+    """A dead door sensor cannot hold the light forever: after 60 s it counts
+    as closed and the countdown starts."""
+    await setup_entries(
+        hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
+    )
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, dead)
+    await settle(hass)
+
+    await _tick(hass, freezer, 59)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await _tick(hass, freezer, 2)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 58)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_unavailable_door_counted_closed_defers_to_presence(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Counting a dead door as closed is a close: occupancy still holds."""
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
+    await setup_entries(hass, entry)
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+
+    await _tick(hass, freezer, 61)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+@pytest.mark.asyncio
+async def test_door_back_from_unavailable_restarts_the_minute(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Each outage gets its own 60 s: reporting open in between ends the last."""
+    await setup_entries(
+        hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
+    )
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    for _ in range(2):
+        hass.states.async_set(DOOR, "unavailable")
+        await settle(hass)
+        await _tick(hass, freezer, 50)
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("manual_off", [False, True], ids=["timed-out", "manual-off"])
+async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
+    hass: HomeAssistant, freezer, manual_off: bool
+) -> None:
+    """Once counted closed, the door's next open report is treated as at
+    startup: it lights the room, unless a manual off stands."""
+    await setup_entries(
+        hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
+    )
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+    await _tick(hass, freezer, 61)
+    if manual_off:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    if manual_off:
+        assert _state(hass).state == "off"
+    else:
+        assert _state(hass).state == "on"
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_dead_door_does_not_light_the_room_when_it_gets_dark(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A door counted closed is no standing-open door for a gate to re-evaluate."""
+    hass.states.async_set(ILLUM, "on")  # bright
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        illuminance=ILLUM,
+        illuminance_mode=ILLUMINANCE_MODE_GATE,
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(DOOR, "on")  # gated
+    await settle(hass)
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+    await _tick(hass, freezer, 61)
+
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_dead_door_does_not_light_the_room_at_a_gate_window_start(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Nor for a gate window starting."""
+    hass.states.async_set(SCHED, "off")
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(DOOR, "on")  # gated
+    await settle(hass)
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+    await _tick(hass, freezer, 61)
+
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
 
 
 # ---------------------------------------------------------------------------

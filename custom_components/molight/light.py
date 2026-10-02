@@ -230,7 +230,7 @@ Door handling (when a door entity is configured), per door_mode:
     already-active occupancy: illuminance going dark or a gate-mode window
     starting turns the lights on and holds them while the door is open. The
     door's last known state is cached, so a sensor that blips unavailable
-    keeps holding until it reports closed.
+    keeps holding; one unavailable for 60 s counts as closed.
 """
 
 from __future__ import annotations
@@ -347,6 +347,7 @@ from .const import (
     DEFAULT_WARN_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
+    DOOR_UNAVAILABLE_TIMEOUT,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_CONTROL,
@@ -811,6 +812,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.
         self._door_open: bool = False
+        # Counts an open door that stays unavailable as closed, None when idle.
+        self._door_dropout_unsub: CALLBACK_TYPE | None = None
         # Whether the door has reported open/closed since startup.
         self._door_seen: bool = False
         # Last known on/off of each keep-on entity, kept ourselves so an
@@ -1320,6 +1323,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and door.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
             and self._door_entity == prev_door_entity
         ):
+            self._cancel_door_dropout()
             self._door_open = door is not None and door.state == "on"
             self._door_seen = door is not None and door.state in ("on", "off")
         self._hold_states = {}
@@ -1725,6 +1729,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Cancel the countdown timer and any waiting turn-on on removal."""
         await super().async_will_remove_from_hass()
         self._cancel_timer()
+        self._cancel_door_dropout()
         # A turn-on still waiting for its selection must not light the room
         # for an entity that is gone.
         self._command_generation += 1
@@ -1816,6 +1821,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            if entity_id == self._door_entity and self._door_open:
+                self._start_door_dropout()
             return
         same_state = old_state is not None and old_state.state == new_state.state
 
@@ -2003,6 +2010,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 replay_since=(old_state or new_state).last_changed if replay else None,
             )
         if entity_id == self._door_entity:
+            self._cancel_door_dropout()
             door_was_open = self._door_open
             self._door_open = new_state.state == "on"
             # An open door first seen since startup may predate a manual off.
@@ -2055,6 +2063,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if entity_id == self._occupancy_entity:
             self._occupancy_last_on = None
         if entity_id == self._door_entity:
+            self._cancel_door_dropout()
             self._door_open = False
         if entity_id in (
             self._occupancy_entity,
@@ -3317,11 +3326,35 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         countdown. In plain open mode a door never holds (it is only a
         momentary turn-on trigger), so this is always False there. Reads the
         last known door state, so a sensor that blips unavailable keeps
-        holding until it reports closed.
+        holding, until it has been unavailable for DOOR_UNAVAILABLE_TIMEOUT.
         """
         if not self._door_entity or self._door_mode != DOOR_MODE_OPEN_CLOSE:
             return False
         return self._door_open
+
+    def _start_door_dropout(self) -> None:
+        """Count an open door whose sensor stays unavailable as closed.
+
+        A dead battery sensor must not hold the light on forever; a brief
+        blip keeps the hold, as on an occupancy sensor.
+        """
+        if self._door_dropout_unsub is None:
+            self._door_dropout_unsub = async_call_later(
+                self.hass, DOOR_UNAVAILABLE_TIMEOUT, self._door_dropout_expired
+            )
+
+    @callback
+    def _door_dropout_expired(self, _now: datetime) -> None:
+        self._door_dropout_unsub = None
+        # As at startup: closed, and its next report is a first sighting.
+        self._door_open = False
+        self._door_seen = False
+        self._on_door_change(False)
+
+    def _cancel_door_dropout(self) -> None:
+        if self._door_dropout_unsub is not None:
+            self._door_dropout_unsub()
+            self._door_dropout_unsub = None
 
     def _on_door_change(self, is_open: bool) -> None:
         """Handle the configured door sensor changing (on = open).

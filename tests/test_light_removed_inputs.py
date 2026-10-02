@@ -139,11 +139,13 @@ async def test_keep_on_entity_that_goes_missing_stops_holding(
     await expect_fresh_timeout(hass, freezer)
 
 
+@pytest.mark.parametrize("outage", [False, True], ids=["open", "unavailable"])
 @pytest.mark.parametrize("how", GONE)
 async def test_open_door_that_goes_missing_counts_as_closed(
-    hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str, outage: bool
 ) -> None:
-    """An open_close door that left while open stops holding the light."""
+    """An open_close door that left while open stops holding the light, also
+    when it left during an outage that would have counted it closed later."""
     await provide(hass, how, RealBinary("input"))
     hass.states.async_set(MEMBER, "off")
     await setup_entries(
@@ -155,7 +157,12 @@ async def test_open_door_that_goes_missing_counts_as_closed(
     hass.states.async_set(MEMBER, "on", {"brightness": 255})
     await settle(hass)
     assert attrs(hass)["molight_state"] == STATE_OCCUPIED
-    await tick(hass, freezer, 3600)
+    if outage:
+        hass.states.async_set(INPUT, "unavailable")
+        await settle(hass)
+        await tick(hass, freezer, 30)
+    else:
+        await tick(hass, freezer, 3600)
 
     await remove(hass, how, INPUT)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
