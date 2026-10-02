@@ -302,6 +302,72 @@ async def test_warning_stages_lead_into_standby(hass: HomeAssistant, freezer) ->
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("asked", [None, 4000], ids=["plain", "color"])
+async def test_turn_on_without_a_level_raises_standby(
+    hass: HomeAssistant, freezer, asked: int | None
+) -> None:
+    """A turn-on with no brightness raises standby to the auto-on level and
+    colour, as presence would, keeping a colour it names; the timeout then
+    drops it back to standby."""
+    modes = {"supported_color_modes": ["color_temp"]}
+    hass.states.async_set(REAL, "off", modes)
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    calls = record_service_calls(hass)
+    _record_light_contexts(hass)
+    await setup_entries(hass, _porch(inside={CONF_AUTO_ON_COLOR_TEMP: 3000}))
+    context = hass.data["standby_test_contexts"][-1]
+    hass.states.async_set(
+        REAL,
+        "on",
+        {**modes, "brightness": STANDBY, "color_temp_kelvin": KELVIN},
+        context=context,
+    )
+    await settle(hass)
+    _assert_standby(hass)
+
+    data = {} if asked is None else {"color_temp_kelvin": asked}
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, **data}, blocking=True
+    )
+    await settle(hass)
+    sent = _light_calls(calls, "turn_on")[-1]
+    assert sent["brightness"] == BOOST
+    assert sent["color_temp_kelvin"] == (asked or 3000)
+    assert "transition" not in sent
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == BOOST
+
+    # Someone walking up holds the raised light; leaving drops it back.
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == STANDBY
+
+
+@pytest.mark.asyncio
+async def test_turn_on_without_a_level_and_no_auto_on_level_keeps_standby_level(
+    hass: HomeAssistant, freezer
+) -> None:
+    """With no auto-on brightness there is no level to raise to, as with
+    presence: the turn-on runs a timer back to standby at the same level."""
+    calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_BRIGHTNESS: None}))
+    await _echo_standby(hass)
+    calls.clear()
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert all("brightness" not in c for c in _light_calls(calls, "turn_on"))
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass)["brightness"] == STANDBY
+    await _tick(hass, freezer, 31)
+    _assert_standby(hass)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "stage",
     [

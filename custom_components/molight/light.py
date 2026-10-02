@@ -81,8 +81,9 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
     the effect/warn stages run and the last step drops to standby, not off
     (at the pre-warning color when standby has no color of its own).
   - An external dim or a manual turn-on from standby runs a timer that ends
-    back at standby. A manual off cancels standby until the next schedule
-    boundary; turning the light back on rejoins it.
+    back at standby; a turn-on with no brightness first raises it to the
+    auto-on level and color, as presence would. A manual off cancels standby
+    until the next schedule boundary; turning the light back on rejoins it.
   - Leaving the inside settings while at standby hands the light to the end
     action: turn off, switch (recalculated), or keep (a fresh timeout).
   - A restart puts a light that was at standby back there, and a member
@@ -1834,6 +1835,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             brightness = self._pre_warn_brightness
             if brightness is not None:
                 self._attr_brightness = brightness
+        elif self._machine_state == STATE_STANDBY:
+            # No level: raise standby to the auto-on look, as presence would.
+            brightness = self._auto_on_brightness
+            if brightness is not None:
+                self._attr_brightness = brightness
+            color = color or self._auto_on_color
         if color is None and self._in_warning():
             # Same for the color: a colored stage must leave no trace either.
             color = self._pre_warn_color
