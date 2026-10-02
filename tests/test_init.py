@@ -41,6 +41,7 @@ from custom_components.molight.const import (
 from tests.conftest import (
     make_light_entry,
     make_scheduled_light_entry,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -256,6 +257,63 @@ async def test_disabling_the_auto_off_switch_while_off_releases_the_hold(
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get("light.kept_light").state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+@pytest.mark.parametrize("meanwhile", ["nothing", "reload", "restart"])
+@pytest.mark.parametrize("switch", ["off", "on"])
+async def test_reenabling_the_auto_off_switch_brings_back_its_state(
+    hass: HomeAssistant, freezer, scheduled: bool, meanwhile: str, switch: str
+) -> None:
+    """Enabling the switch again restores the state it had when disabled, and
+    an off switch holds the light again."""
+    entry = (
+        make_scheduled_light_entry(
+            name="Kept Light",
+            inside={CONF_LIGHT_TIMEOUT: 10},
+            outside={CONF_LIGHT_TIMEOUT: 10},
+        )
+        if scheduled
+        else make_light_entry(name="Kept Light", timeout=10)
+    )
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    hass.states.async_set("light.real_1", "on")
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "switch", f"turn_{switch}", {"entity_id": "switch.kept_light_auto_off"}
+    )
+    await settle(hass)
+    registry = er.async_get(hass)
+    registry.async_update_entity(
+        "switch.kept_light_auto_off", disabled_by=er.RegistryEntryDisabler.USER
+    )
+    await settle(hass)
+    if meanwhile == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await settle(hass)
+    elif meanwhile == "restart":
+        await restart_entries(hass, entry)
+    assert hass.states.get("light.kept_light").attributes["auto_off_held"] is False
+
+    registry.async_update_entity("switch.kept_light_auto_off", disabled_by=None)
+    await settle(hass)
+    # Home Assistant reloads the entry to add the entity back after a delay.
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    held = switch == "off"
+    assert hass.states.get("switch.kept_light_auto_off").state == switch
+    assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is not held
+    assert hass.states.get("light.kept_light").attributes["auto_off_held"] is held
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.kept_light"}, blocking=True
+    )
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == ("on" if held else "off")
 
 
 @pytest.mark.asyncio

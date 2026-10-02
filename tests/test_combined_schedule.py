@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
-from homeassistant.core import CoreState, State
+from homeassistant.core import CoreState, State, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
@@ -855,6 +856,43 @@ async def test_editing_an_input_rebuilds_the_combination(
         hass.states.get("binary_sensor.bedside").attributes["next_transition"]
         == "2026-07-02T06:30:00+00:00"
     )
+
+
+@pytest.mark.asyncio
+async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An input change counted on the next loop pass is dropped when the
+    combination unloads first: no state is written and no boundary is armed."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.house_mode", "off")
+    combined = _combined("Bedside", ["binary_sensor.morning", "binary_sensor.house"])
+    await _setup(
+        hass,
+        _time_schedule("Morning", "06:00", "08:00"),
+        _mirror_schedule("House", "binary_sensor.house_mode"),
+        combined,
+    )
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+    writes = _record_states(hass, "binary_sensor.bedside")
+
+    unloads = []
+
+    @callback
+    def _unload_before_counting(_event: Event) -> None:
+        # Heard after the combination, which counts the change a pass later.
+        unloads.append(
+            hass.async_create_task(hass.config_entries.async_unload(combined.entry_id))
+        )
+
+    async_track_state_change_event(hass, "binary_sensor.house", _unload_before_counting)
+    hass.states.async_set("binary_sensor.house_mode", "on")
+    await settle(hass)
+    assert await unloads[0]
+
+    # A boundary armed after the unload would fail the lingering-timer check.
+    assert writes == ["unavailable"]
 
 
 @pytest.mark.asyncio
