@@ -370,6 +370,10 @@ test("a light with a turn-on selection gets the selection page", async ({ page }
   await expectFlowTitle(page, "Turn-on selection");
   await selectHaOption(page, "Fixed/fallback option", "Cozy");
   await submit(page);
+  // Discovery above wrapped E2E CT Light, so the pick is that virtual light.
+  await expectFlowTitle(page, "Wrapped virtual lights");
+  await expect(page.getByText(/MoLight virtual lights: E2E CT Light\./)).toBeVisible();
+  await submit(page);
   await finishCreated(page, "Browser Selected");
   const state = await entityState(page, "light.browser_selected");
   expect(state.attributes.friendly_name).toBe("Browser Selected");

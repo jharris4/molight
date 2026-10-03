@@ -1758,6 +1758,34 @@ def _new_light_in_members(
     return entity_id in _light_descendants(hass, under, lights)
 
 
+def _new_wrapped_lights(
+    hass: HomeAssistant, members: Sequence[str], known: Sequence[str]
+) -> list[str]:
+    """MoLight virtual lights among the members that are not already known."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    known = current_references(hass, {CONF_LIGHTS: list(known)})[0][CONF_LIGHTS]
+    return [m for m in members if m in lights and m not in known]
+
+
+def _entity_label(hass: HomeAssistant, entity_id: str) -> str:
+    """Friendly name of an entity, falling back to its entity_id."""
+    state = hass.states.get(entity_id)
+    return state.name if state and state.name else entity_id
+
+
+def _show_wrapped_lights(
+    flow: config_entries.ConfigFlow | config_entries.OptionsFlow, lights: list[str]
+) -> config_entries.FlowResult:
+    """Show the page that names the virtual lights a light is about to wrap."""
+    return flow.async_show_form(
+        step_id="confirm_wrapped_lights",
+        data_schema=vol.Schema({}),
+        description_placeholders={
+            "lights": ", ".join(_entity_label(flow.hass, e) for e in lights)
+        },
+    )
+
+
 def _own_entity_ids(
     hass: HomeAssistant, entry: config_entries.ConfigEntry
 ) -> list[str]:
@@ -2030,6 +2058,10 @@ class MoLightConfigFlow(
         self._prefill: dict[str, Any] | None = None
         # Stashed create payload while the entity_id confirm step is shown.
         self._pending: dict[str, Any] | None = None
+        # Stashed create while the wrapped-lights notice is shown, and the
+        # wrapped lights it has already named.
+        self._wrapped_pending: dict[str, Any] | None = None
+        self._wrapped_confirmed: list[str] = []
         # Stashed Virtual Light form while its target-dependent turn-on
         # selection step is shown. Selection values are kept separately so a
         # trip through the entity-id collision menu can prefill them again.
@@ -2157,6 +2189,22 @@ class MoLightConfigFlow(
         )
         if errors:
             return None, errors
+        if entity_type in _MEMBER_LIGHT_TYPES and (
+            wrapped := _new_wrapped_lights(
+                self.hass, data[CONF_LIGHTS], self._wrapped_confirmed
+            )
+        ):
+            self._wrapped_pending = {
+                "lights": wrapped,
+                "create": {
+                    "entity_type": entity_type,
+                    "name": name,
+                    "data": data,
+                    "prefill": prefill,
+                    "entity_id_format": entity_id_format,
+                },
+            }
+            return await self.async_step_confirm_wrapped_lights(), {}
         data = {k: v for k, v in data.items() if k != CONF_ENTITY_ID}
         if obj:
             data[CONF_ENTITY_ID] = obj
@@ -2180,6 +2228,24 @@ class MoLightConfigFlow(
             menu_options=["entity_id_proceed", "entity_id_change"],
             description_placeholders={"entity_id": self._pending["candidate"]},
         )
+
+    async def async_step_confirm_wrapped_lights(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Point out that wrapped virtual lights keep their own timers."""
+        pending = self._wrapped_pending
+        if user_input is None:
+            return _show_wrapped_lights(self, pending["lights"])
+        self._wrapped_confirmed.extend(pending["lights"])
+        create = pending["create"]
+        if create["entity_type"] == ENTITY_TYPE_SCHEDULED_LIGHT:
+            return await self._finish_scheduled_light()
+        # A sensor's timeout may have been raised while this page was open.
+        if not (errors := _validate_light_timeout(self.hass, create["data"])):
+            result, errors = await self._resolve_and_create(**create)
+            if result is not None:
+                return result
+        return self._show_light_form(create["prefill"], errors)
 
     async def async_step_entity_id_proceed(
         self, user_input: dict[str, Any] | None = None
@@ -3004,8 +3070,7 @@ class MoLightConfigFlow(
 
     def _entity_label(self, entity_id: str) -> str:
         """Friendly name of an entity, falling back to its entity_id."""
-        state = self.hass.states.get(entity_id)
-        return state.name if state and state.name else entity_id
+        return _entity_label(self.hass, entity_id)
 
     async def async_step_assign_lights(
         self, user_input: dict[str, Any] | None = None
@@ -3804,6 +3869,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         }
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
+        # Payload held while the wrapped-lights notice is shown, and the
+        # wrapped lights it has already named.
+        self._wrapped_pending: dict[str, Any] | None = None
+        self._wrapped_confirmed: list[str] = []
         self._schedule_definition = self._cfg.get(
             CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME
         )
@@ -3841,12 +3910,32 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 self.hass, data[CONF_LIGHTS], own_entry_id=self._entry.entry_id
             ):
                 return self.async_abort(reason="light_shared")
+            stored = self._cfg.get(CONF_LIGHTS, [])
+            if wrapped := _new_wrapped_lights(
+                self.hass, data[CONF_LIGHTS], [*stored, *self._wrapped_confirmed]
+            ):
+                self._wrapped_pending = {"lights": wrapped, "data": data}
+                return _show_wrapped_lights(self, wrapped)
         name = data[CONF_NAME]
         if name != self._entry.title:
             self.hass.config_entries.async_update_entry(
                 self._entry, title=name, options=data
             )
         return self.async_create_entry(title=name, data=data)
+
+    async def async_step_confirm_wrapped_lights(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Save once the wrapped-lights notice is submitted."""
+        pending = self._wrapped_pending
+        self._wrapped_confirmed.extend(pending["lights"])
+        if self._cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
+            return await self._finish_scheduled_light()
+        data = pending["data"]
+        # A sensor's timeout may have been raised while this page was open.
+        if errors := _validate_light_timeout(self.hass, data):
+            return self._show_light_form(_nest_light(data), errors)
+        return self._finish(data)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

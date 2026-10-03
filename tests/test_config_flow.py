@@ -7218,6 +7218,16 @@ async def _submit_light_options(
     )
 
 
+async def _pass_wrapped_notice(
+    hass: HomeAssistant, result: dict, *, options: bool = True
+) -> dict:
+    """Submit the page that names the virtual lights a light now wraps."""
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "confirm_wrapped_lights"
+    flows = hass.config_entries.options if options else hass.config_entries.flow
+    return await flows.async_configure(result["flow_id"], {})
+
+
 @pytest.mark.asyncio
 async def test_light_options_picker_excludes_member_cycles(
     hass: HomeAssistant,
@@ -7245,6 +7255,7 @@ async def test_light_options_picker_excludes_member_cycles(
     # A virtual light outside the cycle that no other light wraps is a valid
     # member; the light it wraps is hidden, since it belongs to it alone.
     result = await _submit_light_options(hass, result, ["light.other"])
+    result = await _pass_wrapped_notice(hass, result)
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -7322,6 +7333,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
         other["flow_id"],
         {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.hall"]},
     )
+    other = await _pass_wrapped_notice(hass, other)
     assert other["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
@@ -7482,6 +7494,7 @@ async def test_light_options_refuse_a_light_another_virtual_light_controls(
     assert result["errors"] == {CONF_LIGHTS: "light_shared"}
 
     result = await _submit_light_options(hass, result, ["light.other"])
+    result = await _pass_wrapped_notice(hass, result)
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -7577,6 +7590,241 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_shared"
     assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
+
+
+_WRAP_FORMS = [
+    "create",
+    "create_selection",
+    "options",
+    "options_selection",
+    "scheduled_create",
+    "scheduled_options",
+]
+
+
+def _entry_named(hass: HomeAssistant, name: str) -> MockConfigEntry:
+    return next(
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if molight_config(e).get(CONF_NAME) == name
+    )
+
+
+async def _open_wrap_form(hass: HomeAssistant, form: str) -> dict:
+    """Open the form that picks a light's members, for the light named Den."""
+    if form.startswith(("create", "scheduled_create")):
+        result = await _start_create(hass)
+        return await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT
+                if form.startswith("scheduled")
+                else ENTITY_TYPE_LIGHT
+            },
+        )
+    return await hass.config_entries.options.async_init(
+        _entry_named(hass, "Den").entry_id
+    )
+
+
+async def _submit_wrap_form(
+    hass: HomeAssistant, form: str, result: dict, lights: list[str]
+) -> dict:
+    """Submit every page of a Den light form up to its save."""
+    options = "options" in form
+    manager = hass.config_entries.options if options else hass.config_entries.flow
+    advanced = {} if options else {SECTION_ADVANCED: {}}
+    if form.startswith("scheduled"):
+        shared = {
+            CONF_NAME: "Den",
+            CONF_LIGHTS: lights,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            **advanced,
+        }
+        if options:
+            shared[CONF_SCHEDULE_END_ACTION] = SCHEDULE_END_ACTION_KEEP
+        result = await manager.async_configure(result["flow_id"], shared)
+        result = await manager.async_configure(
+            result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        )
+        return await manager.async_configure(
+            result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+        )
+    page = {
+        **EMPTY_LIGHT_SECTIONS,
+        **advanced,
+        CONF_NAME: "Den",
+        CONF_LIGHTS: lights,
+        CONF_LIGHT_TIMEOUT: 60,
+    }
+    if form.endswith("selection"):
+        page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+    result = await manager.async_configure(result["flow_id"], page)
+    if form.endswith("selection"):
+        assert result["step_id"] == "light_selection"
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+        )
+    return result
+
+
+async def _setup_wrap_test(hass: HomeAssistant, form: str) -> None:
+    """Set up Other to wrap and, for a Configure form, the light Den itself."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    entries = [_light_entry("Other", "other")]
+    if "options" in form:
+        entries.append(
+            _scheduled_light_entry("Den", "den")
+            if form.startswith("scheduled")
+            else _light_entry("Den", "den")
+        )
+    await setup_entries(hass, *entries)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _WRAP_FORMS)
+async def test_light_forms_point_out_a_wrapped_virtual_light(
+    hass: HomeAssistant, form: str
+) -> None:
+    """The page names the virtual light, after every other page, and saves
+    exactly what the same form saves for a real light."""
+    await _setup_wrap_test(hass, form)
+    options = "options" in form
+
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, ["light.free"])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    plain = result["data"] if options else dict(result["result"].data)
+    if not options:
+        await hass.config_entries.async_remove(result["result"].entry_id)
+    await settle(hass)
+
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, ["light.other"])
+    assert result["step_id"] == "confirm_wrapped_lights"
+    assert result["description_placeholders"] == {"lights": "Other"}
+    assert result["data_schema"].schema == {}
+    result = await _pass_wrapped_notice(hass, result, options=options)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    saved = result["data"] if options else dict(result["result"].data)
+    assert saved == {**plain, CONF_LIGHTS: ["light.other"]}
+    if form.endswith("selection"):
+        assert saved[CONF_TURN_ON_SELECT_OPTION] == "Cozy"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _WRAP_FORMS)
+@pytest.mark.parametrize("member", ["real", "group"])
+async def test_light_forms_skip_the_page_for_real_lights_and_groups(
+    hass: HomeAssistant, form: str, member: str
+) -> None:
+    """Only a MoLight virtual light keeps a timer of its own."""
+    await _setup_wrap_test(hass, form)
+    hass.states.async_set("light.free", "off")
+    hass.states.async_set("light.group", "off", {"entity_id": ["light.free"]})
+
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, [f"light.{member}"])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_point_out_only_a_newly_wrapped_light(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A save that keeps a wrapped light goes straight through; one that adds
+    another names just the new one."""
+    form = "scheduled_options" if scheduled else "options"
+    await _setup_wrap_test(hass, form)
+    await setup_entries(hass, _light_entry("Third", "third"))
+    den = _entry_named(hass, "Den")
+    hass.config_entries.async_update_entry(
+        den, options={**molight_config(den), CONF_LIGHTS: ["light.other"]}
+    )
+    await settle(hass)
+
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, ["light.other"])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, ["light.other", "light.third"])
+    assert result["step_id"] == "confirm_wrapped_lights"
+    assert result["description_placeholders"] == {"lights": "Third"}
+    result = await _pass_wrapped_notice(hass, result)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_LIGHTS] == ["light.other", "light.third"]
+
+
+@pytest.mark.asyncio
+async def test_light_create_points_out_a_wrapped_light_once(
+    hass: HomeAssistant,
+) -> None:
+    """Going back from the entity ID menu does not show the page again."""
+    await _setup_wrap_test(hass, "create")
+    hass.states.async_set("light.den", "off")
+
+    result = await _open_wrap_form(hass, "create")
+    result = await _submit_wrap_form(hass, "create", result, ["light.other"])
+    result = await _pass_wrapped_notice(hass, result, options=False)
+    assert result["step_id"] == "confirm_entity_id"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_change"}
+    )
+    assert result["step_id"] == "light"
+
+    result = await _submit_wrap_form(hass, "create", result, ["light.other"])
+    assert result["step_id"] == "confirm_entity_id"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "entity_id_proceed"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["result"].data[CONF_LIGHTS] == ["light.other"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _WRAP_FORMS)
+@pytest.mark.parametrize("change", ["removed", "renamed"])
+@pytest.mark.allow_warning_log
+async def test_wrapped_light_page_follows_a_light_changed_while_open(
+    hass: HomeAssistant, form: str, change: str
+) -> None:
+    """A wrapped light deleted behind the page is refused as on any last page;
+    one renamed is saved under its new ID without the page again."""
+    await _setup_wrap_test(hass, form)
+    options = "options" in form
+    result = await _open_wrap_form(hass, form)
+    result = await _submit_wrap_form(hass, form, result, ["light.other"])
+    assert result["step_id"] == "confirm_wrapped_lights"
+
+    other = _entry_named(hass, "Other")
+    if change == "removed":
+        await hass.config_entries.async_remove(other.entry_id)
+    else:
+        er.async_get(hass).async_update_entity(
+            "light.other", new_entity_id="light.renamed"
+        )
+    await settle(hass)
+    result = await _pass_wrapped_notice(hass, result, options=options)
+    await settle(hass)
+
+    if change == "renamed":
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        saved = result["data"] if options else result["result"].data
+        assert saved[CONF_LIGHTS] == ["light.renamed"]
+    elif options:
+        assert result["type"] == FlowResultType.ABORT
+        assert result["reason"] == "reference_removed"
+    else:
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == (
+            "scheduled_light" if form.startswith("scheduled") else "light"
+        )
+        assert result["errors"] == {"base": "reference_removed"}
 
 
 @pytest.mark.asyncio

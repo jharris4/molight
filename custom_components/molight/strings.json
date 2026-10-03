@@ -999,6 +999,10 @@
           "entity_id_proceed": "Create it anyway",
           "entity_id_change": "Go back and set an Entity ID"
         }
+      },
+      "confirm_wrapped_lights": {
+        "title": "Wrapped virtual lights",
+        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors, stages and schedule, and runs them by itself inside this light. When a wrapped light's timer runs out, it turns off and the room goes dark, even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       }
     },
     "error": {
@@ -1626,6 +1630,10 @@
           "turn_on_select_source_entity": "Optional. At each off-to-on transition, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities advertise options now, they must have at least one in common. Changes while the light is already on are not applied.",
           "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
         }
+      },
+      "confirm_wrapped_lights": {
+        "title": "Wrapped virtual lights",
+        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors, stages and schedule, and runs them by itself inside this light. When a wrapped light's timer runs out, it turns off and the room goes dark, even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       },
       "remote": {
         "title": "Virtual Remote",

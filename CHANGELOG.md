@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light back on, through MoLight or at the wall, rejoins standby. A turn-on
   without a brightness, such as a voice "turn on", raises it as presence
   would.
+- **A note on wrapped virtual lights**: when a Virtual Light or Virtual
+  Scheduled Light form adds another MoLight virtual light to its lights to
+  control, one more page names it before the light is saved. It explains
+  that the wrapped light keeps its own timer, sensors, stages and schedule,
+  so the room goes dark when its timer runs out, and that turning off its
+  Auto-off switch lets this light's timeout govern it. Configure shows the
+  page only for a virtual light the save adds, not for one already wrapped.
 
 ### Changed
 
