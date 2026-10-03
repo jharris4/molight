@@ -412,6 +412,31 @@ def _group_members(state: State | None) -> object:
     return state.attributes.get(ATTR_ENTITY_ID), state.attributes.get("group_entities")
 
 
+# What a virtual light stamps when a person changes it, at the wall or through it.
+_HUMAN_STAMPS = (
+    "last_on_physical",
+    "last_on_virtual",
+    "last_off_manual",
+    "last_brightness_change_physical",
+    "last_brightness_change_virtual",
+    "last_color_change_physical",
+    "last_color_change_virtual",
+)
+
+
+def _wrapped_light_acted_alone(old_state: State | None, new_state: State) -> bool:
+    """Whether a wrapped virtual light's report is its own automation.
+
+    Its timer, stages, sensors, schedule and standby move none of the stamps
+    a person's change would, so a report that leaves them all as they were
+    is not human activity at this level.
+    """
+    if old_state is None or "molight_state" not in new_state.attributes:
+        return False
+    old, new = old_state.attributes, new_state.attributes
+    return all(old.get(stamp) == new.get(stamp) for stamp in _HUMAN_STAMPS)
+
+
 # Member color modes an hs command can drive (HA converts hs to each member's
 # native mode); any of them lets the virtual light advertise HS itself. Shared
 # with the config flow so an upstream addition can't split the two.
@@ -1956,6 +1981,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         No configured fade, but a caller-supplied transition is forwarded.
         """
         self._drop_restored()
+        # Stamped before the off is reported, so a light wrapping this one
+        # reads the stamp with the off.
+        self._last_manual_off = datetime.now(UTC)
         await self._set_lights(False, transition=kwargs.get(ATTR_TRANSITION))
         # Also ends an on-period that brightness had cut short.
         self._clear_bright_forced_off()
@@ -2066,6 +2094,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 event.context.id in self._waiting_turn_ons
                 or self._selecting_on_device_of(entity_id)
             )
+            human = not _wrapped_light_acted_alone(old_state, new_state)
             if not claim and lit and self._turn_on_waiting():
                 # Lit by the selection of a turn-on about to be sent, which
                 # keeps the state it set: only mirror the member.
@@ -2077,7 +2106,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 return
             if same_state:
                 if new_state.state == "on":
-                    self._on_light_attrs_change(old_state, new_state, claim=claim)
+                    self._on_light_attrs_change(
+                        old_state, new_state, claim=claim, human=human
+                    )
                 return
             if resend and self._reconcile_recovered_member():
                 return
@@ -2110,8 +2141,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 new_state.state,
                 new_state.attributes.get("brightness"),
                 # A member reporting in was not turned off.
-                manual=not member_recovered,
-                claim=claim,
+                manual=human and not member_recovered,
+                claim=claim and human,
                 touched=entity_id,
             )
             return
@@ -2384,13 +2415,20 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._go_idle(manual=manual)
 
     def _on_light_attrs_change(
-        self, old_state: State, new_state: State, *, claim: bool = True
+        self,
+        old_state: State,
+        new_state: State,
+        *,
+        claim: bool = True,
+        human: bool = True,
     ) -> None:
         """Handle an external brightness/color change on an on real light.
 
         Dimming or recoloring is human activity: record it and restart any
         running countdown with the full timeout. Brightness 0 means off in
-        disguise. claim is False for a change our own select call caused.
+        disguise. claim is False for a change our own select call caused;
+        human is False for a wrapped virtual light's own stage or standby,
+        which is shown but not acted on.
         """
         old_b = old_state.attributes.get("brightness")
         new_b = new_state.attributes.get("brightness")
@@ -2405,16 +2443,18 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         now = datetime.now(UTC)
         if color_changed:
-            self._last_color_change_physical = now
+            if human:
+                self._last_color_change_physical = now
             self._set_color_state(*new_color)
         if brightness_changed:
-            self._last_brightness_change_physical = now
+            if human:
+                self._last_brightness_change_physical = now
             if new_b:
                 self._attr_brightness = new_b
 
             if new_b == 0:
                 if self._all_lights_off():
-                    self._go_idle(manual=True)
+                    self._go_idle(manual=human)
                 else:
                     self.async_write_ha_state()
                 return
@@ -2426,10 +2466,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # ACTIVE/timer or rejoining an active follow window). A
                 # color-only change on a light we consider off is just
                 # mirrored.
-                self._on_light_state_change("on", claim=claim)
+                self._on_light_state_change("on", claim=claim and human)
             self.async_write_ha_state()
             return
 
+        if not human:
+            self.async_write_ha_state()
+            return
         if claim:
             self._claim_on_period()
         if self._machine_state in (

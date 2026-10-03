@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A virtual light that wraps another virtual light no longer takes what the
+  wrapped light does by itself for a change at the wall. The wrapped light's
+  timer turning it off was recorded as a manual off on the wrapping light,
+  which kept a still-occupied room from relighting on the next visit and
+  survived a restart; its warn stage restarted the wrapping light's timeout
+  as a dim at the wall, and its own sensor, schedule or standby turn-ons
+  claimed the on-period as a person's. A change at the wall on the wrapped
+  light's bulbs, or a command through its entity, still counts as a person's
+  for both.
 - A virtual light reports the state it had before a restart until Home
   Assistant has finished starting, instead of `off` and `idle`. A crash or
   power cut shortly after a restart no longer loses a missed *Turn off* end,
