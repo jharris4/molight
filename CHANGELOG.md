@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A light belongs to one virtual light. The Virtual Light and Virtual
   Scheduled Light forms refuse a light that another virtual light already
   controls, counting a light group as the lights it contains, and their
-  pickers hide such lights as discovery already did. Two virtual lights
+  pickers and Discover lights hide such lights. Two virtual lights
   commanding one light fight over it; to control a light from a second
   virtual light, add the virtual light that has it. Entries saved before
   the check keep working and are named in a warning at load.

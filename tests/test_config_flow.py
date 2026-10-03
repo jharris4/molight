@@ -7952,6 +7952,29 @@ async def test_discovery_skips_a_group_holding_a_virtual_light(
 
 
 @pytest.mark.asyncio
+async def test_discovery_skips_a_light_another_virtual_light_controls_through_a_group(
+    hass: HomeAssistant,
+) -> None:
+    """A bulb in a group a virtual light controls, and a group around a bulb a
+    virtual light controls, both already belong to that virtual light."""
+    hass.states.async_set("light.bulb", "off")
+    hass.states.async_set("light.taken", "off", {"entity_id": ["light.bulb"]})
+    hass.states.async_set("light.lamp", "off")
+    hass.states.async_set("light.around", "off", {"entity_id": ["light.lamp"]})
+    owner = _light_entry("Owner", "owner")
+    owner.data[CONF_LIGHTS][:] = ["light.taken"]
+    keeper = _light_entry("Keeper", "keeper")
+    keeper.data[CONF_LIGHTS][:] = ["light.lamp"]
+    hass.states.async_set("light.free", "off")
+    await setup_entries(hass, owner, keeper)
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    offered = _offered_candidates(result)
+    assert "light.free" in offered
+    assert not offered & {"light.bulb", "light.taken", "light.around", "light.lamp"}
+
+
+@pytest.mark.asyncio
 async def test_light_options_reject_own_keep_on_entities(
     hass: HomeAssistant,
 ) -> None:

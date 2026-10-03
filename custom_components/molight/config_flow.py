@@ -1634,6 +1634,9 @@ def _discovery_candidates(
     if domain == "light":
         for entity_id in _groups_with_virtual_lights(hass, list(candidates)):
             del candidates[entity_id]
+        for entity_id in list(candidates):
+            if _shared_lights(hass, [entity_id]):
+                del candidates[entity_id]
     return candidates
 
 
