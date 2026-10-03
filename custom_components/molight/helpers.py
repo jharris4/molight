@@ -321,6 +321,50 @@ def light_descendants(
     return found
 
 
+def lights_commanded(
+    hass: HomeAssistant, members: Sequence[str], lights: dict[str, ConfigEntry]
+) -> set[str]:
+    """Return the lights a virtual light with these members commands itself.
+
+    A light group stands for itself and the lights it contains; a virtual
+    light stands for itself alone, since it commands its own members.
+    """
+    found: set[str] = set()
+    pending = list(members)
+    while pending:
+        entity_id = pending.pop()
+        entity_id = renamed_to(hass, entity_id) or entity_id
+        if entity_id in found:
+            continue
+        found.add(entity_id)
+        if entity_id not in lights:
+            pending.extend(light_member_ids(hass, entity_id, lights))
+    return found
+
+
+def shared_lights(
+    hass: HomeAssistant, members: Sequence[str], *, own_entry_id: str | None = None
+) -> dict[str, str]:
+    """Return lights among these members another virtual light commands.
+
+    Maps each such light to that virtual light's entity id. Two virtual
+    lights commanding one light fight over it, so each light belongs to one;
+    a light under a wrapped virtual light is that light's, not the wrapper's.
+    """
+    lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
+    mine = lights_commanded(hass, members, lights)
+    shared: dict[str, str] = {}
+    for entity_id, entry in sorted(lights.items()):
+        if entry.entry_id == own_entry_id:
+            continue
+        theirs = lights_commanded(
+            hass, molight_config(entry).get(CONF_LIGHTS, []), lights
+        )
+        for light in sorted(mine & theirs):
+            shared.setdefault(light, entity_id)
+    return shared
+
+
 # A keep-on entity holds while it is "on", so only these domains can hold.
 HOLD_ENTITY_DOMAINS = [
     "alert",

@@ -167,6 +167,7 @@ from .helpers import (
     molight_config as _molight_cfg,
     molight_light_entries as _molight_light_entries,
     renamed_to,
+    shared_lights as _shared_lights,
 )
 from .remote import (
     CLICK_DOUBLE,
@@ -1736,6 +1737,18 @@ def _light_member_cycle_candidates(
     )
 
 
+def _shared_light_candidates(
+    hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
+) -> list[str]:
+    """Light entity ids that would add a light another virtual light commands."""
+    own = edited_entry.entry_id if edited_entry is not None else None
+    return sorted(
+        entity_id
+        for entity_id in _all_light_ids(hass)
+        if _shared_lights(hass, [entity_id], own_entry_id=own)
+    )
+
+
 def _new_light_in_members(
     hass: HomeAssistant, entity_id: str, members: Sequence[str]
 ) -> bool:
@@ -2115,6 +2128,8 @@ class MoLightConfigFlow(
             and _new_light_in_members(self.hass, candidate, flat[CONF_LIGHTS])
         ):
             return {CONF_LIGHTS: "light_member_cycle"}
+        if not errors and _shared_lights(self.hass, flat[CONF_LIGHTS]):
+            return {CONF_LIGHTS: "light_shared"}
         return errors
 
     async def _resolve_and_create(
@@ -3549,7 +3564,11 @@ class MoLightConfigFlow(
             {
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                    selector.EntitySelectorConfig(
+                        domain="light",
+                        exclude_entities=_shared_light_candidates(self.hass),
+                        multiple=True,
+                    )
                 ),
                 **_light_option_fields(self.hass, with_entity_id=True),
             }
@@ -3649,7 +3668,11 @@ class MoLightConfigFlow(
             {
                 vol.Required(CONF_NAME): str,
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="light", multiple=True)
+                    selector.EntitySelectorConfig(
+                        domain="light",
+                        exclude_entities=_shared_light_candidates(self.hass),
+                        multiple=True,
+                    )
                 ),
                 vol.Required(CONF_SCHEDULE_ENTITY): _schedule_entity_selector(
                     self.hass
@@ -3811,10 +3834,13 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 reason="reference_removed",
                 description_placeholders={"entity_id": removed},
             )
-        if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES and (
-            _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS])
-        ):
-            return self.async_abort(reason="light_member_cycle")
+        if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES:
+            if _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS]):
+                return self.async_abort(reason="light_member_cycle")
+            if _shared_lights(
+                self.hass, data[CONF_LIGHTS], own_entry_id=self._entry.entry_id
+            ):
+                return self.async_abort(reason="light_shared")
         name = data[CONF_NAME]
         if name != self._entry.title:
             self.hass.config_entries.async_update_entry(
@@ -4182,6 +4208,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self.hass, self._entry, flat[CONF_LIGHTS]
                 ):
                     errors[CONF_LIGHTS] = "light_member_cycle"
+                elif _shared_lights(
+                    self.hass, flat[CONF_LIGHTS], own_entry_id=self._entry.entry_id
+                ):
+                    errors[CONF_LIGHTS] = "light_shared"
             errors.update(
                 _validate_hold_entities(
                     self.hass, flat, self._hold_exclusions(), flat.get(CONF_LIGHTS, [])
@@ -4233,7 +4263,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     selector.EntitySelectorConfig(
                         domain="light",
                         exclude_entities=_picker_exclusions(
-                            _light_member_cycle_candidates(self.hass, self._entry),
+                            sorted(
+                                {
+                                    *_light_member_cycle_candidates(
+                                        self.hass, self._entry
+                                    ),
+                                    *_shared_light_candidates(self.hass, self._entry),
+                                }
+                            ),
                             cfg.get(CONF_LIGHTS),
                         ),
                         multiple=True,
@@ -4306,6 +4343,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 self.hass, self._entry, user_input[CONF_LIGHTS]
             ):
                 errors[CONF_LIGHTS] = "light_member_cycle"
+            elif _shared_lights(
+                self.hass, user_input[CONF_LIGHTS], own_entry_id=self._entry.entry_id
+            ):
+                errors[CONF_LIGHTS] = "light_shared"
             if not _schedule_entity_is_allowed(
                 self.hass,
                 user_input.get(CONF_SCHEDULE_ENTITY),
@@ -4326,7 +4367,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     selector.EntitySelectorConfig(
                         domain="light",
                         exclude_entities=_picker_exclusions(
-                            _light_member_cycle_candidates(self.hass, self._entry),
+                            sorted(
+                                {
+                                    *_light_member_cycle_candidates(
+                                        self.hass, self._entry
+                                    ),
+                                    *_shared_light_candidates(self.hass, self._entry),
+                                }
+                            ),
                             cfg.get(CONF_LIGHTS),
                         ),
                         multiple=True,

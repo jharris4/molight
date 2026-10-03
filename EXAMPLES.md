@@ -246,7 +246,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 ### Example 8: Hallway night light (Virtual Scheduled Light)
 
-Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviors; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below), or two virtual lights would fight over `light.hallway_real`. It's a schedule sensor, then the light's three forms in a row:
+Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviors; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below): a light belongs to one virtual light, and the form refuses `light.hallway_real` while the Hallway light still controls it. It's a schedule sensor, then the light's three forms in a row:
 
 **1. Virtual Schedule Sensor** (the "night" window)
 

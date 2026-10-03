@@ -1055,6 +1055,7 @@
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
       "reference_removed": "A sensor, schedule or light chosen here was deleted while this form was open. Clear it or choose another.",
       "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
+      "light_shared": "A light can be controlled by one Virtual Light only, counting a light group as the lights it contains, and another Virtual Light already controls one of these. To control it from here as well, add that Virtual Light instead.",
       "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or light group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
     },
@@ -1747,6 +1748,7 @@
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly or through another combined sensor.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly or through another combined schedule.",
       "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
+      "light_shared": "A light can be controlled by one Virtual Light only, counting a light group as the lights it contains, and another Virtual Light already controls one of these. To control it from here as well, add that Virtual Light instead.",
       "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or light group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
@@ -1793,6 +1795,7 @@
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
+      "light_shared": "Another Virtual Light was changed to control one of these lights while this form was open. Open Configure again.",
       "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again.",
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }

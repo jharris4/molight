@@ -286,3 +286,26 @@ async def test_outer_commands_still_match_as_echoes(hass: HomeAssistant) -> None
 
     assert hass.states.get(INNER).state == "off"
     assert _attrs(hass, OUTER)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_load_warns_about_a_light_two_virtual_lights_control(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The light that loads second names the other and the light they fight
+    over; at startup, when every entry has loaded first, each names the other."""
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(name="Room", lights=[REAL]),
+        make_light_entry(name="Other", lights=[REAL]),
+    )
+    await settle(hass)
+
+    warned = [
+        record.args
+        for record in caplog.records
+        if record.msg.startswith("%s and %s both control %s")
+    ]
+    assert warned == [("light.other", "light.room", REAL)]

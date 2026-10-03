@@ -5737,9 +5737,11 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
         config_entry=foreign_entry,
     )
 
-    for occupancy_ref, maintain_ref in (
-        ("binary_sensor.test_illuminance", loose.entity_id),
-        (foreign.entity_id, None),
+    for index, (occupancy_ref, maintain_ref) in enumerate(
+        (
+            ("binary_sensor.test_illuminance", loose.entity_id),
+            (foreign.entity_id, None),
+        )
     ):
         result = await _start_create(hass)
         result = await hass.config_entries.flow.async_configure(
@@ -5751,7 +5753,8 @@ async def test_light_flow_skips_timeout_check_for_non_occupancy_refs(
         user_input = {
             **EMPTY_LIGHT_CREATE_SECTIONS,
             CONF_NAME: f"Loose Light {occupancy_ref}",
-            CONF_LIGHTS: ["light.some_real"],
+            # Each light gets its own real light: one belongs to one virtual light.
+            CONF_LIGHTS: [f"light.some_real_{index}"],
             CONF_LIGHT_TIMEOUT: 1,
             SECTION_SENSORS: sensors,
         }
@@ -7232,14 +7235,16 @@ async def test_light_options_picker_excludes_member_cycles(
     await setup_entries(hass, hall, outer, outermost, shared, other)
 
     result = await hass.config_entries.options.async_init(hall.entry_id)
+    # The lights that include it, and the lights other virtual lights control.
     assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
         "light.hall",
         "light.outer",
         "light.outermost",
+        "light.shared",
     ]
-    # Virtual lights outside the cycle are still valid members, even when two
-    # of them reach the same light.
-    result = await _submit_light_options(hass, result, ["light.other", "light.shared"])
+    # A virtual light outside the cycle that no other light wraps is a valid
+    # member; the light it wraps is hidden, since it belongs to it alone.
+    result = await _submit_light_options(hass, result, ["light.other"])
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -7347,6 +7352,7 @@ async def test_light_options_reject_itself_renamed_after_form_opened(
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_warning_log  # two lights wrap Night: load names the fight
 async def test_scheduled_light_options_reject_member_cycle(
     hass: HomeAssistant,
 ) -> None:
@@ -7376,6 +7382,201 @@ async def test_scheduled_light_options_reject_member_cycle(
     )
     assert result["step_id"] == "scheduled_light"
     assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_create_picker_hides_lights_other_virtual_lights_control(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A light belongs to one virtual light: the picker hides one another
+    controls, a group containing it, and a virtual light another wraps."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("light.hall_real", "off")
+    hass.states.async_set("light.free", "off")
+    hass.states.async_set(
+        "light.group", "off", {"entity_id": ["light.hall_real", "light.free"]}
+    )
+    hall = _light_entry("Hall", "hall")
+    outer = _light_entry("Outer", "outer")
+    outer.data[CONF_LIGHTS][:] = ["light.hall"]
+    await setup_entries(hass, hall, outer)
+
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT
+            if scheduled
+            else ENTITY_TYPE_LIGHT
+        },
+    )
+
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
+        "light.group",
+        "light.hall",
+        "light.hall_real",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_create_refuses_a_light_wrapped_while_the_form_was_open(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A light another virtual light took while the form was open is refused."""
+    await _setup_night_schedule(hass)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT
+            if scheduled
+            else ENTITY_TYPE_LIGHT
+        },
+    )
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == []
+    await setup_entries(hass, _light_entry("Hall", "hall"))
+
+    if scheduled:
+        page = {
+            CONF_NAME: "Other",
+            CONF_LIGHTS: ["light.hall_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        }
+    else:
+        page = {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Other",
+            CONF_LIGHTS: ["light.hall_real"],
+            CONF_LIGHT_TIMEOUT: 60,
+        }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "members",
+    [["light.other_real"], ["light.group"], ["light.other", "light.other_real"]],
+    ids=["direct", "through_a_group", "beside_the_light_that_has_it"],
+)
+async def test_light_options_refuse_a_light_another_virtual_light_controls(
+    hass: HomeAssistant, members: list[str]
+) -> None:
+    """Directly, through a light group, or next to the virtual light that has
+    it; wrapping that virtual light alone is the way to control it from here."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("light.group", "off", {"entity_id": ["light.other_real"]})
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    # Other takes its light while Hall's form is open.
+    await setup_entries(hass, _light_entry("Other", "other"))
+
+    result = await _submit_light_options(hass, result, members)
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+
+    result = await _submit_light_options(hass, result, ["light.other"])
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_options_refuse_a_light_another_virtual_light_controls(
+    hass: HomeAssistant,
+) -> None:
+    """The scheduled light's member picker and submit apply the same rule."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("light.other_real", "off")
+    night = _scheduled_light_entry("Night", "night")
+    await setup_entries(hass, night, _light_entry("Other", "other"))
+
+    result = await hass.config_entries.options.async_init(night.entry_id)
+    assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
+        "light.night",
+        "light.other_real",
+    ]
+    await setup_entries(hass, _light_entry("Late", "late"))
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Night",
+            CONF_LIGHTS: ["light.late_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+        },
+    )
+    assert result["step_id"] == "scheduled_light"
+    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
+    hass: HomeAssistant, scheduled: bool
+) -> None:
+    """A light another light's save took behind a later page is refused."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    outer = _light_entry("Outer", "outer")
+    await setup_entries(hass, hall, outer)
+    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    if scheduled:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.free"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        assert result["step_id"] == "scheduled_light_outside"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], side
+        )
+        assert result["step_id"] == "scheduled_light_inside"
+    else:
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                **side,
+                CONF_NAME: "Hall",
+                CONF_LIGHTS: ["light.free"],
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            },
+        )
+        assert result["step_id"] == "light_selection"
+
+    # Outer takes the light while Hall's last page is open.
+    other = await hass.config_entries.options.async_init(outer.entry_id)
+    other = await hass.config_entries.options.async_configure(
+        other["flow_id"],
+        {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
+    )
+    assert other["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {**side, SECTION_STANDBY: {}}
+        if scheduled
+        else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "light_shared"
+    assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
 
 
 @pytest.mark.asyncio

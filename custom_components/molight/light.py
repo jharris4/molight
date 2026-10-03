@@ -392,6 +392,7 @@ from .helpers import (
     molight_light_entries,
     run_unless_renamed,
     same_entity,
+    shared_lights,
     suggested_entity_id,
 )
 
@@ -1287,6 +1288,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 )
             )
             self._drop_member_cycles()
+            self._warn_shared_members()
             self._warn_refused_holds()
             self._select_initial_settings()
             self._seed_state()
@@ -1329,6 +1331,19 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
         self._lights = [m for m in self._lights if m not in cyclic]
         return bool(cyclic)
+
+    @callback
+    def _warn_shared_members(self) -> None:
+        """Name lights another virtual light also controls: the two fight."""
+        shared = shared_lights(self.hass, self._lights, own_entry_id=self._entry_id)
+        for light, other in shared.items():
+            _LOGGER.warning(
+                "%s and %s both control %s, so they fight over it; give it to one "
+                "of them in Configure, or add the other light instead of it",
+                self.entity_id,
+                other,
+                light,
+            )
 
     @callback
     def _warn_refused_holds(self) -> None:
