@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commanding one light fight over it; to control a light from a second
   virtual light, add the virtual light that has it. Entries saved before
   the check keep working and are named in a warning at load.
+- The Virtual Light and Virtual Scheduled Light forms refuse a light group
+  that contains a virtual light, and their pickers and Discover lights hide
+  such groups. Through a group, what the virtual light does by itself, such
+  as its own timer turning it off, looked like a person's change to the
+  light controlling the group, which recorded a manual off. Add the group's
+  lights directly instead; a light saved with such a group keeps working as
+  before until its Configure form is saved.
 
 ### Fixed
 

@@ -1631,6 +1631,9 @@ def _discovery_candidates(
             or state.attributes.get("device_class") in device_classes
         ):
             candidates[state.entity_id] = state.name
+    if domain == "light":
+        for entity_id in _groups_with_virtual_lights(hass, list(candidates)):
+            del candidates[entity_id]
     return candidates
 
 
@@ -1746,6 +1749,38 @@ def _shared_light_candidates(
         entity_id
         for entity_id in _all_light_ids(hass)
         if _shared_lights(hass, [entity_id], own_entry_id=own)
+    )
+
+
+def _groups_with_virtual_lights(
+    hass: HomeAssistant, members: Sequence[str]
+) -> list[str]:
+    """Light groups among the members that contain a MoLight virtual light.
+
+    Through a group, the virtual light's own timer and sensors would pass for
+    a person at the wall, so its lights are listed directly instead.
+    """
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    return [
+        member
+        for member in members
+        if member not in lights
+        and any(
+            light in lights
+            for light in _light_descendants(hass, [member], lights) - {member}
+        )
+    ]
+
+
+def _member_picker_exclusions(
+    hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
+) -> list[str]:
+    """Lights a member picker hides: shared lights and groups with virtual lights."""
+    return sorted(
+        {
+            *_shared_light_candidates(hass, edited_entry),
+            *_groups_with_virtual_lights(hass, sorted(_all_light_ids(hass))),
+        }
     )
 
 
@@ -2162,6 +2197,8 @@ class MoLightConfigFlow(
             return {CONF_LIGHTS: "light_member_cycle"}
         if not errors and _shared_lights(self.hass, flat[CONF_LIGHTS]):
             return {CONF_LIGHTS: "light_shared"}
+        if not errors and _groups_with_virtual_lights(self.hass, flat[CONF_LIGHTS]):
+            return {CONF_LIGHTS: "light_group_virtual"}
         return errors
 
     async def _resolve_and_create(
@@ -3631,7 +3668,7 @@ class MoLightConfigFlow(
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="light",
-                        exclude_entities=_shared_light_candidates(self.hass),
+                        exclude_entities=_member_picker_exclusions(self.hass),
                         multiple=True,
                     )
                 ),
@@ -3735,7 +3772,7 @@ class MoLightConfigFlow(
                 vol.Required(CONF_LIGHTS): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="light",
-                        exclude_entities=_shared_light_candidates(self.hass),
+                        exclude_entities=_member_picker_exclusions(self.hass),
                         multiple=True,
                     )
                 ),
@@ -3910,6 +3947,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 self.hass, data[CONF_LIGHTS], own_entry_id=self._entry.entry_id
             ):
                 return self.async_abort(reason="light_shared")
+            if _groups_with_virtual_lights(self.hass, data[CONF_LIGHTS]):
+                return self.async_abort(reason="light_group_virtual")
             stored = self._cfg.get(CONF_LIGHTS, [])
             if wrapped := _new_wrapped_lights(
                 self.hass, data[CONF_LIGHTS], [*stored, *self._wrapped_confirmed]
@@ -4301,6 +4340,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self.hass, flat[CONF_LIGHTS], own_entry_id=self._entry.entry_id
                 ):
                     errors[CONF_LIGHTS] = "light_shared"
+                elif _groups_with_virtual_lights(self.hass, flat[CONF_LIGHTS]):
+                    errors[CONF_LIGHTS] = "light_group_virtual"
             errors.update(
                 _validate_hold_entities(
                     self.hass, flat, self._hold_exclusions(), flat.get(CONF_LIGHTS, [])
@@ -4357,7 +4398,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                                     *_light_member_cycle_candidates(
                                         self.hass, self._entry
                                     ),
-                                    *_shared_light_candidates(self.hass, self._entry),
+                                    *_member_picker_exclusions(self.hass, self._entry),
                                 }
                             ),
                             cfg.get(CONF_LIGHTS),
@@ -4436,6 +4477,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 self.hass, user_input[CONF_LIGHTS], own_entry_id=self._entry.entry_id
             ):
                 errors[CONF_LIGHTS] = "light_shared"
+            elif _groups_with_virtual_lights(self.hass, user_input[CONF_LIGHTS]):
+                errors[CONF_LIGHTS] = "light_group_virtual"
             if not _schedule_entity_is_allowed(
                 self.hass,
                 user_input.get(CONF_SCHEDULE_ENTITY),
@@ -4461,7 +4504,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                                     *_light_member_cycle_candidates(
                                         self.hass, self._entry
                                     ),
-                                    *_shared_light_candidates(self.hass, self._entry),
+                                    *_member_picker_exclusions(self.hass, self._entry),
                                 }
                             ),
                             cfg.get(CONF_LIGHTS),

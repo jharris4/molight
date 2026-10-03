@@ -7628,9 +7628,14 @@ async def _open_wrap_form(hass: HomeAssistant, form: str) -> dict:
 
 
 async def _submit_wrap_form(
-    hass: HomeAssistant, form: str, result: dict, lights: list[str]
+    hass: HomeAssistant,
+    form: str,
+    result: dict,
+    lights: list[str],
+    *,
+    first_page_only: bool = False,
 ) -> dict:
-    """Submit every page of a Den light form up to its save."""
+    """Submit every page of a Den light form up to its save, or just the first."""
     options = "options" in form
     manager = hass.config_entries.options if options else hass.config_entries.flow
     advanced = {} if options else {SECTION_ADVANCED: {}}
@@ -7644,6 +7649,8 @@ async def _submit_wrap_form(
         if options:
             shared[CONF_SCHEDULE_END_ACTION] = SCHEDULE_END_ACTION_KEEP
         result = await manager.async_configure(result["flow_id"], shared)
+        if first_page_only:
+            return result
         result = await manager.async_configure(
             result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
         )
@@ -7660,6 +7667,8 @@ async def _submit_wrap_form(
     if form.endswith("selection"):
         page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
     result = await manager.async_configure(result["flow_id"], page)
+    if first_page_only:
+        return result
     if form.endswith("selection"):
         assert result["step_id"] == "light_selection"
         result = await manager.async_configure(
@@ -7825,6 +7834,121 @@ async def test_wrapped_light_page_follows_a_light_changed_while_open(
             "scheduled_light" if form.startswith("scheduled") else "light"
         )
         assert result["errors"] == {"base": "reference_removed"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "form", ["create", "options", "scheduled_create", "scheduled_options"]
+)
+@pytest.mark.parametrize("nesting", ["group", "group_in_a_group"])
+async def test_light_forms_refuse_a_group_holding_a_virtual_light(
+    hass: HomeAssistant, form: str, nesting: str
+) -> None:
+    """Through a group, the virtual light's own timer would pass for a person,
+    so the form asks for the group's lights directly."""
+    await _setup_wrap_test(hass, form)
+    hass.states.async_set("light.lamp", "off")
+    hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
+    hass.states.async_set("light.upstairs", "off", {"entity_id": ["light.living"]})
+    group = "light.living" if nesting == "group" else "light.upstairs"
+
+    result = await _open_wrap_form(hass, form)
+    assert group not in _selector_config(result, CONF_LIGHTS)["exclude_entities"]
+    # The group takes in the virtual light while the form is open.
+    hass.states.async_set(
+        "light.living", "off", {"entity_id": ["light.lamp", "light.other"]}
+    )
+    result = await _submit_wrap_form(hass, form, result, [group], first_page_only=True)
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHTS: "light_group_virtual"}
+    excluded = _selector_config(result, CONF_LIGHTS)["exclude_entities"]
+    assert {"light.living", "light.upstairs"} <= set(excluded)
+    assert "light.lamp" not in excluded
+    assert "light.other" not in excluded
+
+    result = await _submit_wrap_form(hass, form, result, ["light.lamp", "light.other"])
+    result = await _pass_wrapped_notice(hass, result, options="options" in form)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", ["options_selection", "scheduled_options"])
+async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
+    hass: HomeAssistant, form: str
+) -> None:
+    """A group that came to hold a virtual light behind a later page is refused."""
+    await _setup_wrap_test(hass, form)
+    hass.states.async_set("light.lamp", "off")
+    hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
+    den = _entry_named(hass, "Den")
+    stored = molight_config(den)[CONF_LIGHTS]
+    result = await _open_wrap_form(hass, form)
+    manager = hass.config_entries.options
+    if form == "scheduled_options":
+        result = await manager.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "Den",
+                CONF_LIGHTS: ["light.living"],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
+            },
+        )
+        result = await manager.async_configure(
+            result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+        )
+        assert result["step_id"] == "scheduled_light_inside"
+        last_page = {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    else:
+        result = await manager.async_configure(
+            result["flow_id"],
+            {
+                **EMPTY_LIGHT_SECTIONS,
+                CONF_NAME: "Den",
+                CONF_LIGHTS: ["light.living"],
+                CONF_LIGHT_TIMEOUT: 60,
+                SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+            },
+        )
+        assert result["step_id"] == "light_selection"
+        last_page = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+
+    hass.states.async_set(
+        "light.living", "off", {"entity_id": ["light.lamp", "light.other"]}
+    )
+    result = await manager.async_configure(result["flow_id"], last_page)
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "light_group_virtual"
+    assert molight_config(den)[CONF_LIGHTS] == stored
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nesting", ["group", "group_in_a_group"])
+async def test_discovery_skips_a_group_holding_a_virtual_light(
+    hass: HomeAssistant, nesting: str
+) -> None:
+    """Discovery offers the group's lights, not the group."""
+    await setup_entries(hass, _light_entry("Other", "other"))
+    hass.states.async_set("light.lamp", "off")
+    hass.states.async_set("light.plain", "off", {"entity_id": ["light.lamp"]})
+    hass.states.async_set(
+        "light.living", "off", {"entity_id": ["light.lamp", "light.other"]}
+    )
+    if nesting == "group_in_a_group":
+        hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
+        hass.states.async_set(
+            "light.inner_group", "off", {"entity_id": ["light.other"]}
+        )
+        hass.states.async_set(
+            "light.upstairs", "off", {"entity_id": ["light.inner_group"]}
+        )
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    offered = _offered_candidates(result)
+    assert {"light.lamp", "light.plain"} <= offered
+    assert not offered & {"light.living", "light.upstairs", "light.inner_group"} - (
+        {"light.living"} if nesting == "group_in_a_group" else set()
+    )
 
 
 @pytest.mark.asyncio
