@@ -7944,7 +7944,8 @@ async def test_discovery_skips_a_group_holding_a_virtual_light(
         )
 
     result = await _reach_discovery_select(hass, "discover_light")
-    offered = _offered_candidates(result)
+    options = _selector_config(result, CONF_SELECTED_ENTITIES)["options"]
+    offered = {option["value"] for option in options}
     assert {"light.lamp", "light.plain"} <= offered
     assert not offered & {"light.living", "light.upstairs", "light.inner_group"} - (
         {"light.living"} if nesting == "group_in_a_group" else set()
@@ -7969,9 +7970,76 @@ async def test_discovery_skips_a_light_another_virtual_light_controls_through_a_
     await setup_entries(hass, owner, keeper)
 
     result = await _reach_discovery_select(hass, "discover_light")
-    offered = _offered_candidates(result)
+    options = _selector_config(result, CONF_SELECTED_ENTITIES)["options"]
+    offered = {option["value"] for option in options}
     assert "light.free" in offered
     assert not offered & {"light.bulb", "light.taken", "light.around", "light.lamp"}
+
+
+def _overlap_lights(hass: HomeAssistant) -> None:
+    """Bulb and Lamp, Kitchen around Bulb, Both around the two, and Porch
+    around a light that is no candidate."""
+    for entity_id, name, members in (
+        ("light.bulb", "Bulb", None),
+        ("light.lamp", "Lamp", None),
+        ("light.kitchen", "Kitchen", ["light.bulb"]),
+        ("light.both", "Both", ["light.bulb", "light.lamp"]),
+        ("light.porch", "Porch", ["light.not_here"]),
+    ):
+        attrs = {"friendly_name": name}
+        if members:
+            attrs["entity_id"] = members
+        hass.states.async_set(entity_id, "off", attrs)
+
+
+@pytest.mark.asyncio
+async def test_discovery_preselects_no_two_picks_that_share_a_light(
+    hass: HomeAssistant,
+) -> None:
+    """Every candidate is offered, but a group whose lights are ticked is not."""
+    _overlap_lights(hass)
+
+    result = await _reach_discovery_select(hass, "discover_light")
+    options = _selector_config(result, CONF_SELECTED_ENTITIES)["options"]
+    assert {o["value"] for o in options} == {
+        "light.bulb",
+        "light.lamp",
+        "light.kitchen",
+        "light.both",
+        "light.porch",
+    }
+    assert _offered_candidates(result) == {"light.bulb", "light.lamp", "light.porch"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("picks", "names"),
+    [
+        (["light.bulb", "light.kitchen"], {"first": "Bulb", "second": "Kitchen"}),
+        (["light.kitchen", "light.both"], {"first": "Kitchen", "second": "Both"}),
+    ],
+    ids=["a_light_and_its_group", "two_groups_sharing_a_light"],
+)
+async def test_discovery_refuses_two_picks_that_share_a_light(
+    hass: HomeAssistant, picks: list[str], names: dict[str, str]
+) -> None:
+    """Each pick becomes its own virtual light, and two would fight over the
+    shared light, so the checklist names them and keeps the ticks."""
+    _overlap_lights(hass)
+    result = await _reach_discovery_select(hass, "discover_light")
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: picks}
+    )
+    assert result["step_id"] == "discover_light_select"
+    assert result["errors"] == {"base": "discovery_picks_overlap"}
+    assert result["description_placeholders"] == names
+    assert _offered_candidates(result) == set(picks)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: picks[1:]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
 
 
 @pytest.mark.asyncio

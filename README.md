@@ -81,7 +81,7 @@ The three **Discover** actions scan your existing entities and create a virtual 
 
 Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
 
-The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new.
+The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. Each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are refused; a light group whose lights are already ticked starts unticked.
 
 An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), with a target of your choice:
 

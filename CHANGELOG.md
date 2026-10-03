@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   light controlling the group, which recorded a manual off. Add the group's
   lights directly instead; a light saved with such a group keeps working as
   before until its Configure form is saved.
+- Discover lights refuses two picks that control the same light, such as a
+  light and a light group that contains it, and names them. Each pick
+  becomes its own virtual light, and the two fought over the shared light.
+  A light group whose lights are already ticked now starts unticked.
 
 ### Fixed
 

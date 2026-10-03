@@ -1035,6 +1035,7 @@
       "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two settings profiles has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
+      "discovery_picks_overlap": "{first} and {second} control the same light, and each pick gets its own virtual light, so the two would fight over it. Pick only one of them.",
       "no_lights_selected": "Select at least one light to convert.",
       "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the auto-on color mode to choose which applies.",
       "effect_color_conflict": "Set only one of the effect color temperature and color, or use the effect color mode to choose which applies.",

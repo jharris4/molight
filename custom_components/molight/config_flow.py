@@ -158,6 +158,7 @@ from .helpers import (
     MEMBER_LIGHT_TYPES as _MEMBER_LIGHT_TYPES,
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
+    lights_commanded as _lights_commanded,
     lights_lit_with as _lights_lit_with,
     lights_support_brightness,
     lights_support_color,
@@ -1775,6 +1776,34 @@ def _groups_with_virtual_lights(
     ]
 
 
+def _overlapping_picks(
+    hass: HomeAssistant, picks: Sequence[str]
+) -> tuple[str, str] | None:
+    """Two picks that would each command one light, as separate virtual lights."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    owners: dict[str, str] = {}
+    for pick in picks:
+        commanded = _lights_commanded(hass, [pick], lights)
+        for light in commanded:
+            if (other := owners.get(light)) is not None:
+                return other, pick
+        owners.update(dict.fromkeys(commanded, pick))
+    return None
+
+
+def _disjoint_picks(hass: HomeAssistant, candidates: Sequence[str]) -> list[str]:
+    """Candidates to preselect: lights first, then groups that overlap none of them."""
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    commanded = {c: _lights_commanded(hass, [c], lights) for c in candidates}
+    picks: set[str] = set()
+    taken: set[str] = set()
+    for candidate in sorted(candidates, key=lambda c: len(commanded[c])):
+        if taken.isdisjoint(commanded[candidate]):
+            picks.add(candidate)
+            taken |= commanded[candidate]
+    return [c for c in candidates if c in picks]
+
+
 def _member_picker_exclusions(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry | None = None
 ) -> list[str]:
@@ -2444,10 +2473,20 @@ class MoLightConfigFlow(
         """
         candidates = self._discovery["candidates"]
 
+        is_light = self._discovery["scan"][0] == "light"
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
         if user_input is not None:
             selected = user_input.get(CONF_SELECTED_ENTITIES, [])
-            if selected:
+            if is_light and (overlap := _overlapping_picks(self.hass, selected)):
+                errors["base"] = "discovery_picks_overlap"
+                placeholders = {
+                    key: candidates.get(entity_id, entity_id)
+                    for key, entity_id in zip(("first", "second"), overlap, strict=True)
+                }
+            elif not selected:
+                errors["base"] = "no_entities_selected"
+            else:
                 self._discovery.update(
                     {
                         "selected": selected,
@@ -2464,15 +2503,17 @@ class MoLightConfigFlow(
                     }
                 )
                 return await defaults_step()
-            errors["base"] = "no_entities_selected"
 
         options = [
             selector.SelectOptionDict(value=eid, label=name)
             for eid, name in sorted(candidates.items(), key=lambda kv: kv[1].lower())
         ]
-        preselected = (
-            list(candidates) if self._discovery.get("preselect_all", True) else []
-        )
+        if not self._discovery.get("preselect_all", True):
+            preselected = []
+        elif is_light:
+            preselected = _disjoint_picks(self.hass, list(candidates))
+        else:
+            preselected = list(candidates)
         return self.async_show_form(
             step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(
@@ -2506,6 +2547,7 @@ class MoLightConfigFlow(
                 user_input or {CONF_SELECTED_ENTITIES: preselected},
             ),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def _finish_discovery(
