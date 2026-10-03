@@ -116,7 +116,9 @@ class FadingLight(RealLight):
     A fade publishes where it has got to at each of steps (fractions of its
     length), then where it ends. With hs it shows a color and blends that
     too; with kelvin it shows a color temperature only, within KELVINS. Every
-    report comes latency seconds late.
+    report comes latency seconds late. With power_first, a fade in from off
+    first reports on at the level and color the light remembered, as a bulb
+    that reports power before it has started to brighten.
     """
 
     _attr_supported_features = LightEntityFeature.TRANSITION
@@ -130,12 +132,14 @@ class FadingLight(RealLight):
         latency: float = 0,
         hs: tuple[float, float] | None = None,
         kelvin: int | None = None,
+        power_first: bool = False,
         **kwargs: Any,
     ):
         """Create the light."""
         super().__init__(object_id, **kwargs)
         self._steps = steps
         self._latency = latency
+        self._power_first = power_first
         self._reports: list[CALLBACK_TYPE] = []
         if hs is not None:
             self._attr_color_mode = ColorMode.HS
@@ -182,6 +186,14 @@ class FadingLight(RealLight):
         rest, start_hs = self._attr_brightness, self._attr_hs_color
         start = rest if self._attr_is_on else 0
         start_kelvin = self._attr_color_temp_kelvin
+        if self._power_first and length and brightness and not start:
+            remembered = partial(self._report, rest, start_hs, start_kelvin, on=True)
+            if self._latency:
+                self._reports.append(
+                    async_call_later(self.hass, self._latency, remembered)
+                )
+            else:
+                remembered(None)
         for fraction in (*self._steps, 1) if length else (1,):
             level = round(start + (brightness - start) * fraction)
             color = hs

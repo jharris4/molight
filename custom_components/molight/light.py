@@ -643,13 +643,26 @@ class _EchoExpectation:
     overtaken: bool = False
     # A command to only some members leaves what it did not name as reported.
     mirror: bool = True
+    # Age of the member's first report after off, while a command with a fade
+    # settled: a bulb that reports power first shows the level and color it
+    # remembered, and its fade runs on from that report.
+    came_on: float | None = None
+    # Where a command that named no level ends: what the member came on at.
+    remembered_brightness: int | None = None
+
+    @property
+    def target_brightness(self) -> int | None:
+        """The level the member should end at, if one is known."""
+        if self.brightness is not None:
+            return self.brightness
+        return self.remembered_brightness
 
     def moved(self, old_state: State | None, new_state: State) -> bool:
         """Whether a report changed anything this command asked for."""
         if old_state is None or old_state.state != new_state.state:
             return True
         old, new = old_state.attributes, new_state.attributes
-        if (self.brightness is not None or not self.on) and (
+        if (self.target_brightness is not None or not self.on) and (
             old.get(ATTR_BRIGHTNESS) != new.get(ATTR_BRIGHTNESS)
         ):
             return True
@@ -658,12 +671,23 @@ class _EchoExpectation:
         )
 
     def judge(
-        self, old_state: State | None, new_state: State, *, settling: bool
+        self,
+        old_state: State | None,
+        new_state: State,
+        *,
+        age: float,
+        settling: bool,
     ) -> str:
         """Return "match", "pending" (echo still arriving), or "contradiction".
 
         While the command is settling a partial reply is "pending"; after that
-        only a full match is still our echo.
+        only a full match is still our echo. When the command carried a fade,
+        a member's first report after off settles nothing, and is no anchor
+        for the report after it while the fade runs on from it: a bulb that
+        reports power first shows what it remembered, not where its fade is,
+        so a level at the target may still be followed by steps up from
+        dark. Once the fade has run its length, the report is judged against
+        it like any other.
         """
         attrs = new_state.attributes
         powered = new_state.state == "on"
@@ -684,21 +708,25 @@ class _EchoExpectation:
         # yet): only power contradicts an on command; brightness is judged below.
         # Before the member was on we cannot judge its attributes: a bulb that
         # reports power first still carries its previous brightness and color.
-        settled = True
-        if self.brightness is not None:
-            new_b = attrs.get(ATTR_BRIGHTNESS)
+        anchored = was_on and not (
+            self.came_on is not None and age <= self.came_on + self.transition
+        )
+        self.came_on = age if self.transition and settling and not was_on else None
+        settled = self.came_on is None
+        new_b = attrs.get(ATTR_BRIGHTNESS)
+        if self.came_on is not None and self.brightness is None and new_b:
+            self.remembered_brightness = new_b
+        if (target := self.target_brightness) is not None:
             if not new_b:
                 # A power-only reply shows no level: while settling the level
                 # may still be coming (two-part repliers), so keep waiting;
                 # late, this is an on/off-only member's complete reply.
                 if settling:
                     settled = False
-            elif abs(new_b - self.brightness) > ECHO_BRIGHTNESS_TOLERANCE:
-                old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
-                if (
-                    was_on
-                    and old_b is not None
-                    and not (new_b == old_b or _toward(old_b, new_b, self.brightness))
+            elif abs(new_b - target) > ECHO_BRIGHTNESS_TOLERANCE:
+                old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if anchored else None
+                if old_b is not None and not (
+                    new_b == old_b or _toward(old_b, new_b, target)
                 ):
                     return "contradiction"
                 # Without an old level there is no direction to judge: a
@@ -713,7 +741,7 @@ class _EchoExpectation:
                     settled = False
             elif not _colors_close(new_color, self.color):
                 if (
-                    was_on
+                    anchored
                     and (old_color := _state_color(old_state)) is not None
                     and new_color != old_color
                     and not _color_toward(old_color, new_color, self.color)
@@ -2729,23 +2757,24 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _member_expectation(
         self, entity_id: str, expectation: _EchoExpectation
     ) -> _EchoExpectation:
-        """Expect a color the way this member can show it.
+        """Expect a color the way this member can show it, in a copy of its own.
 
         The virtual light offers the union of its members' ranges; a member
         clamps a kelvin outside its own and reports the clamped value. For a
         member with a color temperature but no color, Home Assistant turns a
-        color into the nearest color temperature.
+        color into the nearest color temperature. Each member's copy keeps
+        track of that member's replies alone.
         """
         color = expectation.color
         state = self.hass.states.get(entity_id)
         if color is None or state is None:
-            return expectation
+            return replace(expectation)
         if color[0] is ColorMode.COLOR_TEMP:
             kelvin = color[1]
         else:
             modes = set(state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) or ())
             if ColorMode.COLOR_TEMP not in modes or modes & _HS_CAPABLE_MODES:
-                return expectation
+                return replace(expectation)
             kelvin = color_util.color_xy_to_temperature(
                 *color_util.color_hs_to_xy(*color[1])
             )
@@ -2753,8 +2782,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             kelvin = max(kelvin, low)
         if high := state.attributes.get(ATTR_MAX_COLOR_TEMP_KELVIN):
             kelvin = min(kelvin, high)
-        if color == (ColorMode.COLOR_TEMP, kelvin):
-            return expectation
         return replace(expectation, color=(ColorMode.COLOR_TEMP, kelvin))
 
     def _is_lit(self) -> bool:
@@ -2818,6 +2845,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         waiting: list[_EchoExpectation] = []
         contradicted: list[_EchoExpectation] = []
         matched: _EchoExpectation | None = None
+        # A first report after off, answering a fade: mirrored, not settled.
+        lit: _EchoExpectation | None = None
         pending = False
         for expectation in reversed(self._echo_expectations.get(entity_id, ())):
             age = now - expectation.issued
@@ -2836,12 +2865,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 if not fade_step:
                     waiting.append(expectation)
                     continue
-            verdict = expectation.judge(old_state, new_state, settling=settling)
+            verdict = expectation.judge(
+                old_state, new_state, age=age, settling=settling
+            )
             if verdict == "match":
                 matched = expectation
                 break  # answered, and with it every older command
             if verdict == "pending":
                 pending = True
+                if expectation.came_on is not None and lit is None:
+                    lit = expectation
                 waiting.append(expectation)
             else:
                 contradicted.append(expectation)
@@ -2855,6 +2888,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._echo_expectations.pop(entity_id, None)
         if matched is not None:
             self._mirror_plain_echo(matched, waiting)
+        elif lit is not None:
+            others = [expectation for expectation in waiting if expectation is not lit]
+            self._mirror_plain_echo(lit, others)
         return matched is not None or pending
 
     def _mirror_plain_echo(

@@ -260,11 +260,9 @@ class TestbedLight(TestbedEntity, LightEntity):
         due = latency
         fade = self._fade_steps(start, steps) if steps else []
         if piecewise:
-            power: dict[str, Any] = {"state": "on"}
-            if fade and start.get(ATTR_BRIGHTNESS) == 0:
-                # Fading in from dark: on, with no level to show yet.
-                power["attributes"] = {ATTR_BRIGHTNESS: 0}
-            reports.append((due, power))
+            # Power first, at the level and color last reported: a bulb fading
+            # in from dark still shows what it remembered.
+            reports.append((due, {"state": "on"}))
             due += REPORT_STEP_GAP
         for index, attributes in enumerate(fade, 1):
             reports.append(

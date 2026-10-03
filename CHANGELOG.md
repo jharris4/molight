@@ -80,6 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pre-warning brightness. A fade to off of any length that reports dimmer
   levels on its way no longer turns the virtual light back on and then records
   a manual off.
+- A real light that reports power first at the brightness it remembered,
+  then brightens from dark in steps, no longer has its steps taken for a dim
+  at the wall when the turn-on carried a fade. The first step restarted the
+  timeout, lost the false-detection quick off, and dropped a turn-on still
+  waiting for its select call. The same goes for a remembered color followed
+  by color steps, and for an automatic turn-on with a fade but no brightness,
+  which ends at the level the light came on at. A turn-on with no fade is
+  judged as before, and once the fade has run its length from the light's
+  first report, a lower level is again a dim at the wall.
 - With color lights and color-temperature-only lights in one virtual light,
   a slow reply from the latter to a color is no longer taken for a change at
   the wall. Home Assistant sends such a light the nearest color temperature,

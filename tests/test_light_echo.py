@@ -38,10 +38,12 @@ from custom_components.molight.const import (
     CONF_WARN_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
+    SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
+    STATE_SCHEDULED,
     STATE_STANDBY,
     STATE_WARN,
 )
@@ -2341,6 +2343,360 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
     assert list(_stamps(hass)) == ["last_color_change_physical"]
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == PURPLE
+
+
+# ---------------------------------------------------------------------------
+# A bulb that reports power first at the level it remembered
+#
+# Such a bulb says it is on at the level it was last on at, then brightens
+# from dark in steps. When the turn-on carried a fade, that first report is
+# neither the command's answer nor the anchor for the step after it, for the
+# fade's length from that report; after that, or when the turn-on carried no
+# fade, a lower level is a dim at the wall as before.
+# ---------------------------------------------------------------------------
+
+REMEMBERED = [204, 100]  # at the 80% target the tests send, and off it
+STEPS = (0.25, 0.5, 0.75)
+OCC = "binary_sensor.occ"
+
+
+async def _remembering_light(
+    hass: HomeAssistant, entry: MockConfigEntry, *, remembered: int = 204, **member
+) -> FadingLight:
+    """Set up the light over an off member that remembers a level."""
+    light = FadingLight(
+        "real_1", brightness=remembered, power_first=True, **{"steps": STEPS, **member}
+    )
+    await add_real(hass, light)
+    await setup_entries(hass, entry)
+    return light
+
+
+async def _occupied(hass: HomeAssistant) -> None:
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+
+def _levels(seen: list[tuple[str, int | None]]) -> set[int | None]:
+    return {brightness for _, brightness in seen}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("remembered", REMEMBERED)
+async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int, remembered: int
+) -> None:
+    """Power first at the remembered level, then steps up from dark."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(occupancy=OCC, auto_on_brightness=80, auto_on_transition=fade),
+        remembered=remembered,
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    await _occupied(hass)
+    assert member.brightness == remembered  # the power-first report
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
+    assert _levels(seen) == {204}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("remembered", REMEMBERED)
+async def test_manual_fade_power_first_at_remembered_level_is_not_a_dim(
+    hass: HomeAssistant, freezer, remembered: int
+) -> None:
+    """A caller's fade to a level, answered power first at the old one."""
+    member = await _remembering_light(hass, make_light_entry(), remembered=remembered)
+    seen = _reports_of(hass, INSTANT)
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": INSTANT, "brightness": 204, "transition": 4},
+    )
+    await settle(hass)
+    await _run(hass, freezer, 5)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
+    assert _levels(seen) == {204}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("remembered", [51, 204])
+async def test_standby_power_first_at_remembered_level_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int, remembered: int
+) -> None:
+    """Coming on at standby when the window starts, answered power first."""
+    schedule = "binary_sensor.settings_schedule"
+    hass.states.async_set(schedule, "off")
+    member = await _remembering_light(
+        hass,
+        make_scheduled_light_entry(
+            name="Matrix Light",
+            inside={
+                CONF_LIGHT_TIMEOUT: 60,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_AUTO_ON_TRANSITION: fade,
+            },
+        ),
+        remembered=remembered,
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    hass.states.async_set(schedule, "on")
+    await settle(hass)
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 51
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
+    assert _levels(seen) == {51}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("remembered", REMEMBERED)
+async def test_follow_window_start_power_first_at_remembered_level_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int, remembered: int
+) -> None:
+    """A follow window lighting the room, answered power first."""
+    schedule = "binary_sensor.sched"
+    hass.states.async_set(schedule, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(
+            schedule=schedule,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            auto_on_brightness=80,
+            auto_on_transition=fade,
+        ),
+        remembered=remembered,
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    hass.states.async_set(schedule, "on")
+    await settle(hass)
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_SCHEDULED
+    assert _levels(seen) == {204}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+@pytest.mark.parametrize("level", [200, 51])
+async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int, level: int
+) -> None:
+    """The warn stage after a blink-off effect relights the member from off,
+    which answers power first at the level the effect took away."""
+    member = FadingLight(
+        "real_1", on=True, brightness=level, power_first=True, steps=STEPS
+    )
+    await add_real(hass, member)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            effect_timeout=30,
+            effect_brightness=0,
+            warn_timeout=30,
+            warn_brightness=20,
+            warn_transition=fade,
+        ),
+    )
+    await _run(hass, freezer, 61)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_EFFECT
+    assert not member.is_on
+    seen = _reports_of(hass, INSTANT)
+
+    await _run(hass, freezer, 30)
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 51
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
+    assert _levels(seen) == {51}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_auto_on_power_first_at_remembered_color_is_not_a_recolor(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """Power first at the remembered level and color, then steps of both."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            auto_on_brightness=80,
+            auto_on_rgb_color=[0, 255, 255],
+            auto_on_transition=fade,
+        ),
+        hs=RED,
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    await _occupied(hass)
+    assert member.hs_color == RED  # the power-first report
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 204
+    assert member.hs_color == CYAN
+    assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == CYAN
+    assert _levels(seen) == {204}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("virtual_light_behavior_variant")
+@pytest.mark.parametrize("fade", FADES)
+async def test_auto_on_without_a_level_power_first_then_steps_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int
+) -> None:
+    """With no auto-on brightness, the member's remembered level is where
+    its fade ends, and the one the virtual light reports."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass, make_light_entry(occupancy=OCC, auto_on_transition=fade)
+    )
+    seen = _reports_of(hass, INSTANT)
+
+    await _occupied(hass)
+    assert _attrs_of(hass, INSTANT)["brightness"] == 204
+    await _run(hass, freezer, fade + 1)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["brightness"] == 204
+    assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
+    assert not _levels(seen) & {51, 102, 153}
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+async def test_fade_runs_from_the_power_first_report(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A slow bulb's first step lands after the fade's length from the
+    command, but within it from its own power-first report."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(occupancy=OCC, auto_on_brightness=80, auto_on_transition=2),
+        latency=2,
+        steps=(0.5,),
+    )
+    await _occupied(hass)
+    await _run(hass, freezer, 2)
+    assert member.brightness == 204  # the power-first report, 2 s late
+
+    await _run(hass, freezer, 1)
+    assert member.brightness == 102  # the step, 3 s after the command
+    await _run(hass, freezer, 1)
+
+    assert member.brightness == 204
+    assert _attrs_of(hass, INSTANT)["brightness"] == 204
+    assert _stamps(hass) == {}
+
+
+@pytest.mark.asyncio
+async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A bulb answering power first at the target and nothing more: a lower
+    level once the fade has run its length is a person's."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(occupancy=OCC, auto_on_brightness=80, auto_on_transition=4),
+        steps=(),
+    )
+    await _occupied(hass)
+    await _run(hass, freezer, 5)
+    assert member.brightness == 204
+    assert _stamps(hass) == {}
+
+    member.wall(brightness=100)
+    await settle(hass)
+
+    assert list(_stamps(hass)) == ["last_brightness_change_physical"]
+    assert _attrs_of(hass, INSTANT)["brightness"] == 100
+
+
+@pytest.mark.asyncio
+async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Only the report after the power-first one goes unjudged: a level that
+    backs away from the step before it is a person's, fade or no fade."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(occupancy=OCC, auto_on_brightness=80, auto_on_transition=4),
+    )
+    await _occupied(hass)
+    await _run(hass, freezer, 1)
+    assert member.brightness == 51  # the first step
+    assert _stamps(hass) == {}
+
+    member.wall(brightness=30)
+    await settle(hass)
+
+    assert list(_stamps(hass)) == ["last_brightness_change_physical"]
+    assert _attrs_of(hass, INSTANT)["brightness"] == 30
+
+
+@pytest.mark.asyncio
+async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An off during the fade contradicts the turn-on whatever came first."""
+    hass.states.async_set(OCC, "off")
+    member = await _remembering_light(
+        hass,
+        make_light_entry(occupancy=OCC, auto_on_brightness=80, auto_on_transition=4),
+    )
+    await _occupied(hass)
+    assert member.brightness == 204
+
+    member.wall(on=False)
+    await settle(hass)
+
+    assert hass.states.get(INSTANT).state == "off"
+    assert list(_stamps(hass)) == ["last_off_manual"]
+
+
+@pytest.mark.asyncio
+async def test_power_first_then_a_step_without_a_fade_is_a_dim(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A turn-on that carried no fade has no steps to expect: a lower level
+    after the first report is a dim at the wall, as before."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=204)
+    await _write(hass, "on", contexts[-1], brightness=204)
+
+    await _write(hass, "on", contexts[-1], brightness=51)
+
+    assert _attrs(hass)["last_brightness_change_physical"] is not None
+    assert _attrs(hass)["brightness"] == 51
 
 
 # ---------------------------------------------------------------------------
