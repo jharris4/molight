@@ -243,6 +243,8 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         self._last_clear_false: bool = False
         self._last_clear_unavailable: bool = False
         self._unavailable_unsub: CALLBACK_TYPE | None = None
+        # When the outage whose clear is pending began; kept through unload.
+        self._dropout: datetime | None = None
         # Whether the source is computed from this sensor, as a group can be.
         self._source_cycle = False
         # What the source is computed from, watched for coming to include it.
@@ -259,7 +261,8 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         # source leaves them behind. A save that predates the source record
         # is trusted.
         extra = await self.async_get_last_extra_data()
-        saved_source = extra.as_dict().get("source") if extra is not None else None
+        saved = extra.as_dict() if extra is not None else {}
+        saved_source = saved.get("source")
         same_source = saved_source is None or same_entity(
             self.hass, saved_source, self._source_sensor
         )
@@ -288,11 +291,15 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         )
         self.async_on_remove(self._cancel_unavailable_timer)
         self.async_on_remove(self._unwatch_inputs)
+        restored_on = same_source and last is not None and last.state == "on"
         self._seed_state(
-            restored_on=same_source and last is not None and last.state == "on"
+            restored_on=restored_on,
+            dropout=_parse_datetime(saved.get("dropout")) if restored_on else None,
         )
 
-    def _seed_state(self, *, restored_on: bool) -> None:
+    def _seed_state(
+        self, *, restored_on: bool, dropout: datetime | None = None
+    ) -> None:
         state = self.hass.states.get(self._source_sensor)
         if self._source_includes_self():
             # Nothing to follow, and no outage that ends by itself to carry.
@@ -303,12 +310,16 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             and self.hass.state is CoreState.running
         ):
             # Not at startup, where the source may just not have loaded yet.
-            # A source with no state at all was removed; that dropout
-            # advanced latest_occupied_time to the moment it happened.
+            # A saved outage is still the same one: another invalid report
+            # since is no recovery. A source with no state at all was removed;
+            # that dropout advanced latest_occupied_time to when it happened.
             self._resume_dropout(
-                state.last_changed
-                if state is not None
-                else self._latest_occupied_time or datetime.now(UTC)
+                dropout
+                or (
+                    state.last_changed
+                    if state is not None
+                    else self._latest_occupied_time or datetime.now(UTC)
+                )
             )
         elif state:
             self._attr_is_on = state.state == "on"
@@ -383,6 +394,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         if was_cyclic:
             # Usable again: read as when first seen.
             self._cancel_unavailable_timer()
+            self._dropout = None
             self._seed_state(restored_on=bool(self._attr_is_on))
         return was_cyclic
 
@@ -406,6 +418,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         if not _real_state_change(event):
             return
         self._cancel_unavailable_timer()
+        self._dropout = None
         if new_state.state == "on":
             # A recovery from unavailable while already occupied continues the
             # running cycle; restamping last_on_time here would make a later
@@ -465,6 +478,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             self._last_clear_false = False
             self._last_clear_unavailable = True
             return
+        self._dropout = dropout
         self._unavailable_unsub = async_call_later(
             self.hass, self._unavailable_timeout - elapsed, self._unavailable_expired
         )
@@ -483,6 +497,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         now = datetime.now(UTC)
         if self._latest_occupied_time is None or now > self._latest_occupied_time:
             self._latest_occupied_time = now
+        self._dropout = now
         self._unavailable_unsub = async_call_later(
             self.hass, self._unavailable_timeout, self._unavailable_expired
         )
@@ -491,6 +506,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
     @callback
     def _unavailable_expired(self, _now: datetime) -> None:
         self._unavailable_unsub = None
+        self._dropout = None
         self._attr_is_on = False
         self._last_clear_false = False
         self._last_clear_unavailable = True
@@ -510,8 +526,16 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save which source the saved anchor and classification belong to."""
-        return RestoredExtraData({"source": self._source_sensor})
+        """Save which source the saved anchor and classification belong to.
+
+        And when a running outage of it began.
+        """
+        return RestoredExtraData(
+            {
+                "source": self._source_sensor,
+                "dropout": self._dropout.isoformat() if self._dropout else None,
+            }
+        )
 
     @property
     def extra_state_attributes(self) -> dict:

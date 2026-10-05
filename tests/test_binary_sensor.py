@@ -656,6 +656,120 @@ async def test_occupancy_edit_during_dropout_keeps_the_clear_deadline(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "flap", [("unavailable", "unknown"), ("unknown", "unavailable")]
+)
+@pytest.mark.parametrize(
+    ("new_timeout", "clears_after"), [(60, 60), (90, 90), (45, 45), (35, 40)]
+)
+@pytest.mark.parametrize("via", ["edit", "reload"])
+async def test_occupancy_edit_during_a_dropout_flap_keeps_the_first_deadline(
+    hass: HomeAssistant,
+    freezer,
+    flap: tuple[str, str],
+    new_timeout: int,
+    clears_after: int,
+    via: str,
+) -> None:
+    """A second invalid report is no recovery: an edit after it still counts
+    the clear timeout, as edited, from the first dropout."""
+    entry = _dropout_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.motion_1", flap[0])
+    await settle(hass)
+    dropout = datetime.now(UTC)
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("binary_sensor.motion_1", flap[1])
+    await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+    if via == "edit":
+        await _edit_options(
+            hass, entry, **{CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: new_timeout}
+        )
+    else:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        clears_after = 60
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.dropout_occupancy")
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+    if clears_after > 40:
+        assert state.state == "on"
+        freezer.move_to(dropout + timedelta(seconds=clears_after - 1))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert hass.states.get("binary_sensor.dropout_occupancy").state == "on"
+        freezer.tick(timedelta(seconds=2))
+        async_fire_time_changed(hass)
+        await settle(hass)
+    state = hass.states.get("binary_sensor.dropout_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_unavailable"] is True
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_occupancy_new_dropout_after_a_recovery_gets_its_own_deadline(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A source that recovered and dropped out again starts a new outage,
+    and an edit keeps that one's deadline."""
+    entry = _dropout_entry()
+    await _occupied_then_dropped(hass, entry)
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    hass.states.async_set("binary_sensor.motion_1", "unknown")
+    await settle(hass)
+    dropout = datetime.now(UTC)
+    freezer.tick(timedelta(seconds=10))
+    await _edit_options(hass, entry, **{CONF_OCCUPANCY_TIMEOUT: 40})
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.dropout_occupancy")
+    assert state.state == "on"
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+    freezer.move_to(dropout + timedelta(seconds=59))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.dropout_occupancy").state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.dropout_occupancy").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_occupancy_dropout_during_a_reload_counts_from_its_report(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An outage that began while the sensor was not loaded has no saved
+    start: the source's own report dates it."""
+    entry = _dropout_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=30))
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    hass.states.async_set("binary_sensor.motion_1", "unavailable")
+    dropout = datetime.now(UTC)
+    freezer.tick(timedelta(seconds=5))
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.dropout_occupancy")
+    assert state.state == "on"
+    assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+    freezer.move_to(dropout + timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.dropout_occupancy").state == "off"
+
+
+@pytest.mark.asyncio
 async def test_occupancy_edit_after_source_removal_keeps_the_clear_deadline(
     hass: HomeAssistant, freezer
 ) -> None:
