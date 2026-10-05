@@ -1501,30 +1501,170 @@ async def test_combined_restored_on_not_carried_by_maintain_after_startup(
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
 
 
+class _LateRoom:
+    """A combined sensor whose maintain sensor's source has its own entry."""
+
+    combined = "binary_sensor.room"
+
+    def __init__(self) -> None:
+        self.presence_on = False
+        self.presence: RealBinary | None = None
+        self.motion = RealBinary("room_motion")
+        self.hardware: ConfigEntry | None = None
+        self.entries: list[MockConfigEntry] = []
+
+    def _make_presence(self) -> RealBinary:
+        self.presence = RealBinary("room_presence", on=self.presence_on)
+        return self.presence
+
+    async def setup(self, hass: HomeAssistant, *, maintain_first: bool = True) -> None:
+        await add_real(hass, self.motion)
+        self.hardware = await add_real_with_entry(hass, self._make_presence)
+
+        def occupancy(name: str, source: str) -> MockConfigEntry:
+            return MockConfigEntry(
+                domain=DOMAIN,
+                data={
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+                    CONF_NAME: name,
+                    CONF_OCCUPANCY_SENSOR: source,
+                    CONF_OCCUPANCY_TIMEOUT: 1,
+                    CONF_FALSE_DETECTION_GRACE: 0,
+                },
+            )
+
+        hold = occupancy("Room Hold", "binary_sensor.room_presence")
+        room = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+                CONF_NAME: "Room",
+                CONF_TRIGGER_SENSORS: ["binary_sensor.room_trigger"],
+                CONF_MAINTAIN_SENSORS: ["binary_sensor.room_hold"],
+            },
+        )
+        self.entries = [
+            occupancy("Room Trigger", self.motion.entity_id),
+            *([hold, room] if maintain_first else [room, hold]),
+        ]
+        await setup_entries(hass, *self.entries)
+
+    async def visit(self, hass: HomeAssistant, freezer) -> None:
+        """Trigger a visit that the maintain sensor then holds alone."""
+        self.motion.set(True)
+        self.presence.set(True)
+        self.presence_on = True
+        await settle(hass)
+        freezer.tick(timedelta(seconds=30))
+        self.motion.set(False)
+        await settle(hass)
+        assert hass.states.get(self.combined).state == "on"
+
+    async def load_presence(self, hass: HomeAssistant, on: bool) -> None:
+        self.presence_on = on
+        assert await hass.config_entries.async_setup(self.hardware.entry_id)
+        await settle(hass)
+
+    async def replace_presence(self, hass: HomeAssistant, freezer, on: bool) -> None:
+        """Disable the source's integration and bring it back reporting anew."""
+        await hass.config_entries.async_set_disabled_by(
+            self.hardware.entry_id, ConfigEntryDisabler.USER
+        )
+        await settle(hass)
+        freezer.tick(timedelta(seconds=30))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        self.presence_on = on
+        await hass.config_entries.async_set_disabled_by(self.hardware.entry_id, None)
+        await settle(hass)
+
+
 @pytest.mark.asyncio
-async def test_combined_restored_on_carried_by_maintain_with_unknown_start(
-    hass: HomeAssistant,
+@pytest.mark.parametrize("maintain_first", [True, False])
+@pytest.mark.parametrize("restarts", [1, 2])
+async def test_combined_restored_on_carried_by_a_late_loading_maintain_source(
+    hass: HomeAssistant, freezer, maintain_first: bool, restarts: int
 ) -> None:
-    """After startup, a maintain sensor reporting an unwitnessed start (a virtual
-    sensor whose source loaded late: last_on_time None) still carries; one that
-    saw its own start does not."""
-    mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
-    hass.states.async_set("binary_sensor.m2", "off")
-    entry = _raw_combined_entry()
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    """After startup, a maintain sensor whose own source loads late reports a
+    start it did not witness (last_on_time None) and still carries, also when
+    HA restarted again while it waited."""
+    room = _LateRoom()
+    await room.setup(hass, maintain_first=maintain_first)
+    await room.visit(hass, freezer)
+    assert await hass.config_entries.async_unload(room.hardware.entry_id)
+    await settle(hass)
+    for _ in range(restarts):
+        await restart_entries(hass, *room.entries, started=False)
+        await finish_startup(hass)
+        assert hass.states.get(room.combined).state == "off"
+        freezer.tick(timedelta(seconds=30))
 
-    hass.states.async_set(
-        "binary_sensor.m2", "on", {"last_on_time": "2026-07-02T21:00:00+00:00"}
-    )
-    await hass.async_block_till_done()
-    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+    await room.load_presence(hass, on=True)
+    hold = hass.states.get("binary_sensor.room_hold")
+    assert hold.state == "on"
+    assert hold.attributes["last_on_time"] is None
+    assert hass.states.get(room.combined).state == "on"
 
-    hass.states.async_set("binary_sensor.m2", "off")
-    hass.states.async_set("binary_sensor.m2", "on", {"last_on_time": None})
-    await hass.async_block_till_done()
-    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("maintain_first", [True, False])
+async def test_combined_late_maintain_source_loading_off_ends_the_wait(
+    hass: HomeAssistant, freezer, maintain_first: bool
+) -> None:
+    """A late source that loads clear settles the restored visit as over:
+    neither its next detection nor a later undated return can start one."""
+    room = _LateRoom()
+    await room.setup(hass, maintain_first=maintain_first)
+    await room.visit(hass, freezer)
+    assert await hass.config_entries.async_unload(room.hardware.entry_id)
+    await settle(hass)
+    await restart_entries(hass, *room.entries)
+
+    await room.load_presence(hass, on=False)
+    room.presence.set(True)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.room_hold").state == "on"
+    assert hass.states.get(room.combined).state == "off"
+    room.presence.set(False)
+    await settle(hass)
+
+    await room.replace_presence(hass, freezer, on=True)
+    hold = hass.states.get("binary_sensor.room_hold")
+    assert hold.state == "on"
+    assert hold.attributes["last_on_time"] is None
+    assert hass.states.get(room.combined).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ended_during", ["reload", "restart"])
+async def test_combined_visit_that_ended_cannot_be_carried_later(
+    hass: HomeAssistant, freezer, ended_during: str
+) -> None:
+    """A restored visit every constituent reported over is finished: a
+    maintain source coming back much later, undated, does not revive it."""
+    room = _LateRoom()
+    await room.setup(hass)
+    await room.visit(hass, freezer)
+    room_entry = room.entries[-1]
+    if ended_during == "reload":
+        assert await hass.config_entries.async_unload(room_entry.entry_id)
+        room.presence.set(False)
+        await settle(hass)
+        assert await hass.config_entries.async_setup(room_entry.entry_id)
+    else:
+        await restore_state.async_get(hass).async_dump_states()
+        room.presence.set(False)
+        await settle(hass)
+        await crash_entries(hass, *room.entries)
+    await settle(hass)
+    assert hass.states.get(room.combined).state == "off"
+    freezer.tick(timedelta(seconds=90))
+
+    await room.replace_presence(hass, freezer, on=True)
+    hold = hass.states.get("binary_sensor.room_hold")
+    assert hold.state == "on"
+    assert hold.attributes["last_on_time"] is None
+    assert hass.states.get(room.combined).state == "off"
 
 
 @pytest.mark.asyncio

@@ -121,6 +121,10 @@ _LOGGER = logging.getLogger(__name__)
 # from a reload of its entry before it counts as gone (seconds).
 _RELOAD_GRACE = 10
 
+# How long after an input loads a combined occupancy sensor waits for the
+# maintain sensor reading it to show the presence it loaded with (seconds).
+_LATE_SETTLE = 2
+
 
 def _real_state_change(event: Event[EventStateChangedData]) -> bool:
     """Return True when the event is an actual state transition.
@@ -597,6 +601,11 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         self._restored_carry = False
         self._startup_done = True
         self._unreported_maintain: set[str] = set()
+        # Maintain sensors that reported while an input of theirs had not:
+        # only these may still carry with a start they did not witness.
+        self._late_maintain: set[str] = set()
+        self._late_unsub: CALLBACK_TYPE | None = None
+        self._late_settle_unsub: CALLBACK_TYPE | None = None
         self._unsub_started: CALLBACK_TYPE | None = None
         # Constituents that were on when their entry unloaded, each with the
         # timer that ends its grace: they count as on until they report again.
@@ -667,6 +676,12 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._unreported_maintain = {
                 e for e in self._maintain_sensors if self._unreported(e)
             }
+            self._late_maintain = {
+                e
+                for e in set(self._maintain_sensors) - self._unreported_maintain
+                if self._unread_inputs(e)
+            }
+            self._watch_late_inputs()
             if not self._startup_done:
                 self._unsub_started = self.hass.bus.async_listen_once(
                     EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
@@ -709,6 +724,12 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         if self._unsub_started is not None:
             self._unsub_started()
             self._unsub_started = None
+        if self._late_unsub is not None:
+            self._late_unsub()
+            self._late_unsub = None
+        if self._late_settle_unsub is not None:
+            self._late_settle_unsub()
+            self._late_settle_unsub = None
         for cancel in self._reloading.values():
             cancel()
         self._reloading.clear()
@@ -720,6 +741,47 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
             and bool(state.attributes.get(ATTR_RESTORED))
         )
+
+    def _unread_inputs(self, entity_id: str) -> set[str]:
+        """Return what a sensor is computed from, at any depth, with no reading.
+
+        Its "off" is then provisional: presence it shows once that input
+        loads may be the restored visit.
+        """
+        return {
+            e
+            for e in sensor_dependencies(self.hass, [entity_id]) - {entity_id}
+            if (state := self.hass.states.get(e)) is None
+            or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        }
+
+    def _watch_late_inputs(self) -> None:
+        """Follow the inputs the late maintain sensors still wait for."""
+        if self._late_unsub is not None:
+            self._late_unsub()
+            self._late_unsub = None
+        inputs = set().union(*(self._unread_inputs(e) for e in self._late_maintain))
+        if inputs:
+            self._late_unsub = async_track_state_change_event(
+                self.hass, sorted(inputs), self._handle_late_input
+            )
+
+    @callback
+    def _handle_late_input(self, _event: Event[EventStateChangedData]) -> None:
+        # Judged once the sensor reading this input has had time to react.
+        if self._late_settle_unsub is None:
+            self._late_settle_unsub = async_call_later(
+                self.hass, _LATE_SETTLE, self._settle_late_maintain
+            )
+
+    @callback
+    def _settle_late_maintain(self, _now: datetime) -> None:
+        """Stop waiting for a maintain sensor whose inputs have all reported."""
+        self._late_settle_unsub = None
+        settled = {e for e in self._late_maintain if not self._unread_inputs(e)}
+        if settled:
+            self._late_maintain -= settled
+            self._watch_late_inputs()
 
     @callback
     def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
@@ -745,7 +807,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         new_state = event.data["new_state"]
         # A maintain sensor showing presence while startup is still under
         # way, on its first sighting after that, or with a start it did not
-        # witness (a virtual sensor whose source loaded late reports
+        # witness because its own source loaded late (it reports
         # last_on_time: None) carries a restored "on" across (see
         # _seed_state); any later report cannot start occupancy.
         unknown_start = (
@@ -759,9 +821,21 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             and (
                 not self._startup_done
                 or entity_id in self._unreported_maintain
-                or unknown_start
+                or (unknown_start and entity_id in self._late_maintain)
             )
         )
+        was_late = entity_id in self._late_maintain
+        self._late_maintain.discard(entity_id)
+        if (
+            entity_id in self._unreported_maintain
+            and self._restored_carry
+            and new_state.state != "on"
+            and self._unread_inputs(entity_id)
+        ):
+            # Its first report is an "off" its own source has yet to back.
+            self._late_maintain.add(entity_id)
+        if was_late or entity_id in self._late_maintain:
+            self._watch_late_inputs()
         self._unreported_maintain.discard(entity_id)
 
         if new_state.state != "on":
@@ -898,7 +972,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         wait for a maintain sensor to carry it: that wait is saved too.
         """
         carry = self._restored_carry and (
-            not self._startup_done or bool(self._unreported_maintain)
+            not self._startup_done
+            or bool(self._unreported_maintain)
+            or bool(self._late_maintain)
         )
         anchor = self._cycle_start_lot
         if carry:
