@@ -7796,13 +7796,16 @@ _HOLD_FINAL_PAGES = [
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("edited", [True, False], ids=["group_edited", "control"])
+@pytest.mark.parametrize(
+    "edited", ["member", "own_id", None], ids=["group_edited", "own_id", "control"]
+)
 @pytest.mark.parametrize("last_page", _HOLD_FINAL_PAGES)
 async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
-    hass: HomeAssistant, last_page: str, edited: bool
+    hass: HomeAssistant, last_page: str, edited: str | None
 ) -> None:
-    """A keep-on group that gains the light's own light behind a later page
-    would hold it on for good, so the final save sends the form back."""
+    """A keep-on group that gains the light's member, or the ID the light has
+    or will get, behind a later page would hold it on for good, so the final
+    save sends the form back."""
     await _setup_night_schedule(hass)
     member = "light.subject_real"
     hass.states.async_set(member, "off")
@@ -7888,8 +7891,16 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     )
 
     if edited:
+        # A new light whose ID is taken gets the next free one.
+        if last_page.endswith("collision"):
+            own_id = "light.subject_2"
+        elif last_page.startswith("discovery"):
+            own_id = f"{member}_2"
+        else:
+            own_id = "light.subject"
+        added = member if edited == "member" else own_id
         hass.states.async_set(
-            "light.keep", "off", {"entity_id": ["light.spare", member]}
+            "light.keep", "off", {"entity_id": ["light.spare", added]}
         )
     if last_page.endswith("selection"):
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
@@ -10471,6 +10482,75 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
         },
     )
     assert not result.get("errors")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("form", "taken"),
+    [
+        ("create", False),
+        ("create", True),
+        ("scheduled_create", False),
+        ("scheduled_create", True),
+        ("discovery", False),
+    ],
+    ids=[
+        "create",
+        "create_id_taken",
+        "scheduled_create",
+        "scheduled_create_id_taken",
+        "discovery",
+    ],
+)
+async def test_new_light_refuses_a_keep_on_group_naming_its_future_id(
+    hass: HomeAssistant, form: str, taken: bool
+) -> None:
+    """A group set up first, naming the ID the new light will get, is on
+    whenever the light is, including the suffixed ID a taken one leads to."""
+    hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _setup_night_schedule(hass)
+    if taken:
+        hass.states.async_set("light.subject", "off")
+    # Discovery names the light after its member, whose own ID is taken.
+    own_id = (
+        f"{SUBJECT_MEMBER}_2"
+        if form == "discovery"
+        else "light.subject_2"
+        if taken
+        else "light.subject"
+    )
+    await _generic_group(hass, "around", [own_id])
+    result = await _reach_light_settings_form(hass, form)
+    excluded = _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
+        "exclude_entities"
+    ]
+
+    if "group.around" in excluded:
+        # Named on the first page, the scheduled light's ID is known by now.
+        assert form == "scheduled_create"
+    else:
+        result = await _submit_subject_settings(
+            hass,
+            form,
+            result,
+            {
+                CONF_LIGHT_TIMEOUT: 300,
+                SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["group.around"]},
+            },
+        )
+        assert result["errors"] == {"base": "hold_entity_own"}
+
+    result = await _submit_subject_settings(
+        hass, form, result, {CONF_LIGHT_TIMEOUT: 300}
+    )
+    if taken:
+        assert result["step_id"] == "confirm_entity_id"
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "entity_id_proceed"}
+        )
+    assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+    await settle(hass)
+    assert er.async_get(hass).async_get(own_id).platform == DOMAIN
 
 
 @pytest.mark.asyncio

@@ -179,7 +179,7 @@ from .remote import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Sequence
+    from collections.abc import Awaitable, Callable, Iterable, Sequence
 
     from homeassistant.core import HomeAssistant
 
@@ -2241,6 +2241,28 @@ class MoLightConfigFlow(
             or self.hass.states.get(entity_id) is not None
         )
 
+    def _available_entity_id(self, entity_id: str, taken: Iterable[str] = ()) -> str:
+        """Return entity_id, or the suffixed one Home Assistant gives a new entity."""
+        taken = set(taken)
+        available, tries = entity_id, 1
+        while available in taken or self._entity_id_taken(available):
+            tries += 1
+            available = f"{entity_id}_{tries}"
+        return available
+
+    def _new_entity_id(
+        self, name: str, flat: dict[str, Any], entity_id_format: str
+    ) -> str | None:
+        """Return the ID a new entity will get, or None for an unusable entity_id."""
+        _, errors, _, candidate = self._resolve_entity_id(name, flat, entity_id_format)
+        return None if errors else self._available_entity_id(candidate)
+
+    def _new_light_ids(self, flat: dict[str, Any]) -> list[str]:
+        """Return the new light's own ID, which no keep-on entity may include."""
+        name = flat.get(CONF_NAME)
+        entity_id = name and self._new_entity_id(name, flat, LIGHT_ENTITY_ID_FORMAT)
+        return [entity_id] if entity_id else []
+
     def _resolve_entity_id(
         self, name: str, user_input: dict[str, Any], entity_id_format: str
     ) -> tuple[str | None, dict[str, str], bool, str]:
@@ -2392,7 +2414,9 @@ class MoLightConfigFlow(
         if create["entity_type"] == ENTITY_TYPE_SCHEDULED_LIGHT:
             return await self._finish_scheduled_light()
         # A sensor's timeout or a keep-on group may have changed meanwhile.
-        if not (errors := _stale_light_settings(self.hass, create["data"])[1]):
+        data = create["data"]
+        _, errors = _stale_light_settings(self.hass, data, self._new_light_ids(data))
+        if not errors:
             result, errors = await self._resolve_and_create(**create)
             if result is not None:
                 return result
@@ -2409,7 +2433,7 @@ class MoLightConfigFlow(
                 reason="reference_removed",
                 description_placeholders={"entity_id": removed},
             )
-        side, errors = _stale_light_settings(self.hass, data)
+        side, errors = _stale_light_settings(self.hass, data, self._new_light_ids(data))
         if errors:
             # A sensor's timeout or a keep-on group changed while the menu was open.
             if side is not None:
@@ -2639,6 +2663,21 @@ class MoLightConfigFlow(
             description_placeholders=placeholders,
         )
 
+    def _discovery_light_ids(self) -> list[str]:
+        """Return the IDs the selected lights' new Virtual Lights will get."""
+        disc = self._discovery
+        ids: list[str] = []
+        for entity_id in disc.get("selected", []):
+            base = disc["candidates"].get(entity_id, entity_id)
+            # Named or given the ID, each new light's ID comes from the affixed base.
+            composed = f"{disc['prefix']}{base}{disc['suffix']}"
+            ids.append(
+                self._available_entity_id(
+                    LIGHT_ENTITY_ID_FORMAT.format(slugify(composed)), ids
+                )
+            )
+        return ids
+
     async def _finish_discovery(
         self,
         payload: Callable[[str, str], dict[str, Any]],
@@ -2865,7 +2904,10 @@ class MoLightConfigFlow(
             errors.update(_validate_colors(flat))
             errors.update(
                 _validate_hold_entities(
-                    self.hass, flat, [], self._discovery.get("selected", [])
+                    self.hass,
+                    flat,
+                    self._discovery_light_ids(),
+                    self._discovery.get("selected", []),
                 )
             )
             # Each pick becomes its own single-light entry, so the capability
@@ -3804,7 +3846,12 @@ class MoLightConfigFlow(
                 errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_name(flat))
             errors.update(
-                _validate_hold_entities(self.hass, flat, [], flat.get(CONF_LIGHTS, []))
+                _validate_hold_entities(
+                    self.hass,
+                    flat,
+                    self._new_light_ids(flat),
+                    flat.get(CONF_LIGHTS, []),
+                )
             )
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
@@ -3884,6 +3931,9 @@ class MoLightConfigFlow(
                 errors := _stale_light_settings(
                     self.hass,
                     {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
+                    self._discovery_light_ids()
+                    if discovery
+                    else self._new_light_ids(flat),
                     members=self._discovery["selected"] if discovery else None,
                 )[1]
             ):
@@ -3998,6 +4048,10 @@ class MoLightConfigFlow(
             return self._scheduled_light_settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
         return None
 
+    def _hold_exclusions(self) -> list[str]:
+        """Return the new light's own ID, from the shared first form."""
+        return self._new_light_ids(self._scheduled_light_shared or {})
+
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
         """Create the entry after both settings mappings are complete."""
         shared = dict(self._scheduled_light_shared)
@@ -4011,7 +4065,7 @@ class MoLightConfigFlow(
                 return self._show_scheduled_light_side_form(
                     side, None, {"base": "reference_removed"}
                 )
-        side, errors = _stale_light_settings(self.hass, data)
+        side, errors = _stale_light_settings(self.hass, data, self._hold_exclusions())
         if errors:
             # A sensor's timeout or a keep-on group changed while a later page was open.
             return self._show_scheduled_light_side_form(side, None, errors)
