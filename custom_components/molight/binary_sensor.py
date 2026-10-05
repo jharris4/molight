@@ -571,8 +571,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
 
     False-detection classification: constituents that classify a clear as a
     false detection don't advance their latest_occupied_time, so a combined
-    cycle during which our own latest_occupied_time never advanced was made
-    up entirely of false (or stale) cycles, so count it and flag the clear.
+    cycle during which no constituent advanced its own was made up entirely
+    of false (or stale) cycles, so count it and flag the clear. Each one is
+    judged against its own history: the max can hide one's advance.
     """
 
     _attr_device_class = "occupancy"
@@ -588,13 +589,17 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         self._maintain_sensors: list[str] = cfg.get(CONF_MAINTAIN_SENSORS, [])
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
-        self._cycle_start_lot: datetime | None = None
+        # The latest_occupied_time each constituent was last seen with.
+        self._seen_lots: dict[str, datetime] = {}
+        # Constituents not yet seen: their first report is history.
+        self._no_baseline: set[str] = set()
+        # Whether a constituent showed genuine presence in the running cycle.
+        self._cycle_genuine = False
         # When the visit started, as its trigger dated it; None when unwitnessed.
         self._last_on_time: datetime | None = None
-        # The anchor saved with a restored "on": the running cycle keeps it,
-        # so a genuine detection it already contained is not forgotten.
-        self._saved_cycle = False
-        self._saved_cycle_start_lot: datetime | None = None
+        # The constituents a restored "on" was saved with, each with the
+        # latest_occupied_time it had shown, if any.
+        self._saved_lots: dict[str, datetime | None] | None = None
         self._false_count: int = 0
         self._last_clear_false: bool = False
         # A restored "on" that no constituent confirmed at seed time: a
@@ -638,9 +643,17 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         )
         if restored_on and last is not None:
             self._last_on_time = _parse_datetime(last.attributes.get("last_on_time"))
-        if restored_on and extra is not None:
-            self._saved_cycle = True
-            self._saved_cycle_start_lot = _parse_datetime(
+        if restored_on and "cycle_genuine" in saved:
+            # The running cycle keeps a genuine detection it already contained.
+            self._cycle_genuine = bool(saved["cycle_genuine"])
+            lots = saved.get("lots")
+            self._saved_lots = {
+                renamed_to(self.hass, entity_id) or entity_id: _parse_datetime(raw)
+                for entity_id, raw in (lots if isinstance(lots, dict) else {}).items()
+            }
+        elif restored_on and extra is not None:
+            # A save from before each constituent's history was recorded.
+            self._cycle_genuine = self._latest_occupied_time != _parse_datetime(
                 saved.get("cycle_start_latest_occupied_time")
             )
         all_sensors = list(
@@ -694,12 +707,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
                 self._unsub_started = self.hass.bus.async_listen_once(
                     EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
                 )
-        if self._attr_is_on:
-            self._cycle_start_lot = (
-                self._saved_cycle_start_lot
-                if self._saved_cycle
-                else self._latest_occupied_time
-            )
+        if not restored_on:
+            self._cycle_genuine = False
         self.async_write_ha_state()
 
     def _absorb_constituent_history(self) -> None:
@@ -707,17 +716,32 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
 
         A visit they saw before this sensor existed, or while it was not
         loaded, is history to measure the next cycle against, not a
-        detection made during it.
+        detection made during it. Only a constituent a restored running
+        cycle already had can have added to that cycle meanwhile.
         """
-        for entity_id in self._trigger_sensors + self._maintain_sensors:
-            state = self.hass.states.get(entity_id)
-            if state is None:
-                continue
-            lot = _parse_datetime(state.attributes.get("latest_occupied_time"))
-            if lot is not None and (
-                self._latest_occupied_time is None or lot > self._latest_occupied_time
+        saved = self._saved_lots or {}
+        for entity_id in dict.fromkeys(self._trigger_sensors + self._maintain_sensors):
+            if saved.get(entity_id) is not None:
+                self._seen_lots[entity_id] = saved[entity_id]
+            if self._unreported(entity_id):
+                if entity_id not in saved:
+                    self._no_baseline.add(entity_id)
+            elif (
+                self._note_history(entity_id, self.hass.states.get(entity_id))
+                and entity_id in saved
             ):
-                self._latest_occupied_time = lot
+                self._cycle_genuine = True
+
+    def _note_history(self, entity_id: str, state: State) -> bool:
+        """Record a constituent's latest_occupied_time; True when it advanced."""
+        lot = _parse_datetime(state.attributes.get("latest_occupied_time"))
+        seen = self._seen_lots.get(entity_id)
+        if lot is None or (seen is not None and lot <= seen):
+            return False
+        self._seen_lots[entity_id] = lot
+        if self._latest_occupied_time is None or lot > self._latest_occupied_time:
+            self._latest_occupied_time = lot
+        return True
 
     @callback
     def _on_startup_done(self, _event: Event) -> None:
@@ -794,8 +818,12 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
     @callback
     def _handle_occupancy_change(self, event: Event[EventStateChangedData]) -> None:
         entity_id = event.data["entity_id"]
+        old_state = event.data.get("old_state")
+        # Whether it counted as on until this report.
+        was_showing = old_state is not None and old_state.state == "on"
         if cancel := self._reloading.pop(entity_id, None):
             cancel()
+            was_showing = True
         if event.data.get("new_state") is None:
             # A renamed constituent did not drop out: this sensor is about to
             # reload with the new ID.
@@ -846,20 +874,20 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._watch_late_inputs()
         self._unreported_maintain.discard(entity_id)
 
-        if new_state.state != "on":
-            lot_str = new_state.attributes.get("latest_occupied_time")
-            if lot_str:
-                try:
-                    lot = datetime.fromisoformat(lot_str)
-                    if (
-                        self._latest_occupied_time is None
-                        or lot > self._latest_occupied_time
-                    ):
-                        self._latest_occupied_time = lot
-                except (ValueError, TypeError):
-                    pass
-
         was_on = self._attr_is_on
+        if new_state.state != "on":
+            first_report = entity_id in self._no_baseline
+            # Its own verdict on the clear decides, whatever history the
+            # others carry; a sensor that gives none is judged by its own
+            # history moving on.
+            genuine = self._note_history(entity_id, new_state)
+            verdict = new_state.attributes.get("last_clear_false_detection")
+            if was_showing and isinstance(verdict, bool):
+                genuine = not verdict
+            if genuine and was_on and not first_report:
+                self._cycle_genuine = True
+        self._no_baseline.discard(entity_id)
+
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
         elif self._attr_is_on and self._any_on(self._maintain_sensors):
@@ -870,18 +898,15 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._attr_is_on = False
 
         if not was_on and self._attr_is_on:
-            self._cycle_start_lot = (
-                self._saved_cycle_start_lot
-                if self._restored_carry and self._saved_cycle
-                else self._latest_occupied_time
-            )
+            if not self._restored_carry:
+                self._cycle_genuine = False
             if not carry:
                 self._last_on_time = self._visit_started(witnessed=True)
             # Occupancy has (re)started since the restart; the restored
             # evidence is spent.
             self._restored_carry = False
         elif was_on and not self._attr_is_on:
-            self._last_clear_false = self._latest_occupied_time == self._cycle_start_lot
+            self._last_clear_false = not self._cycle_genuine
             if self._last_clear_false:
                 self._false_count += 1
 
@@ -1009,18 +1034,15 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             or bool(self._unreported_maintain)
             or bool(self._late_maintain)
         )
-        anchor = self._cycle_start_lot
-        if carry:
-            anchor = (
-                self._saved_cycle_start_lot
-                if self._saved_cycle
-                else self._latest_occupied_time
-            )
         return RestoredExtraData(
             {
-                "cycle_start_latest_occupied_time": (
-                    anchor.isoformat() if anchor else None
-                ),
+                "cycle_genuine": self._cycle_genuine,
+                "lots": {
+                    e: lot.isoformat() if (lot := self._seen_lots.get(e)) else None
+                    for e in dict.fromkeys(
+                        self._trigger_sensors + self._maintain_sensors
+                    )
+                },
                 "constituents": self._constituents(),
                 "carry": carry,
             }

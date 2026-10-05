@@ -3374,3 +3374,104 @@ async def test_light_countdown_after_a_clear_missed_during_an_occupancy_reload(
     async_fire_time_changed(hass)
     await settle(hass)
     assert not lamp.is_on
+
+
+def _nesting_entry() -> MockConfigEntry:
+    """A combined sensor triggered by the raw combined one."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.seed_combined"],
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize(
+    ("cleared", "false"),
+    [
+        ({"latest_occupied_time": "old", "last_clear_false_detection": False}, False),
+        ({"latest_occupied_time": "old"}, False),
+        ({"last_clear_false_detection": True}, True),
+    ],
+    ids=["genuine", "genuine-no-verdict", "false"],
+)
+async def test_combined_judges_a_clear_by_the_constituent_that_cleared(
+    hass: HomeAssistant, freezer, nested: bool, cleared: dict, false: bool
+) -> None:
+    """A genuine clear counts even when its back-dated departure is older than
+    history another constituent brought along, which hides it in the max. A
+    false clear stays false."""
+    newer = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
+    older = (datetime.now(UTC) - timedelta(seconds=20)).isoformat()
+    hass.states.async_set("binary_sensor.m1", "on")
+    hass.states.async_set("binary_sensor.m2", "off", {"latest_occupied_time": newer})
+    await setup_entries(hass, _raw_combined_entry(), _nesting_entry())
+    entity_id = "binary_sensor.outer" if nested else "binary_sensor.seed_combined"
+    assert hass.states.get(entity_id).state == "on"
+
+    freezer.tick(timedelta(seconds=100))
+    if "latest_occupied_time" in cleared:
+        cleared = {**cleared, "latest_occupied_time": older}
+    hass.states.async_set("binary_sensor.m1", "off", cleared)
+    await settle(hass)
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is false
+    assert state.attributes["false_detection_count"] == int(false)
+    assert state.attributes["latest_occupied_time"] == newer
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("role", [CONF_TRIGGER_SENSORS, CONF_MAINTAIN_SENSORS])
+@pytest.mark.parametrize("genuine_before", [False, True])
+async def test_combined_constituent_added_mid_cycle_brings_only_history(
+    hass: HomeAssistant, freezer, nested: bool, role: str, genuine_before: bool
+) -> None:
+    """History a constituent added during a cycle already carries is no
+    detection in that cycle; a detection the cycle did contain is kept."""
+    old = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    hass.states.async_set(
+        "binary_sensor.m3",
+        "off",
+        {"latest_occupied_time": old, "last_clear_false_detection": False},
+    )
+    inner = _raw_combined_entry()
+    await setup_entries(hass, inner, _nesting_entry())
+    entity_id = "binary_sensor.outer" if nested else "binary_sensor.seed_combined"
+
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    if genuine_before:
+        hass.states.async_set("binary_sensor.m2", "on")
+        await settle(hass)
+        freezer.tick(timedelta(seconds=40))
+        hass.states.async_set(
+            "binary_sensor.m2",
+            "off",
+            {
+                "latest_occupied_time": datetime.now(UTC).isoformat(),
+                "last_clear_false_detection": False,
+            },
+        )
+        await settle(hass)
+    freezer.tick(timedelta(seconds=5))
+    await _edit_options(
+        hass, inner, **{role: [*molight_config(inner)[role], "binary_sensor.m3"]}
+    )
+    await settle(hass)
+    assert hass.states.get(entity_id).state == "on"
+
+    freezer.tick(timedelta(seconds=26))
+    hass.states.async_set("binary_sensor.m1", "off")
+    await settle(hass)
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is not genuine_before
+    assert state.attributes["false_detection_count"] == int(not genuine_before)
