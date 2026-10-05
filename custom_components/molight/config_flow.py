@@ -3298,7 +3298,9 @@ class MoLightConfigFlow(
 
         errors: dict[str, str] = {}
         if user_input is not None:
-            selected = set(user_input.get(CONF_ASSIGN_LIGHTS, []))
+            # A light renamed while the form was open is still ticked under its old ID.
+            picked = {CONF_LIGHTS: user_input.get(CONF_ASSIGN_LIGHTS, [])}
+            selected = set(_current_ids(self.hass, picked)[CONF_LIGHTS])
             if selected & scheduled:
                 errors[CONF_ASSIGN_LIGHTS] = "assign_lights_scheduled"
             else:

@@ -4478,6 +4478,94 @@ async def test_assign_illuminance_sets_mode(
     assert cfg[CONF_ILLUMINANCE_MODE] == ILLUMINANCE_MODE_GATE
 
 
+_ASSIGN_ROLES = {
+    # Role: (kind step, sensor form, key the light stores)
+    "occupancy": (
+        "assign_occupancy",
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+        CONF_OCCUPANCY_ENTITY,
+    ),
+    "maintain": (
+        "assign_occupancy",
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_MAINTAIN,
+        },
+        CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    ),
+    "illuminance": (
+        "assign_illuminance",
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_illuminance",
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        },
+        CONF_ILLUMINANCE_ENTITY,
+    ),
+    "schedule": (
+        "assign_schedule",
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_schedule",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+        },
+        CONF_SCHEDULE_ENTITY,
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("renames", [1, 2])
+@pytest.mark.parametrize("assigned", [True, False], ids=["already_assigned", "new"])
+@pytest.mark.parametrize("role", list(_ASSIGN_ROLES))
+async def test_assign_keeps_a_selected_light_renamed_while_open(
+    hass: HomeAssistant,
+    occupancy_entry: MockConfigEntry,
+    illuminance_entry: MockConfigEntry,
+    schedule_entry: MockConfigEntry,
+    role: str,
+    assigned: bool,
+    renames: int,
+) -> None:
+    """A light still ticked under its former ID is the same light, so it keeps
+    or gets the sensor; a light that was unticked loses it."""
+    step, sensor_form, key = _ASSIGN_ROLES[role]
+    sensor = sensor_form[CONF_ASSIGN_SENSOR]
+    refs = {key: sensor} | {
+        k: v
+        for k, v in sensor_form.items()
+        if k not in (CONF_ASSIGN_SENSOR, CONF_ASSIGN_ROLE)
+    }
+    hall = _light_entry("Hall", "hall", **(refs if assigned else {}))
+    kitchen = _light_entry("Kitchen", "kitchen", **refs)
+    await setup_entries(
+        hass, occupancy_entry, illuminance_entry, schedule_entry, hall, kitchen
+    )
+    result = await _reach_assign_kind(hass, step)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], sensor_form
+    )
+    assert result["step_id"] == "assign_lights"
+    for old, new in [("light.hall", "light.hall_new"), ("light.hall_new", "light.den")][
+        :renames
+    ]:
+        er.async_get(hass).async_update_entity(old, new_entity_id=new)
+        await settle(hass)
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
+    )
+    assert result["reason"] == "assign_done"
+    assert result["description_placeholders"] == {
+        "assigned": "0" if assigned else "1",
+        "removed": "1",
+    }
+    await hass.async_block_till_done()
+    assert molight_config(hall)[key] == sensor
+    assert key not in molight_config(kitchen)
+
+
 @pytest.mark.asyncio
 async def test_assign_aborts_when_no_lights(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
