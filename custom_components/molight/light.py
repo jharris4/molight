@@ -2206,6 +2206,15 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # mid-countdown must not win itself a fresh full timer.
                 self._mirror_member(new_state)
                 return
+            if (
+                not human
+                and lit
+                and (self._machine_state != STATE_IDLE or self._turn_on_waiting())
+            ):
+                # A wrapped light its own sensor lit while this light is on:
+                # shown, but no activity that restarts the timer or a warning.
+                self._mirror_member(new_state)
+                return
             if new_state.state == "on" and (color := self._member_color(new_state)):
                 # Mirror the real light's color on the off→on adoption edge,
                 # like the brightness mirror in _on_light_state_change.

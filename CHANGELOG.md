@@ -64,7 +64,9 @@ Remote buttons.
   controls it, at any depth of nesting, is let go before the next command
   instead of making the light command itself in a loop. In a light group
   changed to contain a virtual light, that light's warn stage no longer
-  restarts the timer of the light controlling the group.
+  restarts the timer of the light controlling the group. A wrapped light
+  relit by its own sensor no longer restarts the timer, or cancels the
+  warning, of a wrapping light that is already on.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on. A light turned off by
   hand no longer comes back on after a restart for the same visit or open

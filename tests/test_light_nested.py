@@ -23,6 +23,7 @@ from custom_components.molight.const import (
     CONF_STANDBY_BRIGHTNESS,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_WARN,
@@ -47,6 +48,15 @@ INNER_OCC = "binary_sensor.inner_occ"
 SCHEDULE = "binary_sensor.settings_schedule"
 WINDOW = "binary_sensor.window"
 OUTER_KINDS = ["regular", "scheduled", "follow"]
+HUMAN_STAMPS = (
+    "last_on_physical",
+    "last_on_virtual",
+    "last_off_manual",
+    "last_brightness_change_physical",
+    "last_brightness_change_virtual",
+    "last_color_change_physical",
+    "last_color_change_virtual",
+)
 
 
 def _outer(kind: str, occupancy: str | None):
@@ -486,3 +496,169 @@ async def test_a_group_of_bulbs_is_a_person_at_the_wall(
     _at_the_wall(bulb, on=False)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_off_manual"] is not None
+
+
+# ---------------------------------------------------------------------------
+# A wrapped light lit by its own automation while the outer light is on
+# ---------------------------------------------------------------------------
+
+INNER_A = "light.inner_a"
+INNER_B = "light.inner_b"
+
+
+async def _outer_over_two(hass: HomeAssistant, inner_b: MockConfigEntry) -> None:
+    """An outer light over a held inner light and one with its own automation."""
+    hass.states.async_set(INNER_OCC, "off")
+    hass.states.async_set(WINDOW, "off")
+    await add_real(hass, RealLight("real_1"), RealLight("real_2"))
+    inner_a = make_light_entry(name="Inner A", lights=[REAL], timeout=300)
+    await setup_entries(hass, inner_a, inner_b)
+    await setup_entries(
+        hass, make_light_entry(name="Outer", lights=[INNER_A, INNER_B], timeout=60)
+    )
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.inner_a_auto_off"}, blocking=True
+    )
+
+
+def _inner_b(trigger: str) -> MockConfigEntry:
+    if trigger == "standby":
+        return make_scheduled_light_entry(
+            name="Inner B",
+            lights=["light.real_2"],
+            schedule=WINDOW,
+            inside={CONF_LIGHT_TIMEOUT: 10, CONF_STANDBY_BRIGHTNESS: 20},
+            outside={CONF_LIGHT_TIMEOUT: 10},
+        )
+    return make_light_entry(
+        name="Inner B", lights=["light.real_2"], timeout=10, occupancy=INNER_OCC
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["occupancy", "standby"])
+async def test_inner_lit_by_itself_does_not_restart_a_running_outer_timer(
+    hass: HomeAssistant, freezer, trigger: str
+) -> None:
+    """Another inner light keeps the outer on; this one's sensor relights it."""
+    await _outer_over_two(hass, _inner_b(trigger))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": OUTER, "brightness": 180}, blocking=True
+    )
+    await settle(hass)
+    await _tick(hass, freezer, 11)
+    assert hass.states.get(INNER_B).state == "off"
+    assert hass.states.get(OUTER).state == "on"
+    await _tick(hass, freezer, 39)
+    stamps = {stamp: _attrs(hass, INNER_B)[stamp] for stamp in HUMAN_STAMPS}
+
+    hass.states.async_set(INNER_OCC if trigger == "occupancy" else WINDOW, "on")
+    await settle(hass)
+    assert hass.states.get(INNER_B).state == "on"
+    assert {stamp: _attrs(hass, INNER_B)[stamp] for stamp in HUMAN_STAMPS} == stamps
+    assert _attrs(hass, OUTER)["last_on_physical"] is None
+
+    # The timeout started at the turn-on still ends the on-period.
+    await _tick(hass, freezer, 11)
+    assert hass.states.get(OUTER).state == "off"
+    assert hass.states.get(INNER_A).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["service", "wall"])
+async def test_inner_lit_by_a_person_restarts_a_running_outer_timer(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """A command through the inner light, or its bulb at the wall, still does."""
+    await _outer_over_two(hass, _inner_b("occupancy"))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": OUTER, "brightness": 180}, blocking=True
+    )
+    await settle(hass)
+    await _tick(hass, freezer, 50)
+    assert hass.states.get(INNER_B).state == "off"
+
+    # Held, so the inner light's own timeout does not end the test early.
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.inner_b_auto_off"}, blocking=True
+    )
+    if how == "service":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": INNER_B}, blocking=True
+        )
+    else:
+        bulb = hass.data["entity_components"]["light"].get_entity("light.real_2")
+        _at_the_wall(bulb, brightness=180)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["last_on_physical"] is not None
+
+    await _tick(hass, freezer, 11)
+    assert hass.states.get(OUTER).state == "on"
+    await _tick(hass, freezer, 50)
+    assert hass.states.get(OUTER).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_inner_lit_by_itself_starts_an_off_outer_light(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An outer light that is off adopts the lit inner light with its own timer."""
+    await _outer_over_two(hass, _inner_b("occupancy"))
+    hass.states.async_set(INNER_OCC, "on")
+    await settle(hass)
+    assert hass.states.get(OUTER).state == "on"
+    assert _attrs(hass, OUTER)["molight_state"] == STATE_ACTIVE
+    assert _attrs(hass, OUTER)["last_on_physical"] is None
+
+    await _tick(hass, freezer, 61)
+    assert hass.states.get(OUTER).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("activation", ["by_itself", "person", "none"])
+async def test_inner_lit_during_the_outer_blink(
+    hass: HomeAssistant, freezer, activation: str
+) -> None:
+    """Only a person's turn-on cancels the outer light's warning."""
+    hass.states.async_set(INNER_OCC, "off")
+    bulb = RealLight("real_1")
+    await add_real(hass, bulb)
+    inner = make_light_entry(
+        name="Inner", lights=[REAL], timeout=300, occupancy=INNER_OCC
+    )
+    outer = make_light_entry(
+        name="Outer",
+        lights=[INNER],
+        timeout=60,
+        effect_timeout=5,
+        effect_brightness=0,
+        warn_timeout=5,
+        warn_brightness=20,
+    )
+    await setup_entries(hass, inner, outer)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.inner_auto_off"}, blocking=True
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": OUTER, "brightness": 180}, blocking=True
+    )
+    await settle(hass)
+    await _tick(hass, freezer, 61)
+    assert not bulb.is_on
+    assert _attrs(hass, OUTER)["molight_state"] == STATE_EFFECT
+    await _tick(hass, freezer, 1)
+
+    if activation == "by_itself":
+        hass.states.async_set(INNER_OCC, "on")
+    elif activation == "person":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": INNER, "brightness": 180}, blocking=True
+        )
+    await settle(hass)
+    assert _attrs(hass, OUTER)["warning_active"] is (activation != "person")
+
+    # The stages run on to the automatic off unless a person cancelled them.
+    await _tick(hass, freezer, 4)
+    await _tick(hass, freezer, 6)
+    assert (hass.states.get(OUTER).state == "on") is (activation == "person")
+    assert _attrs(hass, OUTER)["last_off_manual"] is None
