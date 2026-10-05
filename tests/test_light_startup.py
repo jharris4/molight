@@ -80,6 +80,7 @@ from tests.conftest import (
     setup_entries,
     stop_entries,
 )
+from tests.real_entities import RealLight, add_real
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -1373,6 +1374,90 @@ async def test_turn_off_before_the_seed_keeps_a_restored_standby_off(
     assert _turn_ons(calls) == []
     assert _state(hass).state == "off"
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first_on", [True, False])
+async def test_member_switched_after_a_command_before_the_seed_is_read_as_it_is(
+    hass: HomeAssistant, freezer, hass_admin_user, first_on: bool
+) -> None:
+    """The member's own later command wins over the one it already answered."""
+    lamp = RealLight("real_1", on=not first_on)
+    await add_real(hass, lamp)
+    entry = make_light_entry()
+    await setup_entries(hass, entry)
+    user = Context(user_id=hass_admin_user.id)
+
+    await restart_entries(hass, entry, started=False)
+    for target, on in ((VIRTUAL, first_on), (REAL, not first_on)):
+        await hass.services.async_call(
+            "light",
+            "turn_on" if on else "turn_off",
+            {"entity_id": target},
+            blocking=True,
+            context=user,
+        )
+        await settle(hass)
+        assert lamp.is_on is on
+    await finish_startup(hass)
+    await settle(hass)
+
+    assert _state(hass).state == ("off" if first_on else "on")
+    assert _attrs(hass)["molight_state"] == (STATE_IDLE if first_on else STATE_ACTIVE)
+    # A light adopted on runs its timeout.
+    await _tick(hass, freezer, 61)
+    assert not lamp.is_on
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_member_switched_off_during_an_early_fade_is_read_as_it_is(
+    hass: HomeAssistant,
+) -> None:
+    """A fade still settling is not awaited once the member is turned off."""
+    real = _Members(hass, [REAL], {})
+    entry = make_light_entry()
+    await setup_entries(hass, entry)
+
+    await restart_entries(hass, entry, started=False)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": VIRTUAL, "brightness": 200, "transition": 20},
+        blocking=True,
+    )
+    await settle(hass)
+    assert hass.states.get(REAL).state == "on"
+    real.load(REAL, "off")
+    await settle(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boot", UNKNOWN)
+async def test_member_reporting_in_before_the_seed_still_owes_an_early_command(
+    hass: HomeAssistant, boot: str
+) -> None:
+    """A member that loads dark has not been switched: the turn-on stands."""
+    real = _Members(hass, [REAL], {})
+    entry = make_light_entry()
+    await setup_entries(hass, entry)
+
+    await restart_entries(hass, entry, started=False)
+    real.boot(REAL, boot)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "off", context=Context())
+    await settle(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
 
 
 # ---------------------------------------------------------------------------

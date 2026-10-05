@@ -1299,6 +1299,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         watch = list(dict.fromkeys(watch))
 
         unsub_start: CALLBACK_TYPE | None = None
+        unsub_early: CALLBACK_TYPE | None = None
 
         @callback
         def _subscribe(_event: Event | None = None) -> None:
@@ -1307,6 +1308,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # remove it a second time (that logs "unknown job listener").
             nonlocal unsub_start
             unsub_start = None
+            if unsub_early is not None:
+                unsub_early()
             self._seeded = True
             self.async_on_remove(
                 async_track_state_change_event(
@@ -1338,6 +1341,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             unsub_start = self.hass.bus.async_listen_once(
                 EVENT_HOMEASSISTANT_STARTED, _subscribe
             )
+            unsub_early = async_track_state_change_event(
+                self.hass, self._lights, self._on_early_member_report
+            )
 
             @callback
             def _cancel_start() -> None:
@@ -1345,8 +1351,42 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # auto-removes on fire, so only unsubscribe if it hasn't fired.
                 if unsub_start is not None:
                     unsub_start()
+                    unsub_early()
 
             self.async_on_remove(_cancel_start)
+
+    @callback
+    def _on_early_member_report(self, event: Event[EventStateChangedData]) -> None:
+        """Stop awaiting a command made before the seed once it is outdated.
+
+        A member someone else has switched the other way since then no longer
+        answers it: the seed reads that member as it is.
+        """
+        entity_id = event.data["entity_id"]
+        old_state, new_state = event.data["old_state"], event.data["new_state"]
+        if (
+            entity_id not in self._echo_expectations
+            or old_state is None
+            or new_state is None
+            or old_state.state not in ("on", "off")
+            or new_state.state not in ("on", "off")
+        ):
+            return  # reporting in is no change
+        context = event.context
+        echo = self._is_own_echo(
+            entity_id,
+            old_state,
+            new_state,
+            own_context=context.id in self._self_context_ids,
+            unprompted=context.user_id is None and context.parent_id is None,
+        )
+        was_lit, lit = (
+            state.state == "on" and state.attributes.get(ATTR_BRIGHTNESS) != 0
+            for state in (old_state, new_state)
+        )
+        awaited = self._awaited_power(entity_id)
+        if not echo and lit != was_lit and awaited is not None and lit != awaited:
+            del self._echo_expectations[entity_id]
 
     @callback
     def _drop_member_cycles(self) -> bool:
