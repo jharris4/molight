@@ -29,7 +29,12 @@ from custom_components.molight import (
     _ENTITY_ID_LIST_KEYS,
     RENAME_SETTLE_SECONDS,
 )
-from custom_components.molight.config_flow import SECTION_ADVANCED
+from custom_components.molight.config_flow import (
+    SECTION_ADVANCED,
+    SECTION_BEHAVIOR,
+    SECTION_SENSORS,
+    SECTION_WARNING,
+)
 from custom_components.molight.const import (
     CONF_DOOR_ENTITY,
     CONF_ENTITY_TYPE,
@@ -1168,6 +1173,65 @@ async def test_new_entity_under_a_former_id_is_not_the_renamed_one(
 
     registry.async_get_or_create("sensor", "test", "b", suggested_object_id="lux")
     assert not same_entity(hass, "sensor.lux", "sensor.window_lux")
+
+
+@pytest.mark.parametrize("path", ["reports", "times_out"])
+@pytest.mark.parametrize("saved_by", ["create", "options"])
+@pytest.mark.parametrize(
+    ("domain", "role"),
+    [("light", CONF_LIGHTS), ("binary_sensor", CONF_HOLD_ENTITIES)],
+    ids=["light_member", "keep_on_entity"],
+)
+async def test_reference_saved_to_an_entity_that_took_a_former_id_stays_with_it(
+    hass: HomeAssistant, freezer, domain: str, role: str, saved_by: str, path: str
+) -> None:
+    """A reference from before another entity took the ID follows the renamed
+    entity; one saved afterwards names the new entity and is left alone."""
+    registry = er.async_get(hass)
+    old, new = f"{domain}.original", f"{domain}.renamed"
+    registry.async_get_or_create(domain, "test", "a", suggested_object_id="original")
+    keeper = make_light_entry(name="Keeper", lights=["light.lamp"], hold_entities=[old])
+    wrapper = make_light_entry(name="Wrapper", lights=["light.bulb"])
+    await setup_entries(hass, keeper, *([wrapper] if saved_by == "options" else []))
+    registry.async_update_entity(old, new_entity_id=new)
+    await settle(hass)
+    registry.async_get_or_create(domain, "test", "b", suggested_object_id="original")
+    assert registry.async_get(old).unique_id == "b"
+
+    refs = {CONF_LIGHTS: ["light.bulb"], role: [old]}
+    submitted = {
+        CONF_NAME: "Wrapper",
+        CONF_LIGHTS: refs[CONF_LIGHTS],
+        CONF_LIGHT_TIMEOUT: 60,
+        SECTION_SENSORS: {CONF_HOLD_ENTITIES: refs.get(CONF_HOLD_ENTITIES, [])},
+        SECTION_BEHAVIOR: {},
+        SECTION_WARNING: {},
+    }
+    if saved_by == "create":
+        manager = hass.config_entries.flow
+        result = await manager.async_init(DOMAIN, context={"source": "user"})
+        result = await manager.async_configure(
+            result["flow_id"], {"next_step_id": "create"}
+        )
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+        )
+        submitted[SECTION_ADVANCED] = {}
+    else:
+        manager = hass.config_entries.options
+        result = await manager.async_init(wrapper.entry_id)
+    result = await manager.async_configure(result["flow_id"], submitted)
+    assert result["type"] == FlowResultType.CREATE_ENTRY, result.get("errors")
+    saved = result["result"] if saved_by == "create" else wrapper
+    await settle(hass)
+
+    if path == "reports":
+        hass.states.async_set(new, "off")
+        await settle(hass)
+    else:
+        await tick(hass, freezer, RENAME_SETTLE_SECONDS)
+    assert molight_config(keeper)[CONF_HOLD_ENTITIES] == [new]
+    assert molight_config(saved)[role] == [old]
 
 
 async def test_timeout_guard_and_removal_follow_a_renamed_sensor(

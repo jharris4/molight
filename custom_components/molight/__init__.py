@@ -106,6 +106,9 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     removed: set[str] = hass.data.setdefault(DATA_REMOVED, set())
     # Renames whose entity has yet to report under its new ID.
     pending: dict[str, str] = {}
+    # For a former ID another entity has taken meanwhile, the entries that
+    # named it then: only they mean the renamed entity.
+    reused: dict[str, set[str]] = {}
 
     @callback
     def _rewrite(entity_id: str) -> None:
@@ -113,7 +116,11 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
         for old in mapping:
             del pending[old]
         if mapping:
-            _rename_references(hass, mapping)
+            _rename_references(
+                hass,
+                mapping,
+                {old: reused.pop(old) for old in mapping if old in reused},
+            )
 
     @callback
     def _on_registry_updated(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
@@ -122,6 +129,8 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
             # A new entity under a former ID is not the one that was renamed.
             renamed.pop(data["entity_id"], None)
             removed.discard(data["entity_id"])
+            if data["entity_id"] in pending:
+                reused[data["entity_id"]] = _entries_naming(hass, data["entity_id"])
         if data["action"] != "update" or "old_entity_id" not in data:
             return
         old_id, new_id = data["old_entity_id"], data["entity_id"]
@@ -175,21 +184,42 @@ def _when_reporting(
 
 
 @callback
-def _rename_references(hass: HomeAssistant, mapping: dict[str, str]) -> None:
+def _rename_references(
+    hass: HomeAssistant,
+    mapping: dict[str, str],
+    only: Mapping[str, set[str]] | None = None,
+) -> None:
     """Point every entry's references to renamed entities at their new IDs.
 
-    Data and options are both rewritten; an entry that changed reloads.
+    Data and options are both rewritten; an entry that changed reloads. A
+    former ID in `only` is rewritten in the entries it lists alone.
     """
+    only = only or {}
     for entry in hass.config_entries.async_entries(DOMAIN):
+        ids = {
+            old: new
+            for old, new in mapping.items()
+            if old not in only or entry.entry_id in only[old]
+        }
         hass.config_entries.async_update_entry(
             entry,
             data=_remap_references(
-                entry.data, mapping, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+                entry.data, ids, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
             ),
             options=_remap_references(
-                entry.options, mapping, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+                entry.options, ids, _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
             ),
         )
+
+
+def _entries_naming(hass: HomeAssistant, entity_id: str) -> set[str]:
+    """Return the IDs of the entries that store this entity ID."""
+    return {
+        entry.entry_id
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entity_id in _referenced_ids(entry.data)
+        or entity_id in _referenced_ids(entry.options)
+    }
 
 
 def current_references(
