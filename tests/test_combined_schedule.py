@@ -30,6 +30,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_OPERATOR,
     CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
+    DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_SCHEDULE,
@@ -1984,3 +1985,84 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
         == before.attributes["current_window_start"]
     )
     assert not lamp.is_on
+
+
+@pytest.mark.parametrize("how", ["disable", "unload"])
+@pytest.mark.parametrize(
+    ("layout", "meanwhile", "new_window"),
+    [
+        ("single", ("off", "on"), True),
+        ("nested", ("off", "on"), True),
+        ("inverted_output", ("on", "off"), True),
+        ("single", (), False),
+        ("single", ("unavailable", "on"), False),
+        ("other_input_on", ("off", "on"), False),
+    ],
+    ids=[
+        "cycle",
+        "cycle_nested",
+        "cycle_inverted_output",
+        "unchanged",
+        "outage",
+        "cycle_under_another_input",
+    ],
+)
+@pytest.mark.asyncio
+async def test_combination_back_from_an_unload_knows_the_window_started_meanwhile(
+    hass: HomeAssistant,
+    freezer,
+    how: str,
+    layout: str,
+    meanwhile: tuple[str, ...],
+    new_window: bool,
+) -> None:
+    """A combination disabled or unloaded while a source-backed input goes
+    off and on comes back with the new window; one whose inputs kept it on,
+    or only dropped out, keeps its window."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set(
+        "binary_sensor.src", "off" if layout == "inverted_output" else "on"
+    )
+    inputs = ["binary_sensor.mirror"]
+    entries = [
+        _mirror_schedule("Mirror", "binary_sensor.src"),
+        _time_schedule("Day", "06:00", "22:00"),
+    ]
+    if layout == "nested":
+        entries.append(_combined("Inner", inputs))
+        inputs = ["binary_sensor.inner"]
+    elif layout == "other_input_on":
+        inputs.append("binary_sensor.day")
+    out = _combined("Out", inputs, invert=layout == "inverted_output")
+    await _setup(hass, *entries, out)
+    before = hass.states.get("binary_sensor.out")
+    assert before.state == "on"
+
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            out.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        assert await hass.config_entries.async_unload(out.entry_id)
+    await settle(hass)
+    for value in meanwhile:
+        freezer.tick(timedelta(seconds=10))
+        hass.states.async_set("binary_sensor.src", value)
+        await settle(hass)
+    started = dt_util.utcnow()
+    freezer.tick(timedelta(seconds=10))
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(out.entry_id, None)
+    else:
+        assert await hass.config_entries.async_setup(out.entry_id)
+    await settle(hass)
+
+    after = hass.states.get("binary_sensor.out")
+    assert after.state == "on"
+    marker = after.attributes["current_window_start"]
+    if new_window:
+        assert datetime.fromisoformat(marker) == started
+    else:
+        assert marker == before.attributes["current_window_start"]
+    assert not hass.data.get(DATA_SCHEDULE_WATCH)

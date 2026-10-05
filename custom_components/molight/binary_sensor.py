@@ -20,6 +20,7 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from functools import partial
 from typing import TYPE_CHECKING
 
 from homeassistant.components.binary_sensor import (
@@ -71,6 +72,7 @@ from .const import (
     CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    DATA_SCHEDULE_WATCH,
     DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
     DEFAULT_FALSE_DETECTION_GRACE,
     DEFAULT_ILLUMINANCE_HYSTERESIS,
@@ -1176,6 +1178,31 @@ async def _restored_schedule_data(entity: RestoreEntity) -> dict:
     }
 
 
+def _mirrored(
+    is_on: bool, marker: datetime | None, source: State | None, invert: bool
+) -> tuple[bool, datetime | None]:
+    """Return a mirror's value and window marker once its source reports.
+
+    Both are kept through an outage of the source, which is no boundary.
+    """
+    if source is None or source.state not in ("on", "off"):
+        return is_on, marker
+    if (source.state == "on") == invert:
+        return False, None
+    return True, marker if is_on and marker is not None else source.last_changed
+
+
+@dataclass
+class _MirrorWatch:
+    """A mirror's value and marker, followed while its entry is not loaded."""
+
+    source: str
+    invert: bool
+    is_on: bool
+    marker: datetime | None
+    unsub: CALLBACK_TYPE = lambda: None
+
+
 # ---------------------------------------------------------------------------
 # Virtual Schedule Binary Sensor
 # ---------------------------------------------------------------------------
@@ -1204,6 +1231,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
+        self._entry_id = entry.entry_id
 
         self._definition = cfg.get(CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME)
         self._source: str | None = cfg.get(CONF_SCHEDULE_SOURCE)
@@ -1223,16 +1251,30 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         """Evaluate the schedule and arm the transition timer."""
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_transition_timer)
+        watch: _MirrorWatch | None = self.hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(
+            self._entry_id, None
+        )
+        if watch is not None:
+            watch.unsub()
         if self._definition == SCHEDULE_DEFINITION_BINARY_SENSOR:
-            # An unavailable state is saved without attributes, so the marker
-            # is also kept as extra data; attributes serve older saves.
-            saved = await _restored_schedule_data(self)
-            restored_start = (
-                _parse_datetime(saved.get("current_window_start"))
-                if same_entity(self.hass, saved.get("source_entity"), self._source)
-                and self._saved_invert_matches(saved)
-                else None
-            )
+            if (
+                watch is not None
+                and watch.source == self._source
+                and watch.invert == self._invert
+            ):
+                # Unloaded with Home Assistant running: the source was followed
+                # all along, so a window that started meanwhile is known.
+                restored_start = watch.marker if watch.is_on else None
+            else:
+                # An unavailable state is saved without attributes, so the marker
+                # is also kept as extra data; attributes serve older saves.
+                saved = await _restored_schedule_data(self)
+                restored_start = (
+                    _parse_datetime(saved.get("current_window_start"))
+                    if same_entity(self.hass, saved.get("source_entity"), self._source)
+                    and self._saved_invert_matches(saved)
+                    else None
+                )
             self._current_window_start = restored_start
             self._attr_is_on = restored_start is not None
             if self._source:
@@ -1241,9 +1283,9 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                         self.hass, [self._source], self._handle_source_change
                     )
                 )
+                self.async_on_remove(self._watch_source)
             self._refresh_source(
-                self.hass.states.get(self._source) if self._source else None,
-                restored_start=restored_start,
+                self.hass.states.get(self._source) if self._source else None
             )
         else:
             # A saved marker is kept while its on-period runs on, so a
@@ -1339,9 +1381,33 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._refresh_source(event.data.get("new_state"))
 
     @callback
-    def _refresh_source(
-        self, source: State | None, *, restored_start: datetime | None = None
-    ) -> None:
+    def _watch_source(self) -> None:
+        """Keep following the source once this entity is removed.
+
+        A disabled or reloading entry would otherwise come back with the
+        marker it left with, over a window its source started meanwhile.
+        """
+        marker = self._current_window_start
+        watch = _MirrorWatch(
+            self._source or "",
+            self._invert,
+            bool(self._attr_is_on),
+            marker if isinstance(marker, datetime) else None,
+        )
+
+        @callback
+        def _on_change(event: Event[EventStateChangedData]) -> None:
+            watch.is_on, watch.marker = _mirrored(
+                watch.is_on, watch.marker, event.data["new_state"], watch.invert
+            )
+
+        watch.unsub = async_track_state_change_event(
+            self.hass, [watch.source], _on_change
+        )
+        self.hass.data.setdefault(DATA_SCHEDULE_WATCH, {})[self._entry_id] = watch
+
+    @callback
+    def _refresh_source(self, source: State | None) -> None:
         """Apply a source state, preserving the last value while unavailable."""
         self._next_transition = None
         if (
@@ -1353,15 +1419,13 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self.async_write_ha_state()
             return
 
-        effective_on = (source.state == "on") != self._invert
-        if effective_on:
-            if not self._attr_is_on:
-                self._current_window_start = restored_start or source.last_changed
-            elif restored_start is not None:
-                self._current_window_start = restored_start
-        else:
-            self._current_window_start = None
-        self._attr_is_on = effective_on
+        marker = self._current_window_start
+        self._attr_is_on, self._current_window_start = _mirrored(
+            bool(self._attr_is_on),
+            marker if isinstance(marker, datetime) else None,
+            source,
+            self._invert,
+        )
         self._attr_available = True
         self.async_write_ha_state()
 
@@ -1580,6 +1644,37 @@ def _mirror_since(state: State) -> datetime:
 
 
 @dataclass
+class _SourceChanges:
+    """What a combined schedule saw of its sources between two refreshes.
+
+    A refresh reads only each source's final state, so an off and on arriving
+    together would leave no trace of the window that ended. passed_through
+    keeps the on or off spell (start, end, value) a source left when it
+    changed more than once.
+    """
+
+    changed: set[str] = field(default_factory=set)
+    passed_through: dict[str, tuple[float, float, bool]] = field(default_factory=dict)
+    unsub: CALLBACK_TYPE = lambda: None
+
+    @callback
+    def note(self, event: Event[EventStateChangedData]) -> None:
+        entity_id = event.data["entity_id"]
+        if entity_id not in self.changed:
+            self.changed.add(entity_id)
+            self.passed_through.pop(entity_id, None)
+            return
+        old = event.data["old_state"]
+        if old is None or old.state not in ("on", "off"):
+            return
+        self.passed_through[entity_id] = (
+            _mirror_since(old).timestamp(),
+            event.time_fired.timestamp(),
+            old.state == "on",
+        )
+
+
+@dataclass
 class _ScheduleNode:
     """One schedule in an expanded combined schedule."""
 
@@ -1706,10 +1801,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._unsub_transition: CALLBACK_TYPE | None = None
         self._unsub_started: CALLBACK_TYPE | None = None
         self._refresh_handle: asyncio.Handle | None = None
-        # Sources changed since the last deferred refresh, and the on or off
-        # spell (start, end, value) each was seen to pass through meanwhile.
-        self._batch_changed: set[str] = set()
-        self._passed_through: dict[str, tuple[float, float, bool]] = {}
+        self._seen = _SourceChanges()
 
     async def async_added_to_hass(self) -> None:
         """Expand the inputs, restore state and start tracking."""
@@ -1739,12 +1831,22 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 period = saved.get("period_start")
                 self._period_start = period if isinstance(period, str) else marker
 
+        # Unloaded with Home Assistant running: what the sources did meanwhile
+        # counts as changes that arrived together.
+        watch: _SourceChanges | None = self.hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(
+            self._entry_id, None
+        )
+        if watch is not None:
+            watch.unsub()
+            self._seen.passed_through = watch.passed_through
         if tree.source_entities:
+            sources = sorted(tree.source_entities)
             self.async_on_remove(
                 async_track_state_change_event(
-                    self.hass, sorted(tree.source_entities), self._handle_input_change
+                    self.hass, sources, self._handle_input_change
                 )
             )
+            self.async_on_remove(partial(self._watch_sources, sources))
         # Inputs are read from config, so an edit anywhere beneath must rebuild this.
         # Not an update listener on the input: HA can skip it while that entry reloads.
         if self._input_disabled:
@@ -1775,6 +1877,13 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
             )
         self._refresh()
+
+    @callback
+    def _watch_sources(self, sources: list[str]) -> None:
+        """Keep noting the sources' changes once this entity is removed."""
+        watch = _SourceChanges(changed=set(sources))
+        watch.unsub = async_track_state_change_event(self.hass, sources, watch.note)
+        self.hass.data.setdefault(DATA_SCHEDULE_WATCH, {})[self._entry_id] = watch
 
     @callback
     def _handle_core_config_update(self, _event: Event) -> None:
@@ -1841,34 +1950,14 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     def _handle_input_change(self, event: Event[EventStateChangedData]) -> None:
         # Deferred to the next loop pass so inputs changing together (two
         # schedules mirroring one sensor) are evaluated once, never half-updated.
-        self._note_passed_through(event)
+        self._seen.note(event)
         if self._refresh_handle is None:
             self._refresh_handle = self.hass.loop.call_soon(self._deferred_refresh)
-
-    def _note_passed_through(self, event: Event[EventStateChangedData]) -> None:
-        """Keep the spell a source left when it changes twice before one refresh.
-
-        The refresh reads only the final state, so an off and on arriving
-        together would otherwise leave no trace of the window that ended.
-        """
-        entity_id = event.data["entity_id"]
-        if entity_id not in self._batch_changed:
-            self._batch_changed.add(entity_id)
-            self._passed_through.pop(entity_id, None)
-            return
-        old = event.data["old_state"]
-        if old is None or old.state not in ("on", "off"):
-            return
-        self._passed_through[entity_id] = (
-            _mirror_since(old).timestamp(),
-            event.time_fired.timestamp(),
-            old.state == "on",
-        )
 
     @callback
     def _deferred_refresh(self) -> None:
         self._refresh_handle = None
-        self._batch_changed.clear()
+        self._seen.changed.clear()
         self._refresh()
 
     def _timeline(
@@ -1902,7 +1991,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             return _Timeline.constant(None)
         since = _mirror_since(state).timestamp()
         segments: list[tuple[float, bool | None]] = [(_NEG_INF, None)]
-        passed = self._passed_through.get(entity_id or "")
+        passed = self._seen.passed_through.get(entity_id or "")
         if passed is not None:
             start, end, value = passed
             # The spell came first, even when its state was written late and

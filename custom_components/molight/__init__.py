@@ -38,6 +38,7 @@ from .const import (
     DATA_PLATFORMS,
     DATA_REMOVED,
     DATA_RENAMED,
+    DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
     PLATFORMS,
@@ -330,6 +331,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     keeping a reference to an entity that no longer exists.
     """
     hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, None)
+    if watch := hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(entry.entry_id, None):
+        watch.unsub()
     registry = er.async_get(hass)
     removed = {
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)

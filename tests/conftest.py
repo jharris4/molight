@@ -59,6 +59,7 @@ from custom_components.molight.const import (
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_LIGHT,
@@ -341,6 +342,9 @@ async def _boot_entries(
     # Unloading keeps each entity's live state for a reload; a restart only
     # has what was saved.
     await async_mock_load_restore_state_from_storage(hass)
+    # Nor what a schedule learned from its source while unloaded.
+    for watch in hass.data.pop(DATA_SCHEDULE_WATCH, {}).values():
+        watch.unsub()
     hass.set_state(CoreState.starting)
     for entry in entries:
         assert await hass.config_entries.async_setup(entry.entry_id)

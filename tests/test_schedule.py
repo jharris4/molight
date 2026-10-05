@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.core import State
 from homeassistant.helpers import restore_state
 from homeassistant.helpers.sun import get_astral_event_date
@@ -32,6 +33,7 @@ from custom_components.molight.const import (
     CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_SOURCE,
     CONF_TIME_WINDOWS,
+    DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_SCHEDULE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
@@ -57,6 +59,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealBinary, RealLight, add_real
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -2280,3 +2283,200 @@ async def test_saved_window_that_never_opens_is_logged_at_setup(
         await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
     assert hass.states.get(NIGHT).state == "off"
     assert ("never opens" in caplog.text) is warned
+
+
+# ---------------------------------------------------------------------------
+# A source-backed schedule unloaded while Home Assistant keeps running
+# ---------------------------------------------------------------------------
+
+
+async def _absent(hass: HomeAssistant, entry: MockConfigEntry, how: str) -> None:
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            entry.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+
+
+async def _back(hass: HomeAssistant, entry: MockConfigEntry, how: str) -> None:
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(entry.entry_id, None)
+    else:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+
+@pytest.mark.parametrize("how", ["disable", "unload"])
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+@pytest.mark.parametrize(
+    ("meanwhile", "new_window"),
+    [
+        (("off", "on"), True),
+        (("off", "on", "unavailable", "on"), True),
+        ((), False),
+        (("unavailable", "on"), False),
+        (("unknown", "unavailable", "on"), False),
+    ],
+    ids=["cycle", "cycle_then_outage", "unchanged", "outage", "two_outages"],
+)
+@pytest.mark.asyncio
+async def test_schedule_back_from_an_unload_knows_the_window_its_source_started(
+    hass: HomeAssistant,
+    freezer,
+    how: str,
+    invert: bool,
+    meanwhile: tuple[str, ...],
+    new_window: bool,
+) -> None:
+    """A schedule disabled or unloaded while its source goes off and on comes
+    back with the new window, and a follow-mode light turned off by hand in
+    the old one is lit. A source that only dropped out kept its window."""
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    source = RealBinary("house_mode", on=not invert)
+    lamp = RealLight("lamp")
+    await add_real(hass, source, lamp)
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={**_house_mode_schedule().data, CONF_SCHEDULE_INVERT: invert},
+    )
+    entity_id = "binary_sensor.house_mode_schedule"
+    await setup_entries(
+        hass,
+        schedule,
+        make_light_entry(
+            lights=[lamp.entity_id],
+            schedule=entity_id,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+        ),
+    )
+    assert lamp.is_on
+    old = hass.states.get(entity_id).attributes["current_window_start"]
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.matrix_light"}, blocking=True
+    )
+    await settle(hass)
+
+    await _absent(hass, schedule, how)
+    started = None
+    for value in meanwhile:
+        freezer.tick(timedelta(seconds=10))
+        if value in ("on", "off"):
+            source.set((value == "on") != invert)
+            if value == "on" and started is None:
+                started = dt_util.utcnow()
+        else:
+            hass.states.async_set(source.entity_id, value)
+        await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+    await _back(hass, schedule, how)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    marker = state.attributes["current_window_start"]
+    if new_window:
+        assert datetime.fromisoformat(marker) == started
+    else:
+        assert marker == old
+    assert lamp.is_on is new_window
+    assert DATA_SCHEDULE_WATCH not in hass.data or not hass.data[DATA_SCHEDULE_WATCH]
+
+
+@pytest.mark.parametrize("how", ["disable", "unload"])
+@pytest.mark.asyncio
+async def test_schedule_back_from_an_unload_is_off_when_its_source_went_off(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """The source going off during the unload ends the window."""
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    source = RealBinary("house_mode", on=True)
+    await add_real(hass, source)
+    schedule = _house_mode_schedule()
+    await setup_entries(hass, schedule)
+    await _absent(hass, schedule, how)
+    freezer.tick(timedelta(seconds=10))
+    source.set(False)
+    await settle(hass)
+    await _back(hass, schedule, how)
+
+    state = hass.states.get("binary_sensor.house_mode_schedule")
+    assert state.state == "off"
+    assert state.attributes["current_window_start"] is None
+
+
+@pytest.mark.asyncio
+async def test_restart_keeps_the_saved_marker_over_a_source_cycle_it_could_not_see(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Across a restart nothing followed the source: an off and on during the
+    downtime is ambiguous, and the saved marker stands."""
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    source = RealBinary("house_mode", on=True)
+    await add_real(hass, source)
+    schedule = _house_mode_schedule()
+    await setup_entries(hass, schedule)
+    entity_id = "binary_sensor.house_mode_schedule"
+    old = hass.states.get(entity_id).attributes["current_window_start"]
+
+    await restore_state.async_get(hass).async_dump_states()
+    assert await hass.config_entries.async_unload(schedule.entry_id)
+    for value in (False, True):
+        freezer.tick(timedelta(seconds=10))
+        source.set(value)
+        await settle(hass)
+    await restart_entries(hass)
+    assert await hass.config_entries.async_setup(schedule.entry_id)
+    await settle(hass)
+
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == old
+
+
+@pytest.mark.asyncio
+async def test_schedule_given_a_new_source_while_unloaded_dates_its_window_from_it(
+    hass: HomeAssistant, freezer
+) -> None:
+    """What was followed of the old source says nothing about a new one."""
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    source, other = RealBinary("house_mode", on=True), RealBinary("other", on=True)
+    await add_real(hass, source, other)
+    schedule = _house_mode_schedule()
+    await setup_entries(hass, schedule)
+    freezer.tick(timedelta(seconds=10))
+    assert await hass.config_entries.async_unload(schedule.entry_id)
+    hass.config_entries.async_update_entry(
+        schedule, data={**schedule.data, CONF_SCHEDULE_SOURCE: other.entity_id}
+    )
+    assert await hass.config_entries.async_setup(schedule.entry_id)
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.house_mode_schedule")
+    assert state.state == "on"
+    assert (
+        datetime.fromisoformat(state.attributes["current_window_start"])
+        == hass.states.get(other.entity_id).last_changed
+    )
+    assert not hass.data[DATA_SCHEDULE_WATCH]
+
+
+@pytest.mark.asyncio
+async def test_removing_an_unloaded_schedule_stops_following_its_source(
+    hass: HomeAssistant,
+) -> None:
+    """A disabled schedule follows its source until its entry is removed."""
+    source = RealBinary("house_mode", on=True)
+    await add_real(hass, source)
+    schedule = _house_mode_schedule()
+    await setup_entries(hass, schedule)
+    await _absent(hass, schedule, "disable")
+    watch = hass.data[DATA_SCHEDULE_WATCH][schedule.entry_id]
+    assert watch.is_on
+
+    await hass.config_entries.async_remove(schedule.entry_id)
+    await settle(hass)
+    assert not hass.data[DATA_SCHEDULE_WATCH]
+    source.set(False)
+    await settle(hass)
+    assert watch.is_on
