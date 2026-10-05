@@ -1039,9 +1039,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._last_on_occupancy: datetime | None = None
         self._last_on_illuminance: datetime | None = None
         self._last_on_door: datetime | None = None
-        # When a schedule end last gave a light resting at standby a fresh
-        # timeout: anchors that on-period like a turn-on, without claiming one.
-        self._standby_timeout_started: datetime | None = None
+        # When this on-period last began a fresh full timeout (a hold released,
+        # the door closed, a schedule end): an anchor like a turn-on's.
+        self._fresh_timeout_started: datetime | None = None
         self._last_brightness_change_physical: datetime | None = None
         self._last_brightness_change_virtual: datetime | None = None
         self._last_color_change_physical: datetime | None = None
@@ -1679,7 +1679,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._machine_state == STATE_STANDBY and not self._standby_applies():
             # Standby has no end of its own: the new settings' timeout ends it.
             self._machine_state = STATE_ACTIVE
-            self._standby_timeout_started = datetime.now(UTC)
             self._start_timer()
 
         if not lit:
@@ -3416,7 +3415,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         else:
             if was_standby and not self._occupancy_lots():
                 # A fresh full timeout, not one that history accounts for.
-                self._standby_timeout_started = datetime.now(UTC)
+                self._fresh_timeout_started = datetime.now(UTC)
             self._start_timer(duration)
             self.async_write_ha_state()
 
@@ -4107,7 +4106,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         which must not cut short a light the user turned on since then: the
         countdown never ends before a full timeout after the latest manual,
         physical or door turn-on, a dim or recolor at the wall (which also
-        restarts a running timer), or a schedule end's fresh timeout.
+        restarts a running timer), or any fresh full timeout started since,
+        as by a hold releasing, the door closing or a schedule end.
         """
         countdown = self._compute_occupancy_countdown()
         user_ons = [
@@ -4118,7 +4118,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._last_on_door,
                 self._last_brightness_change_physical,
                 self._last_color_change_physical,
-                self._standby_timeout_started,
+                self._fresh_timeout_started,
             )
             if t is not None
         ]
@@ -4243,6 +4243,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._bright_resume_until = resume_until
         self._machine_state = STATE_IDLE
         self._attr_is_on = False
+        self._fresh_timeout_started = None
         self._occupancy_lit_lights = False
         # A deferred schedule-end off only applies to the on-period it
         # interrupted; any off consumes it.
@@ -4265,6 +4266,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return
         if duration is None:
             duration = self._light_timeout
+            self._fresh_timeout_started = datetime.now(UTC)
         self._timer_ends = datetime.now(UTC) + timedelta(seconds=duration)
         self._timer_unsub = async_call_later(self.hass, duration, self._timer_expired)
 

@@ -91,6 +91,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealLight, add_real
 
 REAL = "light.real_1"
 SCHEDULE = "binary_sensor.settings_schedule"
@@ -2919,3 +2920,51 @@ async def test_manual_off_stands_through_a_time_zone_change(
     await settle(hass)
     assert hass.states.get(SCHEDULE).state == "off"
     assert _attrs(hass)[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reload", [False, True])
+async def test_false_pulse_keeps_the_timeout_a_standby_end_started(
+    hass: HomeAssistant, freezer, reload: bool
+) -> None:
+    """Keep state gives a light leaving standby a fresh timeout. A false
+    detection outside does not cut it short, also once a reload restarted it."""
+    history = {
+        "latest_occupied_time": (
+            datetime.now(UTC) - timedelta(seconds=600)
+        ).isoformat(),
+        "last_clear_false_detection": False,
+    }
+    lamp = RealLight("porch_lamp")
+    await add_real(hass, lamp)
+    entry = make_scheduled_light_entry(
+        lights=[lamp.entity_id],
+        schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCCUPANCY},
+    )
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off", history)
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_STANDBY
+    assert lamp.is_on
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    await _tick(hass, freezer, 2)
+    if reload:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await settle(hass)
+    hass.states.async_set(OCCUPANCY, "on", history)
+    await settle(hass)
+    await _tick(hass, freezer, 1)
+    hass.states.async_set(
+        OCCUPANCY, "off", {**history, "last_clear_false_detection": True}
+    )
+    await settle(hass)
+
+    await _tick(hass, freezer, 20)
+    assert lamp.is_on
+    await _tick(hass, freezer, 41)
+    assert not lamp.is_on

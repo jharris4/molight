@@ -441,3 +441,122 @@ async def test_gate_switch_end_keeps_occupancy_holding_a_bright_light(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
+
+
+MAINT = "binary_sensor.maint"
+HOLD = "input_boolean.keep_on"
+SWITCH = "switch.matrix_light_auto_off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fresh", ["door", "auto_off", "keep_on", "reload", "turn_on"])
+@pytest.mark.parametrize("pulse", ["occupancy", "maintain"])
+@pytest.mark.parametrize("warned", [False, True])
+async def test_false_pulse_does_not_shorten_a_fresh_timeout(
+    hass: HomeAssistant, freezer, fresh: str, pulse: str, warned: bool
+) -> None:
+    """A fresh full timeout, as a hold releasing or the door closing starts,
+    outlives a false detection: the sensors' old history is no reason to end
+    it early, and its warning still starts on time."""
+    old = (dt_util.utcnow() - timedelta(seconds=600)).isoformat()
+    history = {"latest_occupied_time": old, "last_clear_false_detection": False}
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off", history)
+    hass.states.async_set(MAINT, "off", history)
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(HOLD, "off")
+    entry = make_light_entry(
+        occupancy=OCC,
+        maintain=MAINT,
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        hold_entities=[HOLD],
+        timeout=60,
+        false_off_delay=5,
+        warn_timeout=10 if warned else None,
+        warn_brightness=10 if warned else None,
+    )
+    await setup_entries(hass, entry)
+    await settle(hass)
+
+    async def switch(service: str) -> None:
+        await hass.services.async_call("switch", service, {"entity_id": SWITCH})
+        await settle(hass)
+
+    async def turn_on() -> None:
+        await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+        await settle(hass)
+
+    # Hold the light for longer than its timeout, then start the fresh one.
+    if fresh == "door":
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+    else:
+        await turn_on()
+        # The member reports lit, which a reload goes by.
+        hass.states.async_set(REAL, "on")
+        await settle(hass)
+    if fresh == "auto_off":
+        await switch("turn_off")
+    elif fresh == "keep_on":
+        hass.states.async_set(HOLD, "on")
+        await settle(hass)
+    await _tick(hass, freezer, 70 if fresh not in ("reload", "turn_on") else 40)
+    assert _state(hass).state == "on"
+    if fresh == "door":
+        hass.states.async_set(DOOR, "off")
+    elif fresh == "auto_off":
+        await switch("turn_on")
+    elif fresh == "keep_on":
+        hass.states.async_set(HOLD, "off")
+    elif fresh == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    else:
+        await turn_on()
+    await settle(hass)
+
+    await _tick(hass, freezer, 1)
+    sensor = OCC if pulse == "occupancy" else MAINT
+    hass.states.async_set(sensor, "on", history)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    await _tick(hass, freezer, 2)
+    history["last_clear_false_detection"] = True
+    hass.states.async_set(sensor, "off", history)
+    await settle(hass)
+
+    await _tick(hass, freezer, 56)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 2)
+    if warned:
+        assert _state(hass).attributes["molight_state"] == STATE_WARN
+        await _tick(hass, freezer, 10)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_false_pulse_still_turns_off_quickly_a_light_it_lit(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A fresh timeout of an earlier on-period gives a later false detection
+    nothing to wait for."""
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCC, "off")
+    await setup_entries(
+        hass, make_light_entry(occupancy=OCC, timeout=60, false_off_delay=5)
+    )
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    await _tick(hass, freezer, 10)
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+
+    await _tick(hass, freezer, 10)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    hass.states.async_set(OCC, "off", {"last_clear_false_detection": True})
+    await settle(hass)
+    await _tick(hass, freezer, 6)
+    assert _state(hass).state == "off"
