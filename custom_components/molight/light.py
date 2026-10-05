@@ -949,6 +949,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # unavailable sensor (battery contact sensors blip) holds its last
         # value instead of reading as closed and dropping its hold.
         self._door_open: bool = False
+        # When it was first seen open; its reload moves last_changed.
+        self._door_open_since: datetime | None = None
         # Counts an open door that stays unavailable as closed, None when idle.
         self._door_dropout_unsub: CALLBACK_TYPE | None = None
         # Whether the door has reported open/closed since startup.
@@ -962,6 +964,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Last known occupied/clear, None until first seen; a recovery
         # matching it must not re-light a room the user turned off.
         self._occupancy_last_on: bool | None = None
+        # When its visit was first seen; its reload moves last_changed.
+        self._occupancy_on_since: datetime | None = None
         # Last known on/off of the maintain entity, None until first seen.
         self._maintain_last_on: bool | None = None
         # When the user last turned the light off, here or at the wall: a
@@ -1597,8 +1601,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and self._door_entity == prev_door_entity
         ):
             self._cancel_door_dropout()
-            self._door_open = door is not None and door.state == "on"
-            self._door_seen = door is not None and door.state in ("on", "off")
+            self._read_door(door, same=self._door_entity == prev_door_entity)
         self._hold_states = {}
         for entity_id in self._hold_entities:
             state = self.hass.states.get(entity_id)
@@ -1621,7 +1624,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and (s := self.hass.states.get(self._occupancy_entity or "")) is not None
             and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
-            self._occupancy_last_on = self._live_occupancy_on()
+            self._read_occupancy(same=self._occupancy_entity == prev_occupancy_entity)
         if not (
             self._maintain_entity == prev_maintain_entity
             and (s := self.hass.states.get(self._maintain_entity or "")) is not None
@@ -1761,17 +1764,41 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         # An unavailable/unknown/missing door counts as closed at startup.
         if self._door_entity:
-            door = self.hass.states.get(self._door_entity)
-            self._door_open = door is not None and door.state == "on"
-            self._door_seen = door is not None and door.state in ("on", "off")
+            self._read_door(self.hass.states.get(self._door_entity))
 
         self._illuminance_last_bright = self._live_illuminance_bright()
         self._schedule_last_on = self._live_schedule_on()
         if self._schedule_last_on and not self._is_scheduled_light:
             self._schedule_end_off_pending = False  # a window started since
-        self._occupancy_last_on = self._live_occupancy_on()
+        self._read_occupancy()
         self._maintain_last_on = self._live_maintain_on()
         self._seed_from_members(commanded=True)
+
+    def _read_door(self, door: State | None, *, same: bool = False) -> None:
+        """Take the door's open/closed from its state, as at startup.
+
+        With same, a door already known open keeps when it was seen to open.
+        """
+        was_open = same and self._door_open
+        self._door_open = door is not None and door.state == "on"
+        self._door_seen = door is not None and door.state in ("on", "off")
+        if not self._door_open:
+            self._door_open_since = None
+        elif not was_open or self._door_open_since is None:
+            self._door_open_since = door.last_changed
+
+    def _read_occupancy(self, *, same: bool = False) -> None:
+        """Take occupancy's on/off from its state, as at startup.
+
+        With same, a visit already known keeps when it was first seen.
+        """
+        was_on = same and self._occupancy_last_on
+        self._occupancy_last_on = self._live_occupancy_on()
+        if not self._occupancy_last_on:
+            self._occupancy_on_since = None
+        elif not was_on or self._occupancy_on_since is None:
+            state = self.hass.states.get(self._occupancy_entity)
+            self._occupancy_on_since = state.last_changed
 
     def _seed_from_members(self, *, commanded: bool = False) -> None:
         """Settle the saved decisions against the members' power.
@@ -2337,6 +2364,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # A first sighting since startup is not an observed edge either.
             observed = not (recovered and self._occupancy_last_on is None)
             self._occupancy_last_on = occupied
+            if not occupied:
+                self._occupancy_on_since = None
+            elif not replay or self._occupancy_on_since is None:
+                self._occupancy_on_since = new_state.last_changed
             if not replay and not (
                 occupied and self._may_replay_manual_off(new_state, observed=observed)
             ):
@@ -2383,6 +2414,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._cancel_door_dropout()
             door_was_open = self._door_open
             self._door_open = new_state.state == "on"
+            if not self._door_open:
+                self._door_open_since = None
+            elif not door_was_open or self._door_open_since is None:
+                self._door_open_since = new_state.last_changed
             # An open door first seen since startup may predate a manual off.
             first_open = self._door_open and recovered and not self._door_seen
             self._door_seen = True
@@ -2432,6 +2467,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._go_idle()
         if entity_id == self._occupancy_entity:
             self._occupancy_last_on = None
+            self._occupancy_on_since = None
         if entity_id == self._maintain_entity:
             self._maintain_last_on = None
         if entity_id == self._illuminance_entity:
@@ -2439,6 +2475,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if entity_id == self._door_entity:
             self._cancel_door_dropout()
             self._door_open = False
+            self._door_open_since = None
         if entity_id in (
             self._occupancy_entity,
             self._maintain_entity,
@@ -3465,12 +3502,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # Only a start the unreadable gate blocked is applied now; a
                 # light turned off by hand in an occupied room stays off.
                 replay_since = self._after_manual_off(replay_since)
-                occ_active = occ_active and occ_state.last_changed >= replay_since
-                door = self.hass.states.get(self._door_entity or "")
+                occ_active = (
+                    occ_active and self._visit_started(occ_state) >= replay_since
+                )
                 door_holds = (
                     door_holds
-                    and door is not None
-                    and door.last_changed >= replay_since
+                    and self._door_open_since is not None
+                    and self._door_open_since >= replay_since
                 )
             if occ_active or door_holds:
                 now = datetime.now(UTC)
@@ -3708,6 +3746,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return True
         return self._last_manual_off is None or started <= self._last_manual_off
 
+    def _visit_started(self, state: State) -> datetime:
+        """When the visit the occupancy sensor reports began.
+
+        Its own stamp if it has one, else when this light first saw it on:
+        a sensor that reloads mid-visit comes back with a new last_changed.
+        """
+        try:
+            return datetime.fromisoformat(state.attributes.get("last_on_time"))
+        except (TypeError, ValueError):
+            return self._occupancy_on_since or state.last_changed
+
     def _manual_off_stands(self) -> bool:
         """Return True when a manual off is the last thing the light did.
 
@@ -3864,6 +3913,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._door_dropout_unsub = None
         # As at startup: closed, and its next report is a first sighting.
         self._door_open = False
+        self._door_open_since = None
         self._door_seen = False
         self._on_door_change(False)
 

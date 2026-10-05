@@ -2501,3 +2501,147 @@ async def test_gate_outage_outside_the_window_keeps_occupancy_gated(
     hass.states.async_set("binary_sensor.maintain", "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+
+
+ROOM = "binary_sensor.room"
+
+
+async def _visit_sensor(hass: HomeAssistant, kind: str) -> tuple[str, list]:
+    """Set up an occupancy sensor of a kind over MOTION, clear.
+
+    Returns its entity ID and the entries to reload it: a Virtual Occupancy
+    Sensor, a combined sensor over one, or MOTION itself (no entries).
+    """
+    hass.states.async_set(MOTION, "off")
+    if kind == "raw":
+        return MOTION, []
+    presence = _presence_entry()
+    if kind == "simple":
+        await setup_entries(hass, presence)
+        return PRESENCE, [presence]
+    room = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Room",
+            CONF_TRIGGER_SENSORS: [PRESENCE],
+            CONF_MAINTAIN_SENSORS: [],
+        },
+    )
+    await setup_entries(hass, presence, room)
+    return ROOM, [room] if kind == "combined" else [presence, room]
+
+
+async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
+    """Reload a visit sensor's entries; a raw one drops out and returns."""
+    for entry in entries:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await settle(hass)
+    if not entries:
+        hass.states.async_set(MOTION, "unavailable")
+        await settle(hass)
+        hass.states.async_set(MOTION, "on")
+        await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+@pytest.mark.parametrize("kind", ["raw", "simple", "combined", "nested"])
+@pytest.mark.parametrize("fresh", [False, True])
+async def test_gate_recovery_tells_a_reloaded_visit_from_a_new_one(
+    hass: HomeAssistant, freezer, mode: str, kind: str, fresh: bool
+) -> None:
+    """A sensor reloading during a gate outage is not a visit starting.
+
+    The light was turned off by hand during the outage: the visit from before
+    it leaves the room dark when the gate returns, however the sensor's
+    reload dated its state. A visit that did start meanwhile lights it.
+    """
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    hass.states.async_set(REAL, "off")
+    sensor, entries = await _visit_sensor(hass, kind)
+    light = make_light_entry(occupancy=sensor, schedule=WINDOW, schedule_mode=mode)
+    await setup_entries(hass, _window_entry(), light)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(MOTION, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(WINDOW_SOURCE, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    if fresh:
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(MOTION, "off")
+        await settle(hass)
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(MOTION, "on")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await _reload_sensor(hass, entries)
+    assert hass.states.get(sensor).state == "on"
+    assert _state(hass).state == "off"
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    await settle(hass)
+    assert _state(hass).state == ("on" if fresh else "off")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("fresh", [False, True])
+async def test_gate_recovery_tells_a_door_dropout_from_an_opening(
+    hass: HomeAssistant, freezer, fresh: bool
+) -> None:
+    """A held-open door whose sensor blips during a gate outage did not open."""
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=WINDOW,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, _window_entry(), light)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(WINDOW_SOURCE, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    if fresh:
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(DOOR, "off")
+        await settle(hass)
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(DOOR, "unavailable")
+    await settle(hass)
+    hass.states.async_set(DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    await settle(hass)
+    assert _state(hass).state == ("on" if fresh else "off")
