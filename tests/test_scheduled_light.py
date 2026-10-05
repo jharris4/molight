@@ -3099,9 +3099,10 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
 ) -> None:
     """A boundary crossed during an illuminance outage keeps the cached level.
 
-    Recomputing from the unavailable sensor would forget "bright", and its
-    recovery to the same reading would then replay as a fresh bright edge,
-    forcing an on light off in control mode.
+    The boundary is judged against it, as with a readable sensor. Recomputing
+    from the unavailable sensor would forget "bright", and its recovery to
+    the same reading would then replay as a fresh bright edge, forcing an on
+    light off in control mode.
     """
     illuminance = "binary_sensor.shared_illuminance"
     hass.states.async_set(REAL, "off")
@@ -3125,7 +3126,9 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
     await settle(hass)
     hass.states.async_set(SCHEDULE, "on")  # cross the boundary mid-outage
     await settle(hass)
-    assert hass.states.get(VIRTUAL).state == "on"
+    assert hass.states.get(VIRTUAL).state == "off"  # still known bright
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
 
     # Recovery to the same "bright" is a replay, not a fresh bright edge.
     hass.states.async_set(illuminance, "on")

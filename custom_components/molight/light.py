@@ -3121,10 +3121,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
     def _is_illuminance_bright(self) -> bool:
         """Return True when illuminance is bright enough to suppress lighting."""
-        if not self._illuminance_entity:
-            return False
-        state = self.hass.states.get(self._illuminance_entity)
-        return state is not None and state.state == "on"
+        live = self._live_illuminance_bright()
+        # Unreadable (an outage, a reload): the last known reading stands.
+        return bool(self._illuminance_last_bright) if live is None else live
 
     def _bright_gates_presence(self) -> bool:
         """Return True when brightness keeps occupancy or a door from acting.

@@ -29,6 +29,8 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_ILLUMINANCE_THRESHOLD,
     CONF_LIGHT_TIMEOUT,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
@@ -39,7 +41,10 @@ from custom_components.molight.const import (
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    ILLUMINANCE_MODE_CONTROL,
+    ILLUMINANCE_MODE_GATE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -2129,3 +2134,109 @@ async def test_gate_mode_member_recovery_is_unchanged(hass: HomeAssistant) -> No
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
+
+
+# ---------------------------------------------------------------------------
+# A reloading input's placeholder keeps its last known value
+# ---------------------------------------------------------------------------
+
+LUX = "sensor.lux"
+DAYLIGHT = "binary_sensor.daylight"
+
+
+def _daylight_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
+            CONF_NAME: "Daylight",
+            CONF_ILLUMINANCE_SENSOR: LUX,
+            CONF_ILLUMINANCE_THRESHOLD: 100,
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("trigger", ["occupancy", "door"])
+async def test_bright_gate_holds_while_the_illuminance_entry_reloads(
+    hass: HomeAssistant, mode: str, trigger: str
+) -> None:
+    """Presence arriving while a bright illuminance sensor reloads stays gated."""
+    hass.states.async_set(LUX, "1000")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(REAL, "off")
+    daylight = _daylight_entry()
+    light = make_light_entry(
+        occupancy=OCC, door=DOOR, illuminance=DAYLIGHT, illuminance_mode=mode
+    )
+    await setup_entries(hass, daylight, light)
+    assert hass.states.get(DAYLIGHT).state == "on"
+
+    assert await hass.config_entries.async_unload(daylight.entry_id)
+    await settle(hass)
+    placeholder = hass.states.get(DAYLIGHT)
+    assert placeholder.state == "unavailable"
+    assert placeholder.attributes[ATTR_RESTORED]
+    hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    assert await hass.config_entries.async_setup(daylight.entry_id)
+    await settle(hass)
+    assert hass.states.get(DAYLIGHT).state == "on"
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ending", ["dark", "removed"])
+async def test_illuminance_reload_ending_dark_lights_the_occupied_room(
+    hass: HomeAssistant, ending: str
+) -> None:
+    """A sensor back dark, or removed mid-reload, lifts the gate it had kept."""
+    hass.states.async_set(LUX, "1000")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    daylight = _daylight_entry()
+    light = make_light_entry(occupancy=OCC, illuminance=DAYLIGHT)
+    await setup_entries(hass, daylight, light)
+
+    assert await hass.config_entries.async_unload(daylight.entry_id)
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    if ending == "dark":
+        hass.states.async_set(LUX, "5")
+        assert await hass.config_entries.async_setup(daylight.entry_id)
+    else:
+        assert await hass.config_entries.async_remove(daylight.entry_id)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+async def test_bright_control_ends_an_on_period_held_through_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Hold release during an illuminance reload still reads the room bright."""
+    hass.states.async_set(LUX, "1000")
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(REAL, "off")
+    daylight = _daylight_entry()
+    light = make_light_entry(illuminance=DAYLIGHT, hold_entities=[HOLD])
+    await setup_entries(hass, daylight, light)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    assert await hass.config_entries.async_unload(daylight.entry_id)
+    await settle(hass)
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
