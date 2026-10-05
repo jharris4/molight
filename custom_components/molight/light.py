@@ -1345,15 +1345,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     for k in (ATTR_COLOR_TEMP_KELVIN, ATTR_HS_COLOR)
                     if k in raw_pre_warn_color
                 } or None
-            # Pre-warning_active states can only be judged the old way.
+            # Pre-warning_active states can only be judged the old way, as can
+            # one saved while a turn-on ending the warning still waited.
             raw_active = last.attributes.get("warning_active")
-            self._warning_active = (
-                bool(raw_active)
-                if raw_active is not None
-                else (
-                    self._pre_warn_brightness is not None
-                    or self._pre_warn_color is not None
-                )
+            self._warning_active = bool(raw_active) or (
+                self._pre_warn_brightness is not None
+                or self._pre_warn_color is not None
             )
             if self._warning_active:
                 extra = await self.async_get_last_extra_data()
@@ -5176,8 +5173,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             "last_turn_on_selection_source": self._last_turn_on_selection_source,
             # Non-null only while the effect/warn stage is showing; persisted
             # so a restart mid-warning can restore the pre-warning brightness
-            # and color.
-            "warning_active": self._warning_active or look is not None,
+            # and color. A manual turn-on waiting for its selection already
+            # ends the warning, so a brightness step meanwhile builds on it.
+            "warning_active": (
+                self._warning_active and not self._turn_on_waiting(manual=True)
+            )
+            or look is not None,
             "pre_warn_brightness": look[0] if look else self._pre_warn_brightness,
             "pre_warn_color": look[1] if look else self._pre_warn_color,
             "schedule_window_start": window,

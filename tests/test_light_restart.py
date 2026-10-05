@@ -36,6 +36,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
+    STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
     STATE_SCHEDULED,
@@ -985,6 +986,38 @@ async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 255
+
+
+@pytest.mark.asyncio
+async def test_restart_while_a_turn_on_ending_the_warning_waits_uses_the_snapshot(
+    hass: HomeAssistant,
+) -> None:
+    """A state saved while a turn-on that ends the warning still waited for its
+    selection reports no warning but keeps the snapshot, which still restores
+    the pre-warning brightness."""
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "on",
+                {
+                    "brightness": 255,
+                    "molight_state": STATE_EFFECT,
+                    "warning_active": False,
+                    "pre_warn_brightness": 180,
+                },
+            )
+        ],
+    )
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 180
+    assert state.attributes["warning_active"] is False
 
 
 @pytest.mark.asyncio

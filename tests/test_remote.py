@@ -747,6 +747,112 @@ async def test_brightness_step_mid_warning_steps_from_pre_warning_level(
     assert hass.states.get("light.matrix_light").attributes["warning_active"] is True
 
 
+class _HeldSelect:
+    """A select service whose calls each wait until the test releases them."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.calls: list[asyncio.Event] = []
+        self.held = True
+        hass.services.async_register("select", "select_option", self._select)
+
+    async def _select(self, _call) -> None:
+        if self.held:
+            released = asyncio.Event()
+            self.calls.append(released)
+            await released.wait()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(WARNING_STAGES))
+@pytest.mark.parametrize(
+    ("presses", "expected_pct"),
+    [
+        (["raise", "raise"], 70),
+        (["lower", "lower"], 30),
+        (["raise", "lower"], 50),
+        (["lower", "raise"], 50),
+        (["raise", "raise", "raise"], 80),
+    ],
+    ids=["up-up", "down-down", "up-down", "down-up", "up-up-up"],
+)
+@pytest.mark.parametrize("order", ["first", "last"])
+async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
+    hass: HomeAssistant,
+    freezer,
+    stage: str,
+    presses: list[str],
+    expected_pct: int,
+    order: str,
+) -> None:
+    """The first press mid-warning steps from the pre-warning level; one made
+    while that press still waits for its turn-on selection builds on it, in
+    whichever order the select calls finish."""
+    from tests.real_entities import RealLight, add_real  # noqa: PLC0415
+
+    select = _HeldSelect(hass)
+    select.held = False
+    hass.states.async_set("select.scene", "Day")
+    await add_real(hass, RealLight("living_room"))
+    for button in ("event.pico_raise", "event.pico_lower"):
+        _seed(hass, button, PICO_TYPES)
+    light = make_light_entry(
+        name="Test Light",
+        lights=["light.living_room"],
+        turn_on_select_entity="select.scene",
+        turn_on_select_option="Night",
+        **WARNING_STAGES[stage][0],
+    )
+    remote = _remote_entry(
+        **{
+            CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
+            CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE: ["event.pico_lower"],
+        }
+    )
+    await setup_entries(hass, light, remote)
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.test_light", "brightness": 128},
+        blocking=True,
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _vlight(hass).attributes["warning_active"] is True
+    select.held = True
+    calls = _record_service_calls(hass)
+
+    for press in presses:
+        _fire(hass, f"event.pico_{press}", "press", PICO_TYPES)
+        for _ in range(4):  # settle() would wait for the select calls
+            await asyncio.sleep(0)
+    waiting = list(select.calls)
+    # Only a stage that blinks the lights off leaves a turn-on to wait.
+    assert len(waiting) == (len(presses) if stage == "blink_effect" else 0)
+    if waiting:
+        attributes = _vlight(hass).attributes
+        assert attributes["warning_active"] is False
+        assert attributes["pre_warn_brightness"] == 128
+    for released in waiting if order == "first" else reversed(waiting):
+        released.set()
+        for _ in range(8):  # settle() would wait for the calls still held
+            await asyncio.sleep(0)
+    await settle(hass)
+
+    expected = round(expected_pct * 255 / 100)
+    state = _vlight(hass)
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == expected
+    assert state.attributes["warning_active"] is False
+    assert [
+        d["service_data"]["brightness"]
+        for d in calls
+        if d["domain"] == "light"
+        and d["service_data"].get("entity_id") == ["light.living_room"]
+    ][-1] == expected
+
+
 @pytest.mark.asyncio
 async def test_brightness_step_mid_warning_leaves_other_targets_stepping(
     hass: HomeAssistant, freezer
