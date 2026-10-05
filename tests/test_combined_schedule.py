@@ -20,7 +20,12 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache,
 )
 
-from custom_components.molight.binary_sensor import _NEG_INF, _kleene, _Timeline
+from custom_components.molight.binary_sensor import (
+    _MAX_SPELLS,
+    _NEG_INF,
+    _kleene,
+    _Timeline,
+)
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_NAME,
@@ -2318,3 +2323,86 @@ async def test_combination_back_from_an_unload_knows_the_window_started_meanwhil
     else:
         assert marker == before.attributes["current_window_start"]
     assert not hass.data.get(DATA_SCHEDULE_WATCH)
+
+
+@pytest.mark.parametrize("both_off", [True, False], ids=["both_off", "b_stays_on"])
+@pytest.mark.parametrize("how", ["together", "disable", "unload"])
+@pytest.mark.asyncio
+async def test_an_off_between_two_sources_survives_later_changes_of_one(
+    hass: HomeAssistant, freezer, how: str, both_off: bool
+) -> None:
+    """Sources A and B both off for a moment end the window, even when A
+    changes again before the combination refreshes or while it is unloaded."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("binary_sensor.src_a", "on")
+    hass.states.async_set("binary_sensor.src_b", "on")
+    out = _combined("Out", ["binary_sensor.a", "binary_sensor.b"])
+    await _setup(
+        hass,
+        _mirror_schedule("A", "binary_sensor.src_a"),
+        _mirror_schedule("B", "binary_sensor.src_b"),
+        out,
+    )
+    before = hass.states.get("binary_sensor.out")
+    assert before.state == "on"
+    lamp = await _follow_light(hass, "binary_sensor.out")
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            out.entry_id, ConfigEntryDisabler.USER
+        )
+    elif how == "unload":
+        assert await hass.config_entries.async_unload(out.entry_id)
+    await settle(hass)
+
+    changes = [("a", "off"), ("b", "off"), ("a", "on"), ("b", "on")]
+    if not both_off:
+        changes = [("a", "off"), ("a", "on")]
+    started = None
+    for source, value in [*changes, ("a", "off"), ("a", "on")]:
+        freezer.tick(timedelta(milliseconds=10))
+        hass.states.async_set(f"binary_sensor.src_{source}", value)
+        if how != "together":
+            await settle(hass)
+        if started is None and (source, value) == ("a", "on"):
+            started = dt_util.utcnow()
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(out.entry_id, None)
+    elif how == "unload":
+        assert await hass.config_entries.async_setup(out.entry_id)
+    await settle(hass)
+
+    after = hass.states.get("binary_sensor.out")
+    assert after.state == "on"
+    marker = after.attributes["current_window_start"]
+    if both_off:
+        assert datetime.fromisoformat(marker) == started
+    else:
+        assert marker == before.attributes["current_window_start"]
+    if how == "together":
+        assert lamp.is_on == both_off
+
+
+@pytest.mark.asyncio
+async def test_an_unloaded_combination_keeps_only_the_latest_spells(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A source that keeps changing while the combination is unloaded is
+    remembered for its latest changes only."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("binary_sensor.src", "on")
+    out = _combined("Out", ["binary_sensor.mirror"])
+    await _setup(hass, _mirror_schedule("Mirror", "binary_sensor.src"), out)
+    assert await hass.config_entries.async_unload(out.entry_id)
+    await settle(hass)
+
+    for value in ["off", "on"] * _MAX_SPELLS:
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set("binary_sensor.src", value)
+        await settle(hass)
+
+    spells = hass.data[DATA_SCHEDULE_WATCH][out.entry_id].passed_through
+    kept = spells["binary_sensor.mirror"]
+    assert len(kept) == _MAX_SPELLS
+    assert kept[-1][1] == dt_util.utcnow().timestamp()

@@ -18,6 +18,7 @@ import contextlib
 import logging
 import math
 from bisect import bisect_right
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from functools import partial
@@ -1818,6 +1819,8 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
+# Spells each source keeps between refreshes; only the oldest are dropped.
+_MAX_SPELLS = 100
 # current_window_start for an on-period with no known start: stable, so Follow
 # mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
@@ -1929,12 +1932,14 @@ class _SourceChanges:
 
     A refresh reads only each source's final state, so an off and on arriving
     together would leave no trace of the window that ended. passed_through
-    keeps the on or off spell (start, end, value) a source left when it
-    changed more than once.
+    keeps the on and off spells (start, end, value) a source left, in order,
+    when it changed more than once.
     """
 
     changed: set[str] = field(default_factory=set)
-    passed_through: dict[str, tuple[float, float, bool]] = field(default_factory=dict)
+    passed_through: dict[str, deque[tuple[float, float, bool]]] = field(
+        default_factory=dict
+    )
     unsub: CALLBACK_TYPE = lambda: None
 
     @callback
@@ -1947,10 +1952,14 @@ class _SourceChanges:
         old = event.data["old_state"]
         if old is None or old.state not in ("on", "off"):
             return
-        self.passed_through[entity_id] = (
-            _mirror_since(old).timestamp(),
-            event.time_fired.timestamp(),
-            old.state == "on",
+        # Bounded for a schedule left unloaded while a source keeps changing.
+        spells = self.passed_through.setdefault(entity_id, deque(maxlen=_MAX_SPELLS))
+        spells.append(
+            (
+                _mirror_since(old).timestamp(),
+                event.time_fired.timestamp(),
+                old.state == "on",
+            )
         )
 
 
@@ -2313,16 +2322,18 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         if state is None or state.state not in ("on", "off"):
             return _Timeline.constant(None)
         since = _mirror_since(state).timestamp()
-        segments: list[tuple[float, bool | None]] = [(_NEG_INF, None)]
-        passed = self._seen.passed_through.get(entity_id or "")
-        if passed is not None:
-            start, end, value = passed
-            # The spell came first, even when its state was written late and
-            # is dated after the start the current one takes from its source.
-            start = min(start, math.nextafter(since, _NEG_INF))
-            segments += [(start, value), (min(end, since), None)]
-        segments.append((since, state.state == "on"))
-        return _Timeline(segments).normalized()
+        segments: list[tuple[float, bool | None]] = [(since, state.state == "on")]
+        for start, end, value in reversed(
+            self._seen.passed_through.get(entity_id or "", ())
+        ):
+            following = segments[-1][0]
+            # Each spell came before the next, even when its state was written
+            # late and is dated after the start the next takes from its source.
+            segments += [
+                (min(end, following), None),
+                (min(start, math.nextafter(following, _NEG_INF)), value),
+            ]
+        return _Timeline([(_NEG_INF, None), *reversed(segments)]).normalized()
 
     @callback
     def _refresh(self, _now: datetime | None = None) -> None:
