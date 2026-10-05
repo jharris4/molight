@@ -3787,7 +3787,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         Every member gets them, so one reporting in while the select call
         runs is lit too. A stage that blinks the lights off has none to send.
         """
-        if self._machine_state == STATE_EFFECT and not self._effect_brightness:
+        # The stage running decides, not the settings a profile change brought.
+        if self._in_warning() and self._stage_look and not self._stage_look[0]:
             return
         brightness, color = self._attr_brightness, self._current_color()
         looks = None

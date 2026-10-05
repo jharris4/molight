@@ -77,6 +77,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealLight, add_real
 from tests.test_light_selection import _SlowSelect
 
 REAL = "light.real_1"
@@ -3091,6 +3092,73 @@ async def test_warn_undoes_effect_recolor_across_keep_boundary(
     state = hass.states.get(VIRTUAL)
     assert state.attributes["molight_state"] == STATE_WARN
     assert state.attributes["hs_color"] == (120.0, 50.0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boundary", ["start", "end"])
+@pytest.mark.parametrize("running", [20, 0], ids=["dim", "blink"])
+@pytest.mark.parametrize(
+    "new_effect",
+    [
+        {},
+        {CONF_EFFECT_TIMEOUT: 60, CONF_EFFECT_BRIGHTNESS: 0},
+        {CONF_EFFECT_TIMEOUT: 60, CONF_EFFECT_BRIGHTNESS: 80},
+    ],
+    ids=["disabled", "blink", "dim"],
+)
+async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_boundary(
+    hass: HomeAssistant, freezer, boundary: str, running: int, new_effect: dict
+) -> None:
+    """A real light back from unavailable after a keep boundary gets the
+    effect still running, judged by that stage and not by the new settings'
+    effect: a dim one relights it, a blackout leaves it dark. The effect
+    still ends at its own deadline."""
+    lamp = RealLight("real_1")
+    await add_real(hass, lamp)
+    hass.states.async_set(SCHEDULE, "on" if boundary == "end" else "off")
+    old = {
+        CONF_LIGHT_TIMEOUT: 10,
+        CONF_EFFECT_TIMEOUT: 60,
+        CONF_EFFECT_BRIGHTNESS: running,
+    }
+    new = {CONF_LIGHT_TIMEOUT: 10, **new_effect}
+    entry = make_scheduled_light_entry(
+        schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+        outside=new if boundary == "end" else old,
+        inside=old if boundary == "end" else new,
+    )
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 180}, blocking=True
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    shown = (True, 51) if running else (False, 180)
+    assert (lamp.is_on, lamp.brightness) == shown
+
+    hass.states.async_set(SCHEDULE, "off" if boundary == "end" else "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_EFFECT
+    lamp._attr_available = False
+    lamp.async_write_ha_state()
+    await settle(hass)
+    lamp._attr_available = True
+    lamp._attr_is_on = False
+    lamp.async_write_ha_state()
+    await settle(hass)
+
+    assert (lamp.is_on, lamp.brightness) == shown
+    freezer.tick(timedelta(seconds=58))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_EFFECT
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_IDLE
+    assert not lamp.is_on
 
 
 @pytest.mark.asyncio
