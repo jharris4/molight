@@ -342,6 +342,20 @@ def lights_commanded(
     return found
 
 
+def group_leaves(
+    hass: HomeAssistant, group_id: str, lights: dict[str, ConfigEntry]
+) -> set[str]:
+    """Return the lights a light group ends at, through any nested groups.
+
+    A virtual light is one of them: it answers for the lights under it.
+    """
+    return {
+        entity_id
+        for entity_id in lights_commanded(hass, [group_id], lights)
+        if entity_id in lights or not light_member_ids(hass, entity_id, lights)
+    }
+
+
 def shared_lights(
     hass: HomeAssistant, members: Sequence[str], *, own_entry_id: str | None = None
 ) -> dict[str, str]:

@@ -12,7 +12,10 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.molight.const import (
     CONF_LIGHT_TIMEOUT,
@@ -309,3 +312,177 @@ async def test_load_warns_about_a_light_two_virtual_lights_control(
         if record.msg.startswith("%s and %s both control %s")
     ]
     assert warned == [("light.other", "light.room", REAL)]
+
+
+# ---------------------------------------------------------------------------
+# A member light group changed to contain a virtual light
+# ---------------------------------------------------------------------------
+
+ROOM = "light.room"
+BULB = "light.bulb"
+GROUP_TOPOLOGIES = ["sole", "mixed", "nested"]
+
+
+def _at_the_wall(bulb: RealLight, *, on: bool = True, brightness: int = 255) -> None:
+    """Change a bulb with no command behind it."""
+    bulb._attr_is_on = on
+    bulb._attr_brightness = brightness
+    bulb.async_write_ha_state()
+
+
+def _light_group(name: str, members: list[str]) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain="group",
+        title=name,
+        options={
+            "group_type": "light",
+            "name": name,
+            "entities": members,
+            "hide_members": False,
+        },
+    )
+
+
+async def _outer_over_edited_group(
+    hass: HomeAssistant, topology: str, inner: MockConfigEntry
+) -> dict[str, RealLight]:
+    """An outer light over a group of bulbs that is then changed to hold Inner.
+
+    The inner light is alone in the group, next to a bulb, or in a group
+    inside it that the outer light does not watch.
+    """
+    bulbs = {name: RealLight(name) for name in ("real_1", "bulb", "spare")}
+    await add_real(hass, *bulbs.values())
+    room = _light_group("Room", [BULB])
+    below = _light_group("Below", ["light.spare"])
+    await setup_entries(hass, inner, below, room)
+    member = ROOM
+    if topology == "nested":
+        await setup_entries(hass, _light_group("Top", [ROOM, "light.below"]))
+        member = "light.top"
+    await setup_entries(
+        hass, make_light_entry(name="Outer", lights=[member], timeout=60)
+    )
+    await settle(hass)
+    members = [INNER, BULB] if topology == "mixed" else [INNER]
+    hass.config_entries.async_update_entry(
+        room, options={**room.options, "entities": members}
+    )
+    assert await hass.config_entries.async_reload(room.entry_id)
+    await settle(hass)
+    assert hass.states.get(ROOM).attributes["entity_id"] == members
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": OUTER, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(INNER).state == "on"
+    return bulbs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", GROUP_TOPOLOGIES)
+async def test_warn_dim_through_an_edited_group_does_not_restart_the_outer_timer(
+    hass: HomeAssistant, freezer, topology: str
+) -> None:
+    """The group hides the inner light's stamps; its warn stage is still its own."""
+    inner = make_light_entry(
+        name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
+    )
+    bulbs = await _outer_over_edited_group(hass, topology, inner)
+    await _tick(hass, freezer, 51)
+    assert _attrs(hass, INNER)["molight_state"] == STATE_WARN
+    assert bulbs["real_1"].brightness == 51
+    assert _attrs(hass, OUTER)["last_brightness_change_physical"] is None
+
+    await _tick(hass, freezer, 10)
+    assert hass.states.get(OUTER).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", GROUP_TOPOLOGIES)
+async def test_timer_off_through_an_edited_group_is_not_a_manual_off(
+    hass: HomeAssistant, freezer, topology: str
+) -> None:
+    """Nor is the inner light's own timer turning it off a person's off."""
+    inner = make_light_entry(name="Inner", lights=[REAL], timeout=30)
+    await _outer_over_edited_group(hass, topology, inner)
+    # The inner light is the last one lit under the outer light.
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": [BULB, "light.spare"]}, blocking=True
+    )
+    await settle(hass)
+    before = _attrs(hass, OUTER)["last_off_manual"]
+    await _tick(hass, freezer, 31)
+    assert hass.states.get(INNER).state == "off"
+    assert _attrs(hass, INNER)["last_off_manual"] is None
+    assert hass.states.get(OUTER).state == "off"
+    assert _attrs(hass, OUTER)["last_off_manual"] == before
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", GROUP_TOPOLOGIES)
+@pytest.mark.parametrize("target", ["inner", "wall"])
+async def test_a_persons_dim_through_an_edited_group_restarts_the_outer_timer(
+    hass: HomeAssistant, freezer, topology: str, target: str
+) -> None:
+    """A command through the inner light, or a dim at its bulb, is a person's."""
+    inner = make_light_entry(name="Inner", lights=[REAL], timeout=300)
+    bulbs = await _outer_over_edited_group(hass, topology, inner)
+    await _tick(hass, freezer, 51)
+    if target == "inner":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": INNER, "brightness": 150}, blocking=True
+        )
+    else:
+        _at_the_wall(bulbs["real_1"], brightness=150)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
+
+    await _tick(hass, freezer, 10)
+    assert hass.states.get(OUTER).state == "on"
+    await _tick(hass, freezer, 51)
+    assert hass.states.get(OUTER).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_a_dim_at_a_bulb_beside_the_inner_light_is_a_persons(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A bulb in the group changing with the inner light is not its automation."""
+    inner = make_light_entry(
+        name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
+    )
+    bulbs = await _outer_over_edited_group(hass, "mixed", inner)
+    await _tick(hass, freezer, 51)
+    assert _attrs(hass, OUTER)["last_brightness_change_physical"] is None
+    _at_the_wall(bulbs["bulb"], brightness=90)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
+
+    await _tick(hass, freezer, 10)
+    assert hass.states.get(OUTER).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_a_group_of_bulbs_is_a_person_at_the_wall(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A group without a virtual light reports changes at the wall as before."""
+    bulb = RealLight("bulb")
+    await add_real(hass, bulb)
+    await setup_entries(hass, _light_group("Room", [BULB]))
+    await setup_entries(hass, make_light_entry(name="Outer", lights=[ROOM], timeout=60))
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": OUTER, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    await _tick(hass, freezer, 51)
+    _at_the_wall(bulb, brightness=90)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
+
+    await _tick(hass, freezer, 10)
+    assert hass.states.get(OUTER).state == "on"
+    _at_the_wall(bulb, on=False)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["last_off_manual"] is not None

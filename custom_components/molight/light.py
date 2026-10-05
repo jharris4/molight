@@ -383,6 +383,7 @@ from .helpers import (
     MEMBER_LIGHT_TYPES,
     RenamableRestoreEntity,
     entity_gone,
+    group_leaves,
     light_descendants,
     lights_lit_with,
     lights_support_brightness,
@@ -948,6 +949,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Members that have reported on/off since this light was set up: a
         # placeholder they leave later is a reload, not startup loading.
         self._members_seen: set[str] = set()
+        # Virtual lights inside member light groups, and what they last did:
+        # (context ID, whether it was their own automation).
+        self._grouped_lights: set[str] = set()
+        self._grouped_unsub: CALLBACK_TYPE | None = None
+        self._grouped_reports: deque[tuple[str, bool]] = deque(maxlen=32)
         # Last known on/off of the schedule, None until first seen; a
         # recovery matching it crossed no window boundary.
         self._schedule_last_on: bool | None = None
@@ -1288,6 +1294,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 )
             )
             self._drop_member_cycles()
+            self._watch_grouped_lights()
             self._warn_shared_members()
             self._warn_refused_holds()
             self._select_initial_settings()
@@ -1332,6 +1339,49 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             )
         self._lights = [m for m in self._lights if m not in cyclic]
         return bool(cyclic)
+
+    @callback
+    def _watch_grouped_lights(self) -> None:
+        """Follow the virtual lights that member light groups contain.
+
+        The flows refuse such a group, but one can be changed to contain a
+        virtual light, at any depth. The group hides that light's stamps.
+        """
+        lights = molight_light_entries(self.hass, MEMBER_LIGHT_TYPES)
+        grouped = {
+            leaf
+            for member in self._lights
+            if member not in lights
+            for leaf in group_leaves(self.hass, member, lights)
+            if leaf in lights
+        }
+        if grouped == self._grouped_lights:
+            return
+        self._grouped_lights = grouped
+        if self._grouped_unsub is not None:
+            self._grouped_unsub()
+        self._grouped_unsub = (
+            async_track_state_change_event(
+                self.hass, sorted(grouped), self._on_grouped_light_report
+            )
+            if grouped
+            else None
+        )
+
+    @callback
+    def _on_grouped_light_report(self, event: Event[EventStateChangedData]) -> None:
+        """Note whether a virtual light in a member group acted alone."""
+        if (new_state := event.data.get("new_state")) is not None:
+            alone = _wrapped_light_acted_alone(event.data.get("old_state"), new_state)
+            self._grouped_reports.append((event.context.id, alone))
+
+    def _group_acted_alone(self, context: Context) -> bool:
+        """Whether a member group's report is a virtual light in it acting alone.
+
+        A group reports under the context of the light that changed it.
+        """
+        causes = [alone for id_, alone in self._grouped_reports if id_ == context.id]
+        return bool(causes) and all(causes)
 
     @callback
     def _warn_shared_members(self) -> None:
@@ -1926,6 +1976,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         await super().async_will_remove_from_hass()
         self._cancel_timer()
         self._cancel_door_dropout()
+        if self._grouped_unsub is not None:
+            self._grouped_unsub()
+            self._grouped_unsub = None
         # A turn-on still waiting for its selection must not light the room
         # for an entity that is gone.
         self._command_generation += 1
@@ -2040,14 +2093,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         # A group below this one can change without this one's list changing,
         # and then reports this light's own state back to it.
-        if (
-            entity_id in self._lights
-            and (_is_group(new_state) or _is_group(old_state))
-            and self._drop_member_cycles()
-            and entity_id not in self._lights
-        ):
-            return
+        if entity_id in self._lights and (_is_group(new_state) or _is_group(old_state)):
+            if self._drop_member_cycles() and entity_id not in self._lights:
+                return
+            self._watch_grouped_lights()
         if entity_id in self._lights:
+            group_alone = _is_group(new_state) and self._group_acted_alone(
+                event.context
+            )
             member_seen = entity_id in self._members_seen
             if new_state.state in ("on", "off"):
                 self._members_seen.add(entity_id)
@@ -2112,7 +2165,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 event.context.id in self._waiting_turn_ons
                 or self._selecting_on_device_of(entity_id)
             )
-            human = not _wrapped_light_acted_alone(old_state, new_state)
+            human = not (
+                group_alone or _wrapped_light_acted_alone(old_state, new_state)
+            )
             if not claim and lit and self._turn_on_waiting():
                 # Lit by the selection of a turn-on about to be sent, which
                 # keeps the state it set: only mirror the member.
