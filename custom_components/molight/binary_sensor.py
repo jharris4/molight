@@ -312,14 +312,14 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             )
         elif state:
             self._attr_is_on = state.state == "on"
-            if (
-                self._attr_is_on
-                and self._last_on_time is None
-                and self.hass.state is CoreState.running
-            ):
+            running = self.hass.state is CoreState.running
+            if self._attr_is_on and self._last_on_time is None and running:
                 # Only a mid-run reload makes last_changed a real estimate; at
                 # startup it is just the restart moment.
                 self._last_on_time = state.last_changed
+            elif restored_on and not self._attr_is_on and running:
+                # The source cleared while this sensor was not loaded.
+                self._record_clear(state.last_changed)
         self.async_write_ha_state()
 
     def _source_includes_self(self) -> bool:
@@ -437,20 +437,20 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
                 # which would advance latest_occupied_time past the dropout
                 # and overwrite the clear's classification.
                 return
-            now = datetime.now(UTC)
-            self._last_clear_false = self._is_false_cycle(now)
-            self._last_clear_unavailable = False
-            if self._last_clear_false:
-                self._false_count += 1
-            else:
-                candidate = now - timedelta(seconds=self._timeout)
-                if (
-                    self._latest_occupied_time is None
-                    or candidate > self._latest_occupied_time
-                ):
-                    self._latest_occupied_time = candidate
+            self._record_clear(datetime.now(UTC))
             self._attr_is_on = False
         self.async_write_ha_state()
+
+    def _record_clear(self, cleared: datetime) -> None:
+        """Classify the cycle the source just ended and date the departure."""
+        self._last_clear_false = self._is_false_cycle(cleared)
+        self._last_clear_unavailable = False
+        if self._last_clear_false:
+            self._false_count += 1
+            return
+        candidate = cleared - timedelta(seconds=self._timeout)
+        if self._latest_occupied_time is None or candidate > self._latest_occupied_time:
+            self._latest_occupied_time = candidate
 
     def _resume_dropout(self, dropout: datetime) -> None:
         """Carry an occupied dropout across a reload, keeping its clear deadline."""

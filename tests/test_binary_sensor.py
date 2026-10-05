@@ -8,7 +8,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntry, ConfigEntryDisabler
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_STATE_CHANGED
 from homeassistant.core import CoreState, HomeAssistant, State, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, restore_state
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -44,7 +44,14 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
-from tests.real_entities import RealLux, add_real, add_real_with_entry, rename
+from tests.real_entities import (
+    RealBinary,
+    RealLight,
+    RealLux,
+    add_real,
+    add_real_with_entry,
+    rename,
+)
 
 
 def _occupancy2_entry() -> MockConfigEntry:
@@ -2900,3 +2907,131 @@ async def test_light_false_off_delay_survives_a_combined_occupancy_reload(
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get("light.matrix_light").state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("occupied_for", "false"), [(120, False), (31, True)], ids=["genuine", "false"]
+)
+async def test_occupancy_records_a_clear_missed_during_a_reload(
+    hass: HomeAssistant, freezer, occupied_for: int, false: bool
+) -> None:
+    """A source that clears while the sensor is not loaded still ends its
+    cycle: the clear is classified and dated when the source reported it."""
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    entry = _grace_occupancy_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=occupied_for))
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    cleared = datetime.now(UTC)
+    freezer.tick(timedelta(seconds=2))
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is false
+    assert state.attributes["false_detection_count"] == int(false)
+    assert state.attributes["latest_occupied_time"] == (
+        None if false else (cleared - timedelta(seconds=30)).isoformat()
+    )
+
+
+@pytest.mark.asyncio
+async def test_occupancy_does_not_date_a_clear_from_a_restart(
+    hass: HomeAssistant, freezer
+) -> None:
+    """At startup the source's state only dates the restart, not a departure."""
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    entry = _grace_occupancy_entry()
+    await setup_entries(hass, entry)
+    hass.states.async_set("binary_sensor.motion_1", "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=120))
+
+    await restore_state.async_get(hass).async_dump_states()
+    hass.states.async_set("binary_sensor.motion_1", "off")
+    await crash_entries(hass, entry)
+
+    state = hass.states.get("binary_sensor.boot_occupancy")
+    assert state.state == "off"
+    assert state.attributes["latest_occupied_time"] is None
+    assert state.attributes["false_detection_count"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", ["plain", "combined", "nested"])
+@pytest.mark.parametrize(
+    ("occupied_for", "false"), [(120, False), (2, True)], ids=["genuine", "false"]
+)
+async def test_light_countdown_after_a_clear_missed_during_an_occupancy_reload(
+    hass: HomeAssistant, freezer, topology: str, occupied_for: int, false: bool
+) -> None:
+    """A light gets the normal countdown after a genuine visit whose clear the
+    reloading sensor missed, and the quick off after a false one, whether it
+    uses the sensor directly or through combined sensors."""
+    lamp, motion = RealLight("lamp"), RealBinary("motion")
+    await add_real(hass, lamp, motion)
+    occupancy = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Plain",
+            CONF_OCCUPANCY_SENSOR: motion.entity_id,
+            CONF_OCCUPANCY_TIMEOUT: 1,
+            CONF_FALSE_DETECTION_GRACE: 3,
+        },
+    )
+
+    def combined(name: str, trigger: str) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+                CONF_NAME: name,
+                CONF_TRIGGER_SENSORS: [trigger],
+            },
+        )
+
+    light = make_light_entry(
+        lights=[lamp.entity_id],
+        occupancy=f"binary_sensor.{topology}",
+        timeout=60,
+        false_off_delay=5,
+    )
+    await setup_entries(
+        hass,
+        occupancy,
+        combined("Combined", "binary_sensor.plain"),
+        combined("Nested", "binary_sensor.combined"),
+        light,
+    )
+    motion.set(True)
+    await settle(hass)
+    assert lamp.is_on
+    freezer.tick(timedelta(seconds=occupied_for))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert await hass.config_entries.async_unload(occupancy.entry_id)
+    await settle(hass)
+    motion.set(False)
+    await settle(hass)
+    assert await hass.config_entries.async_setup(occupancy.entry_id)
+    await settle(hass)
+    state = hass.states.get(f"binary_sensor.{topology}")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is false
+
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert lamp.is_on is not false
+    freezer.tick(timedelta(seconds=55))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert not lamp.is_on
