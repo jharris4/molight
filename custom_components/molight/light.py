@@ -901,6 +901,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # The settings schedule's window marker, last known and as restored:
         # a different one after a restart means a boundary was crossed.
         self._settings_window_start: str | None = None
+        # The settings schedule's marker when its last valid state was handled.
+        self._settings_window_seen: str | None = None
         self._restored_window_start: str | None = None
         # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
         # Persisted as a state attribute so a restart cannot lose the pending
@@ -1535,6 +1537,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._attr_name,
             )
         self._inside_schedule = inside
+        self._settings_window_seen = (
+            marker
+            if schedule is not None and schedule.state in ("on", "off")
+            else self._restored_window_start
+        )
         self._apply_light_settings(
             self._inside_schedule_settings
             if inside
@@ -2266,6 +2273,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if entity_id == self._settings_schedule_entity and _window_moved(
                 old_state, new_state
             ):
+                self._settings_window_seen = new_state.attributes.get(
+                    "current_window_start"
+                )
                 self._on_new_settings_window()
             return
         # A recovery from unavailable/unknown (or a first sighting) that
@@ -2286,7 +2296,25 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             "on",
             "off",
         ):
-            self._switch_scheduled_settings(new_state.state == "on")
+            inside = new_state.state == "on"
+            marker = (
+                new_state.attributes.get("current_window_start") if inside else None
+            )
+            # A window that started during the schedule's outage, with the
+            # schedule back on the same side, is a boundary that was missed.
+            missed = (
+                recovered
+                and inside
+                and bool(self._inside_schedule)
+                and bool(marker)
+                and self._settings_window_seen is not None
+                and marker != self._settings_window_seen
+            )
+            self._settings_window_seen = marker
+            if missed:
+                self._on_new_settings_window()
+            else:
+                self._switch_scheduled_settings(inside)
         # A keep-on entity engages before its other roles act, so none of them
         # issues an automatic off it holds; a release is applied after them.
         holding = entity_id in self._hold_entities and new_state.state == "on"

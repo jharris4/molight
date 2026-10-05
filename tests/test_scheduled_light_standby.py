@@ -6,6 +6,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import (
     Context,
@@ -49,8 +50,10 @@ from custom_components.molight.const import (
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
+    CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
+    CONF_SCHEDULE_SOURCE,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
@@ -67,6 +70,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -2000,6 +2004,152 @@ async def test_restart_keeps_a_manual_off_only_within_its_window(
     assert hass.states.get(SCHEDULE).state == "on"
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is suppressed
     assert (_attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window) is suppressed
+    assert _attrs(hass)["molight_state"] == (
+        STATE_IDLE if suppressed else STATE_STANDBY
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
+@pytest.mark.parametrize("how", ["unload", "disable", "light_restarts"])
+@pytest.mark.parametrize(
+    ("outage", "suppressed"),
+    [(timedelta(hours=1), True), (timedelta(hours=24), False)],
+    ids=["same_window", "next_window"],
+)
+async def test_schedule_outage_keeps_a_manual_off_only_within_its_window(
+    hass: HomeAssistant,
+    freezer,
+    combined: bool,
+    how: str,
+    outage: timedelta,
+    suppressed: bool,
+) -> None:
+    """A schedule unloaded or disabled into a later window comes back on, as
+    it left: the window is new all the same and brings standby back, also
+    when the light restarted meanwhile. Back in the same window, the manual
+    off stands."""
+    freezer.move_to("2026-03-02 22:00:00-08:00")
+    schedules = [
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+                CONF_NAME: "Night" if combined else "Settings Schedule",
+                CONF_TIME_WINDOWS: [
+                    {"start": {"time": "21:00"}, "end": {"time": "07:00"}}
+                ],
+            },
+        )
+    ]
+    if combined:
+        schedules.append(
+            MockConfigEntry(
+                domain=DOMAIN,
+                data={
+                    CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+                    CONF_NAME: "Settings Schedule",
+                    CONF_SCHEDULE_INPUTS: ["binary_sensor.night"],
+                },
+            )
+        )
+    entry = _porch()
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    await setup_entries(hass, *schedules, entry)
+    await settle(hass)
+    _assert_standby(hass)
+    window = _attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW]
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+    schedule = schedules[-1]
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            schedule.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        assert await hass.config_entries.async_unload(schedule.entry_id)
+    await settle(hass)
+    freezer.tick(outage)
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    if how == "light_restarts":
+        await restart_entries(hass, entry)
+        assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(schedule.entry_id, None)
+    else:
+        assert await hass.config_entries.async_setup(schedule.entry_id)
+    await settle(hass)
+
+    assert hass.states.get(SCHEDULE).state == "on"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is suppressed
+    assert (_attrs(hass)[ATTR_ACTIVE_SETTINGS_WINDOW] == window) is suppressed
+    assert _attrs(hass)["molight_state"] == (
+        STATE_IDLE if suppressed else STATE_STANDBY
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["unload", "disable"])
+@pytest.mark.parametrize(
+    ("meanwhile", "suppressed"),
+    [(("off", "on"), False), (("unavailable", "on"), True), ((), True)],
+    ids=["source_cycle", "source_outage", "unchanged"],
+)
+async def test_source_window_started_while_its_schedule_was_unloaded_is_a_boundary(
+    hass: HomeAssistant,
+    freezer,
+    how: str,
+    meanwhile: tuple[str, ...],
+    suppressed: bool,
+) -> None:
+    """A source-backed schedule unloaded while its source goes off and on
+    comes back on in a new window, which brings standby back after a manual
+    off. A source that only dropped out, or did nothing, leaves the off."""
+    freezer.move_to("2026-03-02 22:00:00-08:00")
+    hass.states.async_set("binary_sensor.night_mode", "on")
+    schedule = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Settings Schedule",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: "binary_sensor.night_mode",
+        },
+    )
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(OCCUPANCY, "off")
+    await setup_entries(hass, schedule, _porch())
+    await settle(hass)
+    _assert_standby(hass)
+    await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
+    await settle(hass)
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            schedule.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        assert await hass.config_entries.async_unload(schedule.entry_id)
+    await settle(hass)
+    for value in meanwhile:
+        freezer.tick(timedelta(seconds=10))
+        hass.states.async_set("binary_sensor.night_mode", value)
+        await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+    if how == "disable":
+        await hass.config_entries.async_set_disabled_by(schedule.entry_id, None)
+    else:
+        assert await hass.config_entries.async_setup(schedule.entry_id)
+    await settle(hass)
+
+    assert hass.states.get(SCHEDULE).state == "on"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is suppressed
     assert _attrs(hass)["molight_state"] == (
         STATE_IDLE if suppressed else STATE_STANDBY
     )

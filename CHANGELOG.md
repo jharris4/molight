@@ -127,7 +127,8 @@ Remote buttons.
   boundary instead of a second after it. A combined schedule starts a new
   window when a source-backed input turns off and on again in the same moment.
   A source-backed or combined schedule disabled or reloaded while its source
-  turned off and on comes back with the new window.
+  turned off and on comes back with the new window, and a Virtual Scheduled
+  Light brings standby back when its schedule returns in a later window.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work, and double clicks on
   those and on BTHome and Xiaomi BLE buttons are accepted. *Brightness up* and
