@@ -3138,6 +3138,36 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "role", [CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY]
+)
+async def test_profile_switch_keeps_the_hold_of_unreadable_presence(
+    hass: HomeAssistant, role: str
+) -> None:
+    """A boundary crossed while a holding presence sensor is out keeps its hold."""
+    presence = "binary_sensor.shared_presence"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "off")
+    hass.states.async_set(presence, "off")
+    profile = {CONF_LIGHT_TIMEOUT: 60, role: presence}
+    entry = make_scheduled_light_entry(outside=dict(profile), inside=dict(profile))
+    await setup_entries(hass, entry)
+    await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
+    await settle(hass)
+    hass.states.async_set(presence, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(presence, "unavailable")
+    await settle(hass)
+    hass.states.async_set(SCHEDULE, "on")  # cross the boundary mid-outage
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
 # ---------------------------------------------------------------------------
 # A boundary that ended a manual off, across restarts
 # ---------------------------------------------------------------------------

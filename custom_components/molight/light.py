@@ -962,6 +962,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Last known occupied/clear, None until first seen; a recovery
         # matching it must not re-light a room the user turned off.
         self._occupancy_last_on: bool | None = None
+        # Last known on/off of the maintain entity, None until first seen.
+        self._maintain_last_on: bool | None = None
         # When the user last turned the light off, here or at the wall: a
         # start deferred by an unreadable sensor is not applied over it.
         self._last_manual_off: datetime | None = None
@@ -1575,6 +1577,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         prev_hold_states = self._hold_states
         prev_illuminance_entity = self._illuminance_entity
         prev_occupancy_entity = self._occupancy_entity
+        prev_maintain_entity = self._maintain_entity
         self._apply_light_settings(
             self._inside_schedule_settings
             if inside
@@ -1619,6 +1622,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
             self._occupancy_last_on = self._live_occupancy_on()
+        if not (
+            self._maintain_entity == prev_maintain_entity
+            and (s := self.hass.states.get(self._maintain_entity or "")) is not None
+            and s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)
+        ):
+            self._maintain_last_on = self._live_maintain_on()
         old_held = self._held
         self._held = self._compute_held()
         # A turn-on still waiting for its selection is judged as on: the off
@@ -1761,6 +1770,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._schedule_last_on and not self._is_scheduled_light:
             self._schedule_end_off_pending = False  # a window started since
         self._occupancy_last_on = self._live_occupancy_on()
+        self._maintain_last_on = self._live_maintain_on()
         self._seed_from_members(commanded=True)
 
     def _seed_from_members(self, *, commanded: bool = False) -> None:
@@ -2350,7 +2360,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # clear, so nothing lit the room: apply that start now.
                 self._on_occupancy_change(True)
         if entity_id == self._maintain_entity:
-            self._on_maintain_change(new_state.state == "on")
+            self._maintain_last_on = new_state.state == "on"
+            self._on_maintain_change(self._maintain_last_on)
         if entity_id == self._illuminance_entity:
             bright = new_state.state == "on"
             level_changed = (
@@ -2421,6 +2432,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._go_idle()
         if entity_id == self._occupancy_entity:
             self._occupancy_last_on = None
+        if entity_id == self._maintain_entity:
+            self._maintain_last_on = None
         if entity_id == self._illuminance_entity:
             self._illuminance_gone()
         if entity_id == self._door_entity:
@@ -3649,11 +3662,15 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self.async_write_ha_state()
 
     def _occupancy_active(self) -> bool:
-        """Return True when the regular occupancy entity is configured and on."""
-        if not self._occupancy_entity:
-            return False
-        state = self.hass.states.get(self._occupancy_entity)
-        return state is not None and state.state == "on"
+        """Return True when the regular occupancy entity is on.
+
+        Unreadable (an outage, a reload), it keeps a hold it had: its last
+        known value counts for a light that is held, and starts nothing.
+        """
+        live = self._live_occupancy_on()
+        if live is None:
+            return bool(self._occupancy_last_on) and self._presence_held()
+        return live
 
     def _occupancy_holds(self) -> bool:
         """Return True when active occupancy may hold an on light as OCCUPIED.
@@ -3767,17 +3784,30 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self.async_write_ha_state()
 
     def _maintain_active(self) -> bool:
-        """Return True when the maintain occupancy entity is configured and on."""
-        if not self._maintain_entity:
-            return False
-        state = self.hass.states.get(self._maintain_entity)
-        return state is not None and state.state == "on"
+        """Return True when the maintain entity is on, or still holds unreadable."""
+        live = self._live_maintain_on()
+        if live is None:
+            return bool(self._maintain_last_on) and self._presence_held()
+        return live
+
+    def _presence_held(self) -> bool:
+        """Return True while presence holds the light on with no timer."""
+        return self._machine_state == STATE_OCCUPIED
 
     def _live_occupancy_on(self) -> bool | None:
         """Live on/off of the occupancy entity, None when unknown."""
         if not self._occupancy_entity:
             return None
         state = self.hass.states.get(self._occupancy_entity)
+        if state is None or state.state not in ("on", "off"):
+            return None
+        return state.state == "on"
+
+    def _live_maintain_on(self) -> bool | None:
+        """Live on/off of the maintain entity, None when unknown."""
+        if not self._maintain_entity:
+            return None
+        state = self.hass.states.get(self._maintain_entity)
         if state is None or state.state not in ("on", "off"):
             return None
         return state.state == "on"

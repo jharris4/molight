@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
@@ -2240,3 +2241,138 @@ async def test_bright_control_ends_an_on_period_held_through_a_reload(
     hass.states.async_set(HOLD, "off")
     await settle(hass)
     assert _state(hass).state == "off"
+
+
+MOTION = "binary_sensor.motion"
+PRESENCE = "binary_sensor.presence"
+
+
+def _presence_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Presence",
+            CONF_OCCUPANCY_SENSOR: MOTION,
+            CONF_OCCUPANCY_TIMEOUT: 0,
+            CONF_FALSE_DETECTION_GRACE: 0,
+        },
+    )
+
+
+async def _held_room_loses_sensor(
+    hass: HomeAssistant, role: str, how: str
+) -> MockConfigEntry:
+    """Light a room held by both presence roles, then make one unreadable.
+
+    The door is open and a keep-on entity holds too. Returns the entry of
+    the unreadable sensor, a real Virtual Occupancy Sensor.
+    """
+    hass.states.async_set(MOTION, "on")
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(REAL, "off")
+    presence = _presence_entry()
+    roles = {"occupancy": OCC, "maintain": OCC, role: PRESENCE}
+    light = make_light_entry(
+        **roles, door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, hold_entities=[HOLD]
+    )
+    await setup_entries(hass, presence, light)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    if how == "reload":
+        assert await hass.config_entries.async_unload(presence.entry_id)
+    else:
+        hass.states.async_set(PRESENCE, how)
+    await settle(hass)
+    assert hass.states.get(PRESENCE).state in ("unavailable", "unknown")
+    return presence
+
+
+async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
+    """Clear every hold but the unreadable sensor's and wait past the timeout."""
+    for entity_id in (OCC, DOOR, HOLD):
+        hass.states.async_set(entity_id, "off")
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["occupancy", "maintain"])
+@pytest.mark.parametrize("how", ["reload", "unavailable", "unknown"])
+@pytest.mark.parametrize("back", ["on", "off"])
+async def test_unreadable_presence_keeps_its_hold_while_other_holds_release(
+    hass: HomeAssistant, freezer, role: str, how: str, back: str
+) -> None:
+    """A presence sensor that reloads or drops out keeps the hold it had.
+
+    The other presence role clearing, the door closing and a keep-on entity
+    releasing meanwhile start no countdown; what the sensor reports when it
+    returns decides.
+    """
+    presence = await _held_room_loses_sensor(hass, role, how)
+    await _release_other_holds(hass, freezer)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+    if how == "reload":
+        hass.states.async_set(MOTION, back)
+        assert await hass.config_entries.async_setup(presence.entry_id)
+    else:
+        hass.states.async_set(PRESENCE, back)
+    await settle(hass)
+    assert hass.states.get(PRESENCE).state == back
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == (
+        STATE_OCCUPIED if back == "on" else STATE_COUNTDOWN
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["occupancy", "maintain"])
+async def test_presence_removed_mid_reload_releases_its_hold(
+    hass: HomeAssistant, freezer, role: str
+) -> None:
+    """A sensor deleted while unloaded is no outage: the light gets a timeout."""
+    presence = await _held_room_loses_sensor(hass, role, "reload")
+    hass.states.async_set(REAL, "on")  # the light reloads, and adopts it
+    await _release_other_holds(hass, freezer)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    assert await hass.config_entries.async_remove(presence.entry_id)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["occupancy", "maintain"])
+async def test_last_known_presence_does_not_adopt_a_light_lit_meanwhile(
+    hass: HomeAssistant, role: str
+) -> None:
+    """Only a hold the sensor had is kept: a later turn-on runs its timer."""
+    hass.states.async_set(OCC, "on")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(**{role: OCC}))
+    await settle(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(OCC, "unavailable")
+    await settle(hass)
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
