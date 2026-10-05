@@ -2683,7 +2683,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._claim_on_period()
             if touched is not None and self._in_warning():
                 self._restore_untouched(touched)
-            self._transition_on()
+            self._transition_on(rejoin=claim)
         elif self._all_lights_off():
             self._go_idle(manual=manual)
 
@@ -4274,16 +4274,21 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return 0
         return max(0, int((max(ends) - datetime.now(UTC)).total_seconds()))
 
-    def _transition_on(self) -> None:
-        """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on."""
+    def _transition_on(self, *, rejoin: bool = True) -> None:
+        """Move to ACTIVE (or stay OCCUPIED/SCHEDULED) when lights come on.
+
+        Without rejoin, a manual off's standby pause outlasts the turn-on:
+        nobody made it (a select call's preset lit the real lights).
+        """
         # A manual/physical turn-on ends any warning sequence; the caller has
         # already set the real lights, so just drop the restore snapshot.
         self._warning_active = False
         self._pre_warn_brightness = None
         self._pre_warn_color = None
         self._clear_bright_forced_off()
-        # Turning the light back on after a manual off rejoins standby.
-        self._standby_suppressed = False
+        if rejoin:
+            # Turning the light back on after a manual off rejoins standby.
+            self._standby_suppressed = False
         self._close_owed_ends()
         # Set before the hold checks: activation-only gate modes only gate turning
         # an off light on, so occupancy may hold this turn-on outside it.

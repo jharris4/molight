@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
+    ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_LIGHT_TIMEOUT,
     CONF_OCCUPANCY_ENTITY,
@@ -3039,6 +3040,141 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
     assert state.attributes["molight_state"] == "standby"
     assert state.attributes["brightness"] == 51
     assert _wall_stamps(hass) == before
+
+
+class _ScenePreset(_PresetSelect):
+    """A select whose options run a scene: it sets the light's level through
+    Home Assistant, under the select call's context."""
+
+    async def async_select_option(self, option: str) -> None:
+        self.started.set()
+        await self.release.wait()
+        await RealSelect.async_select_option(self, option)
+        await self.hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.ambient", "brightness": PRESET_LEVEL},
+            blocking=True,
+            context=self._context,
+        )
+
+
+async def _standby_coming_on(
+    hass: HomeAssistant, reported: str
+) -> tuple[FadingLight, _PresetSelect]:
+    """A scheduled light whose window starts: its turn-on at standby waits
+    for the select call. The preset's level is reported by a push of the
+    strip's own, or under the select call by a light on another device."""
+    if reported == "push":
+        light, select = await _preset_strip(hass)
+    else:
+        hass.states.async_remove("select.ambient_theme")
+        light = FadingLight("ambient", brightness=200)
+        select = _ScenePreset(light)
+        await add_real(hass, light, select)
+    select.release.clear()
+    hass.states.async_set(_SCHEDULE, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={**_PRESET, CONF_STANDBY_BRIGHTNESS: 20},
+        ),
+    )
+    hass.states.async_set(_SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    assert _molight_state(hass) == "standby"
+    return light, select
+
+
+async def _off_then_preset(hass: HomeAssistant, reported: str) -> FadingLight:
+    """Turn the light off by hand during the select call, whose preset then
+    lights the strip all the same."""
+    light, select = await _standby_coming_on(hass, reported)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    state = hass.states.get("light.selection_light")
+    assert (state.state, state.attributes[ATTR_STANDBY_SUPPRESSED]) == ("off", True)
+    await _land_preset(hass, select)
+    state = hass.states.get("light.selection_light")
+    assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
+    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+    assert state.attributes["molight_state"] == "active"
+    return light
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("reported", ["push", "select_call"])
+async def test_preset_landing_after_a_manual_off_keeps_standby_paused(
+    hass: HomeAssistant, freezer, reported: str
+) -> None:
+    """The manual off paused standby until the next boundary. The preset
+    nobody asked for anymore lights the strip, which runs its timeout as any
+    lit room, but is nobody's turn-on: the pause stands and the timeout ends
+    in off, not at standby."""
+    light = await _off_then_preset(hass, reported)
+    state = hass.states.get("light.selection_light")
+    assert state.attributes[ATTR_STANDBY_SUPPRESSED] is True
+    assert state.attributes["last_on_physical"] is None
+
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert not light.is_on
+    assert (state.state, state.attributes["molight_state"]) == ("off", "idle")
+    assert state.attributes[ATTR_STANDBY_SUPPRESSED] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("turned_on", ["through_the_light", "at_the_wall"])
+async def test_turn_on_after_such_a_preset_still_rejoins_standby(
+    hass: HomeAssistant, freezer, turned_on: str
+) -> None:
+    """A person turning the light on, or dimming it at the wall, once the
+    preset has lit it ends the pause as ever: the timeout ends at standby."""
+    light = await _off_then_preset(hass, "push")
+
+    if turned_on == "at_the_wall":
+        light.wall(brightness=90)
+    else:
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 200},
+            blocking=True,
+        )
+    await settle(hass)
+    state = hass.states.get("light.selection_light")
+    assert state.attributes[ATTR_STANDBY_SUPPRESSED] is False
+    await _pass(hass, freezer, 61)
+    await settle(hass)
+
+    assert (light.is_on, light.brightness) == (True, 51)
+    assert _molight_state(hass) == "standby"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("reported", ["push", "select_call"])
+async def test_preset_landing_as_standby_comes_on_leaves_standby(
+    hass: HomeAssistant, reported: str
+) -> None:
+    """With no manual off, the preset is the turn-on's own: standby is sent
+    after it and nothing is paused."""
+    light, select = await _standby_coming_on(hass, reported)
+
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert (light.is_on, light.brightness) == (True, 51)
+    assert state.attributes["molight_state"] == "standby"
+    assert state.attributes[ATTR_STANDBY_SUPPRESSED] is False
+    assert state.attributes["last_on_physical"] is None
 
 
 async def _lit_pair(

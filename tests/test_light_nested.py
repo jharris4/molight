@@ -846,3 +846,42 @@ async def test_off_of_an_inner_light_that_is_off_leaves_a_lit_outer_light(
 
     await _tick(hass, freezer, 21)
     assert hass.states.get(OUTER).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_inner_light_lit_by_its_sensor_keeps_the_outer_standby_paused(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A manual off pauses the outer light's standby. The inner light's own
+    sensor then lights it, which is nobody's turn-on of the outer light: its
+    timeout ends in off, not at standby."""
+    hass.states.async_set(INNER_OCC, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    await add_real(hass, RealLight("real_1"))
+    inner = make_light_entry(
+        name="Inner", lights=[REAL], timeout=600, occupancy=INNER_OCC
+    )
+    outer = make_scheduled_light_entry(
+        name="Outer",
+        lights=[INNER],
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+    )
+    await setup_entries(hass, inner, outer)
+    await settle(hass)
+    assert _attrs(hass, OUTER)["molight_state"] == "standby"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": OUTER}, blocking=True
+    )
+    await settle(hass)
+    assert _attrs(hass, OUTER)["standby_suppressed"] is True
+
+    hass.states.async_set(INNER_OCC, "on")
+    await settle(hass)
+    assert hass.states.get(OUTER).state == "on"
+    assert _attrs(hass, OUTER)["standby_suppressed"] is True
+    assert _attrs(hass, OUTER)["last_on_physical"] is None
+    await _tick(hass, freezer, 61)
+
+    assert hass.states.get(OUTER).state == "off"
+    assert hass.states.get(REAL).state == "off"
+    assert _attrs(hass, OUTER)["standby_suppressed"] is True
