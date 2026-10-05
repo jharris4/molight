@@ -337,6 +337,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     removed = {
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
+    # Entities deleted from the registry earlier, unless another took the ID since.
+    removed.update(
+        deleted.entity_id
+        for deleted in registry.deleted_entities.values()
+        if deleted.config_entry_id == entry.entry_id
+        and registry.async_get(deleted.entity_id) is None
+    )
     if not removed:
         return
     hass.data.setdefault(DATA_REMOVED, set()).update(removed)

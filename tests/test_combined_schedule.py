@@ -1333,6 +1333,50 @@ async def test_deleting_one_input_of_an_all_combination_widens_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("survivor", [False, True], ids=["none_left", "one_left"])
+@pytest.mark.parametrize("invert", [False, True], ids=["plain", "inverted"])
+async def test_deleting_an_input_already_gone_from_the_registry(
+    hass: HomeAssistant, freezer, invert: bool, survivor: bool
+) -> None:
+    """An input entry deleted after its entity left the registry is taken out
+    of the combination too: with none left it is off, and so is the inverse
+    over it; an All combination widens to the input that is left."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 08:30:00+00:00")
+    morning = _time_schedule("Morning", "06:00", "08:00")
+    inputs = ["binary_sensor.morning"]
+    if survivor:
+        inputs.append("binary_sensor.late_morning")
+    combined = _combined(
+        "Bedside", inputs, operator=SCHEDULE_OPERATOR_ALL, invert=invert
+    )
+    await _setup(
+        hass,
+        morning,
+        *([_time_schedule("Late Morning", "06:00", "09:00")] if survivor else []),
+        combined,
+        _combined("Outer", ["binary_sensor.bedside"], invert=True),
+    )
+    await hass.config_entries.async_set_disabled_by(
+        morning.entry_id, ConfigEntryDisabler.USER
+    )
+    await settle(hass)
+    er.async_get(hass).async_remove("binary_sensor.morning")
+    await settle(hass)
+
+    assert await hass.config_entries.async_remove(morning.entry_id)
+    await settle(hass)
+
+    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == inputs[1:]
+    bedside = survivor != invert if survivor else False
+    outer = not bedside if survivor else False
+    assert hass.states.get("binary_sensor.bedside").state == (
+        "on" if bedside else "off"
+    )
+    assert hass.states.get("binary_sensor.outer").state == ("on" if outer else "off")
+
+
+@pytest.mark.asyncio
 async def test_sun_anchored_input(hass: HomeAssistant, freezer) -> None:
     """A sun-based input's window is read from its config, sun event included."""
     day = date(2026, 7, 2)
