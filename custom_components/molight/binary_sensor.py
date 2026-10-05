@@ -1702,6 +1702,8 @@ class _ScheduleTree:
         self.entities: dict[str, bool] = {}
         self.source_entities: set[str] = set()
         self.plain_schedules: set[str] = set()
+        # An input reached by several routes is one shared node, evaluated once.
+        self.nodes: dict[str, _ScheduleNode] = {}
 
     def combined(
         self,
@@ -1726,6 +1728,15 @@ class _ScheduleTree:
         )
 
     def _expand(self, entity_id: str, path: frozenset[str]) -> _ScheduleNode:
+        if (node := self.nodes.get(entity_id)) is None:
+            node = self._new_node(entity_id, path)
+            if node is None:
+                return _ScheduleNode("unknown")
+            self.nodes[entity_id] = node
+        return node
+
+    def _new_node(self, entity_id: str, path: frozenset[str]) -> _ScheduleNode | None:
+        """Expand an input not reached before; None for a loop back into path."""
         reg_entry = er.async_get(self.hass).async_get(entity_id)
         entry = (
             self.hass.config_entries.async_get_entry(reg_entry.config_entry_id)
@@ -1744,7 +1755,7 @@ class _ScheduleTree:
                 "Combined schedule %s includes itself; treating it as unknown",
                 entity_id,
             )
-            return _ScheduleNode("unknown")
+            return None
         self.configs.setdefault(entry.entry_id, cfg)
         self.disabled[entry.entry_id] = entry.disabled_by
         self.entities[entity_id] = reg_entry.disabled
@@ -1961,7 +1972,23 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._refresh()
 
     def _timeline(
-        self, node: _ScheduleNode, now: datetime, known: tuple[float, float]
+        self,
+        node: _ScheduleNode,
+        now: datetime,
+        known: tuple[float, float],
+        cache: dict[int, _Timeline],
+    ) -> _Timeline:
+        """Return a node's timeline, worked out once per refresh however shared."""
+        if (timeline := cache.get(id(node))) is None:
+            timeline = cache[id(node)] = self._evaluate(node, now, known, cache)
+        return timeline
+
+    def _evaluate(
+        self,
+        node: _ScheduleNode,
+        now: datetime,
+        known: tuple[float, float],
+        cache: dict[int, _Timeline],
     ) -> _Timeline:
         if node.kind == "time":
             merged = _merged_window_intervals(
@@ -1978,7 +2005,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 return _Timeline.constant(False)
             timeline = _Timeline.combine(
                 node.require_all,
-                [self._timeline(child, now, known) for child in node.children],
+                [self._timeline(child, now, known, cache) for child in node.children],
             )
         else:
             return _Timeline.constant(None)
@@ -2011,7 +2038,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             dt_util.start_of_local_day(today + timedelta(days=days)).timestamp()
             for days in _TRUSTED_DAYS
         )
-        timeline = self._timeline(self._root, now, (known_from, known_until))
+        timeline = self._timeline(self._root, now, (known_from, known_until), {})
         value = timeline.value_at(ts)
 
         if value is None:

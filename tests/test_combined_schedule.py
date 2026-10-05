@@ -603,6 +603,104 @@ async def test_inputs_reached_twice_never_glitch(hass: HomeAssistant, freezer) -
         assert state.attributes["current_window_start"] == marker
 
 
+_LAYERS = 12
+
+
+@pytest.mark.asyncio
+async def test_inputs_shared_by_nested_layers_are_evaluated_once(
+    hass: HomeAssistant, freezer, monkeypatch
+) -> None:
+    """Layers that each combine the two below share them rather than copy them,
+    so the work grows with the layers, not with the routes through them, and
+    an edit or a disabled input still reaches every layer."""
+    import custom_components.molight.binary_sensor as bs  # noqa: PLC0415
+
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 08:00:00+00:00")
+    hass.states.async_set("binary_sensor.pulse_source", "off")
+    evening = _time_schedule("Evening", "18:00", "23:00")
+    entries = [
+        _time_schedule("Morning", "06:00", "12:00"),
+        evening,
+        _mirror_schedule("Pulse", "binary_sensor.pulse_source"),
+    ]
+    layers: dict[str, tuple[list[str], bool, bool]] = {}
+    below = ["binary_sensor.morning", "binary_sensor.evening"]
+    for i in range(_LAYERS):
+        inputs = [*below[-2:], "binary_sensor.pulse"]
+        require_all, invert = bool(i % 2), i % 3 == 0
+        operator = SCHEDULE_OPERATOR_ALL if require_all else SCHEDULE_OPERATOR_ANY
+        entries.append(
+            _combined(f"Layer {i}", inputs, operator=operator, invert=invert)
+        )
+        below.append(f"binary_sensor.layer_{i}")
+        layers[below[-1]] = (inputs, require_all, invert)
+    await _setup(hass, *entries)
+
+    def _check(morning: bool, evening: bool, pulse: bool | None) -> None:
+        values: dict[str, bool | None] = {
+            "binary_sensor.morning": morning,
+            "binary_sensor.evening": evening,
+            "binary_sensor.pulse": pulse,
+        }
+        for entity_id, (inputs, require_all, invert) in layers.items():
+            value = _kleene(require_all, [values[e] for e in inputs])
+            values[entity_id] = None if value is None else value != invert
+            expected = {True: "on", False: "off", None: "unavailable"}[
+                values[entity_id]
+            ]
+            assert hass.states.get(entity_id).state == expected, entity_id
+
+    _check(morning=True, evening=False, pulse=False)
+
+    evaluations = 0
+    original = bs._merged_window_intervals
+
+    def _counted(*args, **kwargs):
+        nonlocal evaluations
+        evaluations += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(bs, "_merged_window_intervals", _counted)
+    hass.states.async_set("binary_sensor.pulse_source", "on")
+    await settle(hass)
+    _check(morning=True, evening=False, pulse=True)
+    # Every layer refreshes once and reads each time schedule once.
+    assert evaluations == 2 * _LAYERS
+
+    expanded = 0
+    new_node = bs._ScheduleTree._new_node
+
+    def _counted_node(tree, *args):
+        nonlocal expanded
+        expanded += 1
+        return new_node(tree, *args)
+
+    monkeypatch.setattr(bs._ScheduleTree, "_new_node", _counted_node)
+    top = entries[-1]
+    assert await hass.config_entries.async_reload(top.entry_id)
+    await settle(hass)
+    # The layers below and the three plain schedules, each once.
+    assert expanded == _LAYERS - 1 + 3
+    _check(morning=True, evening=False, pulse=True)
+
+    hass.config_entries.async_update_entry(
+        evening,
+        options={
+            CONF_NAME: "Evening",
+            CONF_TIME_WINDOWS: [{"start": {"time": "07:00"}, "end": {"time": "09:00"}}],
+        },
+    )
+    await settle(hass)
+    _check(morning=True, evening=True, pulse=True)
+
+    er.async_get(hass).async_update_entity(
+        "binary_sensor.pulse", disabled_by=er.RegistryEntryDisabler.USER
+    )
+    await settle(hass)
+    _check(morning=True, evening=True, pulse=None)
+
+
 @pytest.mark.asyncio
 async def test_marker_holds_while_inputs_hand_over(
     hass: HomeAssistant, freezer
