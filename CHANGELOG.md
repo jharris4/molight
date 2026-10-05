@@ -58,18 +58,12 @@ Remote buttons.
 ### Fixed
 
 - **Wrapped virtual lights**: what the wrapped light does by itself, such as
-  its timer turning it off or its warn stage, is no longer taken for a change
-  at the wall. It recorded a manual off that kept an occupied room dark on
-  the next visit. A light group changed to include the virtual light that
-  controls it, at any depth of nesting, is let go before the next command
-  instead of making the light command itself in a loop. In a light group
-  changed to contain a virtual light, that light's warn stage no longer
-  restarts the timer of the light controlling the group. A wrapped light
-  relit by its own sensor no longer restarts the timer, or cancels the
-  warning, of a wrapping light that is already on. Turning on a wrapped
-  light that is already on now restarts the wrapping light's timeout, and
-  turning it off while the wrapping light's warning has it blinked off ends
-  the warning instead of the light coming back on.
+  its timer turning it off, its warn stage or its own sensor lighting it, is
+  no longer taken for a change at the wall, also through a light group changed
+  to contain it. It recorded a manual off that kept an occupied room dark on
+  the next visit. A command to the wrapped light that changes nothing it shows
+  now counts for the wrapping light too. A light group changed to include the
+  light that controls it no longer makes that light command itself in a loop.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on. A light turned off by
   hand no longer comes back on after a restart for the same visit or open
@@ -126,10 +120,8 @@ Remote buttons.
   Home Assistant's time zone or location are handled. Changing a follow-mode
   light's schedule no longer turns it off. Releasing a hold under *Gate and
   turn off* turns the light off only if a schedule window ended while it was
-  held. A source-backed schedule no longer accepts a source that is computed
-  from the schedule itself, such as a group that contains it; inverted, it
-  flipped on and off without end. A group changed to contain it later makes
-  the schedule `unavailable` instead.
+  held. A source-backed schedule refuses a source that includes the schedule
+  itself, such as a group that contains it.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work, and double clicks on
   those and on BTHome and Xiaomi BLE buttons are accepted. *Brightness up* and
