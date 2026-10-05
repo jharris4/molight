@@ -59,6 +59,7 @@ from custom_components.molight.const import (
     CONF_WARN_RGB_COLOR,
     CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    DATA_AUTO_OFF_KEPT,
     DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_ILLUMINANCE,
@@ -334,17 +335,32 @@ async def crash_entries(
     await _boot_entries(hass, *entries, started=started)
 
 
-async def _boot_entries(
-    hass: HomeAssistant, *entries: MockConfigEntry, started: bool
-) -> None:
+async def stop_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
+    """Shut Home Assistant down around the entries, which stay unloaded.
+
+    Setting one up afterwards, with Home Assistant running, is an entry that
+    was disabled at boot being enabled.
+    """
+    await restore_state.async_get(hass).async_dump_states()
+    await _stop_entries(hass, *entries)
+
+
+async def _stop_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     for entry in entries:
         assert await hass.config_entries.async_unload(entry.entry_id)
     # Unloading keeps each entity's live state for a reload; a restart only
     # has what was saved.
     await async_mock_load_restore_state_from_storage(hass)
+    hass.data.pop(DATA_AUTO_OFF_KEPT, None)
     # Nor what a schedule learned from its source while unloaded.
     for watch in hass.data.pop(DATA_SCHEDULE_WATCH, {}).values():
         watch.unsub()
+
+
+async def _boot_entries(
+    hass: HomeAssistant, *entries: MockConfigEntry, started: bool
+) -> None:
+    await _stop_entries(hass, *entries)
     hass.set_state(CoreState.starting)
     for entry in entries:
         assert await hass.config_entries.async_setup(entry.entry_id)

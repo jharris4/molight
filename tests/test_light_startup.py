@@ -40,12 +40,16 @@ from custom_components.molight.const import (
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
     CONF_HOLD_ENTITIES,
+    CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_LIGHT_TIMEOUT,
     CONF_OCCUPANCY_ENTITY,
     CONF_STANDBY_BRIGHTNESS,
+    ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
     STATE_IDLE,
     STATE_OCCUPIED,
@@ -63,6 +67,7 @@ from tests.conftest import (
     restart_entries,
     settle,
     setup_entries,
+    stop_entries,
 )
 
 if TYPE_CHECKING:
@@ -1231,3 +1236,130 @@ async def test_turn_off_before_the_seed_stands_over_a_missed_standby_start(
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER2})
     await settle(hass)
     assert _attrs(hass)["molight_state"] == STATE_STANDBY
+
+
+# ---------------------------------------------------------------------------
+# An entry set up once Home Assistant runs, as when it is enabled
+# ---------------------------------------------------------------------------
+
+SWITCH = "switch.matrix_light_auto_off"
+ILLUM = "binary_sensor.illum"
+
+
+async def _auto_off(hass: HomeAssistant, on: bool) -> None:
+    await hass.services.async_call(
+        "switch", "turn_on" if on else "turn_off", {"entity_id": SWITCH}, blocking=True
+    )
+    await settle(hass)
+
+
+async def _set_up_late(hass: HomeAssistant, entry: MockConfigEntry) -> list[dict]:
+    """Set a stopped entry up with Home Assistant running; it seeds at once."""
+    calls = record_service_calls(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [*END_MODES, "switch"])
+async def test_late_setup_keeps_a_missed_end_under_the_saved_auto_off_hold(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """The Auto-off switch left off holds the end until it is turned on."""
+    if mode == "switch":
+        entry = _switch_entry()
+        real = await _lit_before_switch_end(hass, entry)
+    else:
+        entry = _end_entry(mode, [REAL])
+        real = await _lit_in_window(hass, entry, [REAL])
+    await _auto_off(hass, on=False)
+    await stop_entries(hass, entry)
+    hass.states.async_set(SCHED, "off")
+    calls = await _set_up_late(hass, entry)
+
+    assert hass.states.get(SWITCH).state == "off"
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["auto_off_held"] is True
+    assert real.reachable == {REAL}
+
+    await _auto_off(hass, on=True)
+    if mode == "switch":
+        # A recalculation the hold suppressed: the release runs a full timeout.
+        assert _state(hass).state == "on"
+        await _tick(hass, freezer, 61)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_late_setup_keeps_a_held_gate_end_under_the_saved_auto_off_hold(
+    hass: HomeAssistant,
+) -> None:
+    """A Gate and turn off end the switch held stays held when set up late."""
+    _Members(hass, [REAL], {})
+    hass.states.async_set(SCHED, "on")
+    entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await _auto_off(hass, on=False)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _attrs(hass)[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await stop_entries(hass, entry)
+    calls = await _set_up_late(hass, entry)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _attrs(hass)[ATTR_SCHEDULE_END_OFF_PENDING] is True
+
+    await _auto_off(hass, on=True)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+
+
+@pytest.mark.asyncio
+async def test_late_setup_keeps_standby_on_while_bright_under_the_saved_hold(
+    hass: HomeAssistant,
+) -> None:
+    """Brightness in Control mode does not turn a held standby light off."""
+    _Members(hass, [REAL], {})
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(ILLUM, "off")
+    entry = make_scheduled_light_entry(
+        name="Matrix Light",
+        schedule=SCHED,
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_STANDBY_BRIGHTNESS: 20,
+            CONF_ILLUMINANCE_ENTITY: ILLUM,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
+        },
+    )
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    await _auto_off(hass, on=False)
+
+    await stop_entries(hass, entry)
+    hass.states.async_set(ILLUM, "on")
+    calls = await _set_up_late(hass, entry)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+async def test_late_setup_with_auto_off_enabled_applies_a_missed_end(
+    hass: HomeAssistant,
+) -> None:
+    """Without a saved hold the end is applied as the entry is set up."""
+    entry = _end_entry("follow", [REAL])
+    await _lit_in_window(hass, entry, [REAL])
+    await stop_entries(hass, entry)
+    hass.states.async_set(SCHED, "off")
+    calls = await _set_up_late(hass, entry)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"

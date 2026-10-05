@@ -316,7 +316,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # here (torn down with the entry); its Last Action sensor rides the
         # normal platform forwarding below.
         entry.async_on_unload(async_setup_remote(hass, entry))
-    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    # The Auto-off switch restores its hold before the light seeds from it:
+    # a light set up while Home Assistant runs seeds as soon as it is added.
+    if "switch" in platforms:
+        await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
+    await hass.config_entries.async_forward_entry_setups(
+        entry, [platform for platform in platforms if platform != "switch"]
+    )
 
     # Reload the entry whenever options are updated so entities pick up new values.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
