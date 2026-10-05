@@ -7,11 +7,15 @@ light saved before the check existed. Driving it would call the light again.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.molight import light as ml
 from tests.conftest import (
@@ -21,6 +25,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealLight, add_real
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -31,17 +36,38 @@ LAMP = "light.lamp"
 BULB = "light.bulb"
 
 
-def _group_entry(members: list[str]) -> MockConfigEntry:
+def _group_entry(members: list[str], name: str = "Cycle Group") -> MockConfigEntry:
     return MockConfigEntry(
         domain="group",
-        title="Cycle Group",
+        title=name,
         options={
             "group_type": "light",
-            "name": "Cycle Group",
+            "name": name,
             "entities": members,
             "hide_members": False,
         },
     )
+
+
+async def _count_commands(
+    hass: HomeAssistant, monkeypatch, service: str, entity_id: str = VIRTUAL
+) -> int:
+    """Send one command, counting what every virtual light receives (capped)."""
+    count = [0]
+    method = f"async_{service}"
+    original = getattr(ml.VirtualLight, method)
+
+    async def _counting(self, **kwargs):
+        count[0] += 1
+        if count[0] <= 10:
+            await original(self, **kwargs)
+
+    monkeypatch.setattr(ml.VirtualLight, method, _counting)
+    await hass.services.async_call(
+        "light", service, {"entity_id": entity_id}, blocking=True
+    )
+    await settle(hass)
+    return count[0]
 
 
 async def _count_turn_offs(hass: HomeAssistant, monkeypatch) -> list[int]:
@@ -154,4 +180,143 @@ async def test_a_member_group_without_the_light_is_still_driven(
     )
     await settle(hass)
     assert [GROUP] in light_targets(calls, "turn_on")
+    assert "does not control" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service", ["turn_on", "turn_off"])
+@pytest.mark.parametrize("depth", [1, 2, 3])
+@pytest.mark.allow_warning_log
+async def test_a_group_below_a_member_changed_to_include_the_light(
+    hass: HomeAssistant,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+    service: str,
+    depth: int,
+) -> None:
+    """The member's own list and state stay as they were, so nothing reports it."""
+    lamp, bulb = RealLight("lamp"), RealLight("bulb")
+    await add_real(hass, lamp, bulb)
+    # Each level keeps the lamp, so the level above stays available throughout.
+    levels = [_group_entry([BULB], "Level 0")]
+    levels += [
+        _group_entry([f"light.level_{level - 1}", LAMP], f"Level {level}")
+        for level in range(1, depth + 1)
+    ]
+    await setup_entries(hass, *levels)
+    top = f"light.level_{depth}"
+    await setup_entries(hass, make_light_entry(name="Cycle Light", lights=[top]))
+    await settle(hass)
+
+    hass.config_entries.async_update_entry(
+        levels[0], options={**levels[0].options, "entities": [BULB, VIRTUAL]}
+    )
+    assert await hass.config_entries.async_reload(levels[0].entry_id)
+    await settle(hass)
+    assert "does not control" not in caplog.text
+
+    assert await _count_commands(hass, monkeypatch, service) == 1
+    assert f"{VIRTUAL} does not control {top}" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service", ["turn_on", "turn_off"])
+@pytest.mark.parametrize("entered", ["wrapper", "wrapped"])
+@pytest.mark.allow_warning_log
+async def test_a_group_changed_to_include_the_light_that_wraps_its_owner(
+    hass: HomeAssistant, monkeypatch, service: str, entered: str
+) -> None:
+    """A cycle through another virtual light is stopped wherever it is entered."""
+    lamp, bulb = RealLight("lamp"), RealLight("bulb")
+    await add_real(hass, lamp, bulb)
+    below = _group_entry([BULB], "Below")
+    await setup_entries(hass, below, _group_entry(["light.below", LAMP]))
+    await setup_entries(hass, make_light_entry(name="Wrapped", lights=[GROUP]))
+    await setup_entries(
+        hass, make_light_entry(name="Cycle Light", lights=["light.wrapped"])
+    )
+    await settle(hass)
+
+    hass.config_entries.async_update_entry(
+        below, options={**below.options, "entities": [BULB, VIRTUAL]}
+    )
+    assert await hass.config_entries.async_reload(below.entry_id)
+    await settle(hass)
+
+    target = VIRTUAL if entered == "wrapper" else "light.wrapped"
+    # The wrapper commands the wrapped light once before either notices.
+    assert await _count_commands(hass, monkeypatch, service, target) <= 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_a_warning_stage_does_not_enter_a_new_cycle(
+    hass: HomeAssistant, monkeypatch, freezer
+) -> None:
+    """A stage the timer reaches is sent without a command, and checks too."""
+    lamp, bulb = RealLight("lamp"), RealLight("bulb")
+    await add_real(hass, lamp, bulb)
+    below = _group_entry([BULB], "Below")
+    await setup_entries(hass, below, _group_entry(["light.below", LAMP]))
+    await setup_entries(
+        hass,
+        make_light_entry(
+            name="Cycle Light",
+            lights=[GROUP],
+            timeout=60,
+            warn_timeout=30,
+            warn_brightness=20,
+        ),
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    hass.config_entries.async_update_entry(
+        below, options={**below.options, "entities": [BULB, VIRTUAL]}
+    )
+    assert await hass.config_entries.async_reload(below.entry_id)
+    await settle(hass)
+
+    count = [0]
+    original = ml.VirtualLight.async_turn_on
+
+    async def _counting(self, **kwargs):
+        count[0] += 1
+        if count[0] <= 10:
+            await original(self, **kwargs)
+
+    monkeypatch.setattr(ml.VirtualLight, "async_turn_on", _counting)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert count[0] == 0
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == "warn"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("service", ["turn_on", "turn_off"])
+async def test_a_group_below_a_member_changed_without_the_light_is_still_driven(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, service: str
+) -> None:
+    """A nested group gaining some other light is no cycle."""
+    lamp, bulb, other = RealLight("lamp"), RealLight("bulb"), RealLight("other")
+    await add_real(hass, lamp, bulb, other)
+    below = _group_entry([BULB], "Below")
+    await setup_entries(hass, below, _group_entry(["light.below", LAMP]))
+    caplog.set_level(logging.WARNING)
+    await setup_entries(hass, make_light_entry(name="Cycle Light", lights=[GROUP]))
+    await settle(hass)
+    hass.config_entries.async_update_entry(
+        below, options={**below.options, "entities": [BULB, "light.other"]}
+    )
+    assert await hass.config_entries.async_reload(below.entry_id)
+    await settle(hass)
+
+    calls = record_service_calls(hass)
+    await hass.services.async_call(
+        "light", service, {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert [GROUP] in light_targets(calls, service)
     assert "does not control" not in caplog.text

@@ -406,11 +406,11 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-def _group_members(state: State | None) -> object:
-    """Return the members a light group reports, to notice when they change."""
-    if state is None:
-        return None
-    return state.attributes.get(ATTR_ENTITY_ID), state.attributes.get("group_entities")
+def _is_group(state: State | None) -> bool:
+    """Whether a member's state is a light group's, which names its members."""
+    return state is not None and (
+        ATTR_ENTITY_ID in state.attributes or "group_entities" in state.attributes
+    )
 
 
 # What a virtual light stamps when a person changes it, at the wall or through it.
@@ -1313,7 +1313,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _drop_member_cycles(self) -> bool:
         """Stop driving a member that includes this light, so it can't call itself.
 
-        The flows refuse one, but a light group can change, or predate the check.
+        The flows refuse one, but a light group can change, at any depth, or
+        predate the check.
         """
         lights = molight_light_entries(self.hass, MEMBER_LIGHT_TYPES)
         cyclic = [
@@ -2037,9 +2038,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return
         same_state = old_state is not None and old_state.state == new_state.state
 
+        # A group below this one can change without this one's list changing,
+        # and then reports this light's own state back to it.
         if (
             entity_id in self._lights
-            and _group_members(new_state) != _group_members(old_state)
+            and (_is_group(new_state) or _is_group(old_state))
             and self._drop_member_cycles()
             and entity_id not in self._lights
         ):
@@ -4229,6 +4232,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         The virtual light stays logically on. Brightness 0 blinks the real
         lights off (any stage color is moot then).
         """
+        # A group below a member can change without the member reporting it.
+        self._drop_member_cycles()
         context = Context()
         self._self_context_ids.append(context.id)
         self._expect_echo(bool(brightness), brightness or None, color, transition)
@@ -4384,6 +4389,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     stage_brightness, stage_transition, stage_color or color
                 )
                 return False
+        if self._drop_member_cycles() and members is not None:
+            members = [m for m in members if m in self._lights]
         targets = self._lights if members is None else members
         service_data: dict = {"entity_id": targets}
         if transition is not None:
