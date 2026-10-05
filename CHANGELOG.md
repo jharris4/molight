@@ -121,7 +121,10 @@ Remote buttons.
   light's schedule no longer turns it off. Releasing a hold under *Gate and
   turn off* turns the light off only if a schedule window ended while it was
   held. A source-backed schedule refuses a source that includes the schedule
-  itself, such as a group that contains it.
+  itself, such as a group that contains it. A combined schedule with a sun
+  edge in the repeated hour, on the night the clocks go back, no longer
+  re-evaluates in a loop until the edge passes, and schedules change at the
+  boundary instead of a second after it.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work, and double clicks on
   those and on BTHome and Xiaomi BLE buttons are accepted. *Brightness up* and

@@ -1326,8 +1326,10 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             # No boundaries in sight (no valid windows): re-check tomorrow in
             # case sun events become resolvable again (polar day/night).
             next_transition = dt_util.start_of_local_day() + timedelta(days=1)
+        # Armed at the boundary itself, as an instant: wall-clock arithmetic on
+        # a local time in the repeated autumn hour lands an hour early.
         self._unsub_transition = async_track_point_in_time(
-            self.hass, self._refresh, next_transition + timedelta(seconds=1)
+            self.hass, self._refresh, dt_util.as_utc(next_transition)
         )
         self.async_write_ha_state()
 
@@ -1921,7 +1923,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             dt_util.start_of_local_day() + timedelta(days=1)
         )
         self._unsub_transition = async_track_point_in_time(
-            self.hass, self._refresh, wake + timedelta(seconds=1)
+            self.hass, self._refresh, dt_util.as_utc(wake)
         )
         self.async_write_ha_state()
 

@@ -45,6 +45,7 @@ from tests.conftest import (
     ANCHORAGE,
     APIA,
     LONDON,
+    TORONTO,
     TROMSO,
     finish_startup,
     light_targets,
@@ -1678,3 +1679,150 @@ async def test_combined_period_starts_when_a_source_backed_input_started(
         assert state.state == "on"
         marker = datetime.fromisoformat(state.attributes["current_window_start"])
         assert marker == started, entity_id
+
+
+# ---------------------------------------------------------------------------
+# Timers at boundaries around the clock changes
+# ---------------------------------------------------------------------------
+
+_SUNRISE_EARLY = {"sun": "sunrise", "offset": -300}
+_SUNSET_LATE = {"sun": "sunset", "offset": 480}
+_SUNSET_FIRST_PASS = {"sun": "sunset", "offset": 420}
+_SUNRISE_AFTER_GAP = {"sun": "sunrise", "offset": -270}
+
+
+@pytest.mark.parametrize(
+    "kind", ["plain", "combined", "nested_inverted"], ids=lambda kind: kind
+)
+@pytest.mark.parametrize(
+    ("now", "start", "end", "local_hour", "utc_offset"),
+    [
+        # Autumn, Toronto: 01:00 to 02:00 happens twice on 2026-11-01.
+        ("2026-11-01 04:30:00+00:00", "00:00", _SUNRISE_EARLY, 1, -5),
+        ("2026-11-01 04:30:00+00:00", "12:00", _SUNSET_LATE, 1, -5),
+        ("2026-11-01 04:30:00+00:00", _SUNRISE_EARLY, "12:00", 1, -5),
+        ("2026-11-01 04:30:00+00:00", "12:00", _SUNSET_FIRST_PASS, 1, -4),
+        # Spring: 02:00 to 03:00 is skipped on 2026-03-08.
+        (
+            "2026-03-08 06:30:00+00:00",
+            "00:00",
+            {"sun": "sunrise", "offset": -270},
+            3,
+            -4,
+        ),
+        ("2026-03-08 06:30:00+00:00", "12:00", _SUNSET_LATE, 3, -4),
+        ("2026-03-08 06:30:00+00:00", _SUNRISE_EARLY, "12:00", 1, -5),
+        # An ordinary day.
+        ("2026-10-31 04:30:00+00:00", "00:00", _SUNRISE_EARLY, 2, -4),
+    ],
+    ids=[
+        "autumn-sunrise-end-second-pass",
+        "autumn-sunset-end-second-pass",
+        "autumn-sunrise-start-second-pass",
+        "autumn-sunset-end-first-pass",
+        "spring-sunrise-end",
+        "spring-sunset-end",
+        "spring-sunrise-start",
+        "ordinary-day",
+    ],
+)
+@pytest.mark.asyncio
+async def test_solar_boundary_timer_is_armed_at_the_boundary_across_clock_changes(
+    hass: HomeAssistant,
+    freezer,
+    monkeypatch,
+    kind: str,
+    now: str,
+    start: str | dict,
+    end: str | dict,
+    local_hour: int,
+    utc_offset: int,
+) -> None:
+    """A sun edge near a clock change, also in the second pass of the repeated
+    autumn hour, arms the timer for its real instant. The schedule changes
+    there once, and no timer is armed for a moment already past."""
+    import custom_components.molight.binary_sensor as bs  # noqa: PLC0415
+
+    await set_home(hass, *TORONTO)
+    freezer.move_to(now)
+    armed: dict[str, datetime] = {}
+    past_due: list[datetime] = []
+    original = bs.async_track_point_in_time
+
+    def track(hass_arg, action, point):
+        owner = getattr(action, "__self__", None)
+        armed[owner.entity_id] = point
+        if point.timestamp() <= dt_util.utcnow().timestamp():
+            past_due.append(point)
+            if len(past_due) >= 4:
+                # Cap a loop of past-due timers so a failure can't hang.
+                return lambda: None
+        return original(hass_arg, action, point)
+
+    monkeypatch.setattr(bs, "async_track_point_in_time", track)
+    entries = [_time_schedule("Solar", start, end)]
+    entity_id = "binary_sensor.solar"
+    if kind != "plain":
+        entries.append(_combined("Combined", [entity_id]))
+        entity_id = "binary_sensor.combined"
+    if kind == "nested_inverted":
+        entries.append(_combined("Outer", [entity_id], invert=True))
+        entity_id = "binary_sensor.outer"
+    await _setup(hass, *entries)
+
+    before = hass.states.get(entity_id)
+    # A plain schedule reports a sun edge in UTC.
+    boundary = dt_util.as_local(
+        datetime.fromisoformat(before.attributes["next_transition"])
+    )
+    assert (boundary.hour, boundary.utcoffset()) == (
+        local_hour,
+        timedelta(hours=utc_offset),
+    )
+    assert armed[entity_id].timestamp() == boundary.timestamp()
+
+    await _move_to(hass, freezer, (boundary - timedelta(seconds=1)).isoformat())
+    assert hass.states.get(entity_id).state == before.state
+    assert armed[entity_id].timestamp() == boundary.timestamp()
+
+    seen = _record_states(hass, entity_id)
+    await _move_to(hass, freezer, boundary.isoformat())
+    after = hass.states.get(entity_id)
+    assert {before.state, after.state} == {"on", "off"}
+    assert seen == [after.state]
+    assert armed[entity_id].timestamp() > boundary.timestamp()
+    assert not past_due
+
+
+@pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
+@pytest.mark.parametrize("seconds", [1, 2])
+@pytest.mark.asyncio
+async def test_a_window_of_a_second_is_published(
+    hass: HomeAssistant, freezer, combined: bool, seconds: int
+) -> None:
+    """A window turns the schedule on at its start and off at its end, to the
+    second, so a one-second window is on for that second."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-01-14 12:00:00+00:00")
+    entries = [_time_schedule("Short", "12:00:10", f"12:00:{10 + seconds}")]
+    entity_id = "binary_sensor.short"
+    if combined:
+        entries.append(_combined("Combined", [entity_id]))
+        entity_id = "binary_sensor.combined"
+    await _setup(hass, *entries)
+    assert hass.states.get(entity_id).state == "off"
+
+    seen = _record_states(hass, entity_id)
+    await _move_to(hass, freezer, "2026-01-14 12:00:09+00:00")
+    assert seen == []
+    await _move_to(hass, freezer, "2026-01-14 12:00:10+00:00")
+    state = hass.states.get(entity_id)
+    assert state.state == "on"
+    assert state.attributes["current_window_start"] == "2026-01-14T12:00:10+00:00"
+    for second in range(11, 14):
+        await _move_to(hass, freezer, f"2026-01-14 12:00:{second}+00:00")
+    assert hass.states.get(entity_id).state == "off"
+    assert [s for i, s in enumerate(seen) if i == 0 or s != seen[i - 1]] == [
+        "on",
+        "off",
+    ]
