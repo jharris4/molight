@@ -99,6 +99,7 @@ from .helpers import (
     renamed_to,
     run_unless_renamed,
     same_entity,
+    sensors_depend_on,
     suggested_entity_id,
 )
 
@@ -1216,6 +1217,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._period_start: datetime | str | None = None
         self._next_transition: datetime | None = None
         self._unsub_transition = None
+        self._source_cycle = False
 
     async def async_added_to_hass(self) -> None:
         """Evaluate the schedule and arm the transition timer."""
@@ -1340,7 +1342,11 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     ) -> None:
         """Apply a source state, preserving the last value while unavailable."""
         self._next_transition = None
-        if source is None or source.state not in ("on", "off"):
+        if (
+            source is None
+            or source.state not in ("on", "off")
+            or self._source_includes_self()
+        ):
             self._attr_available = False
             self.async_write_ha_state()
             return
@@ -1356,6 +1362,23 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._attr_is_on = effective_on
         self._attr_available = True
         self.async_write_ha_state()
+
+    def _source_includes_self(self) -> bool:
+        """Whether the source is computed from this schedule, as a group can be.
+
+        The forms refuse one, but a group can change afterwards. Mirroring it
+        would feed the schedule its own state, flipping it without end.
+        """
+        cyclic = sensors_depend_on(self.hass, [self._source], [self.entity_id])
+        if cyclic and not self._source_cycle:
+            _LOGGER.warning(
+                "Schedule %s is unavailable: its source %s includes the "
+                "schedule itself; remove it there or pick another source",
+                self.entity_id,
+                self._source,
+            )
+        self._source_cycle = cyclic
+        return cyclic
 
     def _evaluate(self, now: datetime) -> tuple[datetime | None, datetime | None]:
         """Return (active window start, next boundary after now).

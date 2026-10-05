@@ -168,6 +168,7 @@ from .helpers import (
     molight_config as _molight_cfg,
     molight_light_entries as _molight_light_entries,
     renamed_to,
+    sensors_depend_on as _sensors_depend_on,
     shared_lights as _shared_lights,
 )
 from .remote import (
@@ -753,6 +754,18 @@ def _schedule_source_is_molight_schedule(
     return _molight_entity_type(hass, entity_id) in _SCHEDULE_ENTITY_TYPES
 
 
+def _entry_entity_ids(
+    hass: HomeAssistant, entry: config_entries.ConfigEntry
+) -> list[str]:
+    """Return the entity IDs a config entry has registered."""
+    return [
+        entity.entity_id
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+    ]
+
+
 def _combined_schedule_fields(hass: HomeAssistant, exclude: list[str]) -> dict:
     """Return the inputs, operator and invert fields of a combined schedule form."""
     return {
@@ -804,6 +817,11 @@ def _combined_creates_cycle(
     target_entry_id = edited_entry.entry_id
     entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
     inputs = _COMBINED_INPUTS[entity_type]
+    # A schedule's source can lead back here through a group.
+    if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE and _sensors_depend_on(
+        hass, proposed_constituents, _entry_entity_ids(hass, edited_entry)
+    ):
+        return True
 
     def _referenced_entries(entity_ids: list[str]) -> list[config_entries.ConfigEntry]:
         entries = []
@@ -840,9 +858,15 @@ def _combined_cycle_candidates(
     """Entity ids that would create a cycle if selected by the edited entry."""
     registry = er.async_get(hass)
     entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
+    # A plain schedule can lead back too, through its source.
+    entity_types = (
+        _SCHEDULE_ENTITY_TYPES
+        if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE
+        else (entity_type,)
+    )
     excluded: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) != entity_type:
+        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in entity_types:
             continue
         excluded.extend(
             entity.entity_id
@@ -2215,6 +2239,20 @@ class MoLightConfigFlow(
             return None, {}, True, candidate
         return None, {}, False, candidate
 
+    def _new_sensor_in_inputs(
+        self, name: str, flat: dict[str, Any], inputs: list[str]
+    ) -> bool:
+        """Whether a group under these inputs already names the new sensor's ID."""
+        _, errors, needs_confirm, candidate = self._resolve_entity_id(
+            name, flat, BINARY_SENSOR_ENTITY_ID_FORMAT
+        )
+        # A taken ID gets a suffix, so a group naming it means another sensor.
+        return (
+            not errors
+            and not needs_confirm
+            and _sensors_depend_on(self.hass, inputs, [candidate])
+        )
+
     def _new_light_errors(self, flat: dict[str, Any]) -> dict[str, str]:
         """Check a new light's entity ID, and that no member group already names it."""
         _, errors, needs_confirm, candidate = self._resolve_entity_id(
@@ -3562,6 +3600,9 @@ class MoLightConfigFlow(
                 entity_id = (user_input.get(SECTION_ADVANCED) or {}).get(CONF_ENTITY_ID)
                 if entity_id:
                     data[CONF_ENTITY_ID] = entity_id
+                if self._new_sensor_in_inputs(user_input[CONF_NAME], data, [source]):
+                    errors[CONF_SCHEDULE_SOURCE] = "schedule_source_cycle"
+            if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_SCHEDULE,
                     name=user_input[CONF_NAME],
@@ -3615,6 +3656,10 @@ class MoLightConfigFlow(
                 self.hass, flat.get(CONF_SCHEDULE_INPUTS, [])
             )
             errors.update(_validate_name(flat))
+            if not errors and self._new_sensor_in_inputs(
+                flat[CONF_NAME], flat, flat[CONF_SCHEDULE_INPUTS]
+            ):
+                errors["base"] = "combined_schedule_cycle"
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_COMBINED_SCHEDULE,
@@ -4289,6 +4334,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             source = user_input.get(CONF_SCHEDULE_SOURCE)
             if _schedule_source_is_molight_schedule(self.hass, source):
                 errors[CONF_SCHEDULE_SOURCE] = "schedule_source_molight_schedule"
+            elif source and _sensors_depend_on(
+                self.hass, [source], _entry_entity_ids(self.hass, self._entry)
+            ):
+                errors[CONF_SCHEDULE_SOURCE] = "schedule_source_cycle"
             if not errors:
                 return self._finish(
                     {

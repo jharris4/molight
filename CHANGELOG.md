@@ -121,7 +121,10 @@ Remote buttons.
   Home Assistant's time zone or location are handled. Changing a follow-mode
   light's schedule no longer turns it off. Releasing a hold under *Gate and
   turn off* turns the light off only if a schedule window ended while it was
-  held.
+  held. A source-backed schedule no longer accepts a source that is computed
+  from the schedule itself, such as a group that contains it; inverted, it
+  flipped on and off without end. A group changed to contain it later makes
+  the schedule `unavailable` instead.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work, and double clicks on
   those and on BTHome and Xiaomi BLE buttons are accepted. *Brightness up* and

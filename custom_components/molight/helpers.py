@@ -26,10 +26,17 @@ from .const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_LIGHTS,
+    CONF_MAINTAIN_SENSORS,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_SCHEDULE_DEFINITION,
+    CONF_SCHEDULE_INPUTS,
+    CONF_SCHEDULE_SOURCE,
+    CONF_TRIGGER_SENSORS,
     DATA_RENAMED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
 )
 
 if TYPE_CHECKING:
@@ -292,6 +299,11 @@ def light_member_ids(
     """Return the members of a virtual light or a light group."""
     if (entry := lights.get(entity_id)) is not None:
         return molight_config(entry).get(CONF_LIGHTS, [])
+    return group_member_ids(hass, entity_id)
+
+
+def group_member_ids(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Return the members a group names; none for any other entity."""
     if (state := hass.states.get(entity_id)) is not None:
         for key in (ATTR_ENTITY_ID, "group_entities"):
             if isinstance(members := state.attributes.get(key), (list, tuple)):
@@ -302,6 +314,65 @@ def light_member_ids(
         return []
     group = hass.config_entries.async_get_entry(reg_entry.config_entry_id or "")
     return list(group.options.get("entities", [])) if group is not None else []
+
+
+# The settings that name the sensors a MoLight binary sensor is computed from.
+_SENSOR_INPUT_KEYS = (
+    CONF_SCHEDULE_SOURCE,
+    CONF_SCHEDULE_INPUTS,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_TRIGGER_SENSORS,
+    CONF_MAINTAIN_SENSORS,
+)
+
+
+def sensor_input_ids(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Return the entities a MoLight binary sensor or a group is computed from.
+
+    What any other entity reads, such as a template, cannot be told.
+    """
+    reg_entry = er.async_get(hass).async_get(entity_id)
+    entry = (
+        hass.config_entries.async_get_entry(reg_entry.config_entry_id)
+        if reg_entry is not None and reg_entry.config_entry_id is not None
+        else None
+    )
+    if entry is None or entry.domain != DOMAIN:
+        return group_member_ids(hass, entity_id)
+    if reg_entry.domain != "binary_sensor":
+        return []
+    cfg = molight_config(entry)
+    inputs: list[str] = []
+    for key in _SENSOR_INPUT_KEYS:
+        if (
+            key == CONF_SCHEDULE_SOURCE
+            and cfg.get(CONF_SCHEDULE_DEFINITION) != SCHEDULE_DEFINITION_BINARY_SENSOR
+        ):
+            continue  # left over from before a change to a time window
+        value = cfg.get(key) or []
+        inputs.extend([value] if isinstance(value, str) else value)
+    return inputs
+
+
+def sensors_depend_on(
+    hass: HomeAssistant, entity_ids: Iterable[str], targets: Iterable[str]
+) -> bool:
+    """Whether any of these sensors is computed from one of the targets.
+
+    Followed through groups and MoLight's own sensors, at any depth.
+    """
+    targets = set(targets)
+    found: set[str] = set()
+    pending = list(entity_ids)
+    while pending:
+        entity_id = pending.pop()
+        entity_id = renamed_to(hass, entity_id) or entity_id
+        if entity_id in targets:
+            return True
+        if entity_id not in found:
+            found.add(entity_id)
+            pending.extend(sensor_input_ids(hass, entity_id))
+    return False
 
 
 def light_descendants(
