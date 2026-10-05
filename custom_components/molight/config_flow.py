@@ -1048,6 +1048,14 @@ def _validate_turn_on_selection(
     return {}
 
 
+def _current_ids(hass: HomeAssistant, submitted: dict[str, Any]) -> dict[str, Any]:
+    """Return a submission with entities renamed since the form opened at their new IDs.
+
+    Checks that compare entities, or read them, must see them as they are now.
+    """
+    return current_references(hass, submitted)[0]
+
+
 def _validate_name(data: dict[str, Any]) -> dict[str, str]:
     """Strip the Name in place, rejecting one that is blank."""
     data[CONF_NAME] = str(data.get(CONF_NAME) or "").strip()
@@ -2043,7 +2051,7 @@ class _ScheduledLightSettingsSteps:
         errors: dict[str, str] = {}
         previous = self._scheduled_light_previous(side)
         if user_input is not None:
-            flat = _flatten_light(user_input)
+            flat = _current_ids(self.hass, _flatten_light(user_input))
             errors = _validate_light_settings(
                 self.hass,
                 flat,
@@ -2127,6 +2135,7 @@ class _ScheduledLightSettingsSteps:
             # means the user cleared it, so it must not survive the update.
             flat.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
             flat.update(user_input)
+            flat = _current_ids(self.hass, flat)
             errors = _validate_turn_on_selection(self.hass, flat)
             if not errors:
                 self._scheduled_light_settings[side] = _clean_optional_values(flat)
@@ -2841,7 +2850,7 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
         placeholders: dict[str, str] = {}
         if user_input is not None:
-            flat = _flatten_light(user_input)
+            flat = _current_ids(self.hass, _flatten_light(user_input))
             errors = _validate_light_timeout(self.hass, flat)
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
@@ -3391,7 +3400,9 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+            flat = _current_ids(
+                self.hass, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+            )
             errors = _validate_occupancy_source(self.hass, flat)
             errors.update(_validate_name(flat))
             if not errors:
@@ -3439,7 +3450,9 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            flat = _current_ids(
+                self.hass, _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            )
             errors = _validate_name(flat)
             if not flat.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
@@ -3644,6 +3657,7 @@ class MoLightConfigFlow(
         """Configure a source-backed Virtual Schedule Binary Sensor."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input = _current_ids(self.hass, user_input)
             errors = _validate_name(user_input)
             source = user_input.get(CONF_SCHEDULE_SOURCE)
             if _schedule_source_is_molight_schedule(self.hass, source):
@@ -3710,7 +3724,9 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            flat = _current_ids(
+                self.hass, _flatten_sections(user_input, _ENTITY_ID_SECTIONS)
+            )
             errors = _validate_combined_schedule_inputs(
                 self.hass, flat.get(CONF_SCHEDULE_INPUTS, [])
             )
@@ -3760,7 +3776,7 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_light(user_input)
+            flat = _current_ids(self.hass, _flatten_light(user_input))
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
@@ -3840,6 +3856,7 @@ class MoLightConfigFlow(
 
         if user_input is not None:
             flat.update(user_input)
+            flat = _current_ids(self.hass, flat)
             errors = _validate_turn_on_selection(self.hass, flat)
             discovery = pending["kind"] == "discovery"
             if not errors and (
@@ -3901,7 +3918,7 @@ class MoLightConfigFlow(
         """Choose the shared identity, targets and schedule."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            flat = _flatten_light(user_input)
+            flat = _current_ids(self.hass, _flatten_light(user_input))
             errors = _validate_name(flat)
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
@@ -4009,10 +4026,9 @@ class MoLightConfigFlow(
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_remote(user_input)
+            flat, removed = current_references(self.hass, _flatten_remote(user_input))
             errors = _validate_remote(self.hass, flat)
             errors.update(_validate_name(flat))
-            flat, removed = current_references(self.hass, flat)
             if removed:
                 errors["base"] = "reference_removed"
             if not errors:
@@ -4162,7 +4178,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+            flat = _current_ids(
+                self.hass, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+            )
             errors = _validate_occupancy_source(self.hass, flat)
             errors.update(_validate_name(flat))
             if not errors:
@@ -4216,6 +4234,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _current_ids(self.hass, user_input)
             errors = _validate_name(user_input)
             if not user_input.get(CONF_TRIGGER_SENSORS):
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
@@ -4400,6 +4419,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         """Edit a source-backed Virtual Schedule Sensor."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input = _current_ids(self.hass, user_input)
             errors = _validate_name(user_input)
             source = user_input.get(CONF_SCHEDULE_SOURCE)
             if _schedule_source_is_molight_schedule(self.hass, source):
@@ -4456,6 +4476,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _current_ids(self.hass, user_input)
             inputs = user_input.get(CONF_SCHEDULE_INPUTS, [])
             errors = _validate_combined_schedule_inputs(self.hass, inputs)
             errors.update(_validate_name(user_input))
@@ -4491,7 +4512,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_light(user_input)
+            flat = _current_ids(self.hass, _flatten_light(user_input))
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             else:
@@ -4599,6 +4620,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
 
         if user_input is not None:
             flat.update(user_input)
+            flat = _current_ids(self.hass, flat)
             errors = _validate_turn_on_selection(self.hass, flat)
             if not errors and (
                 errors := _stale_light_settings(
@@ -4636,6 +4658,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         """Edit the shared identity, targets and schedule."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input = _current_ids(self.hass, user_input)
             errors = _validate_name(user_input)
             if not user_input.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
@@ -4734,7 +4757,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            flat = _flatten_remote(user_input)
+            flat = _current_ids(self.hass, _flatten_remote(user_input))
             errors = _validate_remote(self.hass, flat)
             errors.update(_validate_name(flat))
             if not errors:

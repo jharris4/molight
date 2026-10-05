@@ -87,6 +87,8 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OFF_BUTTONS_SINGLE,
+    CONF_ON_BUTTONS_DOUBLE,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_PRESELECT_ALL,
@@ -129,6 +131,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
     REMOTE_ACTION_FIELDS,
+    REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
@@ -145,6 +148,7 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import TORONTO, set_home, settle, setup_entries
+from tests.real_entities import RealButton, add_real
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -9729,6 +9733,149 @@ async def test_light_forms_follow_a_sensor_renamed_while_open(
         cfg,
     )
     assert side[CONF_OCCUPANCY_ENTITY] == "binary_sensor.hall_presence"
+
+
+class _SingleButton(RealButton):
+    """A remote button that only reports single clicks."""
+
+    _attr_event_types = ["single"]  # noqa: RUF012
+
+
+_RENAMED_WHILE_OPEN = {
+    # Kind: (entity, new ID, submission with the old and new IDs, expected errors)
+    "remote_binding": (
+        "event.button",
+        "event.renamed_button",
+        {
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.button"]},
+            REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.renamed_button"]},
+        },
+        {"base": "button_click_conflict"},
+    ),
+    "remote_double_click": (
+        "event.single_button",
+        "event.renamed_button",
+        {REMOTE_ACTION_ON: {CONF_ON_BUTTONS_DOUBLE: ["event.single_button"]}},
+        {"base": "double_click_unsupported"},
+    ),
+    "combined_occupancy_roles": (
+        "binary_sensor.test_occupancy",
+        "binary_sensor.renamed_occupancy",
+        {
+            CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.renamed_occupancy"],
+        },
+        {"base": "occupancy_sensor_role_overlap"},
+    ),
+}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+@pytest.mark.parametrize("kind", list(_RENAMED_WHILE_OPEN))
+async def test_forms_check_an_entity_renamed_while_open_under_its_new_id(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry, kind: str, flow: str
+) -> None:
+    """Its former ID and its new one are the same entity, and it is judged as
+    it is now, so a conflict between them is refused instead of saved."""
+    entity_id, new_id, submitted, expected = _RENAMED_WHILE_OPEN[kind]
+    await add_real(hass, RealButton("button"), _SingleButton("single_button"))
+    await setup_entries(hass, occupancy_entry)
+    if kind.startswith("remote"):
+        entity_type = ENTITY_TYPE_REMOTE
+        base = {
+            CONF_NAME: "Subject",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **{action: {} for _single, _double, action in REMOTE_ACTION_FIELDS},
+        }
+        stored = {CONF_ON_BUTTONS_SINGLE: [entity_id]}
+    else:
+        entity_type = ENTITY_TYPE_COMBINED_OCCUPANCY
+        base = {CONF_NAME: "Subject"}
+        stored = {CONF_TRIGGER_SENSORS: [entity_id]}
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: entity_type}
+        )
+        if entity_type == ENTITY_TYPE_COMBINED_OCCUPANCY:
+            base[SECTION_ADVANCED] = {}
+    else:
+        manager = hass.config_entries.options
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: entity_type,
+                CONF_NAME: "Subject",
+                CONF_TARGET_LIGHTS: ["light.test_light"],
+                CONF_DIM_STEP: 10,
+                **stored,
+            }
+            if entity_type == ENTITY_TYPE_REMOTE
+            else {CONF_ENTITY_TYPE: entity_type, CONF_NAME: "Subject", **stored},
+        )
+        await setup_entries(hass, entry)
+        result = await manager.async_init(entry.entry_id)
+    er.async_get(hass).async_update_entity(entity_id, new_entity_id=new_id)
+    await settle(hass)
+
+    result = await manager.async_configure(result["flow_id"], {**base, **submitted})
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == expected
+    assert len(hass.config_entries.async_entries(DOMAIN)) == (
+        1 if flow == "create" else 2
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow", ["create", "options"])
+async def test_combined_schedule_accepts_an_input_renamed_while_open(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry, flow: str
+) -> None:
+    """The former ID names the renamed schedule, and saves as its new ID."""
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Other Schedule",
+            CONF_TIME_WINDOWS: [{"start": {"time": "01:00"}, "end": {"time": "02:00"}}],
+        },
+    )
+    await setup_entries(hass, schedule_entry, other)
+    submitted = {
+        CONF_NAME: "Subject",
+        CONF_SCHEDULE_INPUTS: ["binary_sensor.test_schedule"],
+    }
+    if flow == "create":
+        manager = hass.config_entries.flow
+        result = await _start_create(hass)
+        result = await manager.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE}
+        )
+        submitted[SECTION_ADVANCED] = {}
+    else:
+        manager = hass.config_entries.options
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_SCHEDULE,
+                CONF_NAME: "Subject",
+                CONF_SCHEDULE_INPUTS: ["binary_sensor.other_schedule"],
+            },
+        )
+        await setup_entries(hass, entry)
+        result = await manager.async_init(entry.entry_id)
+    er.async_get(hass).async_update_entity(
+        "binary_sensor.test_schedule", new_entity_id="binary_sensor.day"
+    )
+    await settle(hass)
+
+    result = await manager.async_configure(result["flow_id"], submitted)
+    assert result["type"] == FlowResultType.CREATE_ENTRY, result.get("errors")
+    saved = result["result"] if flow == "create" else entry
+    assert molight_config(saved)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.day"]
 
 
 @pytest.mark.asyncio
