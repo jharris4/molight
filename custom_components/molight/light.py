@@ -1006,6 +1006,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # restored: Home Assistant saves every state as it starts.
         self._showing_restored = False
         self._seeded = False
+        # The power last commanded through this entity before it seeded: it
+        # is newer than anything the seed infers from the restored state.
+        self._early_command: bool | None = None
         self._owed: _Owed | None = None
         self._timer_unsub: CALLBACK_TYPE | None = None
         # When the armed timer fires, None while none is armed.
@@ -1532,8 +1535,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # The schedule we were inside ended while Home Assistant was down.
             # _seed_state applies its selected policy once after restoring the
             # physical/hold state. A reload that changed schedule entity has
-            # crossed no boundary of the newly configured schedule.
-            if self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
+            # crossed no boundary of the newly configured schedule. A turn-on
+            # made since is a new on-period, which the missed end does not end.
+            if self._early_command:
+                pass
+            elif self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
                 self._schedule_end_off_pending = True
                 self._clear_bright_forced_off()
             elif self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH:
@@ -1555,6 +1561,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if inside
             else self._outside_schedule_settings
         )
+        if self._early_command is False:
+            # Turned off after any boundary Home Assistant missed.
+            self._manual_off_cleared = False
+            self._standby_suppressed = self._standby_brightness is not None
 
     def _settings_window(self) -> str | None:
         """Window marker of the settings schedule, the last known if unreadable."""
@@ -1774,6 +1784,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._read_occupancy()
         self._maintain_last_on = self._live_maintain_on()
         self._seed_from_members(commanded=True)
+        self._early_command = None
 
     def _read_door(self, door: State | None, *, same: bool = False) -> None:
         """Take the door's open/closed from its state, as at startup.
@@ -2008,7 +2019,15 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         if sched.state == "on":
             marker = sched.attributes.get("current_window_start")
-            if marker and marker != self._schedule_window_applied:
+            if (
+                marker
+                and marker != self._schedule_window_applied
+                and self._early_command is False
+            ):
+                # Turned off since that window started: a manual override.
+                self._schedule_window_applied = marker
+                self.async_write_ha_state()
+            elif marker and marker != self._schedule_window_applied:
                 # Window started while HA was down: catch up now.
                 self._apply_window_start(marker)
             elif self._attr_is_on:
@@ -2021,6 +2040,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return True
 
         if self._schedule_window_applied is not None:
+            if self._early_command and self._attr_is_on:
+                # Turned on since the window ended: a new on-period.
+                self._schedule_window_applied = None
+                return False
             if self._held and self._attr_is_on:
                 # Auto-off is held: keep the marker so releasing the hold
                 # applies the missed off boundary.
@@ -2108,6 +2131,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             apply_turn_on_selection=True,
             manual=True,
         ):
+            if not self._seeded:
+                self._early_command = True
             self._transition_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -2116,6 +2141,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         No configured fade, but a caller-supplied transition is forwarded.
         """
         self._drop_restored()
+        if not self._seeded:
+            self._early_command = False
         # Stamped before the off is reported, so a light wrapping this one
         # reads the stamp with the off.
         self._last_manual_off = datetime.now(UTC)

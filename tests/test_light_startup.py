@@ -1036,3 +1036,198 @@ async def test_restart_during_a_blink_off_stays_off(
     assert _state(hass).state == "off"
     assert _attrs(hass)["warning_active"] is False
     assert _attrs(hass)["pre_warn_brightness"] is None
+
+
+# ---------------------------------------------------------------------------
+# A command made before the seed is newer than what the restart missed
+# ---------------------------------------------------------------------------
+
+
+async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
+async def _restart_then_turn_on(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    real: _Members,
+    boot: str,
+    *,
+    hold: bool = False,
+) -> list[dict]:
+    """Restart across the window end and turn the light on before it seeds."""
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "off")
+    if hold:
+        hass.states.async_set(HOLD, "on")
+    real.boot(REAL, boot)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    return calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [*END_MODES, "switch"])
+async def test_turn_on_before_the_seed_replaces_a_missed_end(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """A light lit on purpose while HA starts runs its normal timeout."""
+    if mode == "switch":
+        entry = _switch_entry()
+        real = await _lit_before_switch_end(hass, entry)
+    else:
+        entry = _end_entry(mode, [REAL])
+        real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_then_turn_on(hass, entry, real, "off")
+
+    assert light_targets(calls, "turn_off") == []
+    assert hass.states.get(REAL).state == "on"
+    assert _state(hass).state == "on"
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    if mode != "switch":
+        assert not _end_owed(hass, mode)
+
+    await _tick(hass, freezer, 59)
+    assert _state(hass).state == "on"
+    await _tick(hass, freezer, 2)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+@pytest.mark.parametrize("boot", UNKNOWN)
+@pytest.mark.parametrize("late", ["on", "off"])
+async def test_turn_on_before_the_seed_leaves_no_end_owed_to_a_late_member(
+    hass: HomeAssistant, mode: str, boot: str, late: str
+) -> None:
+    """A member that loads later is not turned off for the old window."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_then_turn_on(hass, entry, real, boot)
+    assert _state(hass).state == "on"
+    assert not _end_owed(hass, mode)
+
+    real.load(REAL, late)
+    await settle(hass)
+    # Follow mode matches a member back from unavailable to its schedule.
+    rebooted = mode == "follow" and boot == "unavailable"
+    assert light_targets(calls, "turn_off") == (
+        [[REAL]] if rebooted and late == "on" else []
+    )
+    assert hass.states.get(REAL).state == ("off" if rebooted else "on")
+    assert _state(hass).state == ("off" if rebooted else "on")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+async def test_turn_on_before_the_seed_replaces_a_missed_end_under_a_hold(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """Releasing the hold starts the new on-period's timeout, not the old off."""
+    entry = _end_entry(mode, [REAL], hold=True)
+    real = await _lit_in_window(hass, entry, [REAL])
+    calls = await _restart_then_turn_on(hass, entry, real, "on", hold=True)
+    assert _state(hass).state == "on"
+    assert not _end_owed(hass, mode)
+
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+async def test_turn_off_before_the_seed_stands_over_a_missed_window_start(
+    hass: HomeAssistant,
+) -> None:
+    """A follow window that started while HA was down does not undo the off."""
+    _Members(hass, [REAL], {})
+    hass.states.async_set(SCHED, "off")
+    entry = _end_entry("follow", [REAL])
+    await setup_entries(hass, entry)
+
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)["schedule_window_start"] == MARKER
+
+    # The window is handled: turning the light on again rejoins it.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_SCHEDULED
+
+
+@pytest.mark.asyncio
+async def test_turn_on_before_the_seed_joins_a_missed_window_start(
+    hass: HomeAssistant,
+) -> None:
+    """The window claims the light as it was lit, without sending its own look."""
+    _Members(hass, [REAL], {})
+    hass.states.async_set(SCHED, "off")
+    entry = _end_entry("follow", [REAL])
+    await setup_entries(hass, entry)
+
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+    )
+    await settle(hass)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["molight_state"] == STATE_SCHEDULED
+    assert _attrs(hass)["schedule_window_start"] == MARKER
+
+
+@pytest.mark.asyncio
+async def test_turn_off_before_the_seed_stands_over_a_missed_standby_start(
+    hass: HomeAssistant,
+) -> None:
+    """A window that started while HA was down does not light standby over it."""
+    _Members(hass, [REAL], {})
+    hass.states.async_set(SCHED, "off")
+    entry = _standby_entry()
+    await setup_entries(hass, entry)
+    assert _state(hass).state == "off"
+
+    await restart_entries(hass, entry, started=False)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
+
+    # As with any manual off, the next boundary brings standby back.
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER2})
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
