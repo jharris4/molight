@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import CoreState, callback
+from homeassistant.core import Context, CoreState, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -46,7 +46,8 @@ from tests.real_entities import FadingLight, RealSelect, add_real
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 if TYPE_CHECKING:
-    from homeassistant.core import Context, Event, HomeAssistant, ServiceCall
+    from homeassistant.auth.models import User
+    from homeassistant.core import Event, HomeAssistant, ServiceCall
 
 
 @pytest.fixture(autouse=True)
@@ -3230,6 +3231,131 @@ async def test_off_at_the_wall_after_a_command_during_a_select_call_stands(
     assert not other.is_on
     assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
     assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+
+
+def _select_contexts(hass: HomeAssistant) -> list[Context]:
+    """Record the context of each select call."""
+    contexts: list[Context] = []
+
+    @callback
+    def record_context(event: Event) -> None:
+        if event.data["domain"] == "select":
+            contexts.append(event.context)
+
+    hass.bus.async_listen(EVENT_CALL_SERVICE, record_context)
+    return contexts
+
+
+async def _command_strip(
+    hass: HomeAssistant,
+    light: FadingLight,
+    by: str,
+    user: User,
+    select_context: Context,
+) -> None:
+    """Set the strip to 77: a named command to it, or a push of its own."""
+    if by == "push":
+        light.wall(brightness=77)
+    else:
+        context = {
+            "user": Context(user_id=user.id),
+            "automation": Context(parent_id="01JAUTOMATIONTRIGGER000000"),
+            # An automation the select entity's new option triggered.
+            "select_automation": Context(parent_id=select_context.id),
+        }[by]
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.ambient", "brightness": 77},
+            blocking=True,
+            context=context,
+        )
+    await _drain(hass)
+    assert light.brightness == 77
+
+
+_STRIP_COMMANDS = pytest.mark.parametrize(
+    ("by", "theirs"),
+    [
+        ("user", True),
+        ("automation", True),
+        ("select_automation", False),
+        ("push", False),
+    ],
+)
+
+
+@pytest.mark.asyncio
+@_STRIP_COMMANDS
+async def test_named_command_to_the_strip_replaces_a_waiting_turn_on(
+    hass: HomeAssistant, hass_admin_user: User, by: str, theirs: bool
+) -> None:
+    """A turn-on waits for the select call on the strip's own device. A
+    command to the strip that names a user or another automation is theirs
+    and replaces the turn-on, like a change at any other real light. A push
+    of the strip's own, or an automation the select call set off, is taken
+    for the preset, and the turn-on is still sent."""
+    light, select = await _preset_strip(hass)
+    select.release.clear()
+    contexts = _select_contexts(hass)
+    await setup_entries(hass, _selection_entry())
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 102},
+            blocking=True,
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+
+    await _command_strip(hass, light, by, hass_admin_user, contexts[0])
+    commands = record_service_calls(hass)
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == "active"
+    if theirs:
+        assert light_targets(commands, "turn_on") == []
+        assert state.attributes["last_on_physical"] is not None
+        assert (light.brightness, state.attributes["brightness"]) == (
+            PRESET_LEVEL,
+            PRESET_LEVEL,
+        )
+    else:
+        assert light_targets(commands, "turn_on") == [["light.ambient"]]
+        assert state.attributes["last_on_physical"] is None
+        assert (light.brightness, state.attributes["brightness"]) == (102, 102)
+
+
+@pytest.mark.asyncio
+@_STRIP_COMMANDS
+async def test_named_command_to_the_strip_replaces_a_waiting_re_send(
+    hass: HomeAssistant, hass_admin_user: User, by: str, theirs: bool
+) -> None:
+    """The same while the strip's re-send waits for its select call: a named
+    command to the strip stands, and the re-send is dropped."""
+    contexts = _select_contexts(hass)
+    light, other, select = await _lit_pair(hass)
+    await _park_real_resend(hass, light, select)
+
+    await _command_strip(hass, light, by, hass_admin_user, contexts[-1])
+    commands = record_service_calls(hass)
+    await _land_preset(hass, select)
+
+    state = hass.states.get("light.selection_light")
+    assert state.attributes["molight_state"] == "active"
+    if theirs:
+        assert light_targets(commands, "turn_on") == []
+        assert state.attributes["last_on_physical"] is not None
+        assert (light.brightness, other.brightness) == (PRESET_LEVEL, 200)
+    else:
+        assert light_targets(commands, "turn_on") == [["light.ambient", "light.other"]]
+        assert state.attributes["last_on_physical"] is None
+        assert (light.brightness, other.brightness) == (200, 200)
 
 
 async def _tear_down(hass: HomeAssistant, teardown: str) -> None:

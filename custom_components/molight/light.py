@@ -2306,7 +2306,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # A member our own select call changed was not changed at the wall.
             claim = not (
                 event.context.id in self._waiting_turn_ons
-                or self._selecting_on_device_of(entity_id)
+                or self._selecting_on_device_of(entity_id, event.context)
             )
             human = not (
                 group_alone or _wrapped_light_acted_alone(old_state, new_state)
@@ -2829,13 +2829,19 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._set_color_state(*color)
         self.async_write_ha_state()
 
-    def _selecting_on_device_of(self, entity_id: str) -> bool:
-        """Return True while a select call runs on this member's own device.
+    def _selecting_on_device_of(self, entity_id: str, context: Context) -> bool:
+        """Return True for a report a select call on this member's device made.
 
         A preset that lights its device's light is reported by a push of the
         device's, under a context of its own. Each call speaks for the device
         it was made on, also once the settings name another select entity.
+        A report a user or another automation is named for is theirs.
         """
+        if context.user_id is not None or (
+            context.parent_id is not None
+            and context.parent_id not in self._waiting_turn_ons
+        ):
+            return False
         member = er.async_get(self.hass).async_get(entity_id)
         if member is None or member.device_id is None:
             return False
