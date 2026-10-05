@@ -3168,8 +3168,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         seconds, so from then on a longer fade's steps count under a context
         of the member's own (unprompted), when they change something we
         asked for. Later, a slow bulb's reply arrives under its own context,
-        so a write fully matching the command still counts; anything else
-        (stale, missing, contradicted) is a real change. A reply to an
+        so a write fully matching the command still counts, unless it names
+        a user or an automation; anything else (stale, missing,
+        contradicted) is a real change. A reply to an
         earlier command may arrive after a newer one
         was sent, so each command still awaiting its reply is tried, newest
         first. Once a newer command flipped power, the older one's reply only
@@ -3188,6 +3189,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 continue
             settling = age <= ECHO_SETTLE_SECONDS + expectation.transition
             if expectation.overtaken and not settling:
+                contradicted.append(expectation)
+                continue
+            if not settling and not own_context and not unprompted:
+                # A user's or automation's command, not a slow bulb's reply.
                 contradicted.append(expectation)
                 continue
             if settling and not own_context:

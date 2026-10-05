@@ -858,6 +858,153 @@ async def test_matching_reply_counts_up_to_the_late_edge(
     assert _attrs(hass)["brightness"] == brightness
 
 
+def _named(author: str) -> Context:
+    """A context naming a user or an automation, or a bulb's own."""
+    if author == "user":
+        return Context(user_id="someone")
+    if author == "automation":
+        return Context(parent_id="01JAUTOMATIONTRIGGER000000")
+    return Context()
+
+
+_AUTHORS = pytest.mark.parametrize(
+    ("author", "physical"), [("user", True), ("automation", True), ("bulb", False)]
+)
+_LATE_AGES = pytest.mark.parametrize("age", [4, 29])
+
+
+@pytest.mark.asyncio
+@_AUTHORS
+@_LATE_AGES
+async def test_late_matching_turn_on_naming_its_author_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, author, physical, age
+) -> None:
+    """A silent member turned on, at the level we asked for, by a command
+    that names a user or an automation was turned on by them: only a report
+    of the bulb's own passes as its slow reply."""
+    await _setup(hass, light_entry)
+    await _virtual(hass, "turn_on", brightness=153)
+    _age_expectations(hass, age)
+
+    await _write(hass, "on", _named(author), brightness=153)
+
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert (_attrs(hass)["last_on_physical"] is not None) is physical
+
+
+@pytest.mark.asyncio
+@_AUTHORS
+@_LATE_AGES
+async def test_late_matching_turn_off_naming_its_author_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, freezer, author, physical, age
+) -> None:
+    """The same for a member our off did not reach: their off is a manual
+    off of its own."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=153)
+    await _write(hass, "on", contexts[-1], brightness=153)
+    await _virtual(hass, "turn_off")
+    stamped = _attrs(hass)["last_off_manual"]
+    freezer.tick(timedelta(seconds=age))  # ages our command too
+
+    await _write(hass, "off", _named(author))
+
+    assert _attrs(hass)["molight_state"] == STATE_IDLE
+    assert (_attrs(hass)["last_off_manual"] != stamped) is physical
+
+
+@pytest.mark.asyncio
+@_AUTHORS
+@_LATE_AGES
+async def test_late_matching_dim_naming_its_author_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, author, physical, age
+) -> None:
+    """The same for a new level the member did not answer."""
+    await _setup(hass, light_entry)
+    contexts = _member_contexts(hass)
+    await _virtual(hass, "turn_on", brightness=200)
+    await _write(hass, "on", contexts[-1], brightness=200)
+    await _virtual(hass, "turn_on", brightness=100)
+    _age_expectations(hass, age)
+
+    await _write(hass, "on", _named(author), brightness=100)
+
+    assert _attrs(hass)["brightness"] == 100
+    assert (_attrs(hass)["last_brightness_change_physical"] is not None) is physical
+
+
+@pytest.mark.asyncio
+@_AUTHORS
+@_LATE_AGES
+async def test_late_matching_recolor_naming_its_author_is_physical(
+    hass: HomeAssistant, light_entry: MockConfigEntry, author, physical, age
+) -> None:
+    """The same for a new color the member did not answer."""
+    await _setup_color(hass, light_entry)
+    contexts = _member_contexts(hass)
+    red = {"brightness": 153, "color_mode": "hs", "hs_color": [0, 80]}
+    blue = {**red, "hs_color": [240, 80]}
+    await _virtual(hass, "turn_on", brightness=153, hs_color=[0, 80])
+    await _write(hass, "on", contexts[-1], **red, **HS_TEMP_CAPS)
+    await _virtual(hass, "turn_on", hs_color=[240, 80])
+    _age_expectations(hass, age)
+
+    await _write(hass, "on", _named(author), **blue, **HS_TEMP_CAPS)
+
+    assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
+    assert (_attrs(hass)["last_color_change_physical"] is not None) is physical
+
+
+class _LostFirstLight(RealLight):
+    """A real light that never receives the first turn-on sent to it."""
+
+    def __init__(self, object_id: str) -> None:
+        super().__init__(object_id)
+        self._lost = False
+
+    async def async_turn_on(self, **kwargs) -> None:
+        if not self._lost:
+            self._lost = True
+            return
+        await super().async_turn_on(**kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delay", [2, 20, 31])
+async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timeout(
+    hass: HomeAssistant, freezer, hass_admin_user, delay: int
+) -> None:
+    """A real light misses our turn-on, and a user turns it on from its own
+    card at the same level, while our command settles, in the 30 s after,
+    or later. Each time that is the user's turn-on, and the light stays on
+    for the full timeout from then."""
+    lamp = _LostFirstLight("lamp")
+    await add_real(hass, lamp)
+    await setup_entries(
+        hass, make_light_entry(name="Test Light", lights=["light.lamp"], timeout=60)
+    )
+    await _virtual(hass, "turn_on", brightness=200)
+    assert not lamp.is_on
+    await _tick(hass, freezer, delay)
+
+    await hass.services.async_call(
+        "light",
+        "turn_on",
+        {"entity_id": "light.lamp", "brightness": 200},
+        blocking=True,
+        context=Context(user_id=hass_admin_user.id),
+    )
+    await settle(hass)
+
+    assert _attrs(hass)["last_on_physical"] is not None
+    await _tick(hass, freezer, 59)
+    assert lamp.is_on
+    await _tick(hass, freezer, 2)
+    assert not lamp.is_on
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
 @pytest.mark.asyncio
 async def test_foreign_write_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
