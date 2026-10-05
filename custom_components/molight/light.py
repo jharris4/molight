@@ -3156,7 +3156,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         gate_switch and gate_keep gate activation only: once the lights are
         on, occupancy and the door behave as inside the window (adopt, hold,
         re-hold). Their difference is whether the window-end boundary
-        recalculates or preserves the running state/timer.
+        recalculates or preserves the running state/timer. An unreadable
+        schedule blocks activation, but ends no hold its window allowed.
         """
         if not self._schedule_entity or self._schedule_mode not in (
             SCHEDULE_MODE_GATE,
@@ -3169,8 +3170,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and self._attr_is_on
         ):
             return False
-        state = self.hass.states.get(self._schedule_entity)
-        return not (state is not None and state.state == "on")
+        live = self._live_schedule_on()
+        if live is None and self._presence_held():
+            return not self._schedule_last_on
+        return not live
 
     def _hard_gate_schedule_inactive(self) -> bool:
         """Return True when a valid hard-gate state explicitly requires off."""

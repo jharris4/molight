@@ -38,14 +38,18 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_SCHEDULE_DEFINITION,
+    CONF_SCHEDULE_SOURCE,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
+    ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -2376,3 +2380,124 @@ async def test_last_known_presence_does_not_adopt_a_light_lit_meanwhile(
     )
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+WINDOW_SOURCE = "binary_sensor.window_source"
+WINDOW = "binary_sensor.window"
+
+
+def _window_entry() -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
+            CONF_NAME: "Window",
+            CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
+            CONF_SCHEDULE_SOURCE: WINDOW_SOURCE,
+        },
+    )
+
+
+async def _occupied_room_loses_gate(
+    hass: HomeAssistant, mode: str, how: str, *, window: str = "on"
+) -> MockConfigEntry:
+    """Hold a gated room by occupancy, maintain, door and keep-on; drop the gate."""
+    hass.states.async_set(WINDOW_SOURCE, window)
+    for entity_id in (OCC, "binary_sensor.maintain", DOOR, HOLD):
+        hass.states.async_set(entity_id, "on")
+    hass.states.async_set(REAL, "off")
+    schedule = _window_entry()
+    light = make_light_entry(
+        occupancy=OCC,
+        maintain="binary_sensor.maintain",
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        hold_entities=[HOLD],
+        schedule=WINDOW,
+        schedule_mode=mode,
+    )
+    await setup_entries(hass, schedule, light)
+    await settle(hass)
+    if window == "off":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+        )
+        await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+    if how == "source":
+        hass.states.async_set(WINDOW_SOURCE, "unavailable")
+    else:
+        assert await hass.config_entries.async_unload(schedule.entry_id)
+    await settle(hass)
+    assert hass.states.get(WINDOW).state == "unavailable"
+    return schedule
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+@pytest.mark.parametrize("how", ["source", "reload"])
+async def test_gate_outage_keeps_the_hold_of_an_occupied_room(
+    hass: HomeAssistant, freezer, mode: str, how: str
+) -> None:
+    """Other holds releasing while an active gate is unreadable start no timer.
+
+    Occupancy stays on throughout: the outage is not the window ending, and
+    the window that returns finds the room still lit.
+    """
+    schedule = await _occupied_room_loses_gate(hass, mode, how)
+    for entity_id in ("binary_sensor.maintain", DOOR, HOLD):
+        hass.states.async_set(entity_id, "off")
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    if how == "source":
+        hass.states.async_set(WINDOW_SOURCE, "on")
+    else:
+        assert await hass.config_entries.async_setup(schedule.entry_id)
+    await settle(hass)
+    assert hass.states.get(WINDOW).state == "on"
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_gate_window_that_ended_during_its_outage_turns_the_room_off(
+    hass: HomeAssistant,
+) -> None:
+    """A hard gate back off is a real window end, whoever is in the room."""
+    await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source")
+    hass.states.async_set(HOLD, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    hass.states.async_set(WINDOW_SOURCE, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_gate_outage_outside_the_window_keeps_occupancy_gated(
+    hass: HomeAssistant,
+) -> None:
+    """Last known outside its window, an unreadable hard gate still gates."""
+    await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source", window="off")
+    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(DOOR, "off")
+    await settle(hass)
+    hass.states.async_set("binary_sensor.maintain", "off")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
