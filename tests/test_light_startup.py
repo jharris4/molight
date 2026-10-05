@@ -80,7 +80,7 @@ from tests.conftest import (
     setup_entries,
     stop_entries,
 )
-from tests.real_entities import RealLight, add_real
+from tests.real_entities import FadingLight, RealLight, add_real
 
 if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -962,7 +962,8 @@ async def test_warning_restart_in_a_mixed_group(
     known: str,
     color: bool,
 ) -> None:
-    """A late member is sent the restored look, never mirrored at the warn's."""
+    """A late member is sent the restored look, never mirrored at the warn's.
+    A member found off at the restart stays off."""
     _, real, calls = await _restart_mid_warn(
         hass, freezer, {REAL: known, REAL2: boot}, color=color
     )
@@ -975,8 +976,52 @@ async def test_warning_restart_in_a_mixed_group(
     await settle(hass)
     assert len(_turn_ons(calls)) == sent + 1
     _assert_restored(hass, _turn_ons(calls)[-1], color=color)
-    for member in (REAL, REAL2):
-        assert hass.states.get(member).attributes["brightness"] == 200
+    assert hass.states.get(REAL2).attributes["brightness"] == 200
+    assert hass.states.get(REAL).state == known
+    if known == "on":
+        assert hass.states.get(REAL).attributes["brightness"] == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("late", [False, True], ids=["readable", "late"])
+async def test_warning_restart_restores_each_members_own_look(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, late: bool
+) -> None:
+    """After a restart mid-warning each real light gets its own pre-warning
+    look back, one that loads late too; one that was off stays off."""
+    green = (120.0, 100.0)
+    lights = [
+        FadingLight("a", on=True, brightness=50, hs=green),
+        FadingLight("b", on=True, brightness=200, hs=BLUE),
+        FadingLight("c", on=False, brightness=90, hs=green),
+    ]
+    a, b, c = lights
+    await add_real(hass, *lights)
+    entry = make_light_entry(
+        lights=[light.entity_id for light in lights],
+        warn_timeout=30,
+        warn_brightness=20,
+    )
+    await setup_entries(hass, entry)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert (a.brightness, b.brightness, c.is_on) == (WARN, WARN, False)
+
+    await restart_entries(hass, entry, started=False)
+    if late:
+        hass.states.async_set(b.entity_id, "unavailable", {ATTR_RESTORED: True})
+    await finish_startup(hass)
+    await settle(hass)
+    assert (a.brightness, tuple(a.hs_color)) == (50, green)
+    if late:
+        b.async_write_ha_state()
+        await settle(hass)
+
+    assert (a.brightness, tuple(a.hs_color)) == (50, green)
+    assert (b.is_on, b.brightness, tuple(b.hs_color)) == (True, 200, BLUE)
+    assert not c.is_on
+    assert _attrs(hass)["warning_active"] is False
 
 
 @pytest.mark.asyncio

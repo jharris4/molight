@@ -331,8 +331,8 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 
 By default the light turns off the instant its timer expires. Setting an **effect** and/or **warn** duration flags the impending turn-off first, so a room isn't dropped into darkness without notice:
 
-1. **Effect**: a brief cue for *effect warning duration* seconds, during which the real lights are driven to the *effect brightness* (`0` blinks them fully off). Skipped when its duration is `0`.
-2. **Warn**: a grace period of *warning grace period* seconds at the *warning brightness* (or the brightness the light already had, if blank), then the lights turn off. Skipped when its duration is `0`.
+1. **Effect**: a brief cue for *effect warning duration* seconds, during which the real lights that are on are driven to the *effect brightness* (`0` blinks them fully off). Skipped when its duration is `0`.
+2. **Warn**: a grace period of *warning grace period* seconds at the *warning brightness* (or, if blank, the brightness each real light already had), then the lights turn off. Skipped when its duration is `0`.
 
 Each stage can also show an optional **color**: a white color temperature *or* an RGB color, so temp-only bulbs get a cue too, and a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
 

@@ -245,7 +245,7 @@ import asyncio
 import contextlib
 import logging
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -294,6 +294,7 @@ from homeassistant.helpers.event import (
     async_track_entity_registry_updated_event,
     async_track_state_change_event,
 )
+from homeassistant.helpers.restore_state import RestoredExtraData
 from homeassistant.util import color as color_util
 from homeassistant.util.percentage import percentage_to_ranged_value
 
@@ -569,6 +570,64 @@ def _service_color(color: dict | None) -> tuple[ColorMode, tuple] | None:
     return None
 
 
+def _color_data(color: tuple[ColorMode, tuple] | None) -> dict | None:
+    """Turn a canonical color into turn-on service data."""
+    if color is None:
+        return None
+    mode, value = color
+    if mode is ColorMode.COLOR_TEMP:
+        return {ATTR_COLOR_TEMP_KELVIN: value}
+    return {ATTR_HS_COLOR: list(value)}
+
+
+# A member's brightness and color; in a per-member map, None leaves it out.
+_Look = tuple[int | None, dict | None]
+
+
+def _look_groups(
+    targets: list[str],
+    brightness: int | None,
+    color: dict | None,
+    looks: dict[str, _Look | None] | None,
+) -> list[tuple[list[str], int | None, dict | None]]:
+    """Split targets into one group per look; unmapped members get the given one."""
+    groups: dict[tuple, tuple[list[str], int | None, dict | None]] = {}
+    for entity_id in targets:
+        look = (
+            (brightness, color)
+            if looks is None
+            else looks.get(entity_id, (brightness, color))
+        )
+        if look is None:
+            continue
+        key = (look[0], _service_color(look[1]))
+        groups.setdefault(key, ([], *look))[0].append(entity_id)
+    return list(groups.values())
+
+
+def _restored_looks(saved: Any) -> dict[str, _Look | None]:
+    """Read per-member looks back from saved data; anything malformed is dropped."""
+    looks: dict[str, _Look | None] = {}
+    if not isinstance(saved, dict):
+        return looks
+    for entity_id, look in saved.items():
+        if look is None:
+            looks[entity_id] = None
+        elif (
+            isinstance(look, (list, tuple))
+            and len(look) == 2  # noqa: PLR2004 a (brightness, color) pair
+            and (look[0] is None or isinstance(look[0], int))
+            and (look[1] is None or isinstance(look[1], dict))
+        ):
+            color = look[1] and {
+                k: look[1][k]
+                for k in (ATTR_COLOR_TEMP_KELVIN, ATTR_HS_COLOR)
+                if k in look[1]
+            }
+            looks[entity_id] = (look[0], color or None)
+    return looks
+
+
 def _as_hs(color: tuple[ColorMode, tuple]) -> tuple[float, float]:
     mode, value = color
     if mode is ColorMode.COLOR_TEMP:
@@ -817,6 +876,8 @@ class _Owed:
     window: str | None = None
     # The pre-warning brightness and color of an interrupted warning.
     look: tuple[int | None, dict | None] | None = None
+    # Each member's own pre-warning look, as _pre_warn_members.
+    member_looks: dict[str, _Look | None] = field(default_factory=dict)
 
     def ends(self) -> bool:
         """Return True while a missed schedule end is owed."""
@@ -940,6 +1001,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # attributes so they survive a restart landing mid-warning.
         self._pre_warn_brightness: int | None = None
         self._pre_warn_color: dict | None = None
+        # Each member's own look then, None for one that was off; a member
+        # that could not be read gets the light's.
+        self._pre_warn_members: dict[str, _Look | None] = {}
         # Persisted in its own right: the snapshots above are legitimately
         # null for members reporting no brightness or color.
         self._warning_active: bool = False
@@ -978,6 +1042,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._members_seen: set[str] = set()
         # Members last read as lit: a placeholder hides what one was doing.
         self._members_lit: set[str] = set()
+        # Power last sent to each member that has not reported since.
+        self._commanded_power: dict[str, bool] = {}
         # Virtual lights inside member light groups, and what they last did:
         # (context ID, whether it was their own automation).
         self._grouped_lights: set[str] = set()
@@ -1030,9 +1096,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Counts automatic turn-ons at the auto-on or standby level, so one
         # that waited for its selection yields to the level chosen since.
         self._auto_level_generation = 0
-        # Brightness, fade and color of the stage shown last: an automatic
-        # turn-on that waited for its selection into a stage sends these.
-        self._stage_look: tuple[int, float | None, dict | None] | None = None
+        # Brightness, fade, color and per-member looks of the stage shown
+        # last: an automatic turn-on that waited for its selection into a
+        # stage sends these.
+        self._stage_look: (
+            tuple[int, float | None, dict | None, dict[str, _Look | None]] | None
+        ) = None
         # The lights were last sent a look while a select call still ran; its
         # preset may land on top, so the look is sent again once it ends.
         self._resend_after_select = False
@@ -1286,6 +1355,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     or self._pre_warn_color is not None
                 )
             )
+            if self._warning_active:
+                extra = await self.async_get_last_extra_data()
+                self._pre_warn_members = _restored_looks(
+                    (extra.as_dict() if extra is not None else {}).get(
+                        "pre_warn_members"
+                    )
+                )
             self._show_restored(last)
 
         watch = list(self._lights)
@@ -1871,6 +1947,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if self._warning_active
             else None
         )
+        member_looks = self._pre_warn_members
         self._adopt_members(commanded=commanded)
         # A disabled member never reports, so nothing is owed to it.
         registry = er.async_get(self.hass)
@@ -1889,6 +1966,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             end_switch=end_switch and off,
             window=window if off and self._schedule_window_applied is None else None,
             look=look,
+            member_looks=member_looks,
         )
         if unknown and (owed.ends() or owed.look is not None):
             self._owed = owed
@@ -1922,7 +2000,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._schedule_end_off_pending = False
             elif self._held:
                 if self._warning_active:
-                    self._resume_lights()
+                    self._resume_lights(found_lit=True)
                 # Report the same state the normal seed would: a hold that
                 # would otherwise adopt the light keeps it OCCUPIED until the
                 # pending boundary applies on release.
@@ -1944,7 +2022,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if self._attr_is_on:
                 if self._warning_active:
                     self._machine_state = STATE_ACTIVE
-                    self._resume_lights()
+                    self._resume_lights(found_lit=True)
                 self._switch_running_state()
                 return
 
@@ -1954,18 +2032,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # undo the warning stage like any other re-trigger, then seed
                 # normally (the warn-stage brightness/color must not be
                 # adopted).
-                self._resume_lights()
+                self._resume_lights(found_lit=True)
             else:
                 # The lights ended up off (e.g. mid blink-off): treat the
                 # auto-off as having completed; the room is not re-lit.
-                self._warning_active = False
                 # The light's own look is the one from before the warning.
                 if self._pre_warn_brightness is not None:
                     self._attr_brightness = self._pre_warn_brightness
                 if self._pre_warn_color:
                     self._adopt_color_data(self._pre_warn_color)
-                self._pre_warn_brightness = None
-                self._pre_warn_color = None
+                self._forget_warning()
 
         if self._standby_seed() or self._follow_schedule_seed():
             return
@@ -2156,6 +2232,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         } or None
         if color is not None:
             self._last_color_change_virtual = now
+        # Each member gets back its own pre-warning look where the command
+        # names none; one that was off comes on as it would outside a warning.
+        looks = (
+            self._own_looks(brightness, color, lit_only=False)
+            if self._in_warning()
+            else None
+        )
         if brightness is not None:
             self._last_brightness_change_virtual = now
             self._attr_brightness = brightness
@@ -2181,6 +2264,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             color=color,
             apply_turn_on_selection=True,
             manual=True,
+            looks=looks,
         ):
             self._transition_on()
 
@@ -2247,6 +2331,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if new_state.state in ("on", "off"):
                 self._members_seen.add(entity_id)
                 self._note_member(entity_id)
+                self._commanded_power.pop(entity_id, None)
             # Capabilities can appear late (members unavailable at startup):
             # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
@@ -2606,19 +2691,29 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if owed.look is not None:
                 self._warning_active = True
                 self._pre_warn_brightness, self._pre_warn_color = owed.look
+                self._pre_warn_members = owed.member_looks
             self._seed_from_members()
             return True
         handled = False
         if lit and owed.look is not None and not self._in_warning():
             # The light is on again and this member missed the restore: it
-            # is sent the light's look, not mirrored at the warning's.
-            self.hass.async_create_task(
-                self._set_lights(
+            # is sent its own pre-warning look, or the light's once a command
+            # named another, not mirrored at the warning's.
+            if own := owed.member_looks.get(entity_id):
+                task = self._set_lights(
+                    True,
+                    brightness=own[0],
+                    color=own[1],
+                    members=[entity_id],
+                    adopt=False,
+                )
+            else:
+                task = self._set_lights(
                     True,
                     brightness=self._attr_brightness,
                     color=self._current_color() or owed.look[1],
                 )
-            )
+            self.hass.async_create_task(task)
             handled = True
         if not owed.members:
             self._owed = None
@@ -2686,6 +2781,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._transition_on(rejoin=claim)
         elif self._all_lights_off():
             self._go_idle(manual=manual)
+        elif touched is not None and self._in_warning():
+            # Switched off while the warning runs on: a re-trigger leaves it off.
+            self._pre_warn_members[touched] = None
 
     def _on_light_attrs_change(
         self,
@@ -2732,8 +2830,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if new_b == 0:
                 if self._all_lights_off():
                     self._go_idle(manual=human)
-                else:
-                    self.async_write_ha_state()
+                    return
+                if self._in_warning():
+                    # Dimmed out while the warning runs on: it stays off.
+                    self._pre_warn_members[new_state.entity_id] = None
+                self.async_write_ha_state()
                 return
 
         if self._machine_state == STATE_IDLE:
@@ -2768,8 +2869,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # restore the other to its pre-warning value so the stage
                 # leaves no trace, exactly as a virtual re-trigger does.
                 touched = new_state.entity_id
-                brightness = None if brightness_changed else self._pre_warn_brightness
-                color = None if color_changed else self._pre_warn_color
+                own = self._pre_warn_members.get(touched) or (
+                    self._pre_warn_brightness,
+                    self._pre_warn_color,
+                )
+                brightness = None if brightness_changed else own[0]
+                color = None if color_changed else own[1]
                 if brightness is not None or color is not None:
                     self.hass.async_create_task(
                         self._set_lights(
@@ -2777,9 +2882,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                         )
                     )
                 self._restore_untouched(touched)
-            self._warning_active = False
-            self._pre_warn_brightness = None
-            self._pre_warn_color = None
+            self._forget_warning()
             self._machine_state = STATE_ACTIVE
             if self._maintain_active() or self._occupancy_holds() or self._door_holds():
                 # Presence that left standby alone holds the raised light,
@@ -2818,6 +2921,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     color=self._pre_warn_color,
                     members=others,
                     adopt=False,
+                    looks=self._own_looks(),
                 )
             )
 
@@ -3670,9 +3774,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._schedule_window_applied = sched.attributes.get("current_window_start")
         self._machine_state = STATE_SCHEDULED
         self._cancel_timer()
-        self._warning_active = False
-        self._pre_warn_brightness = None
-        self._pre_warn_color = None
+        self._forget_warning()
         # The member may already be on (booted lit): re-send the settings and
         # the turn-on selection regardless.
         self.hass.async_create_task(self._auto_lights_on(force_selection=True))
@@ -3688,10 +3790,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._machine_state == STATE_EFFECT and not self._effect_brightness:
             return
         brightness, color = self._attr_brightness, self._current_color()
+        looks = None
         if self._in_warning():
             # During a stage the stage is what is sent; should the warning
             # end while the select call runs, this is the look restored.
             brightness, color = self._pre_warn_brightness, self._pre_warn_color
+            looks = self._own_looks()
         self.hass.async_create_task(
             self._set_lights(
                 True,
@@ -3700,6 +3804,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 color=color,
                 apply_turn_on_selection=True,
                 force_selection=True,
+                looks=looks,
             )
         )
 
@@ -4282,9 +4387,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """
         # A manual/physical turn-on ends any warning sequence; the caller has
         # already set the real lights, so just drop the restore snapshot.
-        self._warning_active = False
-        self._pre_warn_brightness = None
-        self._pre_warn_color = None
+        self._forget_warning()
         self._clear_bright_forced_off()
         if rejoin:
             # Turning the light back on after a manual off rejoins standby.
@@ -4368,9 +4471,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # A deferred schedule-end off only applies to the on-period it
         # interrupted; any off consumes it.
         self._schedule_end_off_pending = False
-        self._warning_active = False
-        self._pre_warn_brightness = None
-        self._pre_warn_color = None
+        self._forget_warning()
         self._forget_ended_follow_window()
         self.async_write_ha_state()
 
@@ -4425,6 +4526,67 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Return True while showing the effect or warn stage before auto-off."""
         return self._machine_state in (STATE_EFFECT, STATE_WARN)
 
+    def _forget_warning(self) -> None:
+        """Drop the warning flag and its pre-warning snapshot."""
+        self._warning_active = False
+        self._pre_warn_brightness = None
+        self._pre_warn_color = None
+        self._pre_warn_members = {}
+
+    def _member_looks(self) -> dict[str, _Look | None]:
+        """Each readable real light's own look, None for one that is off.
+
+        One still answering a command, or that never answered our last
+        on or off, is left out: what it reports is not what it shows. So is
+        one off while a turn-on waits for its selection to light it.
+        """
+        looks: dict[str, _Look | None] = {}
+        waiting = bool(self._waiting_turn_ons)
+        for entity_id in self._lights:
+            lit = self._member_is_lit(entity_id)
+            if (
+                lit is None
+                or self._awaited_power(entity_id) is not None
+                or self._commanded_power.get(entity_id, lit) != lit
+                or (waiting and not lit)
+            ):
+                continue
+            state = self.hass.states.get(entity_id)
+            looks[entity_id] = (
+                (
+                    state.attributes.get(ATTR_BRIGHTNESS),
+                    _color_data(_state_color(state)),
+                )
+                if lit
+                else None
+            )
+        return looks
+
+    def _own_looks(
+        self,
+        brightness: int | None = None,
+        color: dict | None = None,
+        *,
+        own_color: bool = True,
+        lit_only: bool = True,
+    ) -> dict[str, _Look | None]:
+        """Per-member looks from the pre-warning snapshot, for _set_lights.
+
+        A given brightness or color replaces each member's own (a color only
+        with own_color). A member that was off is left out, or without
+        lit_only sent just the given values.
+        """
+        looks: dict[str, _Look | None] = {}
+        for entity_id, own in self._pre_warn_members.items():
+            if own is None:
+                looks[entity_id] = None if lit_only else (brightness, color)
+            else:
+                looks[entity_id] = (
+                    own[0] if brightness is None else brightness,
+                    color if color is not None or not own_color else own[1],
+                )
+        return looks
+
     def _begin_warning(self) -> None:
         """Auto-off is due: start the effect→warn warning sequence.
 
@@ -4437,6 +4599,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._warning_active = True
         self._pre_warn_brightness = self._attr_brightness
         self._pre_warn_color = self._current_color()
+        self._pre_warn_members = self._member_looks()
         # Recorded rather than re-derived in _enter_warn: a profile switch
         # mid-effect can swap _effect_color out from under the running stage.
         self._effect_sent_color = (
@@ -4445,7 +4608,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
             self._show_stage(
-                self._effect_brightness, self._effect_transition, self._effect_color
+                self._effect_brightness,
+                self._effect_transition,
+                self._effect_color,
+                self._own_looks(
+                    self._effect_brightness, self._effect_color, own_color=False
+                ),
             )
             self._start_timer(self._effect_timeout)
             self.async_write_ha_state()
@@ -4470,7 +4638,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             color = self._warn_color
             if color is None and effect_recolored:
                 color = self._pre_warn_color
-            self._show_stage(brightness, self._warn_transition, color)
+            # Blank keeps each member's own brightness, and its color unless
+            # the effect stage changed it.
+            looks = {
+                entity_id: look and (look[0] or 255, look[1])
+                for entity_id, look in self._own_looks(
+                    self._warn_brightness,
+                    self._warn_color,
+                    own_color=effect_recolored,
+                ).items()
+            }
+            self._show_stage(brightness, self._warn_transition, color, looks)
             self._start_timer(self._warn_timeout)
             self.async_write_ha_state()
             return
@@ -4516,17 +4694,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         Without a standby color, a warning stage's recolor is undone.
         """
         color = self._standby_color
+        looks = None
         if (
             color is None
             and self._in_warning()
             and self._pre_warn_color != self._current_color()
         ):
             color = self._pre_warn_color
+            looks = self._own_looks(self._standby_brightness, lit_only=False)
         self._cancel_timer()
         self._machine_state = STATE_STANDBY
-        self._warning_active = False
-        self._pre_warn_brightness = None
-        self._pre_warn_color = None
+        self._forget_warning()
         self._occupancy_lit_lights = False
         self.hass.async_create_task(
             self._set_lights(
@@ -4537,32 +4715,42 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 apply_turn_on_selection=selection,
                 force_selection=force_selection,
                 auto_level=True,
+                looks=looks,
             )
         )
         self.async_write_ha_state()
 
-    def _resume_lights(self) -> None:
+    def _resume_lights(self, *, found_lit: bool = False) -> None:
         """Restore the pre-warning brightness and color after a re-trigger.
 
         The caller sets the resulting machine state. No transition: the
-        restore must be as immediate as the re-trigger that caused it.
+        restore must be as immediate as the re-trigger that caused it. With
+        found_lit (a seed), real lights found off stay off.
         """
         brightness = self._pre_warn_brightness
         color = self._pre_warn_color
-        self._warning_active = False
-        self._pre_warn_brightness = None
-        self._pre_warn_color = None
+        looks = self._own_looks()
+        members = (
+            [e for e in self._lights if self._member_is_lit(e)] if found_lit else None
+        )
+        self._forget_warning()
         self.hass.async_create_task(
-            self._set_lights(True, brightness=brightness, color=color)
+            self._set_lights(
+                True, brightness=brightness, color=color, members=members, looks=looks
+            )
         )
 
     def _show_stage(
-        self, brightness: int, transition: float | None, color: dict | None
+        self,
+        brightness: int,
+        transition: float | None,
+        color: dict | None,
+        looks: dict[str, _Look | None],
     ) -> None:
         """Show an effect/warn stage, keeping its look for a waiting turn-on."""
-        self._stage_look = (brightness, transition, color)
+        self._stage_look = (brightness, transition, color, looks)
         self.hass.async_create_task(
-            self._set_stage_lights(brightness, transition, color)
+            self._set_stage_lights(brightness, transition, color, looks)
         )
 
     async def _set_stage_lights(
@@ -4570,11 +4758,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         brightness: int,
         transition: float | None = None,
         color: dict | None = None,
+        looks: dict[str, _Look | None] | None = None,
     ) -> None:
         """Drive the real lights for an effect/warn stage.
 
         The virtual light stays logically on. Brightness 0 blinks the real
-        lights off (any stage color is moot then).
+        lights off (any stage color is moot then). looks overrides the
+        stage per member, as for _set_lights.
         """
         if self._removed:
             return
@@ -4582,7 +4772,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._drop_member_cycles()
         context = Context()
         self._self_context_ids.append(context.id)
-        self._expect_echo(bool(brightness), brightness or None, color, transition)
+        groups = _look_groups(self._lights, brightness, color, looks)
+        for group, group_brightness, group_color in groups:
+            self._commanded_power.update(dict.fromkeys(group, bool(group_brightness)))
+            self._expect_echo(
+                bool(group_brightness),
+                group_brightness or None,
+                group_color,
+                transition,
+                None if group == self._lights else group,
+            )
         self._resend_after_select = bool(self._waiting_turn_ons)
         transition_data = (
             {ATTR_TRANSITION: transition} if transition is not None else {}
@@ -4593,27 +4792,28 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._attr_brightness = brightness
             if color:
                 self._adopt_color_data(color)
-            color_data = color or {}
-            await self.hass.services.async_call(
-                "light",
-                "turn_on",
-                {
-                    "entity_id": self._lights,
-                    ATTR_BRIGHTNESS: brightness,
-                    **color_data,
-                    **transition_data,
-                },
-                blocking=False,
-                context=context,
-            )
-        else:
-            await self.hass.services.async_call(
-                "light",
-                "turn_off",
-                {"entity_id": self._lights, **transition_data},
-                blocking=False,
-                context=context,
-            )
+        for group, group_brightness, group_color in groups:
+            if group_brightness:
+                await self.hass.services.async_call(
+                    "light",
+                    "turn_on",
+                    {
+                        "entity_id": group,
+                        ATTR_BRIGHTNESS: group_brightness,
+                        **(group_color or {}),
+                        **transition_data,
+                    },
+                    blocking=False,
+                    context=context,
+                )
+            else:
+                await self.hass.services.async_call(
+                    "light",
+                    "turn_off",
+                    {"entity_id": group, **transition_data},
+                    blocking=False,
+                    context=context,
+                )
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
@@ -4664,6 +4864,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         auto_level: bool = False,
         members: list[str] | None = None,
         adopt: bool = True,
+        looks: dict[str, _Look | None] | None = None,
     ) -> bool:
         """Command the real lights; False when a newer command overtook it.
 
@@ -4677,7 +4878,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         overtakes an older automatic one still waiting, so the level chosen
         last is the one the lights end at. members limits the command to some
         of the real lights; without adopt, the virtual light does not report
-        the brightness and color it names.
+        the brightness and color it names. looks gives some real lights a
+        brightness and color of their own, or leaves one out (None).
         """
         if self._removed:
             return False
@@ -4690,6 +4892,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if color and self._owed is not None and self._owed.look is not None:
                 # Late members owe the color named last, not the snapshot's.
                 self._owed.look = (self._owed.look[0], color)
+            if (
+                self._owed is not None
+                and looks is None
+                and (brightness is not None or color)
+            ):
+                # Nor their own looks, once a command named another.
+                self._owed.member_looks = {}
         context = Context()
         self._self_context_ids.append(context.id)
         if not on or manual:
@@ -4736,42 +4945,63 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if not manual and self._in_warning() and self._stage_look is not None:
                 # The light is at a stage, maybe reached during the wait: the
                 # members show it, in the color asked for if it names none.
-                stage_brightness, stage_transition, stage_color = self._stage_look
+                stage_brightness, stage_transition, stage_color, stage_looks = (
+                    self._stage_look
+                )
+                stage_looks = dict(stage_looks)
+                for entity_id, look in list(stage_looks.items()):
+                    if look is not None and look[1] is None:
+                        asked = (looks or {}).get(entity_id)
+                        stage_looks[entity_id] = (look[0], asked[1] if asked else color)
                 await self._set_stage_lights(
-                    stage_brightness, stage_transition, stage_color or color
+                    stage_brightness,
+                    stage_transition,
+                    stage_color or color,
+                    stage_looks,
                 )
                 return False
         if self._drop_member_cycles() and members is not None:
             members = [m for m in members if m in self._lights]
         targets = self._lights if members is None else members
-        service_data: dict = {"entity_id": targets}
-        if transition is not None:
-            service_data[ATTR_TRANSITION] = transition
-        if on and brightness is not None:
-            service_data[ATTR_BRIGHTNESS] = brightness
-            # Mirror the commanded brightness so the virtual light reports it
-            # (the echo is only mirrored for a command that named none).
-            if adopt:
-                self._attr_brightness = brightness
-        if on and color:
-            # One call carries the color to every member; HA filters/converts
-            # it per real light, so mixed-capability members each show what
-            # they can.
-            service_data.update(color)
-            if adopt:
-                self._adopt_color_data(color)
-        self._expect_echo(on, brightness, color, transition, members)
+        # Mirror the commanded brightness and color so the virtual light
+        # reports them (the echo is only mirrored for a command that named
+        # none).
+        if on and brightness is not None and adopt:
+            self._attr_brightness = brightness
+        if on and color and adopt:
+            self._adopt_color_data(color)
+        groups = _look_groups(targets, brightness, color, looks if on else None)
+        for group, group_brightness, group_color in groups:
+            self._commanded_power.update(dict.fromkeys(group, on))
+            self._expect_echo(
+                on,
+                group_brightness,
+                group_color,
+                transition,
+                None if members is None and group == self._lights else group,
+            )
         if members is None:
             self._resend_after_select = on and bool(self._waiting_turn_ons)
         # Set before the call: a member may answer inside it.
         self._attr_is_on = on
-        await self.hass.services.async_call(
-            "light",
-            "turn_on" if on else "turn_off",
-            service_data,
-            blocking=False,
-            context=context,
-        )
+        for group, group_brightness, group_color in groups:
+            service_data: dict = {"entity_id": group}
+            if transition is not None:
+                service_data[ATTR_TRANSITION] = transition
+            if on and group_brightness is not None:
+                service_data[ATTR_BRIGHTNESS] = group_brightness
+            if on and group_color:
+                # One call carries the color to every member; HA
+                # filters/converts it per real light, so mixed-capability
+                # members each show what they can.
+                service_data.update(group_color)
+            await self.hass.services.async_call(
+                "light",
+                "turn_on" if on else "turn_off",
+                service_data,
+                blocking=False,
+                context=context,
+            )
         self.async_write_ha_state()
         return True
 
@@ -4902,6 +5132,17 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     # ------------------------------------------------------------------
     # Extra state attributes
     # ------------------------------------------------------------------
+
+    @property
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Save each member's pre-warning look while the attributes name one."""
+        if self._warning_active:
+            looks = self._pre_warn_members
+        elif self._owed_look() is not None:
+            looks = self._owed.member_looks
+        else:
+            looks = {}
+        return RestoredExtraData({"pre_warn_members": looks})
 
     @property
     def extra_state_attributes(self) -> dict:

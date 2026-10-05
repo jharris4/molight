@@ -91,7 +91,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
-from tests.real_entities import RealLight, add_real
+from tests.real_entities import FadingLight, RealLight, add_real
 
 REAL = "light.real_1"
 SCHEDULE = "binary_sensor.settings_schedule"
@@ -429,6 +429,47 @@ async def test_standby_without_a_color_restores_the_pre_warning_color(
     _assert_standby(hass)
     assert _light_calls(calls, "turn_on")[-1]["color_temp_kelvin"] == 3000
     assert _attrs(hass)["color_temp_kelvin"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_standby_after_a_colored_warning_gives_each_light_its_own_color(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Real lights at color temperatures of their own each get theirs back
+    when a colored warning ends at a standby without a color."""
+    warm = FadingLight("warm", kelvin=2700)
+    cool = FadingLight("cool", kelvin=5000)
+    await add_real(hass, warm, cool)
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(OCCUPANCY, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            lights=[warm.entity_id, cool.entity_id],
+            schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
+            outside={CONF_LIGHT_TIMEOUT: 30},
+            inside={
+                CONF_LIGHT_TIMEOUT: 30,
+                CONF_OCCUPANCY_ENTITY: OCCUPANCY,
+                CONF_AUTO_ON_BRIGHTNESS: 100,
+                CONF_STANDBY_BRIGHTNESS: 20,
+                CONF_WARN_TIMEOUT: 2,
+                CONF_WARN_COLOR_TEMP: 6000,
+            },
+        ),
+    )
+    await settle(hass)
+    assert (warm.color_temp_kelvin, cool.color_temp_kelvin) == (2700, 5000)
+
+    await _set(hass, OCCUPANCY, "on")
+    await _set(hass, OCCUPANCY, "off")
+    await _tick(hass, freezer, 31)
+    assert (warm.color_temp_kelvin, cool.color_temp_kelvin) == (6000, 6000)
+    await _tick(hass, freezer, 2)
+
+    _assert_standby(hass)
+    assert (warm.brightness, warm.color_temp_kelvin) == (STANDBY, 2700)
+    assert (cool.brightness, cool.color_temp_kelvin) == (STANDBY, 5000)
 
 
 @pytest.mark.asyncio

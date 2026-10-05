@@ -18,6 +18,7 @@ from homeassistant.core import Context, HomeAssistant, callback
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
+    DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -683,7 +684,7 @@ async def test_colorless_warn_stage_names_a_color_only_to_undo_the_effect(
 ) -> None:
     """Blank keeps the color the lights already had: two real lights showing
     different colors keep them through the warn stage. Only after an effect
-    stage recolored them does it name the pre-warning color."""
+    stage recolored them does it name each one's own pre-warning color."""
     members = ["light.a", "light.b"]
     lit = {"brightness": 200, **HS_CAPS}
     hass.states.async_set("light.a", "on", {**lit, "hs_color": (30.0, 80.0)})
@@ -707,19 +708,32 @@ async def test_colorless_warn_stage_names_a_color_only_to_undo_the_effect(
         await settle(hass)
 
     assert _mstate(hass) == STATE_WARN
-    stage = [
+    turn_ons = [
         d["service_data"]
         for d in calls
         if d["domain"] == "light" and d["service"] == "turn_on"
-    ][-1]
-    assert stage["entity_id"] == members
-    assert stage["brightness"] == 51
-    named = {
-        key: stage[key]
-        for key in ("hs_color", "rgb_color", "color_temp_kelvin")
-        if key in stage
-    }
-    assert named == ({"hs_color": [30.0, 80.0]} if effect_color else {})
+    ]
+    stage = turn_ons[-2:] if effect_color else turn_ons[-1:]
+    assert all(command["brightness"] == 51 for command in stage)
+    named = [
+        (
+            command["entity_id"],
+            {
+                key: command[key]
+                for key in ("hs_color", "rgb_color", "color_temp_kelvin")
+                if key in command
+            },
+        )
+        for command in stage
+    ]
+    assert named == (
+        [
+            (["light.a"], {"hs_color": [30.0, 80.0]}),
+            (["light.b"], {"hs_color": [240.0, 80.0]}),
+        ]
+        if effect_color
+        else [(members, {})]
+    )
 
 
 async def _enter_stage_at_200(hass: HomeAssistant, freezer, stage: str) -> list[dict]:
@@ -1082,3 +1096,252 @@ async def test_wall_change_outside_a_warning_leaves_the_other_light_alone(
     assert _wall_stamps(hass) == ["last_brightness_change_physical"]
     assert pair[1 - touched].brightness == 200
     assert [d for d in calls if d["domain"] == "light"] == []
+
+
+# ---------------------------------------------------------------------------
+# Each real light keeps its own look through a warning
+# ---------------------------------------------------------------------------
+
+DOOR = "binary_sensor.door"
+HOLD_SWITCH = "switch.matrix_light_auto_off"
+# Green at 50, blue at 200, warm white at 120, and one off.
+BEFORE = {"a": (50, GREEN), "b": (200, BLUE), "k": (120, 2700), "c": None}
+MIXED_STAGES = {
+    "dim": {"effect_timeout": 30, "effect_brightness": 10},
+    "blink": {"effect_timeout": 30, "effect_brightness": 0},
+    "colored": {
+        "effect_timeout": 30,
+        "effect_brightness": 10,
+        "effect_rgb_color": STAGE_RED,
+    },
+    "warn": {"warn_timeout": 30, "warn_brightness": 10},
+    "blank_warn": {"warn_timeout": 30},
+}
+
+
+async def _mixed_in_stage(
+    hass: HomeAssistant, freezer, stage: str
+) -> tuple[dict[str, FadingLight], list[dict], object]:
+    """Four real lights with looks of their own, taken into a stage.
+
+    Returns the lights by name, the calls made from the stage on, and the
+    entry.
+    """
+    lights = {
+        "a": FadingLight("a", on=True, brightness=50, hs=GREEN),
+        "b": FadingLight("b", on=True, brightness=200, hs=BLUE),
+        "k": FadingLight("k", on=True, brightness=120, kelvin=2700),
+        "c": FadingLight("c", on=False, brightness=90, hs=GREEN),
+    }
+    await add_real(hass, *lights.values())
+    for sensor in (OCC, MAINTAIN, DOOR):
+        hass.states.async_set(sensor, "off")
+    entry = make_light_entry(
+        lights=[light.entity_id for light in lights.values()],
+        occupancy=OCC,
+        maintain=MAINTAIN,
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        **MIXED_STAGES[stage],
+    )
+    await setup_entries(hass, entry)
+    assert _shown(lights) == BEFORE
+    calls = _record_service_calls(hass)
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).attributes["warning_active"] is True
+    return lights, calls, entry
+
+
+def _shown(lights: dict[str, FadingLight]) -> dict[str, tuple | None]:
+    """What each real light shows: brightness and color, None when off (or
+    at brightness 0)."""
+    return {
+        name: (
+            light.brightness,
+            tuple(light.hs_color) if light.hs_color else light.color_temp_kelvin,
+        )
+        if light.is_on and light.brightness
+        else None
+        for name, light in lights.items()
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(MIXED_STAGES))
+async def test_stage_leaves_a_real_light_that_was_off_alone(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """The stage drives the real lights that were lit; a blank warn stage
+    keeps each one's own level, and the light that was off is never lit."""
+    lights, calls, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    shown = _shown(lights)
+    assert shown["c"] is None
+    assert _commands_to(calls, lights["c"]) == []
+    if stage == "blank_warn":
+        assert shown == BEFORE
+    elif stage == "blink":
+        assert set(shown.values()) == {None}
+    else:
+        assert {shown[name][0] for name in ("a", "b", "k")} == {26}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", list(MIXED_STAGES))
+@pytest.mark.parametrize("trigger", ["occupancy", "maintain", "door", "hold"])
+async def test_retrigger_restores_each_real_lights_own_look(
+    hass: HomeAssistant, freezer, stage: str, trigger: str
+) -> None:
+    """Presence, a door or a hold cancelling the warning gives each real
+    light back its own brightness, color and power, not one shared look."""
+    lights, calls, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    if trigger == "hold":
+        await hass.services.async_call(
+            "switch", "turn_off", {"entity_id": HOLD_SWITCH}, blocking=True
+        )
+    else:
+        hass.states.async_set(
+            {"occupancy": OCC, "maintain": MAINTAIN}.get(trigger, DOOR), "on"
+        )
+    await settle(hass)
+
+    assert _state(hass).attributes["warning_active"] is False
+    assert _shown(lights) == BEFORE
+    assert _commands_to(calls, lights["c"]) == []
+    attrs = _state(hass).attributes
+    assert attrs["pre_warn_brightness"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "blink", "colored", "warn"])
+@pytest.mark.parametrize("brightness", [None, 100])
+async def test_turn_on_during_a_stage_restores_each_real_lights_own_look(
+    hass: HomeAssistant, freezer, stage: str, brightness: int | None
+) -> None:
+    """A turn-on through the light gives each real light its own look where
+    the command names none; the one that was off comes on as it would
+    outside a warning."""
+    lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    await _turn_on_virtual(hass, brightness=brightness)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    if brightness is None:
+        assert _shown(lights) == {**BEFORE, "c": (90, GREEN)}
+    else:
+        assert _shown(lights) == {
+            name: (100, look[1] if look else GREEN) for name, look in BEFORE.items()
+        }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "colored", "warn"])
+async def test_wall_dim_during_a_stage_restores_the_others_own_looks(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """The real light dimmed at the wall keeps it; the others each get
+    their own look back, and the one that was off stays off."""
+    lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    lights["b"].wall(brightness=150)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    # Only its brightness was changed: its own color comes back too.
+    assert _shown(lights) == {**BEFORE, "b": (150, BLUE)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "blink", "warn"])
+async def test_wall_turn_on_of_the_off_light_restores_the_others(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """Switching on, mid-warning, the real light that was off cancels the
+    warning: it keeps what it came on at, the others get their own looks."""
+    lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    lights["c"].wall(brightness=180)
+    await settle(hass)
+
+    assert _mstate(hass) == STATE_ACTIVE
+    assert _shown(lights) == {**BEFORE, "c": (180, GREEN)}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "colored", "warn"])
+@pytest.mark.parametrize("off", [{"on": False}, {"brightness": 0}], ids=["off", "zero"])
+async def test_real_light_switched_off_mid_warning_stays_off_on_retrigger(
+    hass: HomeAssistant, freezer, stage: str, off: dict
+) -> None:
+    """A real light switched off at the wall during the warning was not
+    darkened by it: the re-trigger leaves it off."""
+    lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
+
+    lights["b"].wall(**off)
+    await settle(hass)
+    assert _state(hass).attributes["warning_active"] is True
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    assert _shown(lights) == {**BEFORE, "b": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "blink"])
+async def test_real_light_recovering_mid_warning_gets_the_stage_then_its_look(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """A real light back from unavailable mid-warning is sent the stage
+    like the others, and its own look when the warning is cancelled."""
+    lights, calls, _ = await _mixed_in_stage(hass, freezer, stage)
+    hass.states.async_set("light.b", "unavailable")
+    await settle(hass)
+    lights["b"].wall(on=False)
+    await settle(hass)
+
+    assert _shown(lights)["b"] == ((26, BLUE) if stage == "dim" else None)
+    assert _commands_to(calls, lights["c"]) == []
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _shown(lights) == BEFORE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["dim", "colored", "warn"])
+async def test_reload_mid_warning_restores_each_real_lights_own_look(
+    hass: HomeAssistant, freezer, stage: str
+) -> None:
+    """An options reload landing mid-warning keeps each real light's own
+    pre-warning look, and the one that was off stays off."""
+    lights, _, entry = await _mixed_in_stage(hass, freezer, stage)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+
+    assert _state(hass).attributes["warning_active"] is False
+    assert _shown(lights) == BEFORE
+
+
+@pytest.mark.asyncio
+async def test_reload_mid_blink_relights_only_the_real_lights_found_lit(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A reload finding one real light lit mid blink-off restores that one
+    to its own look; the ones the blink left off stay off."""
+    lights, _, entry = await _mixed_in_stage(hass, freezer, "blink")
+    lights["b"].wall(on=False)  # still dark, as the blink left it
+    await settle(hass)
+    await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    lights["k"].wall(brightness=26)
+    await settle(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    assert _shown(lights) == {"a": None, "b": None, "k": (120, 2700), "c": None}

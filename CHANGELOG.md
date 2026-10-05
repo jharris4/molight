@@ -93,8 +93,8 @@ Remote buttons.
 - **Real lights coming back**: a real light that loads late or returns from
   `unavailable` as off while the virtual light is on is sent its settings
   again, instead of being recorded as a manual off. One returning just before
-  a warning no longer jumps back to full brightness. Cancelling a warning at
-  the wall on one of several real lights restores them all. A light that
+  a warning no longer jumps back to full brightness. Cancelling a warning
+  gives each of several real lights its own look back. A light that
   replies before its turn-on call returns, such as LightwaveRF, no longer
   reports `off` for a moment.
 - **False detections**: only a light that the false detection's own cycle lit
