@@ -124,7 +124,8 @@ Remote buttons.
   itself, such as a group that contains it. A combined schedule with a sun
   edge in the repeated hour, on the night the clocks go back, no longer
   re-evaluates in a loop until the edge passes, and schedules change at the
-  boundary instead of a second after it.
+  boundary instead of a second after it. A combined schedule starts a new
+  window when a source-backed input turns off and on again in the same moment.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work, and double clicks on
   those and on BTHome and Xiaomi BLE buttons are accepted. *Brightness up* and

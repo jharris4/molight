@@ -1568,6 +1568,17 @@ class _Timeline:
         return self.segments[index][0] if index < len(self.segments) else None
 
 
+def _mirror_since(state: State) -> datetime:
+    """Return when a sensor-mirroring schedule's on or off state began."""
+    if state.state == "on":
+        # The schedule restores this across restarts, unlike last_changed.
+        return (
+            _parse_datetime(state.attributes.get("current_window_start"))
+            or state.last_changed
+        )
+    return state.last_changed
+
+
 @dataclass
 class _ScheduleNode:
     """One schedule in an expanded combined schedule."""
@@ -1695,6 +1706,10 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._unsub_transition: CALLBACK_TYPE | None = None
         self._unsub_started: CALLBACK_TYPE | None = None
         self._refresh_handle: asyncio.Handle | None = None
+        # Sources changed since the last deferred refresh, and the on or off
+        # spell (start, end, value) each was seen to pass through meanwhile.
+        self._batch_changed: set[str] = set()
+        self._passed_through: dict[str, tuple[float, float, bool]] = {}
 
     async def async_added_to_hass(self) -> None:
         """Expand the inputs, restore state and start tracking."""
@@ -1823,15 +1838,37 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self._refresh_handle = None
 
     @callback
-    def _handle_input_change(self, _event: Event[EventStateChangedData]) -> None:
+    def _handle_input_change(self, event: Event[EventStateChangedData]) -> None:
         # Deferred to the next loop pass so inputs changing together (two
         # schedules mirroring one sensor) are evaluated once, never half-updated.
+        self._note_passed_through(event)
         if self._refresh_handle is None:
             self._refresh_handle = self.hass.loop.call_soon(self._deferred_refresh)
+
+    def _note_passed_through(self, event: Event[EventStateChangedData]) -> None:
+        """Keep the spell a source left when it changes twice before one refresh.
+
+        The refresh reads only the final state, so an off and on arriving
+        together would otherwise leave no trace of the window that ended.
+        """
+        entity_id = event.data["entity_id"]
+        if entity_id not in self._batch_changed:
+            self._batch_changed.add(entity_id)
+            self._passed_through.pop(entity_id, None)
+            return
+        old = event.data["old_state"]
+        if old is None or old.state not in ("on", "off"):
+            return
+        self._passed_through[entity_id] = (
+            _mirror_since(old).timestamp(),
+            event.time_fired.timestamp(),
+            old.state == "on",
+        )
 
     @callback
     def _deferred_refresh(self) -> None:
         self._refresh_handle = None
+        self._batch_changed.clear()
         self._refresh()
 
     def _timeline(
@@ -1863,13 +1900,17 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         state = self.hass.states.get(entity_id) if entity_id else None
         if state is None or state.state not in ("on", "off"):
             return _Timeline.constant(None)
-        since = state.last_changed
-        if state.state == "on":
-            # The schedule restores this across restarts, unlike last_changed.
-            since = (
-                _parse_datetime(state.attributes.get("current_window_start")) or since
-            )
-        return _Timeline([(_NEG_INF, None), (since.timestamp(), state.state == "on")])
+        since = _mirror_since(state).timestamp()
+        segments: list[tuple[float, bool | None]] = [(_NEG_INF, None)]
+        passed = self._passed_through.get(entity_id or "")
+        if passed is not None:
+            start, end, value = passed
+            # The spell came first, even when its state was written late and
+            # is dated after the start the current one takes from its source.
+            start = min(start, math.nextafter(since, _NEG_INF))
+            segments += [(start, value), (min(end, since), None)]
+        segments.append((since, state.state == "on"))
+        return _Timeline(segments).normalized()
 
     @callback
     def _refresh(self, _now: datetime | None = None) -> None:

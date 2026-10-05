@@ -55,6 +55,7 @@ from tests.conftest import (
     set_home,
     settle,
 )
+from tests.real_entities import RealLight, add_real
 
 if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
@@ -1826,3 +1827,160 @@ async def test_a_window_of_a_second_is_published(
         "on",
         "off",
     ]
+
+
+# ---------------------------------------------------------------------------
+# A source that changes twice before one refresh
+# ---------------------------------------------------------------------------
+
+
+async def _follow_light(hass: HomeAssistant, schedule: str) -> RealLight:
+    """Set up a follow-mode light on the schedule and turn it off by hand."""
+    lamp = RealLight("lamp")
+    await add_real(hass, lamp)
+    await _setup(
+        hass,
+        make_light_entry(
+            lights=[lamp.entity_id],
+            schedule=schedule,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+        ),
+    )
+    assert lamp.is_on
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": "light.matrix_light"}, blocking=True
+    )
+    await settle(hass)
+    assert not lamp.is_on
+    return lamp
+
+
+async def _flip_twice(hass: HomeAssistant, freezer, entity_id: str, settled: bool):
+    """Flip a source and flip it back, 10 ms apart, with or without a pause."""
+    first = hass.states.get(entity_id).state
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(entity_id, "off" if first == "on" else "on")
+    if settled:
+        await settle(hass)
+    freezer.tick(timedelta(milliseconds=10))
+    hass.states.async_set(entity_id, first)
+    await settle(hass)
+
+
+@pytest.mark.parametrize("settled", [False, True], ids=["together", "apart"])
+@pytest.mark.parametrize(
+    "layout",
+    ["single", "inverted_mirror", "nested", "inverted_output", "all_with_window"],
+)
+@pytest.mark.asyncio
+async def test_source_window_that_ends_and_restarts_at_once_is_a_new_window(
+    hass: HomeAssistant, freezer, layout: str, settled: bool
+) -> None:
+    """A source going off and on again ends one window and starts another,
+    also when both changes reach the combination before it refreshes: the
+    marker moves and a follow-mode light turned off by hand is lit again."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    # The source value under which the combination is on.
+    source_on = "off" if layout in ("inverted_mirror", "inverted_output") else "on"
+    hass.states.async_set("binary_sensor.src", source_on)
+    entries = [
+        _mirror_schedule(
+            "Mirror", "binary_sensor.src", invert=layout == "inverted_mirror"
+        )
+    ]
+    if layout == "nested":
+        entries += [
+            _combined("Inner", ["binary_sensor.mirror"]),
+            _combined("Out", ["binary_sensor.inner"], operator=SCHEDULE_OPERATOR_ALL),
+        ]
+    elif layout == "all_with_window":
+        entries += [
+            _time_schedule("Day", "06:00", "22:00"),
+            _combined(
+                "Out",
+                ["binary_sensor.mirror", "binary_sensor.day"],
+                operator=SCHEDULE_OPERATOR_ALL,
+            ),
+        ]
+    else:
+        entries.append(
+            _combined(
+                "Out", ["binary_sensor.mirror"], invert=layout == "inverted_output"
+            )
+        )
+    await _setup(hass, *entries)
+    before = hass.states.get("binary_sensor.out")
+    assert before.state == "on"
+    lamp = await _follow_light(hass, "binary_sensor.out")
+
+    await _flip_twice(hass, freezer, "binary_sensor.src", settled)
+
+    after = hass.states.get("binary_sensor.out")
+    assert after.state == "on"
+    marker = datetime.fromisoformat(after.attributes["current_window_start"])
+    assert marker == dt_util.utcnow()
+    assert lamp.is_on
+
+
+@pytest.mark.parametrize(
+    "case", ["other_input_on", "handoff", "outage", "complementary_mirrors"]
+)
+@pytest.mark.asyncio
+async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
+    hass: HomeAssistant, freezer, case: str
+) -> None:
+    """Changes that reach the combination together and never have it known
+    off keep its window: another input on throughout, one input handing over
+    to another, a source outage, and two mirrors of one sensor."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 12:00:00+00:00")
+    hass.states.async_set("binary_sensor.src", "on")
+    hass.states.async_set("binary_sensor.spare", "off")
+    await _setup(
+        hass,
+        _mirror_schedule("Mirror", "binary_sensor.src"),
+        _mirror_schedule("Other", "binary_sensor.spare"),
+        _mirror_schedule("Opposite", "binary_sensor.src", invert=True),
+        _time_schedule("Day", "06:00", "22:00"),
+        _combined(
+            "Out",
+            {
+                "other_input_on": ["binary_sensor.mirror", "binary_sensor.day"],
+                "handoff": ["binary_sensor.mirror", "binary_sensor.other"],
+                "outage": ["binary_sensor.mirror"],
+                "complementary_mirrors": [
+                    "binary_sensor.mirror",
+                    "binary_sensor.opposite",
+                ],
+            }[case],
+        ),
+    )
+    before = hass.states.get("binary_sensor.out")
+    assert before.state == "on"
+    lamp = await _follow_light(hass, "binary_sensor.out")
+    seen = _record_states(hass, "binary_sensor.out")
+
+    if case == "handoff":
+        freezer.tick(timedelta(seconds=10))
+        hass.states.async_set("binary_sensor.src", "off")
+        freezer.tick(timedelta(milliseconds=10))
+        hass.states.async_set("binary_sensor.spare", "on")
+        await settle(hass)
+    elif case == "outage":
+        freezer.tick(timedelta(seconds=10))
+        hass.states.async_set("binary_sensor.src", "unavailable")
+        freezer.tick(timedelta(milliseconds=10))
+        hass.states.async_set("binary_sensor.src", "on")
+        await settle(hass)
+    else:
+        await _flip_twice(hass, freezer, "binary_sensor.src", settled=False)
+
+    after = hass.states.get("binary_sensor.out")
+    assert set(seen) <= {"on"}
+    assert after.state == "on"
+    assert (
+        after.attributes["current_window_start"]
+        == before.attributes["current_window_start"]
+    )
+    assert not lamp.is_on
