@@ -95,7 +95,7 @@ def _occupancy(source: str) -> MockConfigEntry:
     )
 
 
-def _group(name: str, members: list[str]) -> MockConfigEntry:
+def _group(name: str, members: list[str], *, every: bool = False) -> MockConfigEntry:
     return MockConfigEntry(
         domain="group",
         title=name,
@@ -104,7 +104,7 @@ def _group(name: str, members: list[str]) -> MockConfigEntry:
             "name": name,
             "entities": members,
             "hide_members": False,
-            "all": False,
+            "all": every,
         },
     )
 
@@ -121,17 +121,18 @@ async def _set_members(
 
 
 async def _groups(
-    hass: HomeAssistant,
+    hass: HomeAssistant, *, every: bool = False
 ) -> tuple[dict[str, MockConfigEntry], RealBinary]:
     """A real sensor in a group inside the source group, which also has it.
 
     The real sensor keeps both groups available whatever else they contain.
+    With every, the groups are on only when all their members are.
     """
     real = RealBinary("real")
     await add_real(hass, real)
     groups = {
-        "below": _group("Below", [REAL]),
-        "source": _group("Source Group", [REAL, BELOW]),
+        "below": _group("Below", [REAL], every=every),
+        "source": _group("Source Group", [REAL, BELOW], every=every),
     }
     await setup_entries(hass, *groups.values())
     return groups, real
@@ -231,6 +232,89 @@ async def test_a_source_group_changed_to_include_the_schedule_stops_it(
     await _set_members(hass, groups["below"], [REAL])
     await _set_members(hass, groups["source"], [REAL, BELOW])
     assert hass.states.get(SCHEDULE).state == ("on" if invert else "off")
+
+
+def _count_input_changes(monkeypatch) -> list[str]:
+    """Record the reports of what the source is computed from, stopping a loop."""
+    seen: list[str] = []
+    original = bs.VirtualScheduleSensor._handle_input_change
+
+    @callback
+    def _bounded(self, event):
+        seen.append(event.data["entity_id"])
+        if len(seen) <= 5 * CAP:
+            original(self, event)
+
+    monkeypatch.setattr(bs.VirtualScheduleSensor, "_handle_input_change", _bounded)
+    return seen
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", ["nested", "combined", "occupancy"])
+@pytest.mark.parametrize("invert", [True, False])
+@pytest.mark.parametrize("real_on", [True, False])
+@pytest.mark.allow_warning_log
+async def test_a_group_under_the_source_changed_to_include_the_schedule_stops_it(
+    hass: HomeAssistant,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+    topology: str,
+    invert: bool,
+    real_on: bool,
+) -> None:
+    """The schedule stops at once, though its source may report nothing new.
+
+    A schedule that is on keeps the group under its source on, so the source
+    never changes and the schedule would hold itself on for good.
+    """
+    groups, real = await _groups(hass)
+    await setup_entries(hass, _schedule(GROUP, invert=invert))
+    real.set(real_on)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == ("on" if real_on != invert else "off")
+    seen = _count_source_changes(monkeypatch)
+    inputs = _count_input_changes(monkeypatch)
+
+    await _close_cycle(hass, groups, topology)
+    assert hass.states.get(SCHEDULE).state == "unavailable"
+    assert f"Schedule {SCHEDULE} is unavailable" in caplog.text
+    real.set(not real_on)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == "unavailable"
+    real.set(False)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == "unavailable"
+
+    # Taking the schedule out of that group alone brings it back.
+    await _set_members(hass, groups["below"], [REAL])
+    assert hass.states.get(SCHEDULE).state == ("on" if invert else "off")
+    real.set(True)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == ("off" if invert else "on")
+    assert len(seen) < CAP, seen
+    assert len(inputs) < 5 * CAP, inputs
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_an_all_group_under_the_source_changed_to_include_the_schedule_stops_it(
+    hass: HomeAssistant, monkeypatch
+) -> None:
+    """Groups that need every member on hide the change from the source too."""
+    groups, real = await _groups(hass, every=True)
+    await setup_entries(hass, _schedule(GROUP, invert=False))
+    real.set(True)
+    await settle(hass)
+    assert hass.states.get(SCHEDULE).state == "on"
+    seen = _count_source_changes(monkeypatch)
+    inputs = _count_input_changes(monkeypatch)
+
+    await _close_cycle(hass, groups, "nested")
+    assert hass.states.get(SCHEDULE).state == "unavailable"
+    await _set_members(hass, groups["below"], [REAL])
+    assert hass.states.get(SCHEDULE).state == "on"
+    assert len(seen) < CAP, seen
+    assert len(inputs) < 5 * CAP, inputs
 
 
 @pytest.mark.asyncio

@@ -102,7 +102,6 @@ from .helpers import (
     run_unless_renamed,
     same_entity,
     sensor_dependencies,
-    sensors_depend_on,
     suggested_entity_id,
 )
 
@@ -1498,6 +1497,9 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._next_transition: datetime | None = None
         self._unsub_transition = None
         self._source_cycle = False
+        # What the source is computed from, watched for coming to include it.
+        self._inputs: set[str] = set()
+        self._inputs_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
         """Evaluate the schedule and arm the transition timer."""
@@ -1536,6 +1538,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                     )
                 )
                 self.async_on_remove(self._watch_source)
+                self.async_on_remove(self._unwatch_inputs)
             self._refresh_source(
                 self.hass.states.get(self._source) if self._source else None
             )
@@ -1685,9 +1688,20 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         """Whether the source is computed from this schedule, as a group can be.
 
         The forms refuse one, but a group can change afterwards. Mirroring it
-        would feed the schedule its own state, flipping it without end.
+        would feed the schedule its own state, flipping it without end or
+        holding it on. What it is computed from is watched: it can come to
+        include this schedule while the source itself reports nothing new.
         """
-        cyclic = sensors_depend_on(self.hass, [self._source], [self.entity_id])
+        inputs = sensor_dependencies(self.hass, [self._source])
+        cyclic = self.entity_id in inputs
+        inputs -= {self._source, self.entity_id}
+        if inputs != self._inputs:
+            self._unwatch_inputs()
+            self._inputs = inputs
+            if inputs:
+                self._inputs_unsub = async_track_state_change_event(
+                    self.hass, sorted(inputs), self._handle_input_change
+                )
         if cyclic and not self._source_cycle:
             _LOGGER.warning(
                 "Schedule %s is unavailable: its source %s includes the "
@@ -1697,6 +1711,20 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             )
         self._source_cycle = cyclic
         return cyclic
+
+    @callback
+    def _unwatch_inputs(self) -> None:
+        if self._inputs_unsub is not None:
+            self._inputs_unsub()
+            self._inputs_unsub = None
+        self._inputs = set()
+
+    @callback
+    def _handle_input_change(self, _event: Event[EventStateChangedData]) -> None:
+        """Judge the source again when what it is computed from changes."""
+        was_cyclic = self._source_cycle
+        if self._source_includes_self() != was_cyclic:
+            self._refresh_source(self.hass.states.get(self._source))
 
     def _evaluate(self, now: datetime) -> tuple[datetime | None, datetime | None]:
         """Return (active window start, next boundary after now).
