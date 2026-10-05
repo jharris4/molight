@@ -7593,6 +7593,102 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("taken", ["by_another_light", "by_a_group_edit"])
+@pytest.mark.parametrize(
+    "last_page",
+    [
+        "selection",
+        "collision",
+        "wrapped_notice",
+        "scheduled_inside",
+        "scheduled_collision",
+    ],
+)
+async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
+    hass: HomeAssistant, last_page: str, taken: str
+) -> None:
+    """A new light's last page refuses a light another light took behind it."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hass.states.async_set("light.group", "off", {"entity_id": ["light.spare"]})
+    if last_page.endswith("collision"):
+        hass.states.async_set("light.new", "off")
+    outer = _light_entry("Outer", "outer")
+    await setup_entries(hass, outer, _light_entry("Inner", "inner"))
+    member = "light.free" if taken == "by_another_light" else "light.group"
+    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+
+    result = await _start_create(hass)
+    if last_page.startswith("scheduled"):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_NAME: "New",
+                CONF_LIGHTS: [member],
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+                SECTION_ADVANCED: {},
+            },
+        )
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], side)
+        assert result["step_id"] == "scheduled_light_inside"
+        if last_page == "scheduled_collision":
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {**side, SECTION_STANDBY: {}}
+            )
+    else:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+        )
+        page = {**side, SECTION_ADVANCED: {}, CONF_NAME: "New", CONF_LIGHTS: [member]}
+        if last_page == "selection":
+            page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+        elif last_page == "wrapped_notice":
+            page[CONF_LIGHTS] = [member, "light.inner"]
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    expected_step = {
+        "selection": "light_selection",
+        "wrapped_notice": "confirm_wrapped_lights",
+        "scheduled_inside": "scheduled_light_inside",
+    }.get(last_page, "confirm_entity_id")
+    assert result["step_id"] == expected_step
+
+    # Outer takes the light while the new light's last page is open.
+    if taken == "by_another_light":
+        other = await hass.config_entries.options.async_init(outer.entry_id)
+        other = await hass.config_entries.options.async_configure(
+            other["flow_id"],
+            {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
+        )
+        assert other["type"] == FlowResultType.CREATE_ENTRY
+        await hass.async_block_till_done()
+    else:
+        hass.states.async_set(
+            "light.group", "off", {"entity_id": ["light.spare", "light.outer_real"]}
+        )
+
+    if last_page == "selection":
+        user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    elif last_page == "scheduled_inside":
+        user_input = {**side, SECTION_STANDBY: {}}
+    elif last_page == "wrapped_notice":
+        user_input = {}
+    else:
+        user_input = {"next_step_id": "entity_id_proceed"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == (
+        "scheduled_light" if last_page.startswith("scheduled") else "light"
+    )
+    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 3
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
 @pytest.mark.parametrize("absent", ["entity_deleted", "not_set_up"])
 async def test_a_light_entry_without_its_light_entity_keeps_its_lights(

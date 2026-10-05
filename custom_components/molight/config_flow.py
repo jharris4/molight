@@ -2296,6 +2296,11 @@ class MoLightConfigFlow(
         )
         if errors:
             return None, errors
+        # Another light may have taken a member since the first page checked it.
+        if entity_type in _MEMBER_LIGHT_TYPES and (
+            errors := self._new_light_errors(data)
+        ):
+            return None, errors
         if entity_type in _MEMBER_LIGHT_TYPES and (
             wrapped := _new_wrapped_lights(
                 self.hass, data[CONF_LIGHTS], self._wrapped_confirmed
@@ -2370,6 +2375,13 @@ class MoLightConfigFlow(
             # A sensor's timeout was raised while the menu was open.
             if side is not None:
                 return self._show_scheduled_light_side_form(side, None, errors)
+            return self._show_light_form(pending["user_input"], errors)
+        entity_type = pending["entity_type"]
+        if entity_type in _MEMBER_LIGHT_TYPES and (
+            errors := self._new_light_errors(data)
+        ):
+            if entity_type == ENTITY_TYPE_SCHEDULED_LIGHT:
+                return self._show_scheduled_light_form(pending["user_input"], errors)
             return self._show_light_form(pending["user_input"], errors)
         return self.async_create_entry(title=pending["name"], data=data)
 
@@ -3808,8 +3820,8 @@ class MoLightConfigFlow(
                 )
                 if result is not None:
                     return result
-                # The entity_id was free on the light form but has been taken
-                # since (a race with another flow); only that form can change it.
+                # The entity_id or a light was free on the light form but has
+                # been taken since; only that form can change them.
                 return self._show_light_form(pending["prefill"], errors)
 
         target = flat[CONF_TURN_ON_SELECT_ENTITY]
@@ -3920,9 +3932,9 @@ class MoLightConfigFlow(
         )
         if result is not None:
             return result
-        # The explicit entity_id was free on the first step but has been taken
-        # since (a race with another flow): send the user back to that form
-        # with the collision error, keeping both completed settings forms.
+        # The explicit entity_id or a light was free on the first step but has
+        # been taken since: send the user back to that form with the error,
+        # keeping both completed settings forms.
         return self._show_scheduled_light_form(
             self._scheduled_light_shared_input, errors
         )
