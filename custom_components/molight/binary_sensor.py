@@ -101,6 +101,7 @@ from .helpers import (
     renamed_to,
     run_unless_renamed,
     same_entity,
+    sensor_dependencies,
     sensors_depend_on,
     suggested_entity_id,
 )
@@ -242,6 +243,11 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         self._last_clear_false: bool = False
         self._last_clear_unavailable: bool = False
         self._unavailable_unsub: CALLBACK_TYPE | None = None
+        # Whether the source is computed from this sensor, as a group can be.
+        self._source_cycle = False
+        # What the source is computed from, watched for coming to include it.
+        self._inputs: set[str] = set()
+        self._inputs_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to the source sensor."""
@@ -281,13 +287,17 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             )
         )
         self.async_on_remove(self._cancel_unavailable_timer)
+        self.async_on_remove(self._unwatch_inputs)
         self._seed_state(
             restored_on=same_source and last is not None and last.state == "on"
         )
 
     def _seed_state(self, *, restored_on: bool) -> None:
         state = self.hass.states.get(self._source_sensor)
-        if (
+        if self._source_includes_self():
+            # Nothing to follow, and no outage that ends by itself to carry.
+            self._attr_is_on = False
+        elif (
             restored_on
             and (state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN))
             and self.hass.state is CoreState.running
@@ -312,8 +322,74 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
                 self._last_on_time = state.last_changed
         self.async_write_ha_state()
 
+    def _source_includes_self(self) -> bool:
+        """Whether the source is computed from this sensor, as a group can be.
+
+        The forms refuse one, but a group can change afterwards. Following it
+        would keep this sensor on by its own state, so it counts as a source
+        that cannot be read. What it is computed from is watched: it can come
+        to include this sensor while the source itself reports nothing new.
+        """
+        inputs = sensor_dependencies(self.hass, [self._source_sensor])
+        cyclic = self.entity_id in inputs
+        inputs -= {self._source_sensor, self.entity_id}
+        if inputs != self._inputs:
+            self._unwatch_inputs()
+            self._inputs = inputs
+            if inputs:
+                self._inputs_unsub = async_track_state_change_event(
+                    self.hass, sorted(inputs), self._handle_input_change
+                )
+        if cyclic and not self._source_cycle:
+            _LOGGER.warning(
+                "Occupancy sensor %s does not follow its source %s, which "
+                "includes the sensor itself; remove it there or pick another "
+                "source",
+                self.entity_id,
+                self._source_sensor,
+            )
+        self._source_cycle = cyclic
+        return cyclic
+
+    @callback
+    def _unwatch_inputs(self) -> None:
+        if self._inputs_unsub is not None:
+            self._inputs_unsub()
+            self._inputs_unsub = None
+        self._inputs = set()
+
+    @callback
+    def _handle_input_change(self, _event: Event[EventStateChangedData]) -> None:
+        """Judge the source again when what it is computed from changes."""
+        self._source_changed_use()
+
+    def _source_changed_use(self) -> bool:
+        """Apply the source starting or ceasing to include this sensor.
+
+        Returns True when it did either, or still includes it: its report is
+        then not followed.
+        """
+        was_cyclic = self._source_cycle
+        if self._source_includes_self():
+            if was_cyclic:
+                return True
+            if self._attr_is_on and self._unavailable_timeout <= 0:
+                # Unlike an outage it cannot end by itself: clear now.
+                self._latest_occupied_time = datetime.now(UTC)
+                self._unavailable_expired(self._latest_occupied_time)
+            else:
+                self._on_source_unavailable()
+            return True
+        if was_cyclic:
+            # Usable again: read as when first seen.
+            self._cancel_unavailable_timer()
+            self._seed_state(restored_on=bool(self._attr_is_on))
+        return was_cyclic
+
     @callback
     def _handle_sensor_change(self, event: Event[EventStateChangedData]) -> None:
+        if self._source_changed_use():
+            return
         new_state = event.data.get("new_state")
         if new_state is None:
             # A renamed source did not drop out: this sensor is about to

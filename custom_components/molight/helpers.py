@@ -361,18 +361,29 @@ def sensors_depend_on(
 
     Followed through groups and MoLight's own sensors, at any depth.
     """
-    targets = set(targets)
+    return not sensor_dependencies(hass, entity_ids, until=targets).isdisjoint(targets)
+
+
+def sensor_dependencies(
+    hass: HomeAssistant, entity_ids: Iterable[str], *, until: Iterable[str] = ()
+) -> set[str]:
+    """Return these sensors and all they are computed from, at any depth.
+
+    Followed through groups and MoLight's own sensors, no further than the
+    first of the `until` entities met.
+    """
+    until = set(until)
     found: set[str] = set()
     pending = list(entity_ids)
     while pending:
         entity_id = pending.pop()
         entity_id = renamed_to(hass, entity_id) or entity_id
-        if entity_id in targets:
-            return True
         if entity_id not in found:
             found.add(entity_id)
+            if entity_id in until:
+                break
             pending.extend(sensor_input_ids(hass, entity_id))
-    return False
+    return found
 
 
 def light_descendants(

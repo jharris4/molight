@@ -817,8 +817,9 @@ def _combined_creates_cycle(
     target_entry_id = edited_entry.entry_id
     entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
     inputs = _COMBINED_INPUTS[entity_type]
-    # A schedule's source can lead back here through a group.
-    if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE and _sensors_depend_on(
+    # A schedule's or an occupancy sensor's source can lead back here
+    # through a group.
+    if _sensors_depend_on(
         hass, proposed_constituents, _entry_entity_ids(hass, edited_entry)
     ):
         return True
@@ -858,11 +859,12 @@ def _combined_cycle_candidates(
     """Entity ids that would create a cycle if selected by the edited entry."""
     registry = er.async_get(hass)
     entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
-    # A plain schedule can lead back too, through its source.
+    # A plain schedule or occupancy sensor can lead back too, through its
+    # source.
     entity_types = (
         _SCHEDULE_ENTITY_TYPES
         if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE
-        else (entity_type,)
+        else (ENTITY_TYPE_OCCUPANCY, ENTITY_TYPE_COMBINED_OCCUPANCY)
     )
     excluded: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
@@ -1072,11 +1074,18 @@ def _validate_combined_occupancy_roles(user_input: dict[str, Any]) -> dict[str, 
 
 
 def _validate_occupancy_source(
-    hass: HomeAssistant, user_input: dict[str, Any]
+    hass: HomeAssistant, user_input: dict[str, Any], own: Sequence[str] = ()
 ) -> dict[str, str]:
-    """Reject wrapping another MoLight-created occupancy entity."""
-    if user_input.get(CONF_OCCUPANCY_SENSOR) in _molight_occupancy_entity_ids(hass):
+    """Reject a MoLight occupancy entity, or a source computed from the sensor.
+
+    own names the edited sensor's entities, which a group in the source can
+    contain.
+    """
+    source = user_input.get(CONF_OCCUPANCY_SENSOR)
+    if source in _molight_occupancy_entity_ids(hass):
         return {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
+    if source and own and _sensors_depend_on(hass, [source], own):
+        return {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
     return {}
 
 
@@ -3407,6 +3416,10 @@ class MoLightConfigFlow(
             )
             errors = _validate_occupancy_source(self.hass, flat)
             errors.update(_validate_name(flat))
+            if not errors and self._new_sensor_in_inputs(
+                flat[CONF_NAME], flat, [flat[CONF_OCCUPANCY_SENSOR]]
+            ):
+                errors[CONF_OCCUPANCY_SENSOR] = "occupancy_source_cycle"
             if not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_OCCUPANCY,
@@ -3460,6 +3473,12 @@ class MoLightConfigFlow(
                 errors[CONF_TRIGGER_SENSORS] = "trigger_sensors_required"
             elif role_errors := _validate_combined_occupancy_roles(flat):
                 errors.update(role_errors)
+            elif not errors and self._new_sensor_in_inputs(
+                flat[CONF_NAME],
+                flat,
+                flat[CONF_TRIGGER_SENSORS] + flat.get(CONF_MAINTAIN_SENSORS, []),
+            ):
+                errors["base"] = "combined_occupancy_cycle"
             elif not errors:
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -4183,7 +4202,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             flat = _current_ids(
                 self.hass, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
             )
-            errors = _validate_occupancy_source(self.hass, flat)
+            errors = _validate_occupancy_source(
+                self.hass, flat, _entry_entity_ids(self.hass, self._entry)
+            )
             errors.update(_validate_name(flat))
             if not errors:
                 # Raising this sensor's timeout must not outgrow any virtual light

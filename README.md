@@ -139,6 +139,8 @@ Classification needs a real on-time. `last_on_time` survives restarts, but if mo
 
 Changing the source sensor leaves the old source's presence behind: the sensor follows the new source from its first valid reading, and a new source that is `unavailable` at the time does not keep it `on`.
 
+A source that is computed from the sensor itself, such as a group that contains it (directly, or through another group or a combined occupancy sensor), is refused: it would hold the sensor `on` by its own state. If a group is edited to include the sensor later, the sensor stops following it and clears as for an `unavailable` source (at once when *Clear after unavailable* is disabled) until the group is corrected.
+
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
 ### Virtual Combined Occupancy Binary Sensor
@@ -494,7 +496,7 @@ Deleting a virtual light strips it from every remote's target list, like any oth
 
 ## Troubleshooting
 
-MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, a combined schedule that includes itself, a Virtual Schedule Sensor whose source group includes it (it goes `unavailable`), a Virtual Light whose member light group includes it, directly or through a light group inside it (it stops controlling that group), a keep-on entity saved before the form refused it (it stays as it was), and an error when discovery fails to create an entry. To see why a light did what it did, read these attributes in **Developer tools → States**:
+MoLight writes no debug logs. It logs a warning only when it cannot do what it was asked: a turn-on selection it could not apply, a Virtual Scheduled Light with no schedule, a combined schedule that includes itself, a Virtual Schedule Sensor whose source group includes it (it goes `unavailable`), a Virtual Occupancy Sensor whose source group includes it (it stops following the source), a Virtual Light whose member light group includes it, directly or through a light group inside it (it stops controlling that group), a keep-on entity saved before the form refused it (it stays as it was), and an error when discovery fails to create an entry. To see why a light did what it did, read these attributes in **Developer tools → States**:
 
 - `molight_state` on the virtual light: its [state-machine](#state-machine) state.
 - `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.
