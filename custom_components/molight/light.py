@@ -976,6 +976,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # Members that have reported on/off since this light was set up: a
         # placeholder they leave later is a reload, not startup loading.
         self._members_seen: set[str] = set()
+        # Members last read as lit: a placeholder hides what one was doing.
+        self._members_lit: set[str] = set()
         # Virtual lights inside member light groups, and what they last did:
         # (context ID, whether it was their own automation).
         self._grouped_lights: set[str] = set()
@@ -1851,6 +1853,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._members_seen |= {
             e for e in self._lights if self._member_is_lit(e) is not None
         }
+        for entity_id in self._lights:
+            self._note_member(entity_id)
 
         # Match the physical brightness and color at startup too, overriding
         # the values restored from our own last state, so the virtual light
@@ -2167,6 +2171,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             member_seen = entity_id in self._members_seen
             if new_state.state in ("on", "off"):
                 self._members_seen.add(entity_id)
+                self._note_member(entity_id)
             # Capabilities can appear late (members unavailable at startup):
             # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
@@ -2456,10 +2461,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._settle_owed(entity_id, lit=False)
             # Only the real light that was lit can have left the light dark;
             # a stage that blinks them off, or a turn-on on its way, has not.
+            # One that went by way of a placeholder is judged as last read.
+            was_lit = entity_id in self._members_lit
+            self._members_lit.discard(entity_id)
             if (
-                old_state is not None
-                and old_state.state == "on"
-                and old_state.attributes.get(ATTR_BRIGHTNESS) != 0
+                was_lit
                 and self._machine_state != STATE_IDLE
                 and not self._turn_on_waiting()
                 and self._all_lights_off()
@@ -3046,6 +3052,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             for waiting in self._waiting_turn_ons.values()
             if waiting.auto_level is None or not manual
         )
+
+    def _note_member(self, entity_id: str) -> None:
+        """Remember whether a real light that can be read is lit."""
+        lit = self._member_is_lit(entity_id)
+        if lit:
+            self._members_lit.add(entity_id)
+        elif lit is not None:
+            self._members_lit.discard(entity_id)
 
     def _member_is_lit(self, entity_id: str) -> bool | None:
         """Whether a real light is on (brightness 0 is off), None if unknown."""

@@ -573,6 +573,87 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
     assert attrs(hass)["last_off_manual"] is None
 
 
+@pytest.mark.parametrize("others", ["none", "dark", "lit"])
+async def test_light_whose_last_lit_real_lights_entry_is_disabled_is_off(
+    hass: HomeAssistant, virtual_light_behavior_variant, others: str
+) -> None:
+    """Disabling the entry of the only lit real light ends the on-period.
+
+    Its placeholder hides that it was lit. Presence that only maintains
+    cannot start a light, so the real light stays off when it is enabled
+    again; another real light that is lit keeps the virtual light on.
+    """
+    boots_on = True
+    hardware = await add_real_with_entry(
+        hass, lambda: RealLight("real_1", on=boots_on, brightness=200)
+    )
+    other = RealLight("real_2", on=others == "lit")
+    lights = [MEMBER]
+    if others != "none":
+        await add_real(hass, other)
+        lights.append("light.real_2")
+    hass.states.async_set(INPUT, "on")
+    await setup_entries(hass, make_light_entry(lights=lights, maintain=INPUT))
+    await settle(hass)
+    assert attrs(hass)["molight_state"] == STATE_OCCUPIED
+    calls = record_service_calls(hass)
+
+    await hass.config_entries.async_set_disabled_by(
+        hardware.entry_id, ConfigEntryDisabler.USER
+    )
+    await settle(hass)
+    assert hass.states.get(MEMBER).state == "unavailable"
+    assert hass.states.get(VIRTUAL).state == ("on" if others == "lit" else "off")
+    assert attrs(hass)["last_off_manual"] is None
+    assert calls == []
+
+    boots_on = False
+    await hass.config_entries.async_set_disabled_by(hardware.entry_id, None)
+    await settle(hass)
+    # Lit, the virtual light sends the one that missed its command back on.
+    assert hass.states.get(MEMBER).state == ("on" if others == "lit" else "off")
+    assert other.is_on == (others == "lit")
+
+
+@pytest.mark.parametrize("how", ["deleted", "disabled"])
+async def test_lit_real_light_that_goes_missing_during_an_outage_is_off(
+    hass: HomeAssistant, virtual_light_behavior_variant, how: str
+) -> None:
+    """A real light deleted while unavailable is judged as it was last read."""
+    member = RealLight("real_1", on=True)
+    await add_real(hass, member)
+    await setup_entries(hass, make_light_entry(lights=[MEMBER], timeout=60))
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+
+    member._attr_available = False
+    member.async_write_ha_state()
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await remove(hass, how, MEMBER)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert attrs(hass)["last_off_manual"] is None
+
+
+async def test_real_lights_entry_reloading_is_sent_the_light_again(
+    hass: HomeAssistant, virtual_light_behavior_variant
+) -> None:
+    """An entry that reloads, not disabled, comes back to a light still on."""
+    boots_on = True
+    hardware = await add_real_with_entry(
+        hass, lambda: RealLight("real_1", on=boots_on, brightness=200)
+    )
+    hass.states.async_set(INPUT, "on")
+    await setup_entries(hass, make_light_entry(lights=[MEMBER], maintain=INPUT))
+    await settle(hass)
+
+    boots_on = False
+    assert await hass.config_entries.async_reload(hardware.entry_id)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert hass.states.get(MEMBER).state == "on"
+
+
 @pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
 async def test_sensor_whose_entry_is_disabled_stops_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
