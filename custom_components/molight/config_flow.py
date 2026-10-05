@@ -1815,6 +1815,13 @@ def _overlapping_picks(
     return None
 
 
+def _reserved_by_discovery(hass: HomeAssistant, members: Sequence[str]) -> bool:
+    """Whether a discovery that is creating its entries has one of these lights."""
+    reserved = hass.data.get(DATA_DISCOVERY_RESERVED, set())
+    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    return not reserved.isdisjoint(_lights_commanded(hass, members, lights))
+
+
 def _disjoint_picks(hass: HomeAssistant, candidates: Sequence[str]) -> list[str]:
     """Candidates to preselect: lights first, then groups that overlap none of them."""
     lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
@@ -2265,7 +2272,10 @@ class MoLightConfigFlow(
             and _new_light_in_members(self.hass, candidate, flat[CONF_LIGHTS])
         ):
             return {CONF_LIGHTS: "light_member_cycle"}
-        if not errors and _shared_lights(self.hass, flat[CONF_LIGHTS]):
+        if not errors and (
+            _shared_lights(self.hass, flat[CONF_LIGHTS])
+            or _reserved_by_discovery(self.hass, flat[CONF_LIGHTS])
+        ):
             return {CONF_LIGHTS: "light_shared"}
         if not errors and _groups_with_virtual_lights(self.hass, flat[CONF_LIGHTS]):
             return {CONF_LIGHTS: "light_group_virtual"}
@@ -2613,8 +2623,9 @@ class MoLightConfigFlow(
         to run detached, so the reported count is what actually got created and
         a failure is surfaced instead of only reaching the log.
 
-        The picks are reserved from the eligibility check until their entries
-        exist, so a second flow submitted meanwhile skips them.
+        The picks, and the lights a picked group contains, are reserved from
+        the eligibility check until their entries exist, so a second flow
+        submitted meanwhile skips them.
         """
         overrides, removed = current_references(self.hass, overrides)
         if removed:
@@ -2624,11 +2635,36 @@ class MoLightConfigFlow(
             )
         disc = self._discovery
         candidates = disc["candidates"]
+        is_light = disc["scan"][0] == "light"
+        # A group edited while a later page was open may now overlap a pick.
+        if is_light and _overlapping_picks(self.hass, disc["selected"]):
+            return await self.async_step_discover_light_select(
+                {
+                    CONF_SELECTED_ENTITIES: disc["selected"],
+                    CONF_AFFIX_PREFIX: disc["prefix"],
+                    CONF_AFFIX_SUFFIX: disc["suffix"],
+                    CONF_AFFIX_TARGET: disc["target"],
+                }
+            )
         # Another flow may have wrapped a pick while this one was open.
         eligible = _discovery_candidates(self.hass, *disc["scan"])
+        lights = _molight_light_entries(self.hass, _MEMBER_LIGHT_TYPES)
+        claims = {
+            entity_id: (
+                _lights_commanded(self.hass, [entity_id], lights)
+                if is_light
+                else {entity_id}
+            )
+            for entity_id in disc["selected"]
+        }
         reserved: set[str] = self.hass.data.setdefault(DATA_DISCOVERY_RESERVED, set())
-        selected = [e for e in disc["selected"] if e in eligible and e not in reserved]
-        reserved.update(selected)
+        selected = [
+            e
+            for e in disc["selected"]
+            if e in eligible and reserved.isdisjoint(claims[e])
+        ]
+        claimed = set().union(*(claims[e] for e in selected))
+        reserved.update(claimed)
         skipped = len(disc["selected"]) - len(selected)
         prefix, suffix, target = disc["prefix"], disc["suffix"], disc["target"]
         # Drop cleared optional fields so they stay absent from the entry
@@ -2661,7 +2697,7 @@ class MoLightConfigFlow(
         try:
             results = await asyncio.gather(*flows, return_exceptions=True)
         finally:
-            reserved.difference_update(selected)
+            reserved.difference_update(claimed)
         created = 0
         for entity_id, result in zip(selected, results, strict=True):
             if isinstance(result, BaseException):

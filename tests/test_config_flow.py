@@ -8190,6 +8190,146 @@ async def test_discovery_refuses_two_picks_that_share_a_light(
     assert result["step_id"] == "discover_light_defaults"
 
 
+def _light_entry_count(hass: HomeAssistant) -> int:
+    return sum(
+        molight_config(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+        for e in hass.config_entries.async_entries(DOMAIN)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("last_page", ["defaults", "selection"])
+@pytest.mark.parametrize(
+    ("picks", "edited", "members"),
+    [
+        (["light.bulb", "light.porch"], "light.porch", ["light.bulb"]),
+        (["light.kitchen", "light.porch"], "light.porch", ["light.bulb"]),
+    ],
+    ids=["a_group_gains_a_picked_light", "two_groups_come_to_share_a_light"],
+)
+async def test_discovery_rechecks_picks_a_group_edit_made_overlap(
+    hass: HomeAssistant,
+    picks: list[str],
+    edited: str,
+    members: list[str],
+    last_page: str,
+) -> None:
+    """A group edited behind a later page sends the flow back to the checklist."""
+    _overlap_lights(hass)
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: picks}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+    defaults = dict(EMPTY_LIGHT_SECTIONS)
+    if last_page == "selection":
+        defaults[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], defaults
+        )
+        assert result["step_id"] == "light_selection"
+
+    hass.states.async_set(edited, "off", {"entity_id": members})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_TURN_ON_SELECT_OPTION: "Cozy"} if last_page == "selection" else defaults,
+    )
+    assert result["step_id"] == "discover_light_select"
+    assert result["errors"] == {"base": "discovery_picks_overlap"}
+    assert _offered_candidates(result) == set(picks)
+    assert _light_entry_count(hass) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("first", "second", "created"),
+    [
+        ("light.bulb", "light.kitchen", 1),
+        ("light.kitchen", "light.bulb", 1),
+        ("light.kitchen", "light.both", 1),
+        ("light.bulb", "light.porch", 2),
+    ],
+    ids=[
+        "a_light_then_its_group",
+        "a_group_then_its_light",
+        "two_groups_sharing_a_light",
+        "control_no_shared_light",
+    ],
+)
+async def test_light_discoveries_submitted_together_do_not_share_a_light(
+    hass: HomeAssistant, first: str, second: str, created: int
+) -> None:
+    """A light a picked group contains is reserved like the group itself."""
+    _overlap_lights(hass)
+    flows = []
+    for pick in (first, second):
+        result = await _reach_discovery_select(hass, "discover_light")
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_SELECTED_ENTITIES: [pick]}
+        )
+        assert result["step_id"] == "discover_light_defaults"
+        flows.append(result["flow_id"])
+
+    results = await asyncio.gather(
+        *(
+            hass.config_entries.flow.async_configure(flow, dict(EMPTY_LIGHT_SECTIONS))
+            for flow in flows
+        )
+    )
+    await hass.async_block_till_done()
+
+    assert sum(int(r["description_placeholders"]["count"]) for r in results) == created
+    assert _light_entry_count(hass) == created
+    assert not hass.data[DATA_DISCOVERY_RESERVED]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("create_first", [False, True])
+@pytest.mark.parametrize("pick", ["light.bulb", "light.kitchen"])
+async def test_light_create_and_discovery_submitted_together_share_no_light(
+    hass: HomeAssistant, pick: str, create_first: bool
+) -> None:
+    """Whichever is submitted first gets the light; the other leaves it alone."""
+    _overlap_lights(hass)
+    discovery = await _reach_discovery_select(hass, "discover_light")
+    discovery = await hass.config_entries.flow.async_configure(
+        discovery["flow_id"], {CONF_SELECTED_ENTITIES: [pick]}
+    )
+    create = await _start_create(hass)
+    create = await hass.config_entries.flow.async_configure(
+        create["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+    submissions = [
+        hass.config_entries.flow.async_configure(
+            discovery["flow_id"], dict(EMPTY_LIGHT_SECTIONS)
+        ),
+        hass.config_entries.flow.async_configure(
+            create["flow_id"],
+            {
+                **EMPTY_LIGHT_CREATE_SECTIONS,
+                CONF_NAME: "Manual",
+                CONF_LIGHTS: ["light.bulb"],
+                CONF_LIGHT_TIMEOUT: 60,
+            },
+        ),
+    ]
+    if create_first:
+        submissions.reverse()
+    results = await asyncio.gather(*submissions)
+    await hass.async_block_till_done()
+
+    discovered, created = reversed(results) if create_first else results
+    if create_first:
+        assert created["type"] == FlowResultType.CREATE_ENTRY
+        assert discovered["reason"] == "discovery_done_skipped"
+    else:
+        assert discovered["description_placeholders"]["count"] == "1"
+        assert created["errors"] == {CONF_LIGHTS: "light_shared"}
+    assert _light_entry_count(hass) == 1
+
+
 @pytest.mark.asyncio
 async def test_light_options_reject_own_keep_on_entities(
     hass: HomeAssistant,
