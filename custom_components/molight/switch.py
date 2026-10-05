@@ -82,6 +82,13 @@ class AutoOffSwitch(SwitchEntity, RenamableRestoreEntity):
             self._attr_is_on = True
             self._publish()
 
+    async def async_removed_from_registry(self) -> None:
+        """Release the hold when the switch is deleted: nothing else can."""
+        self._attr_is_on = True
+        self._publish()
+        # The switch a reload adds back restores this, not the hold.
+        self.async_write_ha_state()
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Re-enable the light's automatic turn-offs."""
         self._attr_is_on = True

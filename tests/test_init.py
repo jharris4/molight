@@ -37,6 +37,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_REMOTE,
     ENTITY_TYPE_SCHEDULE,
     PLATFORMS_BY_ENTITY_TYPE,
+    SCHEDULE_MODE_FOLLOW,
 )
 from tests.conftest import (
     make_light_entry,
@@ -314,6 +315,103 @@ async def test_reenabling_the_auto_off_switch_brings_back_its_state(
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get("light.kept_light").state == ("on" if held else "off")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True])
+@pytest.mark.parametrize("reload", [False, True])
+async def test_deleting_the_auto_off_switch_while_off_releases_the_hold(
+    hass: HomeAssistant, freezer, scheduled: bool, reload: bool
+) -> None:
+    """A deleted switch can never turn back on either, so the hold goes with
+    it; the switch a reload adds back is on."""
+    entry = (
+        make_scheduled_light_entry(
+            name="Kept Light",
+            inside={CONF_LIGHT_TIMEOUT: 10},
+            outside={CONF_LIGHT_TIMEOUT: 10},
+        )
+        if scheduled
+        else make_light_entry(name="Kept Light", timeout=10)
+    )
+    hass.states.async_set("binary_sensor.settings_schedule", "on")
+    hass.states.async_set("light.real_1", "on")
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.kept_light_auto_off"}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get("light.kept_light").attributes["auto_off_held"] is True
+
+    er.async_get(hass).async_remove("switch.kept_light_auto_off")
+    await settle(hass)
+    assert hass.states.get("switch.kept_light_auto_off") is None
+    if reload:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await settle(hass)
+        assert hass.states.get("switch.kept_light_auto_off").state == "on"
+
+    assert hass.data[DOMAIN][entry.entry_id][DATA_AUTO_OFF_ENABLED] is True
+    assert hass.states.get("light.kept_light").attributes["auto_off_held"] is False
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_deleting_the_auto_off_switch_applies_a_window_end_it_held(
+    hass: HomeAssistant,
+) -> None:
+    """A follow window that ended under the hold turns the light off now."""
+    hass.states.async_set("binary_sensor.window", "off")
+    hass.states.async_set("light.real_1", "off")
+    entry = make_light_entry(
+        name="Kept Light",
+        schedule="binary_sensor.window",
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+    )
+    await setup_entries(hass, entry)
+    hass.states.async_set(
+        "binary_sensor.window", "on", {"current_window_start": "2026-07-02T21:00"}
+    )
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == "on"
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.kept_light_auto_off"}, blocking=True
+    )
+    hass.states.async_set("binary_sensor.window", "off")
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == "on"
+
+    er.async_get(hass).async_remove("switch.kept_light_auto_off")
+    await settle(hass)
+    assert hass.states.get("light.kept_light").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_renaming_the_auto_off_switch_keeps_its_hold(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A new entity ID removes the switch for a moment; it is still there."""
+    entry = make_light_entry(name="Kept Light", timeout=10)
+    hass.states.async_set("light.real_1", "on")
+    await setup_entries(hass, entry)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.kept_light_auto_off"}, blocking=True
+    )
+    await settle(hass)
+
+    er.async_get(hass).async_update_entity(
+        "switch.kept_light_auto_off", new_entity_id="switch.hallway_auto_off"
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=11))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get("switch.hallway_auto_off").state == "off"
+    assert hass.states.get("light.kept_light").attributes["auto_off_held"] is True
+    assert hass.states.get("light.kept_light").state == "on"
 
 
 @pytest.mark.asyncio
