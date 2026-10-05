@@ -1097,8 +1097,16 @@ async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
     """Each is named once, with why it never acts as a keep-on entity."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set("light.downstairs", "off", {"entity_id": [REAL, "light.x"]})
+    hass.states.async_set("group.room", "off", {"entity_id": [REAL, HOLD]})
     outer = make_light_entry(name="Outer", lights=[VIRTUAL])
-    holds = [REAL, "light.downstairs", "light.outer", "media_player.tv", HOLD]
+    holds = [
+        REAL,
+        "light.downstairs",
+        "group.room",
+        "light.outer",
+        "media_player.tv",
+        HOLD,
+    ]
     # At startup every entry has loaded before the lights subscribe.
     await setup_entries(
         hass, outer, make_light_entry(lights=[REAL], hold_entities=holds)
@@ -1108,6 +1116,7 @@ async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
     assert _refused_holds(caplog) == [
         (VIRTUAL, REAL, _ALWAYS),
         (VIRTUAL, "light.downstairs", _ALWAYS),
+        (VIRTUAL, "group.room", _ALWAYS),
         (VIRTUAL, "light.outer", _ALWAYS),
         (VIRTUAL, "media_player.tv", _NEVER),
     ]

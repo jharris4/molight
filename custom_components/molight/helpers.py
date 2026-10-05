@@ -486,16 +486,16 @@ def lights_lit_with(
     members: Sequence[str],
     candidates: Iterable[str],
 ) -> set[str]:
-    """Of the candidates, the lights that are on whenever this light is lit.
+    """Of the candidates, the lights and groups on whenever this light is lit.
 
-    That is a light sharing a member with it, at any depth, or one that
-    includes it.
+    That is one sharing a member with it, at any depth, or one that includes
+    it; a generic group counts like a light group.
     """
     lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
     lit = light_descendants(hass, members, lights).union(own_entities)
     return {
         entity_id
         for entity_id in candidates
-        if entity_id.startswith("light.")
+        if entity_id.startswith(("light.", "group."))
         and not lit.isdisjoint(light_descendants(hass, [entity_id], lights))
     }

@@ -1911,10 +1911,9 @@ def _hold_picker_exclusions(
     hass: HomeAssistant, own_entities: Sequence[str], members: Sequence[str]
 ) -> list[str]:
     """Entities that would hold the light whenever it is lit."""
+    candidates = _all_light_ids(hass).union(hass.states.async_entity_ids("group"))
     return sorted(
-        _lights_lit_with(hass, own_entities, members, _all_light_ids(hass)).union(
-            own_entities
-        )
+        _lights_lit_with(hass, own_entities, members, candidates).union(own_entities)
     )
 
 

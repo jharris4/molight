@@ -17,6 +17,7 @@ from homeassistant.helpers import (
     entity_registry as er,
     label_registry as lr,
 )
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.config_flow import (
@@ -9919,6 +9920,17 @@ async def _light_group(hass: HomeAssistant, name: str, members: list[str]) -> st
     return entity_id
 
 
+async def _generic_group(
+    hass: HomeAssistant, object_id: str, entities: list[str]
+) -> None:
+    """Set up a generic Home Assistant group, as group.set makes one."""
+    assert await async_setup_component(hass, "group", {})
+    await hass.services.async_call(
+        "group", "set", {"object_id": object_id, "entities": entities}, blocking=True
+    )
+    await hass.async_block_till_done()
+
+
 def _group_helper(hass: HomeAssistant, name: str, members: list[str]) -> str:
     """Register a light group helper that has not loaded, so it has no state."""
     entry = _group_entry(name, members)
@@ -10044,16 +10056,19 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
     ("hold", "error"),
     [
         (SUBJECT_MEMBER, "hold_entity_own"),
+        ("group.room", "hold_entity_own"),
         ("media_player.tv", "hold_entity_never_on"),
         ("person.alex", "hold_entity_never_on"),
     ],
-    ids=["member", "media_player", "person"],
+    ids=["member", "generic_group_with_member", "media_player", "person"],
 )
 async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
     hass: HomeAssistant, form: str, hold: str, error: str
 ) -> None:
-    """A member is on whenever the light is; a media player never reads on."""
+    """A member, or a group with it, is on whenever the light is; a media
+    player never reads on."""
     hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _generic_group(hass, "room", [SUBJECT_MEMBER])
     await _setup_night_schedule(hass)
     result = await _reach_light_settings_form(hass, form)
     step_id = result["step_id"]
@@ -10093,7 +10108,8 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
 async def test_keep_on_lights_that_are_on_whenever_the_light_is(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """Lights sharing a member at any depth, or including it, never let it off."""
+    """Lights and groups sharing a member at any depth, or including it, never
+    let it off; a generic group counts like a light group."""
     await _setup_night_schedule(hass)
     inner = _light_entry("Inner", "inner")  # wraps light.inner_real
     hall = (
@@ -10109,7 +10125,24 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
         hass.states.async_set(real, "off")
     await setup_entries(hass, inner, hall, outer, elsewhere)
     group = await _light_group(hass, "Downstairs", ["light.hall_real", "light.lamp"])
-    lit_with = [group, "light.inner", "light.inner_real", "light.outer"]
+    for object_id, entities in (
+        ("room", ["light.hall_real", "input_boolean.guest"]),
+        ("house", ["group.room"]),
+        ("around_light", ["light.hall"]),
+        ("around_group", [group]),
+        ("porch", ["light.elsewhere_real"]),
+    ):
+        await _generic_group(hass, object_id, entities)
+    lit_with = [
+        group,
+        "group.around_group",
+        "group.around_light",
+        "group.house",
+        "group.room",
+        "light.inner",
+        "light.inner_real",
+        "light.outer",
+    ]
 
     result = await hass.config_entries.options.async_init(hall.entry_id)
     shared = {
@@ -10126,7 +10159,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
         "exclude_entities"
     ]
     assert set(lit_with) <= set(excluded)
-    assert "light.elsewhere" not in excluded
+    assert not {"light.elsewhere", "group.porch"} & set(excluded)
     (domains,) = [
         f["domain"]
         for f in _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
