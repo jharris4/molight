@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_CALL_SERVICE
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -3011,6 +3012,152 @@ async def test_off_at_the_wall_after_a_command_during_a_select_call_stands(
     assert not other.is_on
     assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
     assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+
+
+async def _tear_down(hass: HomeAssistant, teardown: str) -> None:
+    """Take the light's entry away the way the test names."""
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    if teardown == "unload":
+        assert await hass.config_entries.async_unload(entry.entry_id)
+    elif teardown == "reload":
+        assert await hass.config_entries.async_reload(entry.entry_id)
+    elif teardown == "disable":
+        assert await hass.config_entries.async_set_disabled_by(
+            entry.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        assert await hass.config_entries.async_remove(entry.entry_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("teardown", ["unload", "reload", "disable", "remove"])
+@pytest.mark.parametrize("armed_by", ["level", "stage", "blink"])
+async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
+    hass: HomeAssistant, freezer, teardown: str, armed_by: str
+) -> None:
+    """A new level or a stage sent during a select call is sent again when
+    the call ends, but not by a light that was unloaded, reloaded, disabled
+    or removed meanwhile: an off at the wall after that stands."""
+    stage = {"warn_timeout": 8, "warn_brightness": 20}
+    if armed_by == "blink":
+        stage = {"effect_timeout": 8, "effect_brightness": 0}
+    light, other, select = await _lit_pair(hass, timeout=5, **stage)
+    await _park_real_resend(hass, light, select)
+    if armed_by == "level":
+        await hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 100},
+        )
+        await _drain(hass)
+    else:
+        await _pass(hass, freezer, 6)
+        assert _molight_state(hass) == ("warn" if armed_by == "stage" else "effect")
+
+    await _tear_down(hass, teardown)
+    await _drain(hass)
+    other.wall(on=False)
+    await _drain(hass)
+    commands = record_service_calls(hass)
+    await _land_preset(hass, select)
+
+    assert light_targets(commands, "turn_on") == []
+    assert not other.is_on
+    state = hass.states.get("light.selection_light")
+    if teardown == "reload":
+        assert state.state == "on"  # the strip the preset lit
+    elif teardown == "remove":
+        assert state is None
+    else:
+        assert state.state == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_reloaded_light_keeps_its_level_over_the_old_select_call(
+    hass: HomeAssistant,
+) -> None:
+    """The light set up in place of an unloaded one sends a level of its own.
+    The old one's select call then ends: nothing is sent over that level."""
+    light, other, select = await _lit_pair(hass)
+    await _park_real_resend(hass, light, select)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light", "brightness": 100}
+    )
+    await _drain(hass)
+    await _tear_down(hass, "reload")
+    await _drain(hass)
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light", "brightness": 60}
+    )
+    await _drain(hass)
+    assert other.brightness == 60
+    commands = record_service_calls(hass)
+    await _land_preset(hass, select)
+
+    assert light_targets(commands, "turn_on") == []
+    assert other.brightness == 60
+    assert hass.states.get("light.selection_light").state == "on"
+
+
+class _QueuedSelect:
+    """A select service whose calls are each released on their own."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.started = [asyncio.Event(), asyncio.Event()]
+        self.release = [asyncio.Event(), asyncio.Event()]
+        self._count = 0
+        hass.services.async_register("select", "select_option", self._select)
+
+    async def _select(self, _call: ServiceCall) -> None:
+        index = self._count
+        self._count += 1
+        self.started[index].set()
+        await self.release[index].wait()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("teardown", ["unload", "reload", "disable", "remove"])
+@pytest.mark.parametrize("first_done", [1, 0], ids=["newer_first", "older_first"])
+async def test_torn_down_light_drops_both_of_two_waiting_turn_ons(
+    hass: HomeAssistant, teardown: str, first_done: int
+) -> None:
+    """Two turn-ons wait for their select calls and one call ends, in either
+    order. The light is then torn down and its real light switched off: the
+    call still running lights nothing when it ends."""
+    lamp = FadingLight("ambient", brightness=255)
+    await add_real(hass, lamp)
+    select = _QueuedSelect(hass)
+    await setup_entries(hass, _selection_entry())
+    turn_ons = []
+    for index, brightness in enumerate((100, 200)):
+        turn_ons.append(
+            hass.async_create_task(
+                hass.services.async_call(
+                    "light",
+                    "turn_on",
+                    {"entity_id": "light.selection_light", "brightness": brightness},
+                    blocking=True,
+                )
+            )
+        )
+        await asyncio.wait_for(select.started[index].wait(), 2)
+    select.release[first_done].set()
+    await turn_ons[first_done]
+    await _drain(hass)
+    assert lamp.is_on is bool(first_done)
+
+    await _tear_down(hass, teardown)
+    await _drain(hass)
+    lamp.wall(on=False)
+    await _drain(hass)
+    commands = record_service_calls(hass)
+    select.release[1 - first_done].set()
+    await turn_ons[1 - first_done]
+    await settle(hass)
+
+    assert light_targets(commands, "turn_on") == []
+    assert not lamp.is_on
 
 
 @pytest.mark.asyncio

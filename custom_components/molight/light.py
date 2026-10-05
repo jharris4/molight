@@ -1036,6 +1036,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # The lights were last sent a look while a select call still ran; its
         # preset may land on top, so the look is sent again once it ends.
         self._resend_after_select = False
+        # Set on removal: work still in flight then sends nothing.
+        self._removed = False
 
         self._last_on_physical: datetime | None = None
         self._last_on_virtual: datetime | None = None
@@ -1150,6 +1152,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         could toggle lights or start countdowns based on incomplete state.
         """
         await super().async_added_to_hass()
+        self._removed = False  # a rename removes and adds the same entity
         last = await self.async_get_last_state()
         if last is not None:
             if self._is_scheduled_light:
@@ -2110,8 +2113,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._grouped_unsub()
             self._grouped_unsub = None
         # A turn-on still waiting for its selection must not light the room
-        # for an entity that is gone.
+        # for an entity that is gone, nor send its look again.
+        self._removed = True
         self._command_generation += 1
+        self._resend_after_select = False
 
     # ------------------------------------------------------------------
     # LightEntity API
@@ -4555,6 +4560,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         The virtual light stays logically on. Brightness 0 blinks the real
         lights off (any stage color is moot then).
         """
+        if self._removed:
+            return
         # A group below a member can change without the member reporting it.
         self._drop_member_cycles()
         context = Context()
@@ -4656,6 +4663,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         of the real lights; without adopt, the virtual light does not report
         the brightness and color it names.
         """
+        if self._removed:
+            return False
         # A blink-fully-off leaves the light logically on while the members
         # are dark, so this is still off-to-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
@@ -4753,7 +4762,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         but its preset may have landed on top of the command that replaced
         it: the real lights end at the look sent last, not the preset's.
         """
-        if not self._resend_after_select or self._waiting_turn_ons:
+        if self._removed or not self._resend_after_select or self._waiting_turn_ons:
             return
         if self._in_warning() and self._stage_look is not None:
             await self._set_stage_lights(*self._stage_look)
