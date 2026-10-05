@@ -589,6 +589,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         self._attr_is_on = False
         self._latest_occupied_time: datetime | None = None
         self._cycle_start_lot: datetime | None = None
+        # When the visit started, as its trigger dated it; None when unwitnessed.
+        self._last_on_time: datetime | None = None
         # The anchor saved with a restored "on": the running cycle keeps it,
         # so a genuine detection it already contained is not forgotten.
         self._saved_cycle = False
@@ -634,6 +636,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         restored_on = (last is not None and last.state == "on") or bool(
             saved.get("carry")
         )
+        if restored_on and last is not None:
+            self._last_on_time = _parse_datetime(last.attributes.get("last_on_time"))
         if restored_on and extra is not None:
             self._saved_cycle = True
             self._saved_cycle_start_lot = _parse_datetime(
@@ -653,6 +657,10 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         self._absorb_constituent_history()
         if self._any_on(self._trigger_sensors):
             self._attr_is_on = True
+            if not restored_on:
+                self._last_on_time = self._visit_started(
+                    witnessed=self.hass.state is CoreState.running
+                )
         elif restored_on and self._any_on(self._maintain_sensors):
             # Intentional startup exception to "maintain sensors never start
             # occupancy": the restored state is direct evidence occupancy was
@@ -867,6 +875,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
                 if self._restored_carry and self._saved_cycle
                 else self._latest_occupied_time
             )
+            if not carry:
+                self._last_on_time = self._visit_started(witnessed=True)
             # Occupancy has (re)started since the restart; the restored
             # evidence is spent.
             self._restored_carry = False
@@ -936,6 +946,29 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         self._last_clear_false = False
         self.async_write_ha_state()
 
+    def _visit_started(self, *, witnessed: bool) -> datetime | None:
+        """Return when the visit began, by the trigger sensors showing it.
+
+        The earliest of their own stamps, and unknown if any of them could
+        not date its start: a late-loading source replaying presence is not
+        a detection made now. One without a stamp was seen to start now.
+        """
+        starts: list[datetime] = []
+        for entity_id in self._trigger_sensors:
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state != "on":
+                continue
+            if "last_on_time" not in state.attributes:
+                if not witnessed:
+                    return None
+                starts.append(datetime.now(UTC))
+                continue
+            started = _parse_datetime(state.attributes["last_on_time"])
+            if started is None:
+                return None
+            starts.append(started)
+        return min(starts, default=None)
+
     def _any_on(self, sensors: list[str]) -> bool:
         return any(
             e in self._reloading or ((s := self.hass.states.get(e)) and s.state == "on")
@@ -999,6 +1032,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         lot = self._latest_occupied_time
         return {
             "latest_occupied_time": lot.isoformat() if lot else None,
+            "last_on_time": (
+                self._last_on_time.isoformat() if self._last_on_time else None
+            ),
             "last_clear_false_detection": self._last_clear_false,
             "false_detection_count": self._false_count,
         }

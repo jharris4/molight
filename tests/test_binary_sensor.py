@@ -1517,7 +1517,13 @@ class _LateRoom:
         self.presence = RealBinary("room_presence", on=self.presence_on)
         return self.presence
 
-    async def setup(self, hass: HomeAssistant, *, maintain_first: bool = True) -> None:
+    async def setup(
+        self,
+        hass: HomeAssistant,
+        *,
+        maintain_first: bool = True,
+        nested: bool = False,
+    ) -> None:
         await add_real(hass, self.motion)
         self.hardware = await add_real_with_entry(hass, self._make_presence)
 
@@ -1534,18 +1540,28 @@ class _LateRoom:
             )
 
         hold = occupancy("Room Hold", "binary_sensor.room_presence")
+        inner = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+                CONF_NAME: "Room Inner",
+                CONF_TRIGGER_SENSORS: ["binary_sensor.room_hold"],
+            },
+        )
+        maintain = "binary_sensor.room_inner" if nested else "binary_sensor.room_hold"
         room = MockConfigEntry(
             domain=DOMAIN,
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
                 CONF_NAME: "Room",
                 CONF_TRIGGER_SENSORS: ["binary_sensor.room_trigger"],
-                CONF_MAINTAIN_SENSORS: ["binary_sensor.room_hold"],
+                CONF_MAINTAIN_SENSORS: [maintain],
             },
         )
+        held = [hold, *([inner] if nested else [])]
         self.entries = [
             occupancy("Room Trigger", self.motion.entity_id),
-            *([hold, room] if maintain_first else [room, hold]),
+            *([*held, room] if maintain_first else [room, *held]),
         ]
         await setup_entries(hass, *self.entries)
 
@@ -1604,6 +1620,75 @@ async def test_combined_restored_on_carried_by_a_late_loading_maintain_source(
     assert hold.state == "on"
     assert hold.attributes["last_on_time"] is None
     assert hass.states.get(room.combined).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("maintain_first", [True, False])
+async def test_combined_restored_on_carried_through_a_nested_maintain_sensor(
+    hass: HomeAssistant, freezer, maintain_first: bool
+) -> None:
+    """A combined maintain sensor passes on that its visit is undated, so the
+    sensor above it carries the restored visit too."""
+    room = _LateRoom()
+    await room.setup(hass, maintain_first=maintain_first, nested=True)
+    await room.visit(hass, freezer)
+    assert await hass.config_entries.async_unload(room.hardware.entry_id)
+    await settle(hass)
+    await restart_entries(hass, *room.entries)
+    assert hass.states.get(room.combined).state == "off"
+    freezer.tick(timedelta(seconds=30))
+
+    await room.load_presence(hass, on=True)
+    inner = hass.states.get("binary_sensor.room_inner")
+    assert inner.state == "on"
+    assert inner.attributes["last_on_time"] is None
+    assert hass.states.get(room.combined).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("attributes", "dated"),
+    [
+        ({"last_on_time": "2026-07-02T21:00:00+00:00"}, "2026-07-02T21:00:00+00:00"),
+        ({"last_on_time": None}, None),
+        ({}, "now"),
+    ],
+    ids=["dated", "undated", "no-stamp"],
+)
+@pytest.mark.parametrize("nested", [False, True])
+async def test_combined_dates_a_visit_as_its_trigger_does(
+    hass: HomeAssistant, freezer, attributes: dict, dated: str | None, nested: bool
+) -> None:
+    """last_on_time is the trigger's own, through any depth: unknown when the
+    trigger could not date the visit, now for a sensor that keeps no stamp.
+    It survives a reload of the combined sensor."""
+    hass.states.async_set("binary_sensor.m1", "off")
+    hass.states.async_set("binary_sensor.m2", "off")
+    inner = _raw_combined_entry()
+    outer = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Outer",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.seed_combined"],
+        },
+    )
+    await setup_entries(hass, inner, outer)
+    entity_id = "binary_sensor.outer" if nested else "binary_sensor.seed_combined"
+    assert hass.states.get(entity_id).attributes["last_on_time"] is None
+
+    freezer.tick(timedelta(seconds=30))
+    expected = datetime.now(UTC).isoformat() if dated == "now" else dated
+    hass.states.async_set("binary_sensor.m1", "on", attributes)
+    await settle(hass)
+    assert hass.states.get(entity_id).attributes["last_on_time"] == expected
+
+    freezer.tick(timedelta(seconds=30))
+    assert await hass.config_entries.async_reload(outer.entry_id)
+    assert await hass.config_entries.async_reload(inner.entry_id)
+    await settle(hass)
+    assert hass.states.get(entity_id).state == "on"
+    assert hass.states.get(entity_id).attributes["last_on_time"] == expected
 
 
 @pytest.mark.asyncio

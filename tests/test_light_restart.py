@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from homeassistant.core import HomeAssistant, State
 from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
     async_fire_time_changed,
     async_mock_restore_state_shutdown_restart,
     mock_restore_cache,
@@ -22,8 +23,16 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     ATTR_SCHEDULE_WINDOW_SCHEDULE,
     CONF_ENTITY_TYPE,
+    CONF_FALSE_DETECTION_GRACE,
+    CONF_NAME,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_TRIGGER_SENSORS,
+    DOMAIN,
+    ENTITY_TYPE_COMBINED_OCCUPANCY,
+    ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -41,6 +50,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
+from tests.real_entities import RealBinary, RealLight, add_real, add_real_with_entry
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -358,6 +368,85 @@ async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("topology", ["plain", "combined", "nested"])
+@pytest.mark.parametrize("new_visit", [False, True])
+async def test_manual_off_stands_over_combined_presence_that_loads_late(
+    hass: HomeAssistant, freezer, topology: str, new_visit: bool
+) -> None:
+    """A motion source that loads after startup still showing the old visit
+    does not undo a manual off, through combined sensors either; motion that
+    starts after the off lights the room."""
+    load_on = True
+    sources: list[RealBinary] = []
+
+    def make_source() -> RealBinary:
+        sources.append(RealBinary("late_motion", on=load_on))
+        return sources[-1]
+
+    hardware = await add_real_with_entry(hass, make_source)
+    lamp = RealLight("late_lamp")
+    await add_real(hass, lamp)
+
+    def combined(name: str, trigger: str) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+                CONF_NAME: name,
+                CONF_TRIGGER_SENSORS: [trigger],
+            },
+        )
+
+    sensor = f"binary_sensor.{topology}"
+    entries = [
+        MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+                CONF_NAME: "Plain",
+                CONF_OCCUPANCY_SENSOR: "binary_sensor.late_motion",
+                CONF_OCCUPANCY_TIMEOUT: 1,
+                CONF_FALSE_DETECTION_GRACE: 0,
+            },
+        ),
+        combined("Combined", "binary_sensor.plain"),
+        combined("Nested", "binary_sensor.combined"),
+        make_light_entry(lights=[lamp.entity_id], timeout=60, occupancy=sensor),
+    ]
+    await setup_entries(hass, *entries)
+    await finish_startup(hass)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=30))
+    assert await hass.config_entries.async_unload(hardware.entry_id)
+    await settle(hass)
+    await restart_entries(hass, *entries)
+    assert hass.states.get(sensor).state == "off"
+
+    freezer.tick(timedelta(seconds=5))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert not lamp.is_on
+    freezer.tick(timedelta(seconds=5))
+    load_on = not new_visit
+    assert await hass.config_entries.async_setup(hardware.entry_id)
+    await settle(hass)
+    if new_visit:
+        freezer.tick(timedelta(seconds=5))
+        sources[-1].set(True)
+        await settle(hass)
+
+    state = hass.states.get(sensor)
+    assert state.state == "on"
+    assert (state.attributes["last_on_time"] is None) is not new_visit
+    assert lamp.is_on is new_visit
 
 
 @pytest.mark.asyncio
