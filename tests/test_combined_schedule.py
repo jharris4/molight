@@ -2361,8 +2361,12 @@ async def test_an_off_between_two_sources_survives_later_changes_of_one(
     started = None
     for source, value in [*changes, ("a", "off"), ("a", "on")]:
         freezer.tick(timedelta(milliseconds=10))
-        hass.states.async_set(f"binary_sensor.src_{source}", value)
-        if how != "together":
+        if how == "together":
+            # The schedules themselves: Home Assistant 2026.1 updates a mirror
+            # only once the loop turns, dating a whole burst alike.
+            hass.states.async_set(f"binary_sensor.{source}", value)
+        else:
+            hass.states.async_set(f"binary_sensor.src_{source}", value)
             await settle(hass)
         if started is None and (source, value) == ("a", "on"):
             started = dt_util.utcnow()
