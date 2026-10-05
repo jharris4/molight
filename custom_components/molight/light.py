@@ -439,6 +439,25 @@ def _wrapped_light_acted_alone(old_state: State | None, new_state: State) -> boo
     return all(old.get(stamp) == new.get(stamp) for stamp in _HUMAN_STAMPS)
 
 
+def _wrapped_light_commanded(old_state: State | None, new_state: State) -> bool:
+    """Whether a wrapped virtual light took a person's command that shows nothing.
+
+    A turn-on of a light that is on, or an off of one that is off, moves
+    only its stamps. A stamp from before its last report is one it restored.
+    """
+    if old_state is None or "molight_state" not in new_state.attributes:
+        return False
+    old, new = old_state.attributes, new_state.attributes
+    off = new_state.state == "off"
+    for stamp in _HUMAN_STAMPS:
+        if (stamp == "last_off_manual") is not off or old.get(stamp) == new.get(stamp):
+            continue
+        with contextlib.suppress(ValueError, TypeError):
+            if datetime.fromisoformat(new.get(stamp)) >= old_state.last_updated:
+                return True
+    return False
+
+
 # Member color modes an hs command can drive (HA converts hs to each member's
 # native mode); any of them lets the virtual light advertise HS itself. Shared
 # with the config flow so an upstream addition can't split the two.
@@ -2178,10 +2197,21 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # replaced: that command is sent again when the call ends.
                 return
             if same_state:
+                # Our own command to it moves its stamps too.
+                commanded = not own_context and _wrapped_light_commanded(
+                    old_state, new_state
+                )
                 if new_state.state == "on":
                     self._on_light_attrs_change(
-                        old_state, new_state, claim=claim, human=human
+                        old_state,
+                        new_state,
+                        claim=claim,
+                        human=human,
+                        retrigger=commanded,
                     )
+                elif commanded and self._in_warning() and self._all_lights_off():
+                    # Turned off by hand while a stage had it blinked off.
+                    self._go_idle(manual=True)
                 return
             if resend and self._reconcile_recovered_member():
                 return
@@ -2503,6 +2533,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         *,
         claim: bool = True,
         human: bool = True,
+        retrigger: bool = False,
     ) -> None:
         """Handle an external brightness/color change on an on real light.
 
@@ -2510,7 +2541,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         running countdown with the full timeout. Brightness 0 means off in
         disguise. claim is False for a change our own select call caused;
         human is False for a wrapped virtual light's own stage or standby,
-        which is shown but not acted on.
+        which is shown but not acted on. retrigger is a person's turn-on of
+        a wrapped virtual light that was on, which changes neither.
         """
         old_b = old_state.attributes.get("brightness")
         new_b = new_state.attributes.get("brightness")
@@ -2520,10 +2552,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         color_changed = new_color is not None and new_color != self._member_color(
             old_state
         )
-        if not brightness_changed and not color_changed:
+        if not brightness_changed and not color_changed and not retrigger:
             return  # some other attribute changed (battery, ...)
 
         now = datetime.now(UTC)
+        if retrigger:
+            self._last_on_physical = now
         if color_changed:
             if human:
                 self._last_color_change_physical = now

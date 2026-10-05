@@ -66,7 +66,10 @@ Remote buttons.
   changed to contain a virtual light, that light's warn stage no longer
   restarts the timer of the light controlling the group. A wrapped light
   relit by its own sensor no longer restarts the timer, or cancels the
-  warning, of a wrapping light that is already on.
+  warning, of a wrapping light that is already on. Turning on a wrapped
+  light that is already on now restarts the wrapping light's timeout, and
+  turning it off while the wrapping light's warning has it blinked off ends
+  the warning instead of the light coming back on.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on. A light turned off by
   hand no longer comes back on after a restart for the same visit or open
