@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.const import EVENT_CALL_SERVICE
-from homeassistant.core import callback
+from homeassistant.core import CoreState, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -32,6 +33,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_GATE_SWITCH,
 )
 from tests.conftest import (
+    finish_startup,
     light_targets,
     make_light_entry,
     make_scheduled_light_entry,
@@ -1662,6 +1664,222 @@ async def test_waiting_turn_on_cancelled_by_an_off_reports_off(
     assert calls == [("turn_off", None)]
     assert state.state == "off"
     assert state.attributes["molight_state"] == "idle"
+
+
+async def _run_script(hass: HomeAssistant, level: int) -> None:
+    """Start a script that turns the virtual light on at a level."""
+    if not hass.services.has_service("script", "lights_on"):
+        turn_on = {
+            "action": "light.turn_on",
+            "target": {"entity_id": "light.selection_light"},
+            "data": {"brightness": "{{ level }}"},
+        }
+        config = {"lights_on": {"mode": "restart", "sequence": [turn_on]}}
+        assert await async_setup_component(hass, "script", {"script": config})
+    await hass.services.async_call(
+        "script",
+        "turn_on",
+        {"entity_id": "script.lights_on", "variables": {"level": level}},
+        blocking=True,
+    )
+    await _drain(hass)
+    assert hass.states.get("light.selection_light").attributes["brightness"] == level
+
+
+async def _stop_script(hass: HomeAssistant) -> None:
+    await hass.services.async_call(
+        "script", "turn_off", {"entity_id": "script.lights_on"}, blocking=True
+    )
+    await _drain(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("how", ["stop", "restart"])
+async def test_script_stopped_during_the_wait_takes_back_its_on(
+    hass: HomeAssistant, freezer, how: str
+) -> None:
+    """A script stopped while its turn-on waits for the select call lights
+    nothing, and the light reports off again. Run again instead, the script
+    stops its first turn-on and the second one lights the room."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+    calls = _light_calls(hass)
+    await _run_script(hass, 200)
+    await asyncio.wait_for(select.started.wait(), 2)
+    assert hass.states.get("light.selection_light").state == "on"
+
+    if how == "stop":
+        await _stop_script(hass)
+        state = hass.states.get("light.selection_light")
+        assert (state.state, state.attributes["molight_state"]) == ("off", "idle")
+    else:
+        await _run_script(hass, 100)
+    select.release.set()
+    await settle(hass)
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    if how == "stop":
+        assert calls == []
+        assert (state.state, state.attributes["molight_state"]) == ("off", "idle")
+    else:
+        assert calls == [("turn_on", 100)]
+        assert (state.state, state.attributes["brightness"]) == ("on", 100)
+        assert state.attributes["molight_state"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_script_stopped_during_the_wait_leaves_a_newer_turn_on(
+    hass: HomeAssistant,
+) -> None:
+    """A turn-on made after the script's replaces it and is not stopped with
+    the script: it lights the room at its own level."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    await setup_entries(hass, _selection_entry())
+    calls = _light_calls(hass)
+    await _run_script(hass, 200)
+    turn_on = hass.async_create_task(
+        hass.services.async_call(
+            "light",
+            "turn_on",
+            {"entity_id": "light.selection_light", "brightness": 50},
+            blocking=True,
+        )
+    )
+    await _drain(hass)
+
+    await _stop_script(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    select.release.set()
+    await turn_on
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 50)]
+    assert (state.state, state.attributes["brightness"]) == ("on", 50)
+
+
+@pytest.mark.asyncio
+async def test_script_stopped_during_the_wait_leaves_occupancy_its_lights(
+    hass: HomeAssistant,
+) -> None:
+    """The script's turn-on replaced one occupancy had waiting. Stopped, it
+    sends nothing, and the room someone is in is lit at the auto-on level."""
+    select = await _park_automatic_turn_on(hass, auto_on_brightness=40)
+    calls = _light_calls(hass)
+    await _run_script(hass, 200)
+
+    await _stop_script(hass)
+    assert hass.states.get("light.selection_light").state == "on"
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 102)]
+    assert (state.state, state.attributes["brightness"]) == ("on", 102)
+    assert state.attributes["molight_state"] == "occupied"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_script_stopped_during_the_wait_leaves_standby_its_lights(
+    hass: HomeAssistant,
+) -> None:
+    """The script raises a light that was coming on at standby. Stopped, it
+    sends nothing, and the light comes on at standby after all."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    hass.states.async_set(_SCHEDULE, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            name="Selection Light",
+            lights=["light.ambient"],
+            inside={**_PRESET, CONF_STANDBY_BRIGHTNESS: 20},
+        ),
+    )
+    hass.states.async_set(_SCHEDULE, "on")
+    await asyncio.wait_for(select.started.wait(), 2)
+    assert _molight_state(hass) == "standby"
+    calls = _light_calls(hass)
+    await _run_script(hass, 200)
+
+    await _stop_script(hass)
+    select.release.set()
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == [("turn_on", 51)]
+    assert (state.state, state.attributes["brightness"]) == ("on", 51)
+    assert state.attributes["molight_state"] == "standby"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_script_stopped_during_startup_is_no_command_for_the_seed(
+    hass: HomeAssistant,
+) -> None:
+    """The script runs while Home Assistant starts and is stopped during the
+    select call. The light then reads its real light, which is off, and
+    sends nothing."""
+    select = _SlowSelect(hass)
+    hass.states.async_set("light.ambient", "off")
+    hass.set_state(CoreState.starting)
+    await setup_entries(hass, _selection_entry())
+    calls = _light_calls(hass)
+    await _run_script(hass, 200)
+
+    await _stop_script(hass)
+    select.release.set()
+    await finish_startup(hass)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert calls == []
+    assert (state.state, state.attributes["molight_state"]) == ("off", "idle")
+    assert state.attributes["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+async def test_script_stopped_during_a_blink_leaves_the_warning_running(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A stage has the real light blinked off when the script turns the
+    light on, and the script is stopped during the select call: the warning
+    runs on and ends in off."""
+    select = _SlowSelect(hass)
+    select.release.set()
+    lamp = FadingLight("ambient", brightness=200)
+    await add_real(hass, lamp)
+    await setup_entries(
+        hass, _selection_entry(timeout=5, effect_timeout=8, effect_brightness=0)
+    )
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
+    )
+    await settle(hass)
+    await _pass(hass, freezer, 6)
+    await settle(hass)
+    assert (_molight_state(hass), lamp.is_on) == ("effect", False)
+    select.release.clear()
+    commands = record_service_calls(hass)
+    await _run_script(hass, 150)
+
+    await _stop_script(hass)
+    select.release.set()
+    await settle(hass)
+    assert (_molight_state(hass), lamp.is_on) == ("effect", False)
+    await _pass(hass, freezer, 9)
+    await settle(hass)
+
+    state = hass.states.get("light.selection_light")
+    assert ["light.ambient"] not in light_targets(commands, "turn_on")
+    assert (state.state, state.attributes["molight_state"]) == ("off", "idle")
+    assert not lamp.is_on
 
 
 @pytest.mark.asyncio

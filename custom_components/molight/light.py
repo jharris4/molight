@@ -4705,8 +4705,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # What the call changed in its last moments is still on its
                 # way to our listener: let it arrive as the call's doing.
                 await asyncio.sleep(0)
-            finally:
+            except asyncio.CancelledError:
                 del self._waiting_turn_ons[context.id]
+                self._on_turn_on_cancelled(waiting)
+                raise
+            finally:
+                self._waiting_turn_ons.pop(context.id, None)
             if self._overtaken(waiting):
                 # An off, a newer manual command, a newer automatic level or
                 # a change at the wall landed while the select call was
@@ -4754,6 +4758,25 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
         self.async_write_ha_state()
         return True
+
+    def _on_turn_on_cancelled(self, waiting: _WaitingTurnOn) -> None:
+        """Take back the on a turn-on reported when its caller was stopped.
+
+        A script or automation stopped while the select call ran sends
+        nothing more. A newer command stands; an automatic on-period the
+        turn-on had replaced gets its lights after all.
+        """
+        if self._removed or self.hass.is_stopping:
+            return
+        if self._overtaken(waiting):
+            self.hass.async_create_task(self._resend_look_after_select())
+        elif self._machine_state == STATE_STANDBY:
+            self._enter_standby(
+                self._auto_on_transition, selection=True, force_selection=True
+            )
+        elif self._machine_state != STATE_IDLE and not self._in_warning():
+            self.hass.async_create_task(self._auto_lights_on(force_selection=True))
+        self.async_write_ha_state()
 
     async def _resend_look_after_select(self) -> None:
         """Send the newest look again, now that the last select call ended.
