@@ -413,24 +413,29 @@ async def _start_schedule(hass: HomeAssistant, entity_type: str) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("named", ["name", "entity_id"])
+@pytest.mark.parametrize("named", ["name", "entity_id", "taken_name"])
 @pytest.mark.parametrize("nested", [False, True])
 async def test_creating_a_schedule_refuses_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
-    """A group can name an entity that does not exist yet."""
+    """A group can name an entity that does not exist yet, including the
+    suffixed ID a taken name leads to."""
     groups, _real = await _groups(hass)
-    await _set_members(hass, groups["below" if nested else "source"], [REAL, SCHEDULE])
+    own_id = SCHEDULE
+    if named == "taken_name":
+        hass.states.async_set(SCHEDULE, "off")
+        own_id = f"{SCHEDULE}_2"
+    await _set_members(hass, groups["below" if nested else "source"], [REAL, own_id])
     result = await _start_schedule(hass, ENTITY_TYPE_SCHEDULE)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR},
     )
     values = {
-        CONF_NAME: "Mode" if named == "name" else "Something Else",
+        CONF_NAME: "Something Else" if named == "entity_id" else "Mode",
         CONF_SCHEDULE_SOURCE: GROUP,
         CONF_SCHEDULE_INVERT: True,
-        SECTION_ADVANCED: {} if named == "name" else {CONF_ENTITY_ID: "mode"},
+        SECTION_ADVANCED: {CONF_ENTITY_ID: "mode"} if named == "entity_id" else {},
     }
     result = await hass.config_entries.flow.async_configure(result["flow_id"], values)
     assert result["type"] == FlowResultType.FORM
@@ -484,13 +489,19 @@ async def test_a_combined_schedule_refuses_a_schedule_whose_source_includes_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("taken", [False, True], ids=["free", "taken_name"])
 async def test_creating_a_combined_schedule_refuses_a_group_that_names_its_id(
-    hass: HomeAssistant,
+    hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined schedule can take an ID its input's source group names."""
+    """A new combined schedule can take an ID its input's source group names,
+    including the suffixed ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _schedule(GROUP, invert=True))
-    await _set_members(hass, groups["below"], [REAL, COMBINED])
+    if taken:
+        hass.states.async_set(COMBINED, "off")
+    await _set_members(
+        hass, groups["below"], [REAL, f"{COMBINED}_2" if taken else COMBINED]
+    )
 
     result = await _start_schedule(hass, ENTITY_TYPE_COMBINED_SCHEDULE)
     values = {

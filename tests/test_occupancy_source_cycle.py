@@ -246,20 +246,25 @@ async def test_editing_an_occupancy_sensor_accepts_a_group_of_other_sensors(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("named", ["name", "entity_id"])
+@pytest.mark.parametrize("named", ["name", "entity_id", "taken_name"])
 @pytest.mark.parametrize("nested", [False, True])
 async def test_creating_an_occupancy_sensor_refuses_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
-    """A group can name an entity that does not exist yet."""
+    """A group can name an entity that does not exist yet, including the
+    suffixed ID a taken name leads to."""
     groups, _real = await _groups(hass)
-    await _set_members(hass, groups["below" if nested else "source"], [REAL, SEEN])
+    own_id = SEEN
+    if named == "taken_name":
+        hass.states.async_set(SEEN, "off")
+        own_id = f"{SEEN}_2"
+    await _set_members(hass, groups["below" if nested else "source"], [REAL, own_id])
     result = await _start_schedule(hass, ENTITY_TYPE_OCCUPANCY)
     values = {
-        CONF_NAME: "Seen" if named == "name" else "Something Else",
+        CONF_NAME: "Something Else" if named == "entity_id" else "Seen",
         CONF_OCCUPANCY_SENSOR: GROUP,
         CONF_OCCUPANCY_TIMEOUT: 30,
-        SECTION_ADVANCED: {} if named == "name" else {CONF_ENTITY_ID: "seen"},
+        SECTION_ADVANCED: {CONF_ENTITY_ID: "seen"} if named == "entity_id" else {},
     }
     result = await hass.config_entries.flow.async_configure(result["flow_id"], values)
     assert result["type"] == FlowResultType.FORM
@@ -310,13 +315,17 @@ async def test_a_combined_sensor_refuses_a_sensor_whose_source_includes_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("taken", [False, True], ids=["free", "taken_name"])
 async def test_creating_a_combined_sensor_refuses_a_group_that_names_its_id(
-    hass: HomeAssistant,
+    hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined sensor can take an ID its constituent's source names."""
+    """A new combined sensor can take an ID its constituent's source names,
+    including the suffixed ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _occupancy(GROUP))
-    await _set_members(hass, groups["below"], [REAL, ROOM])
+    if taken:
+        hass.states.async_set(ROOM, "off")
+    await _set_members(hass, groups["below"], [REAL, f"{ROOM}_2" if taken else ROOM])
 
     result = await _start_schedule(hass, ENTITY_TYPE_COMBINED_OCCUPANCY)
     values = {

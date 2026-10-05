@@ -2301,26 +2301,18 @@ class MoLightConfigFlow(
         self, name: str, flat: dict[str, Any], inputs: list[str]
     ) -> bool:
         """Whether a group under these inputs already names the new sensor's ID."""
-        _, errors, needs_confirm, candidate = self._resolve_entity_id(
-            name, flat, BINARY_SENSOR_ENTITY_ID_FORMAT
-        )
-        # A taken ID gets a suffix, so a group naming it means another sensor.
-        return (
-            not errors
-            and not needs_confirm
-            and _sensors_depend_on(self.hass, inputs, [candidate])
+        entity_id = self._new_entity_id(name, flat, BINARY_SENSOR_ENTITY_ID_FORMAT)
+        return entity_id is not None and _sensors_depend_on(
+            self.hass, inputs, [entity_id]
         )
 
     def _new_light_errors(self, flat: dict[str, Any]) -> dict[str, str]:
         """Check a new light's entity ID, and that no member group already names it."""
-        _, errors, needs_confirm, candidate = self._resolve_entity_id(
+        _, errors, _, candidate = self._resolve_entity_id(
             flat[CONF_NAME], flat, LIGHT_ENTITY_ID_FORMAT
         )
-        # A taken ID gets a suffix, so a group naming it means another light.
-        if (
-            not errors
-            and not needs_confirm
-            and _new_light_in_members(self.hass, candidate, flat[CONF_LIGHTS])
+        if not errors and _new_light_in_members(
+            self.hass, self._available_entity_id(candidate), flat[CONF_LIGHTS]
         ):
             return {CONF_LIGHTS: "light_member_cycle"}
         if not errors and (

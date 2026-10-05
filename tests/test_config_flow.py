@@ -7686,7 +7686,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("taken", ["by_another_light", "by_a_group_edit"])
+@pytest.mark.parametrize("taken", ["by_another_light", "by_a_group_edit", "own_id"])
 @pytest.mark.parametrize(
     "last_page",
     [
@@ -7700,7 +7700,8 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, last_page: str, taken: str
 ) -> None:
-    """A new light's last page refuses a light another light took behind it."""
+    """A new light's last page refuses a light another light took behind it,
+    or a member group that came to name the ID the new light will get."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.group", "off", {"entity_id": ["light.spare"]})
@@ -7757,6 +7758,11 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         )
         assert other["type"] == FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
+    elif taken == "own_id":
+        own_id = "light.new_2" if last_page.endswith("collision") else "light.new"
+        hass.states.async_set(
+            "light.group", "off", {"entity_id": ["light.spare", own_id]}
+        )
     else:
         hass.states.async_set(
             "light.group", "off", {"entity_id": ["light.spare", "light.outer_real"]}
@@ -7777,7 +7783,9 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     assert result["step_id"] == (
         "scheduled_light" if last_page.startswith("scheduled") else "light"
     )
-    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+    assert result["errors"] == {
+        CONF_LIGHTS: "light_member_cycle" if taken == "own_id" else "light_shared"
+    }
     assert len(hass.config_entries.async_entries(DOMAIN)) == 3
 
 
@@ -10390,13 +10398,19 @@ async def test_light_options_accept_a_light_group_without_the_light(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+@pytest.mark.parametrize("taken", [False, True], ids=["free", "taken_name"])
 async def test_new_light_rejects_a_member_group_that_already_names_it(
-    hass: HomeAssistant, scheduled: bool
+    hass: HomeAssistant, scheduled: bool, taken: bool
 ) -> None:
-    """A group set up first, naming the ID the new light will get, is a cycle."""
+    """A group set up first, naming the ID the new light will get, is a cycle,
+    including the suffixed ID a taken name leads to."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.bulb", "off")
-    await setup_entries(hass, _group_entry("Kitchen", ["light.hall", "light.bulb"]))
+    own_id = "light.hall"
+    if taken:
+        hass.states.async_set("light.hall", "off")
+        own_id = "light.hall_2"
+    await setup_entries(hass, _group_entry("Kitchen", [own_id, "light.bulb"]))
     group = "light.kitchen"
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
