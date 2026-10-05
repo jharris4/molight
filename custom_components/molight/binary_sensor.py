@@ -1698,8 +1698,8 @@ class _ScheduleTree:
         self.hass = hass
         self.configs: dict[str, dict] = {}
         self.disabled: dict[str, ConfigEntryDisabler | None] = {}
-        # Each MoLight input entity, and whether its registry entry is disabled.
-        self.entities: dict[str, bool] = {}
+        # Each input entity, and whether its registry entry is disabled (None: none).
+        self.entities: dict[str, bool | None] = {}
         self.source_entities: set[str] = set()
         self.plain_schedules: set[str] = set()
         # An input reached by several routes is one shared node, evaluated once.
@@ -1743,7 +1743,11 @@ class _ScheduleTree:
             if reg_entry is not None and reg_entry.config_entry_id is not None
             else None
         )
-        if reg_entry is None or entry is None or entry.domain != DOMAIN:
+        if reg_entry is None:
+            # Deleted from the registry; its entry may yet create it again.
+            self.entities[entity_id] = None
+            return _ScheduleNode("unknown")
+        if entry is None or entry.domain != DOMAIN:
             return _ScheduleNode("unknown")
         cfg = molight_config(entry)
         entity_type = cfg[CONF_ENTITY_TYPE]
@@ -1800,7 +1804,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._plain_schedules: list[str] = []
         self._input_configs: dict[str, dict] = {}
         self._input_disabled: dict[str, ConfigEntryDisabler | None] = {}
-        self._input_entities: dict[str, bool] = {}
+        self._input_entities: dict[str, bool | None] = {}
         self._reload_scheduled = False
         self._current_window_start: str | None = None
         # As in VirtualScheduleSensor: where the inputs date the on-period from.
@@ -1867,12 +1871,19 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 )
             )
         # Disabling an input's entity leaves its entry enabled.
-        if self._input_entities:
+        if registered := [e for e, d in self._input_entities.items() if d is not None]:
             self.async_on_remove(
                 async_track_entity_registry_updated_event(
-                    self.hass,
-                    sorted(self._input_entities),
+                    self.hass, sorted(registered), self._handle_registry_change
+                )
+            )
+        # One with no registry entry may be created again or renamed into place.
+        if None in self._input_entities.values():
+            self.async_on_remove(
+                self.hass.bus.async_listen(
+                    er.EVENT_ENTITY_REGISTRY_UPDATED,
                     self._handle_registry_change,
+                    event_filter=self._is_unregistered_input,
                 )
             )
 
@@ -1936,15 +1947,20 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self.hass.config_entries.async_schedule_reload(self._entry_id)
 
     @callback
+    def _is_unregistered_input(self, data: er.EventEntityRegistryUpdatedData) -> bool:
+        return self._input_entities.get(data["entity_id"], False) is None
+
+    @callback
     def _handle_registry_change(
         self, event: Event[er.EventEntityRegistryUpdatedData]
     ) -> None:
         entity_id = event.data["entity_id"]
         reg_entry = er.async_get(self.hass).async_get(entity_id)
         disabled = reg_entry is not None and reg_entry.disabled
-        if not self._reload_scheduled and disabled != self._input_entities.get(
-            entity_id, disabled
-        ):
+        expanded = self._input_entities.get(entity_id, disabled)
+        if expanded is None and reg_entry is None:
+            return
+        if not self._reload_scheduled and disabled != expanded:
             self._reload_scheduled = True
             self.hass.config_entries.async_schedule_reload(self._entry_id)
 

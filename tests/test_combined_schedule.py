@@ -455,6 +455,116 @@ async def test_input_registry_edit_does_not_rebuild(
     assert hass.states.get("binary_sensor.bedside").state == "on"
 
 
+def _input_and_combination(
+    definition: str, nested: bool
+) -> tuple[MockConfigEntry, list[MockConfigEntry]]:
+    """Return Morning and the combinations over it, Bedside last."""
+    morning = (
+        _time_schedule("Morning", "06:00", "08:00")
+        if definition == "time"
+        else _mirror_schedule("Morning", "binary_sensor.door")
+    )
+    if not nested:
+        return morning, [_combined("Bedside", ["binary_sensor.morning"])]
+    return morning, [
+        _combined("Inner", ["binary_sensor.morning"]),
+        _combined("Bedside", ["binary_sensor.inner"]),
+    ]
+
+
+async def _assert_bedside_follows_morning(
+    hass: HomeAssistant, freezer, definition: str
+) -> None:
+    """Bedside turns off and on again with Morning's next change."""
+    if definition == "time":
+        await _move_to(hass, freezer, "2026-07-02 08:00:02+00:00")
+        assert hass.states.get("binary_sensor.bedside").state == "off"
+        await _move_to(hass, freezer, "2026-07-03 06:00:02+00:00")
+    else:
+        hass.states.async_set("binary_sensor.door", "off")
+        await settle(hass)
+        assert hass.states.get("binary_sensor.bedside").state == "off"
+        hass.states.async_set("binary_sensor.door", "on")
+        await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True], ids=["direct", "nested"])
+@pytest.mark.parametrize("definition", ["time", "source"])
+async def test_input_created_again_rebuilds_the_combination(
+    hass: HomeAssistant, freezer, definition: str, nested: bool
+) -> None:
+    """An input whose entity was deleted from the registry while its entry was
+    disabled counts again once enabling the entry creates the entity anew."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.door", "on")
+    morning, combinations = _input_and_combination(definition, nested)
+    await _setup(hass, morning, *combinations)
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+    await hass.config_entries.async_set_disabled_by(
+        morning.entry_id, ConfigEntryDisabler.USER
+    )
+    await settle(hass)
+    er.async_get(hass).async_remove("binary_sensor.morning")
+    await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
+
+    await hass.config_entries.async_set_disabled_by(morning.entry_id, None)
+    await settle(hass)
+    assert hass.states.get("binary_sensor.morning").state == "on"
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+    await _assert_bedside_follows_morning(hass, freezer, definition)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True], ids=["direct", "nested"])
+@pytest.mark.parametrize("definition", ["time", "source"])
+async def test_combination_set_up_before_its_input_picks_it_up(
+    hass: HomeAssistant, freezer, definition: str, nested: bool
+) -> None:
+    """A combination that starts before its input has a registry entry counts
+    the input once it is created, and other registry changes don't rebuild it."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    hass.states.async_set("binary_sensor.door", "on")
+    morning, combinations = _input_and_combination(definition, nested)
+    await _setup(hass, *reversed(combinations))
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
+
+    writes = _record_states(hass, "binary_sensor.bedside")
+    registry = er.async_get(hass)
+    other = registry.async_get_or_create("binary_sensor", "test", "unrelated")
+    registry.async_update_entity(other.entity_id, name="Unrelated")
+    await settle(hass)
+    assert writes == []
+
+    await _setup(hass, morning)
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+    await _assert_bedside_follows_morning(hass, freezer, definition)
+
+
+@pytest.mark.asyncio
+async def test_input_renamed_into_place_counts(hass: HomeAssistant, freezer) -> None:
+    """A schedule renamed to the entity ID a combination names is its input."""
+    await hass.config.async_set_time_zone("UTC")
+    freezer.move_to("2026-07-02 07:00:00+00:00")
+    await _setup(
+        hass,
+        _time_schedule("Early", "06:00", "08:00"),
+        _combined("Bedside", ["binary_sensor.morning"]),
+    )
+    assert hass.states.get("binary_sensor.bedside").state == "unavailable"
+
+    er.async_get(hass).async_update_entity(
+        "binary_sensor.early", new_entity_id="binary_sensor.morning"
+    )
+    await settle(hass)
+    assert hass.states.get("binary_sensor.bedside").state == "on"
+
+
 @pytest.mark.asyncio
 async def test_no_inputs_is_off(hass: HomeAssistant, freezer) -> None:
     """A combined schedule whose inputs were all removed is permanently off."""
