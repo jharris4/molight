@@ -8,6 +8,7 @@ receives nothing until it reports in.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
@@ -16,12 +17,18 @@ from homeassistant.components.light import (
     DEFAULT_MAX_KELVIN,
     DEFAULT_MIN_KELVIN,
 )
-from homeassistant.const import ATTR_RESTORED, EVENT_CALL_SERVICE, EVENT_STATE_CHANGED
+from homeassistant.const import (
+    ATTR_RESTORED,
+    EVENT_CALL_SERVICE,
+    EVENT_HOMEASSISTANT_STARTED,
+    EVENT_STATE_CHANGED,
+)
 from homeassistant.core import (
     Context,
     CoreState,
     Event,
     HomeAssistant,
+    ServiceCall,
     State,
     callback,
 )
@@ -39,12 +46,16 @@ from custom_components.molight.const import (
     ATTR_ACTIVE_SETTINGS_WINDOW,
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
+    CONF_AUTO_ON_BRIGHTNESS,
     CONF_HOLD_ENTITIES,
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHT_TIMEOUT,
     CONF_OCCUPANCY_ENTITY,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_ON_SELECT_ENTITY,
+    CONF_TURN_ON_SELECT_OPTION,
     ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -1236,6 +1247,132 @@ async def test_turn_off_before_the_seed_stands_over_a_missed_standby_start(
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER2})
     await settle(hass)
     assert _attrs(hass)["molight_state"] == STATE_STANDBY
+
+
+async def _resting_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
+    """Set a standby light up inside its window, resting at 20 %."""
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    entry = make_scheduled_light_entry(
+        name="Matrix Light",
+        schedule=SCHED,
+        outside={CONF_LIGHT_TIMEOUT: 60},
+        inside={
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_STANDBY_BRIGHTNESS: 20,
+            CONF_AUTO_ON_BRIGHTNESS: 80,
+            **inside,
+        },
+    )
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    assert hass.states.get(REAL).attributes["brightness"] == 51
+    return entry
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("data", "level"), [({"brightness": 200}, 200), ({}, 204)], ids=["level", "plain"]
+)
+async def test_raise_before_the_seed_replaces_a_restored_standby(
+    hass: HomeAssistant, freezer, data: dict, level: int
+) -> None:
+    """The raise stands, and its timeout drops the light back to standby."""
+    _Members(hass, [REAL], {})
+    entry = await _resting_at_standby(hass)
+
+    await restart_entries(hass, entry, started=False)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL, **data}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(REAL).attributes["brightness"] == level
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert hass.states.get(REAL).attributes["brightness"] == level
+    assert _attrs(hass)["brightness"] == level
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+    await _tick(hass, freezer, 61)
+    assert _attrs(hass)["molight_state"] == STATE_STANDBY
+    assert hass.states.get(REAL).attributes["brightness"] == 51
+
+
+class _ParkedSelect:
+    """A select service whose call blocks until released."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        hass.states.async_set("select.scene", "Day", {"options": ["Day", "Night"]})
+        hass.services.async_register("select", "select_option", self._select)
+
+    async def _select(self, _call: ServiceCall) -> None:
+        self.started.set()
+        await self.release.wait()
+
+
+@pytest.mark.asyncio
+async def test_raise_waiting_for_its_selection_at_the_seed_replaces_standby(
+    hass: HomeAssistant,
+) -> None:
+    """The seed arriving during the raise's select call does not undo it."""
+    real = _Members(hass, [REAL], {})
+    entry = await _resting_at_standby(hass)
+    data = dict(entry.data)
+    inside = {
+        **data[CONF_INSIDE_SCHEDULE_SETTINGS],
+        CONF_TURN_ON_SELECT_ENTITY: "select.scene",
+        CONF_TURN_ON_SELECT_OPTION: "Night",
+    }
+    hass.config_entries.async_update_entry(
+        entry, data={**data, CONF_INSIDE_SCHEDULE_SETTINGS: inside}
+    )
+    await settle(hass)
+    select = _ParkedSelect(hass)
+
+    await restart_entries(hass, entry, started=False)
+    # A light that restarts dark selects before the raise is sent.
+    real.boot(REAL, "off")
+    hass.async_create_task(
+        hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+        )
+    )
+    await asyncio.wait_for(select.started.wait(), 2)
+    hass.set_state(CoreState.running)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    for _ in range(10):
+        await asyncio.sleep(0)
+    select.release.set()
+    await settle(hass)
+
+    assert hass.states.get(REAL).attributes["brightness"] == 200
+    assert _attrs(hass)["brightness"] == 200
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_turn_off_before_the_seed_keeps_a_restored_standby_off(
+    hass: HomeAssistant,
+) -> None:
+    """A manual off inside the window still holds standby off after the seed."""
+    _Members(hass, [REAL], {})
+    entry = await _resting_at_standby(hass)
+
+    await restart_entries(hass, entry, started=False)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+    assert _turn_ons(calls) == []
+    assert _state(hass).state == "off"
+    assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is True
 
 
 # ---------------------------------------------------------------------------

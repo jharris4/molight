@@ -1970,7 +1970,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if not self._standby_applies():
             return False
         if self._attr_is_on:
-            if not self._restored_standby:
+            if not self._restored_standby or self._early_command:
+                # Not resting: lit by hand since, or never at standby.
                 return False
             if not self._can_rest_at_standby() and not self._held:
                 # Bright in control mode: standby waits for darkness.
@@ -2093,7 +2094,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         (this is the manual path). A turn-on that also restores the pre-warning
         brightness/color restores it over that same fade.
         """
+        # Read before the restored report is dropped: it may be standby.
+        resting = self._machine_state == STATE_STANDBY
         self._drop_restored()
+        if not self._seeded:
+            # Set before the selection is awaited: the seed may come first.
+            self._early_command = True
         now = datetime.now(UTC)
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
@@ -2114,7 +2120,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             brightness = self._pre_warn_brightness
             if brightness is not None:
                 self._attr_brightness = brightness
-        elif self._machine_state == STATE_STANDBY:
+        elif resting:
             # No level: raise standby to the auto-on look, as presence would.
             brightness = self._auto_on_brightness
             if brightness is not None:
@@ -2131,8 +2137,6 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             apply_turn_on_selection=True,
             manual=True,
         ):
-            if not self._seeded:
-                self._early_command = True
             self._transition_on()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
