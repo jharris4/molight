@@ -3475,3 +3475,115 @@ async def test_combined_constituent_added_mid_cycle_brings_only_history(
     assert state.state == "off"
     assert state.attributes["last_clear_false_detection"] is not genuine_before
     assert state.attributes["false_detection_count"] == int(not genuine_before)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("survivor", [CONF_TRIGGER_SENSORS, CONF_MAINTAIN_SENSORS])
+@pytest.mark.parametrize("gone", ["unloaded", "removed", "idle"])
+async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
+    hass: HomeAssistant, freezer, nested: bool, survivor: str, gone: str
+) -> None:
+    """A constituent that disappears while showing presence was present up
+    to then, even though another keeps the sensor on: the survivor's false
+    clear ends a genuine cycle and the light counts down from the dropout.
+    One that was idle when it disappeared adds nothing."""
+    lamp, motion_a, motion_b = RealLight("lamp"), RealBinary("a"), RealBinary("b")
+    await add_real(hass, lamp, motion_a, motion_b)
+
+    def occupancy(name: str, source: RealBinary) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+                CONF_NAME: name,
+                CONF_OCCUPANCY_SENSOR: source.entity_id,
+                CONF_OCCUPANCY_TIMEOUT: 120,
+                CONF_FALSE_DETECTION_GRACE: 3,
+            },
+        )
+
+    first = occupancy("First", motion_a)
+    triggers = ["binary_sensor.first"]
+    maintain = []
+    (triggers if survivor == CONF_TRIGGER_SENSORS else maintain).append(
+        "binary_sensor.second"
+    )
+    together = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Together",
+            CONF_TRIGGER_SENSORS: triggers,
+            CONF_MAINTAIN_SENSORS: maintain,
+        },
+    )
+    above = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
+            CONF_NAME: "Above",
+            CONF_TRIGGER_SENSORS: ["binary_sensor.together"],
+        },
+    )
+    entity_id = "binary_sensor.above" if nested else "binary_sensor.together"
+    light = make_light_entry(
+        lights=[lamp.entity_id], occupancy=entity_id, timeout=300, false_off_delay=5
+    )
+    await setup_entries(
+        hass, first, occupancy("Second", motion_b), together, above, light
+    )
+
+    motion_a.set(True)
+    await settle(hass)
+    freezer.tick(timedelta(seconds=300))
+    async_fire_time_changed(hass)
+    motion_b.set(True)
+    await settle(hass)
+    if gone == "idle":
+        # A false cycle of its own, over before it disappears.
+        motion_a.set(False)
+        motion_b.set(False)
+        await settle(hass)
+        freezer.tick(timedelta(seconds=400))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert not lamp.is_on
+        motion_a.set(True)
+        await settle(hass)
+        freezer.tick(timedelta(seconds=121))
+        motion_b.set(True)
+        motion_a.set(False)
+        await settle(hass)
+        assert hass.states.get(entity_id).state == "on"
+    dropout = datetime.now(UTC)
+    if gone == "removed":
+        assert await hass.config_entries.async_remove(first.entry_id)
+    else:
+        assert await hass.config_entries.async_unload(first.entry_id)
+    await settle(hass)
+    freezer.tick(timedelta(seconds=120))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(entity_id).state == "on"
+
+    motion_b.set(False)
+    await settle(hass)
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    present = gone != "idle"
+    assert state.attributes["last_clear_false_detection"] is not present
+    freezer.tick(timedelta(seconds=6))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert lamp.is_on is present
+    if present:
+        assert state.attributes["latest_occupied_time"] == dropout.isoformat()
+        freezer.move_to(dropout + timedelta(seconds=299))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert lamp.is_on
+        freezer.tick(timedelta(seconds=2))
+        async_fire_time_changed(hass)
+        await settle(hass)
+        assert not lamp.is_on

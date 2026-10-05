@@ -832,13 +832,19 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
                 run_unless_renamed(
                     self.hass,
                     entity_id,
-                    lambda: self._reevaluate_on_dropout(event, dropout),
+                    lambda: self._reevaluate_on_dropout(
+                        event, dropout, showed=was_showing
+                    ),
                 )
             )
             return
         if not _real_state_change(event):
             self._hold_through_reload(event)
-            self._reevaluate_on_dropout(event, datetime.now(UTC))
+            self._reevaluate_on_dropout(
+                event,
+                datetime.now(UTC),
+                showed=was_showing and entity_id not in self._reloading,
+            )
             return
         new_state = event.data["new_state"]
         # A maintain sensor showing presence while startup is still under
@@ -935,16 +941,18 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         @callback
         def _expired(_now: datetime) -> None:
             del self._reloading[entity_id]
-            self._reevaluate_on_dropout(event, dropout)
+            self._reevaluate_on_dropout(event, dropout, showed=True)
 
         self._reloading[entity_id] = async_call_later(
             self.hass, _RELOAD_GRACE, _expired
         )
 
     def _reevaluate_on_dropout(
-        self, event: Event[EventStateChangedData], dropout: datetime
+        self, event: Event[EventStateChangedData], dropout: datetime, *, showed: bool
     ) -> None:
         """Clear occupancy when the last constituent still on drops out.
+
+        showed says the constituent counted as on until it dropped out.
 
         A constituent leaving the state machine (its entry unloaded, the
         entity removed) must not hold the combined sensor on forever. Like
@@ -963,7 +971,17 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             return  # attribute-only update; the combined state can't change
         if not self._attr_is_on:
             return
+        if showed and not self._any_on([event.data["entity_id"]]):
+            # Present up to its dropout, whoever else keeps the sensor on.
+            self._cycle_genuine = True
+            if (
+                self._latest_occupied_time is None
+                or dropout > self._latest_occupied_time
+            ):
+                self._latest_occupied_time = dropout
         if self._any_on(self._trigger_sensors) or self._any_on(self._maintain_sensors):
+            if showed:
+                self.async_write_ha_state()
             return
         if self._latest_occupied_time is None or dropout > self._latest_occupied_time:
             self._latest_occupied_time = dropout
