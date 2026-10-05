@@ -488,7 +488,7 @@ Long, held and triple presses never fire a binding. A click whose spelling a but
 Two things worth knowing:
 
 - On a multi-press-capable button, the device only confirms a *single* click after its multi-press window (~half a second) closes, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico presses are instant.
-- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press. The guards you'd otherwise write as `trigger.from_state` template conditions are built in.
+- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press. A press made since the button dropped out still counts, even when it arrives together with the recovery. The guards you'd otherwise write as `trigger.from_state` template conditions are built in.
 
 Deleting a virtual light strips it from every remote's target list, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
 

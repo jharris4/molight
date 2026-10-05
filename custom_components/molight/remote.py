@@ -68,12 +68,15 @@ from .const import (
 from .helpers import molight_config
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import (
         CALLBACK_TYPE,
         Event,
         EventStateChangedData,
         HomeAssistant,
+        State,
     )
 
 CLICK_SINGLE = "single"
@@ -217,6 +220,12 @@ def _brightness_step_calls(
     return calls
 
 
+def _fired_since(state: State, since: datetime) -> bool:
+    """Return True for an event fired after `since`: its state is its time."""
+    fired = dt_util.parse_datetime(state.state)
+    return fired is not None and fired.tzinfo is not None and fired > since
+
+
 @callback
 def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE:
     """Wire up a Virtual Remote entry; returns its teardown callback.
@@ -250,18 +259,30 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     if not watch or not targets:
         return _noop
 
+    # The last event each button showed, which a recovery may show again.
+    last_shown: dict[str, str] = {}
+
     @callback
     def _handle_event(event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
-        if old_state is None or old_state.state == STATE_UNAVAILABLE:
+        shown = last_shown.get(new_state.entity_id)
+        last_shown[new_state.entity_id] = new_state.state
+        if old_state is None or (
+            old_state.state == STATE_UNAVAILABLE
+            and (
+                new_state.state == shown
+                or not _fired_since(new_state, old_state.last_changed)
+            )
+        ):
             # The entity just appeared or recovered; its state carries its
             # last (possibly restored, certainly stale) event; never replay
-            # it. An "unknown" old state is different: the entity existed but
-            # had never fired an event (a freshly paired button), so this
-            # first event is genuinely fresh and must not be swallowed.
+            # it. A recovery that brings an event fired since it dropped out
+            # is a press. An "unknown" old state is different: the entity
+            # existed but had never fired an event (a freshly paired button),
+            # so this first event is genuinely fresh and must not be swallowed.
             return
         event_type = new_state.attributes.get(ATTR_EVENT_TYPE)
         # Before HA 2026.8 two events in the same millisecond share a state, so

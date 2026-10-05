@@ -428,10 +428,11 @@ async def test_first_sighting_and_unavailable_never_fire(
     await settle(hass)
     assert _vlight(hass).state == "off"
 
-    # Recovery from unavailable is equally suspect.
+    # Recovery from unavailable republishes it, and is equally suspect.
+    stale = hass.states.get("event.pico_on")
     hass.states.async_set("event.pico_on", "unavailable")
     await settle(hass)
-    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    hass.states.async_set("event.pico_on", stale.state, stale.attributes)
     await settle(hass)
     assert _vlight(hass).state == "off"
 
@@ -439,6 +440,74 @@ async def test_first_sighting_and_unavailable_never_fire(
     _fire(hass, "event.pico_on", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("click", ["single", "double"])
+@pytest.mark.parametrize("recovery", ["fresh", "replay", "separate", "reload"])
+async def test_press_arriving_with_availability_recovery(
+    hass: HomeAssistant, freezer, recovery: str, click: str
+) -> None:
+    """A button back from unavailable with an event fired since is a press.
+
+    Its recovery may arrive in the same state write as the press, or in one
+    of its own first. A recovery that only republishes the last event, as
+    after its integration reloads, is still no press.
+    """
+    from tests.real_entities import (  # noqa: PLC0415
+        InstantLight,
+        RealButton,
+        add_real,
+        add_real_with_entry,
+    )
+
+    bulb = InstantLight("remote_bulb")
+    await add_real(hass, bulb)
+    buttons: list[RealButton] = []
+
+    def make_button() -> RealButton:
+        buttons.append(RealButton("recovery_button"))
+        return buttons[-1]
+
+    hardware = await add_real_with_entry(hass, make_button)
+    buttons[-1].press(click)
+    await settle(hass)
+    key = CONF_ON_BUTTONS_SINGLE if click == "single" else CONF_ON_BUTTONS_DOUBLE
+    remote = _remote_entry(
+        **{CONF_TARGET_LIGHTS: ["light.remote_bulb"], key: ["event.recovery_button"]}
+    )
+    await setup_entries(hass, remote)
+
+    freezer.tick(timedelta(seconds=10))
+    if recovery == "reload":
+        assert await hass.config_entries.async_unload(hardware.entry_id)
+        await settle(hass)
+        assert hass.states.get("event.recovery_button").state == "unavailable"
+        freezer.tick(timedelta(seconds=60))
+        assert await hass.config_entries.async_setup(hardware.entry_id)
+    else:
+        button = buttons[-1]
+        button._attr_available = False
+        button.async_write_ha_state()
+        await settle(hass)
+        freezer.tick(timedelta(seconds=60))
+        button._attr_available = True
+        if recovery == "separate":
+            button.async_write_ha_state()
+            await settle(hass)
+        if recovery == "replay":
+            button.async_write_ha_state()
+        else:
+            button.press(click)
+    await settle(hass)
+    assert hass.states.get("event.recovery_button").state != "unavailable"
+    assert bulb.is_on == (recovery in ("fresh", "separate"))
+
+    # The press after any of them counts.
+    freezer.tick(timedelta(seconds=1))
+    buttons[-1].press(click)
+    await settle(hass)
+    assert bulb.is_on
 
 
 @pytest.mark.asyncio
