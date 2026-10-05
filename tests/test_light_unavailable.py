@@ -63,11 +63,15 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import (
+    light_targets,
     make_light_entry,
     make_scheduled_light_entry,
+    record_service_calls,
+    restart_entries,
     settle,
     setup_entries,
 )
+from tests.real_entities import rename
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -2645,3 +2649,277 @@ async def test_gate_recovery_tells_a_door_dropout_from_an_opening(
     hass.states.async_set(WINDOW_SOURCE, "on")
     await settle(hass)
     assert _state(hass).state == ("on" if fresh else "off")
+
+
+# ---------------------------------------------------------------------------
+# An input the light could not read when it seeded: its first state is no edge
+# ---------------------------------------------------------------------------
+
+
+async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -> None:
+    """Make the light seed again: an options reload, a restart, or the reload
+    that follows a rename of the occupancy sensor it uses."""
+    if how == "reload":
+        assert await hass.config_entries.async_reload(light.entry_id)
+    elif how == "restart":
+        await restart_entries(hass, light)
+    else:
+        await rename(hass, PRESENCE, "binary_sensor.presence_2")
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+@pytest.mark.parametrize(
+    ("kind", "how"),
+    [
+        ("raw", "reload"),
+        ("raw", "restart"),
+        ("simple", "reload"),
+        ("simple", "restart"),
+        ("simple", "rename"),
+        ("combined", "reload"),
+        ("combined", "restart"),
+    ],
+)
+@pytest.mark.parametrize("fresh", [False, True])
+async def test_gate_recovery_after_the_light_seeds_again_keeps_a_manual_off(
+    hass: HomeAssistant, freezer, mode: str, kind: str, how: str, fresh: bool
+) -> None:
+    """A light that seeds during a gate outage takes its end for no window start.
+
+    The visit from before the manual off leaves the room dark when the gate
+    returns. One that started since lights it, when its sensor can date it.
+    """
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    hass.states.async_set(REAL, "off")
+    sensor, _entries = await _visit_sensor(hass, kind)
+    light = make_light_entry(occupancy=sensor, schedule=WINDOW, schedule_mode=mode)
+    await setup_entries(hass, _window_entry(), light)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(MOTION, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(WINDOW_SOURCE, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    if fresh:
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(MOTION, "off")
+        await settle(hass)
+        freezer.tick(timedelta(seconds=1))
+        hass.states.async_set(MOTION, "on")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await _reseed_light(hass, light, how)
+    assert _state(hass).state == "off"
+
+    freezer.tick(timedelta(seconds=1))
+    calls = record_service_calls(hass)
+    hass.states.async_set(WINDOW_SOURCE, "on")
+    await settle(hass)
+    assert hass.states.get(WINDOW).state == "on"
+    lit = fresh and kind != "raw"
+    assert light_targets(calls, "turn_on") == ([[REAL]] if lit else [])
+    assert _state(hass).state == ("on" if lit else "off")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("how", ["reload", "restart"])
+@pytest.mark.parametrize("manual_off", [True, False])
+async def test_gate_recovery_after_the_light_seeds_again_with_the_door_held_open(
+    hass: HomeAssistant, freezer, how: str, manual_off: bool
+) -> None:
+    """The open door relights nothing over a manual off, and a room it never lit."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    await setup_entries(hass, light)
+    if manual_off:
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+        assert _state(hass).state == "on"
+        freezer.tick(timedelta(seconds=1))
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        hass.states.async_set(REAL, "off")
+        await settle(hass)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    if not manual_off:
+        # Opened during the outage, which blocked it.
+        hass.states.async_set(DOOR, "on")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await _reseed_light(hass, light, how)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).state == ("off" if manual_off else "on")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode",
+    [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
+)
+@pytest.mark.parametrize("how", ["reload", "restart"])
+async def test_gate_start_an_outage_blocked_is_applied_after_the_light_seeds_again(
+    hass: HomeAssistant, freezer, mode: str, how: str
+) -> None:
+    """Someone who walked in during the outage is lit when the gate returns."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=mode)
+    await setup_entries(hass, light)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    await _reseed_light(hass, light, how)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(SCHED, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH])
+@pytest.mark.parametrize("how", ["reload", "restart"])
+async def test_gate_reading_off_after_the_light_seeds_again_ends_no_window(
+    hass: HomeAssistant, freezer, mode: str, how: str
+) -> None:
+    """A light on through the outage keeps the timeout its seed gave it."""
+    hass.states.async_set(SCHED, "on")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(schedule=SCHED, schedule_mode=mode)
+    await setup_entries(hass, light)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    await _reseed_light(hass, light, how)
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+    calls = record_service_calls(hass)
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("how", ["reload", "restart"])
+@pytest.mark.parametrize("window", ["on", "off"])
+async def test_follow_schedule_without_a_marker_first_read_after_a_seed_is_no_edge(
+    hass: HomeAssistant, how: str, window: str
+) -> None:
+    """A manual off inside the window, or a manual on outside it, stands."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
+    await setup_entries(hass, light)
+    by_hand = "turn_off" if window == "on" else "turn_on"
+    if window == "on":
+        hass.states.async_set(SCHED, "on")
+        await settle(hass)
+        hass.states.async_set(REAL, "on")
+        await settle(hass)
+        assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+    await hass.services.async_call("light", by_hand, {"entity_id": VIRTUAL})
+    hass.states.async_set(REAL, "off" if window == "on" else "on")
+    await settle(hass)
+    hass.states.async_set(SCHED, "unavailable")
+    await settle(hass)
+    await _reseed_light(hass, light, how)
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(SCHED, window)
+    await settle(hass)
+    assert light_targets(calls, "turn_on") == []
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == ("off" if window == "on" else "on")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize("how", ["reload", "restart"])
+@pytest.mark.parametrize("presence", ["occupancy", "door"])
+@pytest.mark.parametrize("manual_off", [True, False])
+async def test_illuminance_first_read_dark_after_a_seed_keeps_a_manual_off(
+    hass: HomeAssistant, freezer, how: str, presence: str, manual_off: bool
+) -> None:
+    """The seed already counted the unreadable sensor as dark: nothing got darker."""
+    hass.states.async_set(ILLUM, "off")
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(REAL, "off")
+    light = make_light_entry(
+        occupancy=OCC,
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        illuminance=ILLUM,
+        illuminance_mode=ILLUMINANCE_MODE_GATE,
+    )
+    await setup_entries(hass, light)
+    hass.states.async_set(OCC if presence == "occupancy" else DOOR, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(ILLUM, "unavailable", {ATTR_RESTORED: True})
+    await settle(hass)
+    if manual_off:
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        hass.states.async_set(REAL, "off")
+        await settle(hass)
+    freezer.tick(timedelta(seconds=1))
+    await _reseed_light(hass, light, how)
+
+    calls = record_service_calls(hass)
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert light_targets(calls, "turn_on") == []
+    assert _state(hass).state == ("off" if manual_off else "on")
+    if not manual_off:
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED

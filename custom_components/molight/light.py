@@ -2470,20 +2470,22 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._on_maintain_change(self._maintain_last_on)
         if entity_id == self._illuminance_entity:
             bright = new_state.state == "on"
-            level_changed = (
-                self._illuminance_last_bright is None
-                or bright != self._illuminance_last_bright
-            )
+            # The seed could not read it: its first state is no observed edge.
+            first = recovered and self._illuminance_last_bright is None
+            level_changed = first or bright != self._illuminance_last_bright
             self._illuminance_last_bright = bright
             if not recovered or level_changed:
-                self._on_illuminance_change(bright)
+                self._on_illuminance_change(bright, first=first)
         if entity_id == self._schedule_entity and new_state.state in ("on", "off"):
             schedule_on = new_state.state == "on"
             replay = recovered and schedule_on == self._schedule_last_on
+            # The seed could not read it: its first state is no boundary.
+            first = recovered and self._schedule_last_on is None
             self._schedule_last_on = schedule_on
             self._on_schedule_change(
                 new_state,
                 replay_since=(old_state or new_state).last_changed if replay else None,
+                first=first,
             )
         if entity_id == self._door_entity:
             self._cancel_door_dropout()
@@ -3491,15 +3493,23 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self.async_write_ha_state()
 
     def _on_schedule_change(
-        self, new_state: State, *, replay_since: datetime | None = None
+        self,
+        new_state: State,
+        *,
+        replay_since: datetime | None = None,
+        first: bool = False,
     ) -> None:
         """Handle the virtual schedule sensor changing.
 
         replay_since is set when the schedule recovers to the value it had
-        before an outage that began then: no boundary was crossed.
+        before an outage that began then: no boundary was crossed. Nor by a
+        schedule's first state after a seed that could not read it (first),
+        which is judged as that seed would have judged it.
         """
         replay = replay_since is not None
         if self._schedule_mode == SCHEDULE_MODE_FOLLOW:
+            # Without a window of its own, the light was not following one.
+            replay = replay or (first and self._schedule_window_applied is None)
             if new_state.state == "on":
                 marker = new_state.attributes.get("current_window_start")
                 if (
@@ -3545,7 +3555,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # light from current sensor history, and gate_keep leaves its current
         # state/timer alone.
         if new_state.state != "on":
-            if replay:
+            if replay or first:
                 return  # still outside the window: nothing ended
             if self._schedule_mode == SCHEDULE_MODE_GATE and self._is_lit():
                 if self._held:
@@ -3593,6 +3603,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     door_holds
                     and self._door_open_since is not None
                     and self._door_open_since >= replay_since
+                )
+            elif first:
+                # As at the seed, presence a manual off ended lights nothing.
+                occ_active = occ_active and not self._may_replay_manual_off(
+                    occ_state, observed=False
+                )
+                door_holds = door_holds and not self._may_replay_manual_off(
+                    self.hass.states.get(self._door_entity), observed=False
                 )
             if occ_active or door_holds:
                 now = datetime.now(UTC)
@@ -4079,7 +4097,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             state is not None and state.attributes.get("last_clear_false_detection")
         )
 
-    def _on_illuminance_change(self, is_bright: bool) -> None:
+    def _on_illuminance_change(self, is_bright: bool, *, first: bool = False) -> None:
         """Handle the virtual illuminance sensor changing.
 
         is_bright=True  (illuminance ON  = bright): natural light is sufficient
@@ -4087,6 +4105,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         is_bright=False (illuminance OFF = dark):   need artificial light
                         → turn on if currently occupied, or resume an
                           on-period that brightness cut short.
+        With first, the seed could not read the sensor and counted it as
+        dark, so presence a manual off ended lights nothing now either.
         """
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
@@ -4121,7 +4141,15 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 else None
             )
             occ_active = occ_state is not None and occ_state.state == "on"
-            if occ_active or self._door_holds():
+            door_holds = self._door_holds()
+            if first:
+                occ_active = occ_active and not self._may_replay_manual_off(
+                    occ_state, observed=False
+                )
+                door_holds = door_holds and not self._may_replay_manual_off(
+                    self.hass.states.get(self._door_entity), observed=False
+                )
+            if occ_active or door_holds:
                 self._last_on_illuminance = datetime.now(UTC)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
