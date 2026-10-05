@@ -957,23 +957,35 @@ def _validate_light_timeout(
     return {}
 
 
-def _stale_light_timeout(
-    hass: HomeAssistant, data: dict[str, Any]
+def _stale_light_settings(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    own_entities: Sequence[str] = (),
+    members: Sequence[str] | None = None,
 ) -> tuple[str | None, dict[str, str]]:
-    """Recheck a light payload's timeouts against the sensors as saved now.
+    """Recheck a light payload's timeouts and keep-on entities as things are now.
 
-    A sensor's timeout can be raised while a later page of the light's form
-    is open, since the unsaved light is not yet its dependent. Returns the
-    failing scheduled-light side (None for a regular light) and the errors.
+    A sensor's timeout can be raised, or a keep-on group edited, while a later
+    page of the light's form is open, since the unsaved light is not yet its
+    dependent. Returns the failing scheduled-light side (None for a regular
+    light) and the errors.
     """
+    if members is None:
+        members = data.get(CONF_LIGHTS, [])
+
+    def _errors(settings: dict[str, Any]) -> dict[str, str]:
+        return _validate_light_timeout(hass, settings) or _validate_hold_entities(
+            hass, settings, own_entities, members
+        )
+
     entity_type = data.get(CONF_ENTITY_TYPE)
     if entity_type == ENTITY_TYPE_SCHEDULED_LIGHT:
         for side in _SCHEDULED_LIGHT_SIDES:
-            if errors := _validate_light_timeout(hass, data.get(side) or {}):
+            if errors := _errors(data.get(side) or {}):
                 return side, errors
         return None, {}
     if entity_type == ENTITY_TYPE_LIGHT:
-        return None, _validate_light_timeout(hass, data)
+        return None, _errors(data)
     return None, {}
 
 
@@ -2361,8 +2373,8 @@ class MoLightConfigFlow(
         create = pending["create"]
         if create["entity_type"] == ENTITY_TYPE_SCHEDULED_LIGHT:
             return await self._finish_scheduled_light()
-        # A sensor's timeout may have been raised while this page was open.
-        if not (errors := _validate_light_timeout(self.hass, create["data"])):
+        # A sensor's timeout or a keep-on group may have changed meanwhile.
+        if not (errors := _stale_light_settings(self.hass, create["data"])[1]):
             result, errors = await self._resolve_and_create(**create)
             if result is not None:
                 return result
@@ -2379,9 +2391,9 @@ class MoLightConfigFlow(
                 reason="reference_removed",
                 description_placeholders={"entity_id": removed},
             )
-        side, errors = _stale_light_timeout(self.hass, data)
+        side, errors = _stale_light_settings(self.hass, data)
         if errors:
-            # A sensor's timeout was raised while the menu was open.
+            # A sensor's timeout or a keep-on group changed while the menu was open.
             if side is not None:
                 return self._show_scheduled_light_side_form(side, None, errors)
             return self._show_light_form(pending["user_input"], errors)
@@ -3829,9 +3841,16 @@ class MoLightConfigFlow(
         if user_input is not None:
             flat.update(user_input)
             errors = _validate_turn_on_selection(self.hass, flat)
-            if not errors and (errors := _validate_light_timeout(self.hass, flat)):
-                # A sensor's timeout was raised while this page was open.
-                if pending["kind"] == "discovery":
+            discovery = pending["kind"] == "discovery"
+            if not errors and (
+                errors := _stale_light_settings(
+                    self.hass,
+                    {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
+                    members=self._discovery["selected"] if discovery else None,
+                )[1]
+            ):
+                # A sensor timeout or keep-on group changed while this page was open.
+                if discovery:
                     return self._show_discover_light_defaults(_nest_light(flat), errors)
                 return self._show_light_form(pending["prefill"], errors)
             if not errors:
@@ -3954,9 +3973,9 @@ class MoLightConfigFlow(
                 return self._show_scheduled_light_side_form(
                     side, None, {"base": "reference_removed"}
                 )
-        side, errors = _stale_light_timeout(self.hass, data)
+        side, errors = _stale_light_settings(self.hass, data)
         if errors:
-            # A sensor's timeout was raised while a later page was open.
+            # A sensor's timeout or a keep-on group changed while a later page was open.
             return self._show_scheduled_light_side_form(side, None, errors)
         result, errors = await self._resolve_and_create(
             entity_type=ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -4108,8 +4127,12 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if self._cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
             return await self._finish_scheduled_light()
         data = pending["data"]
-        # A sensor's timeout may have been raised while this page was open.
-        if errors := _validate_light_timeout(self.hass, data):
+        # A sensor's timeout or a keep-on group may have changed meanwhile.
+        if errors := _stale_light_settings(
+            self.hass,
+            {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **data},
+            self._hold_exclusions(),
+        )[1]:
             return self._show_light_form(_nest_light(data), errors)
         return self._finish(data)
 
@@ -4577,8 +4600,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if user_input is not None:
             flat.update(user_input)
             errors = _validate_turn_on_selection(self.hass, flat)
-            if not errors and (errors := _validate_light_timeout(self.hass, flat)):
-                # A sensor's timeout was raised while this page was open.
+            if not errors and (
+                errors := _stale_light_settings(
+                    self.hass,
+                    {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
+                    self._hold_exclusions(),
+                )[1]
+            ):
+                # A sensor timeout or keep-on group changed while this page was open.
                 return self._show_light_form(_nest_light(flat), errors)
             if not errors:
                 clean = {k: v for k, v in flat.items() if v is not None}
@@ -4684,11 +4713,13 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
         """Store both settings mappings as one complete options payload."""
         data = {**self._scheduled_light_shared, **self._scheduled_light_settings}
-        side, errors = _stale_light_timeout(
-            self.hass, {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT, **data}
+        side, errors = _stale_light_settings(
+            self.hass,
+            {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT, **data},
+            self._hold_exclusions(),
         )
         if errors:
-            # A sensor's timeout was raised while a later page was open.
+            # A sensor's timeout or a keep-on group changed while a later page was open.
             return self._show_scheduled_light_side_form(side, None, errors)
         return self._finish(data)
 

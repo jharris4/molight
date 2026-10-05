@@ -7689,6 +7689,142 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     assert len(hass.config_entries.async_entries(DOMAIN)) == 3
 
 
+_HOLD_FINAL_PAGES = [
+    "create_selection",
+    "create_wrapped_notice",
+    "create_collision",
+    "scheduled_create_inside",
+    "scheduled_create_collision",
+    "options_selection",
+    "options_wrapped_notice",
+    "scheduled_options_inside",
+    "scheduled_options_selection",
+    "discovery_selection",
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("edited", [True, False], ids=["group_edited", "control"])
+@pytest.mark.parametrize("last_page", _HOLD_FINAL_PAGES)
+async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
+    hass: HomeAssistant, last_page: str, edited: bool
+) -> None:
+    """A keep-on group that gains the light's own light behind a later page
+    would hold it on for good, so the final save sends the form back."""
+    await _setup_night_schedule(hass)
+    member = "light.subject_real"
+    hass.states.async_set(member, "off")
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hass.states.async_set("light.keep", "off", {"entity_id": ["light.spare"]})
+    if last_page.endswith("collision"):
+        hass.states.async_set("light.subject", "off")
+    await setup_entries(hass, _light_entry("Inner", "inner"))
+    flow = hass.config_entries.flow
+    scheduled = last_page.startswith("scheduled")
+    if last_page.startswith("scheduled_options"):
+        entry = _scheduled_light_entry("Subject", "subject")
+    elif last_page.startswith("options"):
+        entry = _light_entry("Subject", "subject")
+    else:
+        entry = None
+    if entry is not None:
+        await setup_entries(hass, entry)
+        flow = hass.config_entries.options
+    hold = {SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["light.keep"]}}
+    select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}}
+    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    members = [member, "light.inner"] if "wrapped" in last_page else [member]
+
+    if last_page == "discovery_selection":
+        result = await _reach_discovery_select(hass, "discover_light")
+        result = await flow.async_configure(
+            result["flow_id"], {CONF_SELECTED_ENTITIES: [member]}
+        )
+        result = await flow.async_configure(
+            result["flow_id"], {**side, **hold, **select}
+        )
+    elif scheduled:
+        if entry is None:
+            result = await _start_create(hass)
+            result = await flow.async_configure(
+                result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+            )
+            first = {SECTION_ADVANCED: {}}
+        else:
+            result = await flow.async_init(entry.entry_id)
+            first = {CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP}
+        result = await flow.async_configure(
+            result["flow_id"],
+            {
+                **first,
+                CONF_NAME: "Subject",
+                CONF_LIGHTS: members,
+                CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            },
+        )
+        result = await flow.async_configure(result["flow_id"], {**side, **hold})
+        assert result["step_id"] == "scheduled_light_inside"
+        if not last_page.endswith("inside"):
+            inside = {**side, SECTION_STANDBY: {}}
+            if last_page.endswith("selection"):
+                inside.update(select)
+            result = await flow.async_configure(result["flow_id"], inside)
+    else:
+        if entry is None:
+            result = await _start_create(hass)
+            result = await flow.async_configure(
+                result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+            )
+            page = {SECTION_ADVANCED: {}}
+        else:
+            result = await flow.async_init(entry.entry_id)
+            page = {}
+        page.update({**side, **hold, CONF_NAME: "Subject", CONF_LIGHTS: members})
+        if last_page.endswith("selection"):
+            page.update(select)
+        result = await flow.async_configure(result["flow_id"], page)
+    assert (
+        result["step_id"]
+        == {
+            "selection": (
+                "scheduled_light_selection" if scheduled else "light_selection"
+            ),
+            "notice": "confirm_wrapped_lights",
+            "collision": "confirm_entity_id",
+            "inside": "scheduled_light_inside",
+        }[last_page.rsplit("_", 1)[-1]]
+    )
+
+    if edited:
+        hass.states.async_set(
+            "light.keep", "off", {"entity_id": ["light.spare", member]}
+        )
+    if last_page.endswith("selection"):
+        user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    elif last_page.endswith("inside"):
+        user_input = {**side, SECTION_STANDBY: {}}
+    elif last_page.endswith("collision"):
+        user_input = {"next_step_id": "entity_id_proceed"}
+    else:
+        user_input = {}
+    result = await flow.async_configure(result["flow_id"], user_input)
+
+    if not edited:
+        assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
+        assert result.get("reason") in (None, "discovery_done")
+        return
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "hold_entity_own"}
+    if last_page == "discovery_selection":
+        assert result["step_id"] == "discover_light_defaults"
+    else:
+        assert result["step_id"] == (
+            "scheduled_light_outside" if scheduled else "light"
+        )
+    if entry is not None:
+        assert CONF_HOLD_ENTITIES not in molight_config(entry)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
 @pytest.mark.parametrize("absent", ["entity_deleted", "not_set_up"])
