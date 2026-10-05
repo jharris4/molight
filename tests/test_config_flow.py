@@ -7592,6 +7592,58 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
+@pytest.mark.parametrize("absent", ["entity_deleted", "not_set_up"])
+async def test_a_light_entry_without_its_light_entity_keeps_its_lights(
+    hass: HomeAssistant, scheduled: bool, absent: str
+) -> None:
+    """Its lights stay its own until the entry itself is deleted."""
+    await _setup_night_schedule(hass)
+    hass.states.async_set("light.hall_real", "off")
+    hass.states.async_set("light.spare", "off")
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    hall = (
+        _scheduled_light_entry("Hall", "hall")
+        if scheduled
+        else _light_entry("Hall", "hall")
+    )
+    if absent == "entity_deleted":
+        await setup_entries(hass, hall)
+        er.async_get(hass).async_remove("light.hall")
+        await hass.async_block_till_done()
+    else:
+        hall.add_to_hass(hass)
+    page = {
+        **EMPTY_LIGHT_CREATE_SECTIONS,
+        CONF_NAME: "Other",
+        CONF_LIGHTS: ["light.hall_real"],
+        CONF_LIGHT_TIMEOUT: 60,
+    }
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    assert result["errors"] == {CONF_LIGHTS: "light_shared"}
+    fresh = await _start_create(hass)
+    fresh = await hass.config_entries.flow.async_configure(
+        fresh["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    assert "light.hall_real" in _selector_config(fresh, CONF_LIGHTS)["exclude_entities"]
+    discovery = await _reach_discovery_select(hass, "discover_light")
+    assert _offered_candidates(discovery) == {"light.spare"}
+
+    assert await hass.config_entries.async_remove(hall.entry_id)
+    await hass.async_block_till_done()
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], page)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
 _WRAP_FORMS = [
     "create",
     "create_selection",

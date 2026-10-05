@@ -432,21 +432,31 @@ def shared_lights(
 ) -> dict[str, str]:
     """Return lights among these members another virtual light commands.
 
-    Maps each such light to that virtual light's entity id. Two virtual
-    lights commanding one light fight over it, so each light belongs to one;
-    a light under a wrapped virtual light is that light's, not the wrapper's.
+    Maps each such light to that virtual light's entity id, or its entry's
+    title while it has no light entity. Two virtual lights commanding one
+    light fight over it, so each light belongs to one; a light under a
+    wrapped virtual light is that light's, not the wrapper's.
     """
     lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
+    names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
     mine = lights_commanded(hass, members, lights)
     shared: dict[str, str] = {}
-    for entity_id, entry in sorted(lights.items()):
-        if entry.entry_id == own_entry_id:
-            continue
+    # An entry whose light entity was deleted or not yet set up still has its lights.
+    owners = sorted(
+        (
+            (names.get(entry.entry_id, entry.title), entry)
+            for entry in hass.config_entries.async_entries(DOMAIN)
+            if molight_config(entry).get(CONF_ENTITY_TYPE) in MEMBER_LIGHT_TYPES
+            and entry.entry_id != own_entry_id
+        ),
+        key=lambda owner: owner[0],
+    )
+    for name, entry in owners:
         theirs = lights_commanded(
             hass, molight_config(entry).get(CONF_LIGHTS, []), lights
         )
         for light in sorted(mine & theirs):
-            shared.setdefault(light, entity_id)
+            shared.setdefault(light, name)
     return shared
 
 
