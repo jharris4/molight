@@ -17,7 +17,7 @@ The examples build on each other:
 11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
 12. [Porch light with standby](#example-12-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
 
-See the [README](README.md#entity-reference) for the full field reference.
+See [REFERENCE.md](REFERENCE.md) for the full field reference.
 
 ---
 
@@ -417,7 +417,7 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
 - Switching the porch off by hand turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby color without a brightness.
-- See the [README](README.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
+- See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---
 

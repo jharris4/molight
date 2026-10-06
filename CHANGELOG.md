@@ -25,10 +25,10 @@ Remote buttons.
   load. The exception is a Virtual Light inside a light group that contains
   it: it never lit its bulbs, and it now stops controlling that group.
 - **Schedule windows that pair a sun event with a fixed time** now follow
-  Home Assistant's own sun and time conditions (README, "Overnight windows").
-  A window from a sun event to a fixed time early the next day, such as
-  *sunrise → 01:00*, is now always empty; invert *01:00 → sunrise* instead. A
-  schedule saved with a window that never opens logs a warning.
+  Home Assistant's own sun and time conditions (REFERENCE.md, "Overnight
+  windows"). A window from a sun event to a fixed time early the next day,
+  such as *sunrise → 01:00*, is now always empty; invert *01:00 → sunrise*
+  instead. A schedule saved with a window that never opens logs a warning.
 
 ### Added
 
@@ -76,13 +76,14 @@ Remote buttons.
   again, instead of being recorded as a manual off.
 - **False detections**: only a light that the false detection itself lit gets
   the quick off; a blip after a genuine visit keeps that visit's countdown.
-- **Doors**: an `open_close` door sensor that stays `unavailable` for 60
-  seconds, such as one with a dead battery, counts as closed instead of
-  holding the light on until a restart.
-- **Illuminance**: in *Gate* mode, brightness only stops an off light turning
-  on. When the sensor saw the lamp, the light turned off over people still
-  moving and came back once the room read dark. Going dark after brightness
-  turned a light off brings it back for the rest of its countdown.
+- **Doors**: a door sensor in *Open & close* door mode that stays
+  `unavailable` for 60 seconds, such as one with a dead battery, counts as
+  closed instead of holding the light on until a restart.
+- **Illuminance**: with the illuminance mode set to *Gate only*, brightness
+  only stops an off light turning on. When the sensor saw the lamp, the light
+  turned off over people still moving and came back once the room read dark.
+  Going dark after brightness turned a light off brings it back for the rest
+  of its countdown.
 - **Schedules**: a window with a sun event on one edge and a fixed time on
   the other no longer runs round the clock once the sun event passes the
   fixed time; *sunset → 21:00* was on almost all day in summer. Changing a
@@ -274,7 +275,8 @@ longer needs a custom repository.
 
 - Color support for virtual lights, including automatic-on, effect and warning
   colors.
-- Door sensor support: an `open_close` entity can turn a light on and hold it.
+- Door sensor support: with the door mode set to *Open & close*, a door can
+  turn a light on and hold it.
 - Area and label filters plus a select-all toggle as the first step of bulk
   discovery.
 - [EXAMPLES.md](EXAMPLES.md), with worked end-to-end configurations.
