@@ -8,25 +8,28 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 
 | Entity | What it does |
 |---|---|
-| [Virtual Occupancy Sensor](REFERENCE.md#virtual-occupancy-binary-sensor) | Wraps one motion/presence sensor; estimates when the person *actually left* |
-| [Virtual Combined Occupancy Sensor](REFERENCE.md#virtual-combined-occupancy-binary-sensor) | Merges several occupancy sensors with trigger/maintain roles |
-| [Virtual Illuminance Sensor](REFERENCE.md#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
-| [Virtual Schedule Sensor](REFERENCE.md#virtual-schedule-binary-sensor) | Reusable schedule signal from a time/sun window or another binary sensor, optionally inverted |
-| [Virtual Combined Schedule Sensor](REFERENCE.md#virtual-combined-schedule-binary-sensor) | Combines schedules with any/all logic, e.g. a morning and an evening window for one lamp |
-| [Virtual Light](REFERENCE.md#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
-| [Virtual Scheduled Light](REFERENCE.md#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it |
-| [Virtual Remote](REFERENCE.md#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to light actions, with no automations |
+| [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-binary-sensor) | Wraps one motion/presence sensor; estimates when the person *actually left* |
+| [Virtual Combined Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-combined-occupancy-binary-sensor) | Merges several occupancy sensors with trigger/maintain roles |
+| [Virtual Illuminance Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-binary-sensor) | Turns a lux reading into a steady bright/dark signal |
+| [Virtual Schedule Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-schedule-binary-sensor) | Reusable schedule signal from a time/sun window or another binary sensor, optionally inverted |
+| [Virtual Combined Schedule Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-combined-schedule-binary-sensor) | Combines schedules with any/all logic, e.g. a morning and an evening window for one lamp |
+| [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
+| [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it, optionally resting at a standby level |
+| [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to light actions, with no automations |
 
 **Highlights** (everything below is covered by the automated test suite):
 
-- Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's own hold time, not the moment it happens to clear.
-- Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified and never cut short lights the user turned on.
-- Turn-ons can be gated on darkness and/or a schedule window; getting bright can force lights off (or not, for lux sensors that can see the lights they control).
-- Follow-mode schedules give porch-light behavior (on at window start, off at window end) while respecting manual overrides mid-window.
-- Optional effect/warn warning: blink or dim before an automatic turn-off, then a grace period to re-trigger, instead of sudden darkness.
-- Every virtual light gets a companion **Auto-off switch**, and any on/off entity can act as a **keep-on hold** (guest mode, movie night) that suspends automatic turn-offs.
-- Restarts and `unavailable` sources are handled everywhere: missed follow-mode and Virtual Scheduled Light boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion or door sensor can't hold lights on forever.
-- Virtual Remotes replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (IKEA Bilresa, Hue dimmer, and others, plus Lutron Picos via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
+- Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's own hold time, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-binary-sensor)).
+- Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified and never cut short lights the user turned on (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).
+- A [maintain sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on.
+- Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-binary-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); getting bright can force lights off (or not, for lux sensors that can see the lights they control).
+- Follow-mode schedules give porch-light behavior (on at window start, off at window end) while respecting manual overrides mid-window, and a [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) swaps a whole settings set inside and outside a schedule, optionally resting at a dim [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) level instead of turning off.
+- A [door sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#door-sensor) lights a pantry or closet when the door opens, or holds it while the door stands open.
+- Automatic turn-ons can carry their own [brightness, color and fade](https://github.com/jharris4/molight/blob/main/REFERENCE.md#brightness-color-and-fades), and can apply a preset through a `select` entity first, such as a WLED preset (see [Turn-on selection](https://github.com/jharris4/molight/blob/main/REFERENCE.md#turn-on-selection)).
+- Optional [effect/warn warning](https://github.com/jharris4/molight/blob/main/REFERENCE.md#effect--warn-warning): blink or dim before an automatic turn-off, then a grace period to re-trigger, instead of sudden darkness.
+- Every virtual light gets a companion **Auto-off switch**, and any on/off entity can act as a **keep-on hold** (guest mode, movie night) that suspends automatic turn-offs (see [Holding auto-off](https://github.com/jharris4/molight/blob/main/REFERENCE.md#holding-auto-off)). A virtual light can also [control other virtual lights](https://github.com/jharris4/molight/blob/main/REFERENCE.md#wrapping-another-virtual-light).
+- [Restarts and `unavailable` sources](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability) are handled everywhere: missed follow-mode and Virtual Scheduled Light boundaries are applied exactly once, sensor blips are never misread as state changes, and a dead motion or door sensor can't hold lights on forever.
+- [Virtual Remotes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) replace hand-written button automations: map single/double clicks of any remote whose buttons appear as `event` entities (IKEA Bilresa, Hue dimmer, and others, plus Lutron Picos via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) to on/off/toggle/dim/preset actions, with the single-vs-double vocabulary read from each button itself.
 
 ## Installation
 
@@ -55,9 +58,9 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 
 The usual order:
 
-1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. It's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](REFERENCE.md#virtual-occupancy-binary-sensor)).
+1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. It's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-binary-sensor)).
 2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
-3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](REFERENCE.md#virtual-remote)).
+3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
 Order matters only in that a virtual entity must exist before another can reference it. Sensors are reusable: one occupancy or illuminance sensor can serve many lights. Every entry can be edited later via its **Configure** button, or removed independently.
@@ -69,7 +72,7 @@ Every entity except a Virtual Remote can be given an **Entity ID** when it is cr
 - **Leave it blank** to derive the ID from the name. If that ID is already taken, the flow warns you and offers to proceed (HA appends `_2`) or go back, prefilled, and set one yourself.
 - **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting ID re-shows the form with an error. A virtual light's pinned ID also shapes its companion switch: `light.kitchen` → `switch.kitchen_auto_off`.
 
-The field only appears when creating. Renaming later works through each entry's **Configure** button (every edit form has a **Name** field, and the entry title follows it), while the entity ID stays put (change that via HA's own entity settings). MoLight follows an entity ID changed there, of a virtual entity or of a real one it uses: see [Restarts and unavailability](REFERENCE.md#restarts-and-unavailability).
+The field only appears when creating. Renaming later works through each entry's **Configure** button (every edit form has a **Name** field, and the entry title follows it), while the entity ID stays put (change that via HA's own entity settings). MoLight follows an entity ID changed there, of a virtual entity or of a real one it uses: see [Restarts and unavailability](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability).
 
 ### Bulk discovery
 
@@ -112,17 +115,17 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 **Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
 - **Gated → scheduled**: available for Virtual Lights with any gate behavior and a schedule sensor. Each light retains its own schedule. Its current settings become the inside-schedule profile; the outside profile keeps its timing, appearance, warnings, turn-on selection, and keep-on entities but starts without occupancy, maintain, illuminance, or door inputs. Turn-off, switch-state, and keep-state gates map to the same-named schedule-end actions. This creates a useful starting profile rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
-- **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile and any [standby](REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
+- **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
 
 Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting a settings policy.
 
 ## Examples
 
-For worked examples with the exact field values to enter, see [EXAMPLES.md](EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, and a porch light that rests at standby all night.
+For worked examples with the exact field values to enter, see [EXAMPLES.md](https://github.com/jharris4/molight/blob/main/EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, and a porch light that rests at standby all night.
 
 ## Reference
 
-[REFERENCE.md](REFERENCE.md) describes every field, attribute and edge case of each entity, and ends with the design notes. [CONTRIBUTING.md](CONTRIBUTING.md) covers the dev container, the tests and the release process.
+[REFERENCE.md](https://github.com/jharris4/molight/blob/main/REFERENCE.md) describes every field, attribute and edge case of each entity, and ends with the design notes. [CONTRIBUTING.md](https://github.com/jharris4/molight/blob/main/CONTRIBUTING.md) covers the dev container, the tests and the release process.
 
 ## Troubleshooting
 
@@ -140,7 +143,7 @@ MoLight writes no debug logs. It logs an error when discovery fails to create an
 
 To see why a light did what it did, read these attributes in **Developer tools → States**:
 
-- `molight_state` on the virtual light: its [state-machine](REFERENCE.md#state-machine) state.
+- `molight_state` on the virtual light: its [state-machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine) state.
 - `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.
 - `auto_off_held` on the virtual light: whether the Auto-off switch or a keep-on entity is holding automatic turn-offs.
 - `schedule_window_start`, `bright_forced_off` with `bright_resume_until` and, on a Virtual Scheduled Light, `active_settings`: the follow-mode window marker, whether brightness forced the light off and until when going dark resumes it, and which settings profile is live.
