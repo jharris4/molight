@@ -65,6 +65,33 @@ The usual order:
 
 Order matters only in that a virtual entity must exist before another can reference it. Sensors are reusable: one occupancy or illuminance sensor can serve many lights. Every entry can be edited later via its **Configure** button, or removed independently.
 
+### A typical first setup
+
+The simplest useful setup is a hallway with one motion sensor, where the light turns off a bit after you leave. It takes two entries, each created via **Add entry → Create a single entity**; fields not listed keep their defaults.
+
+**1. Virtual Occupancy Sensor**: wraps the real motion sensor
+
+```text
+Name:                 Hallway Occupancy        # → binary_sensor.hallway_occupancy
+Source sensor:        binary_sensor.hallway_motion
+Occupancy timeout:    30      # my sensor holds "on" ~30s after last motion
+False-detection grace: 5      # a single instantaneous blip = fly/heat, ignored
+Clear after unavailable: 60   # if the sensor dies, don't hold lights forever
+```
+
+**2. Virtual Light**: points at the real light, references the sensor above
+
+```text
+Name:              Hallway                     # → light.hallway  (pin the Entity ID
+Lights to control: light.hallway_real          #    field if it clashes with the real one)
+Turn-off timeout:  60         # 60s after you actually left
+Occupancy sensor:  binary_sensor.hallway_occupancy
+```
+
+Walk in → lights on. Room empties → 60s countdown anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on by hand and it still turns off after the room empties, but a false blip never cuts short a manual on.
+
+For more worked examples with the exact field values to enter, see [EXAMPLES.md](https://github.com/jharris4/molight/blob/main/EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, and a porch light that rests at standby all night.
+
 ### Choosing the entity ID
 
 Every entity except a Virtual Remote can be given an **Entity ID** when it is created. The field is optional and is the last one on the form that asks for the name (on a Virtual Scheduled Light, the first of its three forms). It is handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior. (A remote entry's only entity is its diagnostic sensor, whose ID derives from the name.) On the sensor forms this field sits in a collapsed **Advanced** section, along with less-common options like the false-detection grace:
@@ -118,10 +145,6 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 - **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule profile becomes the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding turn-off, switch-state, or keep-state behavior is selected. The outside-schedule profile and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
 
 Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting a settings policy.
-
-## Examples
-
-For worked examples with the exact field values to enter, see [EXAMPLES.md](https://github.com/jharris4/molight/blob/main/EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, and a porch light that rests at standby all night.
 
 ## Reference
 

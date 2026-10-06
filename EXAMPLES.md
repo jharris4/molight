@@ -1,6 +1,14 @@
 # MoLight configuration examples
 
-MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios, from the simplest case to the full toolbox. Every create form starts with a **Name** (the entity ID derives from it), and all but the Virtual Remote's end with an optional **Entity ID** override if you want to pin it.
+MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios, from the simplest case to the full toolbox.
+
+## How to use these examples
+
+- Each example is a list of entries to create, in the order shown: a light can only reference a sensor that already exists.
+- For each entry, go to **Settings → Devices & Services → MoLight → Add entry → Create a single entity**, pick the type named in the entry's bold heading, and fill in the fields listed. The `# comments` explain the choices.
+- Fields that aren't listed keep their defaults. Some sit in collapsed sections of the form (**Advanced** on the sensor forms; **Turn-on & turn-off behavior**, **Off warning sequence** and **Advanced** on the light forms); expand a section to find its fields.
+- Every create form starts with a **Name**, which the entity ID derives from. All but the Virtual Remote's also offer an optional **Entity ID** field, the last one on the form that asks for the name, to pin the ID yourself.
+- Entity IDs such as `light.hallway_real` stand for your own entities.
 
 The examples build on each other:
 
