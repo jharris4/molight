@@ -23,17 +23,17 @@
       },
       "convert_to_scheduled": {
         "title": "Convert gated lights",
-        "description": "Select one or more gated Virtual Lights. Each light keeps its own schedule. Its current settings become the inside-schedule profile; its outside profile retains manual behavior but starts without automatic sensor inputs.",
+        "description": "Select one or more gated Virtual Lights. Each light keeps its own schedule. Its current settings become the inside-schedule settings; its outside-schedule settings keep manual behavior but start without automatic sensor inputs.",
         "data": {
           "convert_lights": "Gated lights"
         },
         "data_description": {
-          "convert_lights": "Each choice shows the light followed by the schedule that will select its profiles."
+          "convert_lights": "Each choice shows the light followed by the schedule that will select its settings."
         }
       },
       "convert_to_regular": {
         "title": "Convert scheduled lights",
-        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule profile becomes the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings and any standby level will be discarded.",
+        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings and any standby level will be discarded.",
         "data": {
           "convert_lights": "Scheduled lights"
         },
@@ -50,7 +50,7 @@
       },
       "confirm_convert_to_regular": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. Each inside-schedule profile will become the regular light settings, without any standby level; every outside-schedule profile will be permanently discarded.",
+        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. The inside-schedule settings become the regular light settings, without any standby level; the outside-schedule settings are permanently discarded.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
@@ -94,7 +94,7 @@
           "schedule_mode": "Schedule mode"
         },
         "data_description": {
-          "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end."
+          "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone."
         }
       },
       "assign_lights": {
@@ -264,7 +264,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -272,7 +272,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -470,7 +470,7 @@
           },
           "end": {
             "name": "Window end",
-            "description": "A fixed time, a sun event with an optional offset, or both combined. A fixed end at or before a fixed start, or a morning end after an evening start (sunrise counts as morning, sunset as evening), rolls over to the next day (overnight window). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
+            "description": "A fixed time, a sun event with an optional offset, or both. The window runs overnight when a fixed end is at or before a fixed start, or a morning end follows an evening start (sunrise counts as morning, sunset as evening). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
             "data": {
               "time": "Time",
               "sun": "Sun event",
@@ -556,7 +556,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -564,7 +564,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -642,7 +642,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "When the schedule ends, Keep and Switch re-check the outside settings' sensors, and so does Turn off for a light that is already off. Turn off: an on light goes off and stays off until an outside sensor next changes. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
+          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until an outside sensor next changes. Switch state: its state and timer are recalculated from the outside sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside sensors in every case."
         },
         "sections": {
           "advanced": {
@@ -837,7 +837,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the next schedule boundary: a window starting or ending, including one window starting as another ends and midnight on an all-day schedule. For no standby, leave the brightness blank and set the color mode to None.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer runs out. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -879,7 +879,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with any remote control whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...). Lutron Caséta Picos need the lutron-caseta-events integration installed to expose their buttons as event entities. Bind single or double clicks to actions; whether a button supports double clicks is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
+        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
@@ -1002,7 +1002,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors, stages and schedule, and runs them by itself inside this light. When a wrapped light's timer runs out, it turns off and the room goes dark, even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       }
     },
     "error": {
@@ -1036,7 +1036,7 @@
       "color_temp_unsupported_pick": "{entity_id} does not support a white color temperature, and every discovered light gets its own entry with these settings. Clear the color temperature (set its color mode to None), or deselect it.",
       "color_unsupported_pick": "{entity_id} cannot show a color, and every discovered light gets its own entry with these settings. Clear the color fields (set their color mode to None), or deselect it.",
       "brightness_unsupported_pick": "{entity_id} is not dimmable, and every discovered light gets its own entry with these settings. Clear the brightness setting, or deselect it. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
-      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two settings profiles has its own sensors. Configure those through the light's own Configure button instead.",
+      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two sets of settings has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "discovery_picks_overlap": "{first} and {second} control the same light, and each pick gets its own virtual light, so the two would fight over it. Pick only one of them.",
@@ -1073,7 +1073,7 @@
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
       "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its options.",
-      "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its settings profiles has its own sensors: set them in its Configure form, or create a Virtual Light first.",
+      "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}.",
       "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
@@ -1182,7 +1182,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "When the schedule ends, Keep and Switch re-check the outside settings' sensors, and so does Turn off for a light that is already off. Turn off: an on light goes off and stays off until an outside sensor next changes. Switch: its state and timer are recalculated from the outside sensors and history. Keep: it keeps only its running timer."
+          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until an outside sensor next changes. Switch state: its state and timer are recalculated from the outside sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside sensors in every case."
         }
       },
       "scheduled_light_outside": {
@@ -1365,7 +1365,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active. The light comes on at the standby level when the schedule starts, occupancy and the door raise it to the auto-on level as usual, and when the timer runs out it returns to standby instead of turning off (after any warning stages). A manual off turns standby off until the next schedule boundary: a window starting or ending, including one window starting as another ends and midnight on an all-day schedule. For no standby, leave the brightness blank and set the color mode to None.",
+            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer runs out. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the color mode to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1497,7 +1497,7 @@
           },
           "end": {
             "name": "Window end",
-            "description": "A fixed time, a sun event with an optional offset, or both combined. A fixed end at or before a fixed start, or a morning end after an evening start (sunrise counts as morning, sunset as evening), rolls over to the next day (overnight window). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
+            "description": "A fixed time, a sun event with an optional offset, or both. The window runs overnight when a fixed end is at or before a fixed start, or a morning end follows an evening start (sunrise counts as morning, sunset as evening). A sun event that passes a fixed time in the same half of the day leaves the window empty that day.",
             "data": {
               "time": "Time",
               "sun": "Sun event",
@@ -1561,7 +1561,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
-              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window. At its end, a light that is still on is turned off, recalculated from current illuminance, presence, and occupancy history, or left alone, depending on the mode you pick. Switch/keep also let occupancy and the door hold an on light past the end.",
+              "schedule_mode": "Follow: the window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "door_entity": "Optional. A door/contact binary sensor; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1569,7 +1569,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before MoLight turns the lights on. Manual control is never affected, except that the turn-on selection also covers manual Virtual Light turn-ons (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -1639,7 +1639,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors, stages and schedule, and runs them by itself inside this light. When a wrapped light's timer runs out, it turns off and the room goes dark, even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       },
       "remote": {
         "title": "Virtual Remote",
