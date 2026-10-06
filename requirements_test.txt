@@ -2,6 +2,6 @@
 # pytest-cov, ...) and the Home Assistant version it tracks, so this one pin
 # fixes them all. CI also runs the declared floor and the latest release;
 # see the pytest matrix in .github/workflows/ci.yml.
-pytest-homeassistant-custom-component==0.13.367
+pytest-homeassistant-custom-component==0.13.368
 # Pinned: `select = ["ALL"]` means new ruff releases can add rules and break CI
 ruff==0.16.10
