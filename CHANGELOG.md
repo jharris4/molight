@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-06
+
 This release adds **standby** for Virtual Scheduled Lights and makes sure each
 light is controlled by only one virtual light. It also carries a large round of
 fixes for restarts, renamed or deleted entities, slow turn-on selects, long and
@@ -359,7 +361,8 @@ Initial release.
   with startup-specific handling for lights, occupancy and illuminance.
 - HACS and hassfest validation, CI, and a brand icon.
 
-[Unreleased]: https://github.com/jharris4/molight/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/jharris4/molight/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/jharris4/molight/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jharris4/molight/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jharris4/molight/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/jharris4/molight/compare/v1.5.0...v1.6.0
