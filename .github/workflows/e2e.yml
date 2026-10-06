@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: "30 0 * * *"
   workflow_dispatch:
+    inputs:
+      # The Home Assistant bump workflow sets it on its PRs; see ha-bump.yml.
+      pinned_only:
+        description: Only the PR jobs, on the pinned Home Assistant
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,7 +28,7 @@ env:
 jobs:
   current:
     name: Live E2E (HA current)
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.pinned_only
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
@@ -45,7 +51,7 @@ jobs:
 
   restarts:
     name: Restart scenarios (HA current)
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.pinned_only
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
@@ -67,7 +73,7 @@ jobs:
 
   scenarios:
     name: Behavior scenarios ${{ matrix.shard }} (HA current)
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.pinned_only
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
@@ -93,7 +99,7 @@ jobs:
 
   browser:
     name: Browser smoke (HA current)
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || inputs.pinned_only
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
@@ -124,7 +130,7 @@ jobs:
 
   compatibility:
     name: Live E2E (${{ matrix.ref && format('{0}, ', matrix.ref) }}${{ matrix.ha.label }}, ${{ matrix.suite }})
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && !inputs.pinned_only
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     continue-on-error: ${{ matrix.ha.experimental }}

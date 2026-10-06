@@ -22,6 +22,8 @@ npm test
 
 `npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13), so a test that passes locally can still fail there, and, as an advisory leg, on the newest version `pytest-homeassistant-custom-component` targets, which is often a beta.
 
+A daily workflow opens a PR when a newer stable Home Assistant is out, moving that pin and the e2e image in `tests/e2e/env.sh` together, and runs pytest and every e2e suite on the new version only. `scripts/ha-bump` previews the same bump locally.
+
 ## Releasing
 
 Development is done on the `develop` branch. Start a release by fast-forwarding

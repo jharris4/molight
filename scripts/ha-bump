@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Move the pinned Home Assistant to the newest stable release.
+
+Usage: scripts/ha-bump            # preview only
+       scripts/ha-bump --write    # apply
+
+One release is pinned in two places: the test package in requirements_test.txt
+(each of its releases pins one Home Assistant) and the e2e image in
+tests/e2e/env.sh. Betas are skipped, and a release whose test package is not out
+yet waits for it. Under GitHub Actions, --write also hands the versions to the
+next steps; see .github/workflows/ha-bump.yml.
+"""
+
+import json
+import os
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+REQUIREMENTS = ROOT / "requirements_test.txt"
+E2E_ENV = ROOT / "tests/e2e/env.sh"
+PYPI = "https://pypi.org/pypi"
+TEST_PACKAGE = "pytest-homeassistant-custom-component"
+TEST_PACKAGE_PIN = re.compile(rf"^{TEST_PACKAGE}==(\S+)$", re.MULTILINE)
+E2E_PIN = re.compile(r"^MOLIGHT_E2E_HA_VERSION=(\S+)$", re.MULTILINE)
+HA_REQUIREMENT = re.compile(r"^homeassistant\s*==\s*([^\s;,]+)")
+
+
+def fail(msg: str) -> None:
+    """Abort with a one-line error message."""
+    sys.exit(f"error: {msg}")
+
+
+def fetch_json(url: str) -> dict:
+    """Return a PyPI JSON document."""
+    with urllib.request.urlopen(url, timeout=30) as response:
+        return json.load(response)
+
+
+def ha_key(version: str) -> tuple[int, int, int, int, int] | None:
+    """Return a sort key for a Home Assistant release or beta, else None."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:b(\d+))?", version)
+    if match is None:
+        return None
+    year, month, patch, beta = match.groups()
+    # A release sorts after its betas.
+    stage = (0, int(beta)) if beta is not None else (1, 0)
+    return int(year), int(month), int(patch), *stage
+
+
+def package_key(version: str) -> tuple[int, ...] | None:
+    """Return a sort key for a plain x.y.z test package release, else None."""
+    if not re.fullmatch(r"\d+(?:\.\d+)*", version):
+        return None
+    return tuple(int(part) for part in version.split("."))
+
+
+def _released(files: list[dict]) -> bool:
+    """Return whether a PyPI release has files and none of them are yanked."""
+    return bool(files) and not any(file.get("yanked") for file in files)
+
+
+def newest_stable_ha() -> str:
+    """Return the newest stable Home Assistant release on PyPI."""
+    releases = fetch_json(f"{PYPI}/homeassistant/json")["releases"]
+    stable = [
+        version
+        for version, files in releases.items()
+        if re.fullmatch(r"\d+\.\d+\.\d+", version) and _released(files)
+    ]
+    if not stable:
+        fail("PyPI lists no stable Home Assistant release")
+    return max(stable, key=ha_key)
+
+
+def test_package_for(ha_version: str, pinned: str) -> str | None:
+    """Return the newest test package release pinning ha_version, else None."""
+    target = ha_key(ha_version)
+    releases = fetch_json(f"{PYPI}/{TEST_PACKAGE}/json")["releases"]
+    pinned_key = package_key(pinned)
+    newer = [
+        version
+        for version, files in releases.items()
+        if (key := package_key(version)) is not None
+        and pinned_key is not None
+        and key > pinned_key
+        and _released(files)
+    ]
+    for version in sorted(newer, key=package_key, reverse=True):
+        info = fetch_json(f"{PYPI}/{TEST_PACKAGE}/{version}/json")["info"]
+        for requirement in info.get("requires_dist") or []:
+            match = HA_REQUIREMENT.match(requirement)
+            if match is None:
+                continue
+            key = ha_key(match.group(1))
+            if key == target:
+                return version
+            # Newest first: once the pins drop below the target, none match.
+            if key is not None and target is not None and key < target:
+                return None
+    return None
+
+
+def _pin(path: Path, pattern: re.Pattern[str]) -> str:
+    """Return the single version pattern captures in a file."""
+    matches = pattern.findall(path.read_text())
+    if len(matches) != 1:
+        fail(f"expected one pin in {path.relative_to(ROOT)}, found {len(matches)}")
+    return matches[0]
+
+
+def _replace(path: Path, pattern: re.Pattern[str], line: str) -> None:
+    """Replace the single line pattern matches in a file."""
+    path.write_text(pattern.sub(line, path.read_text(), count=1))
+
+
+def main() -> None:
+    """Preview or apply the bump to the newest stable Home Assistant."""
+    args = sys.argv[1:]
+    if args not in ([], ["--write"]):
+        fail("usage: scripts/ha-bump [--write]")
+    write = args == ["--write"]
+
+    current = _pin(E2E_ENV, E2E_PIN)
+    current_package = _pin(REQUIREMENTS, TEST_PACKAGE_PIN)
+    newest = newest_stable_ha()
+    current_key, newest_key = ha_key(current), ha_key(newest)
+    if current_key is None:
+        fail(f"tests/e2e/env.sh pins '{current}', not a Home Assistant release")
+    if newest_key is None or newest_key <= current_key:
+        print(f"Home Assistant {current} is the newest stable release.")
+        return
+    package = test_package_for(newest, current_package)
+    if package is None:
+        print(f"Home Assistant {newest} is out, but {TEST_PACKAGE} has no release")
+        print("for it yet.")
+        return
+
+    print(f"Home Assistant {current} -> {newest}")
+    print(f"{TEST_PACKAGE} {current_package} -> {package}")
+    if not write:
+        print("\nPreview only, nothing written. Apply with: scripts/ha-bump --write")
+        return
+    _replace(REQUIREMENTS, TEST_PACKAGE_PIN, f"{TEST_PACKAGE}=={package}")
+    _replace(E2E_ENV, E2E_PIN, f"MOLIGHT_E2E_HA_VERSION={newest}")
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(output).open("a") as file:
+            file.write(f"previous={current}\nversion={newest}\n")
+
+
+if __name__ == "__main__":
+    main()

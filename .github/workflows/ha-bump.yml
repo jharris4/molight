@@ -1,0 +1,74 @@
+name: Home Assistant bump
+
+# Opens a PR moving the pinned Home Assistant to the newest stable release.
+# Dependabot leaves the test package alone: its releases often target betas,
+# and a bump also moves the e2e image in tests/e2e/env.sh.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Starts CI and E2E on the bump branch; see the last step.
+  actions: write
+
+concurrency:
+  group: ha-bump
+
+jobs:
+  bump:
+    name: Open a bump PR
+    runs-on: ubuntu-26.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: develop
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Find the newest stable Home Assistant
+        id: find
+        run: python scripts/ha-bump --write
+      - name: Open the PR
+        if: steps.find.outputs.version
+        env:
+          PREVIOUS: ${{ steps.find.outputs.previous }}
+          VERSION: ${{ steps.find.outputs.version }}
+        run: |
+          # Fixes pushed by hand to an open bump PR must not be overwritten.
+          open=$(gh pr list --state open --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("ha-bump/"))] | length')
+          if [ "$open" != 0 ]; then
+            echo "A bump PR is still open; merge or close it first."
+            exit 0
+          fi
+          branch="ha-bump/$VERSION"
+          # A closed PR means that release was skipped on purpose.
+          if [ -n "$(gh pr list --state all --head "$branch" --json number --jq '.[].number')" ]; then
+            echo "A PR for $VERSION already exists."
+            exit 0
+          fi
+          if ! docker manifest inspect "ghcr.io/home-assistant/home-assistant:$VERSION" > /dev/null; then
+            echo "The $VERSION image is not published yet."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Bump Home Assistant to $VERSION"
+          # No PR uses the branch, so a leftover from a failed run can go.
+          git push --force origin "$branch"
+          gh pr create --base develop --head "$branch" \
+            --title "Bump Home Assistant to $VERSION" \
+            --body "Moves the pinned Home Assistant from $PREVIOUS to $VERSION: the test package in \`requirements_test.txt\` and the e2e image in \`tests/e2e/env.sh\`.
+
+          The bump workflow started pytest and every e2e suite on $VERSION for this branch.
+
+          Before merging, re-check the native button vocabularies in \`tests/test_remote.py\` against this release."
+          # A PR opened with this token triggers no workflows, but a dispatch does.
+          gh workflow run ci.yml --ref "$branch" -f pinned_only=true
+          gh workflow run e2e.yml --ref "$branch" -f pinned_only=true

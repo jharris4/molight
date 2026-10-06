@@ -9,6 +9,13 @@ on:
     - cron: "0 0 * * *"
   # Release tags run this too; see release.yml.
   workflow_call:
+  # The Home Assistant bump workflow starts it on its PRs; see ha-bump.yml.
+  workflow_dispatch:
+    inputs:
+      pinned_only:
+        description: Only test the pinned Home Assistant
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,6 +23,8 @@ permissions:
 jobs:
   lint:
     name: Lint
+    # A bump PR only moves the pinned Home Assistant.
+    if: ${{ !inputs.pinned_only }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -29,8 +38,32 @@ jobs:
       # The pinned version in the script, not the runner's own shellcheck.
       - run: npm run lint:sh
 
-  test:
+  pinned:
+    name: pytest (pinned)
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: pip install -r requirements_test.txt
+      - name: Report the Home Assistant version under test
+        run: python -c "from importlib.metadata import version; print(version('homeassistant'))"
+      - name: Check the e2e image is on the same Home Assistant
+        run: |
+          e2e=$(sed -n 's/^MOLIGHT_E2E_HA_VERSION=//p' tests/e2e/env.sh)
+          installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
+          if [ "$e2e" != "$installed" ]; then
+            echo "::error::tests/e2e/env.sh pins the e2e image to $e2e but requirements_test.txt installs $installed; update one of them"
+            exit 1
+          fi
+      - run: pytest --cov
+
+  # Separate from the pinned job, which a bump PR runs alone.
+  compatibility:
     name: pytest (${{ matrix.label }})
+    if: ${{ !inputs.pinned_only }}
     runs-on: ubuntu-26.04
     # The newest leg reports an upstream break without turning the build red.
     continue-on-error: ${{ matrix.experimental }}
@@ -43,10 +76,6 @@ jobs:
           - label: HA floor
             python: "3.13"
             spec: pytest-homeassistant-custom-component==0.13.305
-            experimental: false
-          - label: pinned
-            python: "3.14"
-            spec: -r requirements_test.txt
             experimental: false
           # Whatever the newest test package targets, often a beta.
           - label: HA newest
@@ -69,15 +98,6 @@ jobs:
           installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
           if [ "$declared" != "$installed" ]; then
             echo "::error::hacs.json declares $declared but this leg installs $installed; update the pin above or hacs.json"
-            exit 1
-          fi
-      - name: Check the e2e image is on the same Home Assistant
-        if: matrix.label == 'pinned'
-        run: |
-          e2e=$(sed -n 's/^MOLIGHT_E2E_HA_VERSION=//p' tests/e2e/env.sh)
-          installed=$(python -c "from importlib.metadata import version; print(version('homeassistant'))")
-          if [ "$e2e" != "$installed" ]; then
-            echo "::error::tests/e2e/env.sh pins the e2e image to $e2e but requirements_test.txt installs $installed; update one of them"
             exit 1
           fi
       - run: pytest --cov

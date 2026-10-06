@@ -16,6 +16,9 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
+    # Its releases often target betas; ha-bump.yml moves it with the e2e image.
+    ignore:
+      - dependency-name: pytest-homeassistant-custom-component
     groups:
       pip:
         patterns: ["*"]
