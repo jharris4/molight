@@ -9,9 +9,9 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 | Config | Description |
 |---|---|
 | **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded; wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-sensor) |
-| **Occupancy timeout (s)** | Default `120`, range 1 to 3600. The source's own hold time; **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time - timeout` |
-| **False-detection grace (s)** | `0` disables, default `3`, range 0 to 60. A cycle whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection: the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
-| **Clear after unavailable (s)** | `0` disables, default `60`, range 0 to 3600. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection, since the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
+| **Occupancy timeout** | Seconds. Default `120`, range 1 to 3600. The source's own hold time; **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time - timeout` |
+| **False-detection grace** | Seconds. `0` disables, default `3`, range 0 to 60. A cycle whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection: the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off quickly |
+| **Clear after unavailable** | Seconds. `0` disables, default `60`, range 0 to 3600. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection, since the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
 
 > [!IMPORTANT]
 > **Set the occupancy timeout to match the real sensor's actual hold time.** MoLight can't read this from the source. It's a value you supply, and everything downstream is anchored to it: when MoLight decides the person *actually left*, the turn-off countdown, and false-detection classification. Set it too high and genuine occupancy can be misread as a false detection (`on_duration <= timeout + grace`), sending the lights off early via the quick-off path; set it wrong in either direction and turn-off timing drifts from reality.
@@ -56,8 +56,8 @@ Attributes: `latest_occupied_time` (max across all constituents), `last_on_time`
 | Config | Description |
 |---|---|
 | **Source sensor** | Any real `sensor` with `device_class: illuminance` |
-| **Threshold (lx)** | Default `10`, at most 100000. The lux level at which the sensor reports `on`. Must be above `0`, since dark means a reading below it |
-| **Hysteresis (lx)** | `0` disables (the default), at most 10000. Becomes bright at `threshold + hysteresis`, dark below `threshold - hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold. Must be smaller than the threshold: the form rejects a band whose dark edge would sit below `0 lx`, which no sensor can ever report, latching the state bright forever |
+| **Threshold** | Lux. Default `10`, at most 100000. The lux level at which the sensor reports `on`. Must be above `0`, since dark means a reading below it |
+| **Hysteresis** | Lux. `0` disables (the default), at most 10000. Becomes bright at `threshold + hysteresis`, dark below `threshold - hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold. Must be smaller than the threshold: the form rejects a band whose dark edge would sit below `0 lx`, which no sensor can ever report, latching the state bright forever |
 
 An unavailable or unparsable source (including `nan` and `inf`) holds the last known value, since a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
 
@@ -89,7 +89,7 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 |---|---|
 | **Time** | Fixed local time for this edge |
 | **Sun event** | Anchor the edge to **Sunset** or **Sunrise** either instead of the fixed time or alongside it |
-| **Sun offset (min)** | Minutes to shift the sun event; negative is before it (`-15` = 15 min before). Range -720 to 720 |
+| **Sun offset** | Minutes to shift the sun event; negative is before it (`-15` = 15 min before). Range -720 to 720 |
 | **Time vs. sun** | When both are set, whichever this picks wins: **Latest of the two** (`latest`, the default) or **Earliest of the two** (`earliest`) |
 
 e.g. *start at the later of 15 min before sunset and 21:00*.
@@ -160,7 +160,7 @@ At the top level:
 | Config | Description |
 |---|---|
 | **Lights to control** | The `light` entities to control: usually real lights, but another MoLight virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
-| **Turn-off timeout (s)** | Default `300`, range 1 to 14400 (4 h). Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors |
+| **Turn-off timeout** | Seconds. Default `300`, range 1 to 14400 (4 h). Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors |
 
 ***Sensors & triggers*** (expanded):
 
@@ -180,33 +180,33 @@ At the top level:
 
 | Config | Description |
 |---|---|
-| **False-detection off delay (s)** | Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that cycle lit it |
-| **Auto-on brightness (%)** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 |
+| **False-detection off delay** | Seconds. Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that cycle lit it |
+| **Auto-on brightness** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 % |
 | **Auto-on color mode** *(optional)* | Whether automatic turn-ons apply the color temperature below, the color below, or (**None**) neither. Only the selected field is used, and choosing **None** is how a previously set color is cleared, since the color fields themselves can't be blanked once set. Left blank (as it starts while no color is set), both fields are kept as entered, so the form rejects setting both |
-| **Auto-on color temperature (K)** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Range 2000 to 6500 K |
+| **Auto-on color temperature** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Range 2000 to 6500 K |
 | **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Manual and physical turn-ons keep their own color |
 | **Turn-on selection entity** *(optional)* | The target `select` entity to set immediately before MoLight turns the lights on, for example the preset select exposed by WLED. Choosing it opens a second step where the fixed option is selected from the target's currently offered options |
 | **Option source entity** *(optional)* | An `input_select` or a different `select` whose current state supplies the target option at each off-to-on transition. The target itself is excluded. This lets Home Assistant automations, calendars, seasons, or any other logic decide the selection without duplicating that logic in MoLight |
 | **Fixed/fallback option** *(required when a target is selected)* | The option to apply when no source is configured, or when the source is missing, unavailable, unknown, or does not match an option offered by the target. It can represent a preset, theme, mood, mode, or any integration-specific choice |
-| **Auto-on fade (s)** *(optional)* | Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons don't use it; a `transition` passed on the service call is forwarded instead. Range 0 to 300, in 0.1 s steps |
-| **Auto-off fade (s)** *(optional)* | Fade time for automatic turn-offs (timer expiry, bright forcing off, a schedule window ending). A manual off doesn't use it: it is immediate unless the service call passes a `transition` of its own, which is forwarded. Range 0 to 300, in 0.1 s steps |
+| **Auto-on fade** *(optional)* | Seconds. Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons don't use it; a `transition` passed on the service call is forwarded instead. Range 0 to 300, in 0.1 s steps |
+| **Auto-off fade** *(optional)* | Seconds. Fade time for automatic turn-offs (timer expiry, bright forcing off, a schedule window ending). A manual off doesn't use it: it is immediate unless the service call passes a `transition` of its own, which is forwarded. Range 0 to 300, in 0.1 s steps |
 
 ***Off warning sequence*** (collapsed):
 
 | Config | Description |
 |---|---|
-| **Effect warning duration (s)** | Default `0` (disabled), range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
-| **Effect brightness (%)** | Brightness during the effect stage. Default `0`, range 0 to 100. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
+| **Effect warning duration** | Seconds. Default `0` (disabled), range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
+| **Effect brightness** | Brightness during the effect stage. Default `0`, range 0 to 100 %. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
 | **Effect color mode** *(optional)* | Like the auto-on color mode: picks the effect color temperature, the effect color, or **None** (which also clears a previously set effect color) |
-| **Effect color temperature (K)** *(optional)* | White color temperature during the effect stage, for members that support it, giving temp-only bulbs a warning cue too. Requires an effect brightness above `0`. Range 2000 to 6500 K |
+| **Effect color temperature** *(optional)* | White color temperature during the effect stage, for members that support it, giving temp-only bulbs a warning cue too. Requires an effect brightness above `0`. Range 2000 to 6500 K |
 | **Effect color** *(optional)* | RGB color during the effect stage, for members that can show it. Requires an effect brightness above `0` (a blink fully off has no color to show) |
-| **Effect fade (s)** *(optional)* | Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too). Range 0 to 300, in 0.1 s steps |
-| **Warning grace period (s)** | Default `0` (disabled), range 0 to 3600. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
-| **Warning brightness (%)** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one). Range 1 to 100 |
+| **Effect fade** *(optional)* | Seconds. Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too). Range 0 to 300, in 0.1 s steps |
+| **Warning grace period** | Seconds. Default `0` (disabled), range 0 to 3600. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
+| **Warning brightness** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one). Range 1 to 100 % |
 | **Warning color mode** *(optional)* | Like the auto-on color mode: picks the warning color temperature, the warning color, or **None** (which also clears a previously set warning color) |
-| **Warning color temperature (K)** *(optional)* | White color temperature during the grace period, for members that support it. Blank keeps the color the lights already had. Range 2000 to 6500 K |
+| **Warning color temperature** *(optional)* | White color temperature during the grace period, for members that support it. Blank keeps the color the lights already had. Range 2000 to 6500 K |
 | **Warning color** *(optional)* | RGB color during the grace period, e.g. red as an unmissable "about to turn off" cue. Blank keeps the color the lights already had |
-| **Warning fade (s)** *(optional)* | Fade into the warning brightness. Must fit within the grace period. Range 0 to 300, in 0.1 s steps |
+| **Warning fade** *(optional)* | Seconds. Fade into the warning brightness. Must fit within the grace period. Range 0 to 300, in 0.1 s steps |
 
 ### Attributes
 
@@ -534,9 +534,9 @@ Take a porch with a dusk-to-dawn schedule, standby at 1%, auto-on at 100%, a 30 
 
 | Config | Description |
 |---|---|
-| **Standby brightness (%)** *(optional)* | Setting it turns standby on. Range 1 to 100 |
+| **Standby brightness** *(optional)* | Setting it turns standby on. Range 1 to 100 % |
 | **Standby color mode** *(optional)* | Like the auto-on color mode: picks the standby color temperature, the standby color, or **None** (which also clears a previously set standby color) |
-| **Standby color temperature (K)** *(optional)* | White color temperature at standby, for members that support it. Requires a standby brightness. Range 2000 to 6500 K |
+| **Standby color temperature** *(optional)* | White color temperature at standby, for members that support it. Requires a standby brightness. Range 2000 to 6500 K |
 | **Standby color** *(optional)* | RGB color at standby, for members that can show it. Requires a standby brightness |
 
 To turn standby off again, clear the standby brightness and set the standby color mode to **None**: the form refuses a standby color without a brightness.
@@ -573,7 +573,7 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 | Config | Description |
 |---|---|
 | **Lights to control** | The `light` entities every bound button drives (at least one is required) |
-| **Brightness step (%)** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
+| **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
 | **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
 | **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* an **RGB color**; its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
