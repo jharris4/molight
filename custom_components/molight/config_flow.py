@@ -565,8 +565,8 @@ def _schedule_edge_fields() -> dict:
 # their picker is built dynamically below from MoLight schedule config entries.
 # The door sensor is a plain real contact sensor, so its picker is not
 # restricted to MoLight, only to door-ish binary_sensor device classes.
-# Keep-on entities can be anything with an on/off state (input_boolean,
-# switch, binary_sensor, ...), so that picker is not narrowed at all.
+# Keep-on entities can be anything with an on/off state, so that picker is
+# narrowed only to the domains in HOLD_ENTITY_DOMAINS.
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,

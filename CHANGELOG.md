@@ -26,9 +26,11 @@ Remote buttons.
   it: it never lit its bulbs, and it now stops controlling that group.
 - **Schedule windows that pair a sun event with a fixed time** now follow
   Home Assistant's own sun and time conditions (REFERENCE.md, "Overnight
-  windows"). A window from a sun event to a fixed time early the next day,
-  such as *sunrise → 01:00*, is now always empty; invert *01:00 → sunrise*
-  instead. A schedule saved with a window that never opens logs a warning.
+  windows"); *sunset → 21:00* was on almost all day in summer. A window from
+  a sun event to a fixed time early the next day, such as *sunrise → 01:00*,
+  is now always empty; invert *01:00 → sunrise* instead. The schedule form
+  now refuses a window that never opens, and a schedule saved with one logs a
+  warning.
 
 ### Added
 
@@ -36,9 +38,6 @@ Remote buttons.
   rest at a low brightness and color instead of turning off. A dusk-to-dawn
   porch can glow at 1%, come up to 100% when someone walks up, drop back to 1%
   once they leave, and turn off when the schedule ends.
-- **A note on wrapped virtual lights**: when a light form adds another MoLight
-  virtual light, one more page explains that the wrapped light keeps its own
-  timer, sensors and schedule.
 
 ### Changed
 
@@ -49,14 +48,15 @@ Remote buttons.
 - Keep-on entities can no longer be the light itself, a light or group that
   shares its lights, or an entity that never reads `on`, such as a media
   player or a person.
-- Every form rejects a blank Name, and the schedule form rejects a window that
-  never opens at the home location.
+- The integration's class on its Home Assistant page is now **Calculated**: it
+  derives its entities from others rather than talking to a device.
 
 ### Fixed
 
 - **Wrapped virtual lights**: what the wrapped light does by itself, such as
   its timer turning it off, is no longer taken for a change at the wall. It
   recorded a manual off that kept an occupied room dark on the next visit.
+  The light form now explains this when another MoLight light is added.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on, and a light turned
   off by hand no longer comes back on after a restart.
@@ -84,10 +84,8 @@ Remote buttons.
   turned off over people still moving and came back once the room read dark.
   Going dark after brightness turned a light off brings it back for the rest
   of its countdown.
-- **Schedules**: a window with a sun event on one edge and a fixed time on
-  the other no longer runs round the clock once the sun event passes the
-  fixed time; *sunset → 21:00* was on almost all day in summer. Changing a
-  follow-mode light's schedule no longer turns it off.
+- **Schedules**: changing a follow-mode light's schedule no longer turns it
+  off. The sun-event window fix is under Upgrade notes.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
   Gen2 and later, and Z-Wave scene controllers work. *Brightness up* and
   *Brightness down* during a warning step from the brightness before it.

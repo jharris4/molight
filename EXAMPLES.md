@@ -115,13 +115,13 @@ Occupancy sensor:       binary_sensor.living_occupancy    # regular = turns on &
 Maintain occupancy sensor: binary_sensor.living_presence  # only holds an on light on
 Illuminance sensor:     binary_sensor.living_dark_enough
 Illuminance mode:       Control   # dark gates turn-ons AND bright forces off
-Auto-on brightness:     60%       # automatic turn-ons come up at 60%; manual left alone
+Auto-on brightness:     60        # automatic turn-ons come up at 60%; manual left alone
 Turn-on selection entity: select.living_wled_preset
 # The next two fields are asked on a second page after submitting this form:
 Option source entity:      input_select.living_theme  # changed by calendar/automations
 Fixed/fallback option:     Warm White Solid           # picked from WLED's offered options
 Effect warning duration: 3        # 3s "about to turn off" cue...
-Effect brightness:       0%       # ...a blink fully off
+Effect brightness:       0        # ...a blink fully off
 Warning grace period:    20       # then 20s at current brightness to re-trigger
 Warning color:           255, 0, 0   # red: bulbs that can show color turn red for it
 ```
@@ -295,9 +295,9 @@ Auto-on color temperature: 2200                  # warm night light
 
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
-- With this example's **Keep state** choice and profiles, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. An incoming profile with bright illuminance in **Control** mode can still force off under the normal rules.
-- Choose **Switch state** to replace an on light's state and deadline using the outside profile's current sensors/history and 300-second timeout, or **Turn off using the inside settings** when the end of the night schedule window itself should be an automatic off boundary.
-- Every setting can differ per side, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one side and motion simply does nothing there.
+- With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
+- Choose **Switch state** to replace an on light's state and deadline using the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
+- Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
 
 ---
@@ -341,7 +341,7 @@ Brightness up   → Single-click buttons:  event.living_room_buttons_button_1
 Brightness down → Single-click buttons:  event.living_room_buttons_button_2
 ```
 
-Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Lutron buttons, `single_press` vs. `double_press` on HomeKit buttons), so there's nothing to configure, and binding a click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
+Single vs. double is read from each button's own advertised events (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Caséta buttons from lutron-caseta-events, `single_press` vs. `double_press` on HomeKit buttons), so there's nothing to configure, and binding a click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
 
 ---
 
