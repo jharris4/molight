@@ -274,7 +274,7 @@ Window end:
 Name:              Hallway                       # → light.hallway
 Lights to control: light.hallway_real
 Schedule sensor:   binary_sensor.night           # required; off = outside, on = inside
-At schedule end:   Apply outside settings and keep the running state and timer
+At schedule end:   Keep state: apply the outside settings and keep the running timer
 ```
 
 **3. Outside-schedule settings** (daytime and evening, schedule *off*)
@@ -399,7 +399,7 @@ Through Example 4's window the porch glows at 1% and warm, comes up to full brig
 Name:              Porch                         # → light.porch
 Lights to control: light.porch_real
 Schedule sensor:   binary_sensor.porch_schedule  # from Example 4
-At schedule end:   Turn off using the inside settings, then apply outside settings
+At schedule end:   Turn off: turn off with the inside settings, then apply the outside settings
 ```
 
 **2. Outside-schedule settings** (daytime, schedule *off*)

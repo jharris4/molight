@@ -494,7 +494,7 @@ Creation uses three main forms:
    |---|---|
    | **Lights to control** | As for a Virtual Light |
    | **Schedule sensor** | A Virtual Schedule Sensor or a Virtual Combined Schedule Sensor; `off` selects the outside-schedule settings, `on` the inside-schedule settings |
-   | **At schedule end** | What the `on → off` boundary does to a light that is still on, documented below by the short names: **Keep state** (*Apply outside settings and keep the running state and timer*, the default), **Switch state** (*Apply outside settings and switch state*) or **Turn off** (*Turn off using the inside settings, then apply outside settings*) |
+   | **At schedule end** | What the `on → off` boundary does to a light that is still on: **Keep state** (the default), **Switch state** or **Turn off**, described below |
    | **Entity ID** *(optional)* | See [Choosing the entity ID](README.md#choosing-the-entity-id) |
 
 2. Configure the outside-schedule settings.

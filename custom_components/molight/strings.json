@@ -1137,9 +1137,9 @@
     },
     "schedule_end_action": {
       "options": {
-        "turn_off": "Turn off using the inside settings, then apply outside settings",
-        "switch": "Apply outside settings and switch state",
-        "keep": "Apply outside settings and keep the running state and timer"
+        "turn_off": "Turn off: turn off with the inside settings, then apply the outside settings",
+        "switch": "Switch state: apply the outside settings and recalculate the state and timer",
+        "keep": "Keep state: apply the outside settings and keep the running timer"
       }
     },
     "sun_event": {
