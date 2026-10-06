@@ -91,7 +91,7 @@ Occupancy sensor:  binary_sensor.hallway_occupancy
 
 Walk in → lights on. Room empties → 60s countdown anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on by hand and it still turns off after the room empties, but a false blip never cuts short a manual on.
 
-For more worked examples with the exact field values to enter, see [EXAMPLES.md](https://github.com/jharris4/molight/blob/main/EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, and a porch light that rests at standby all night.
+For more worked examples with the exact field values to enter, see [EXAMPLES.md](https://github.com/jharris4/molight/blob/main/EXAMPLES.md). It covers a plain turn-off timer, a single-sensor room, a living room with occupancy, maintain, illuminance, a warning blink and a turn-on selection, a porch light, home-only lighting from an inverted away-mode schedule, a night-only stairs light, a door-driven storage room light, a day/night hallway light, a Pico and a Bilresa remote, a bedside lamp on for a morning and an evening window, a porch light that rests at standby all night, and an open-plan kitchen whose motion sensors merge into one occupancy signal.
 
 ### Choosing the entity ID
 

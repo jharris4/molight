@@ -24,6 +24,7 @@ The examples build on each other:
 10. [Bilresa remote](#example-10-bilresa-two-button-remote-single-vs-double-click): single vs. double clicks
 11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
 12. [Porch light with standby](#example-12-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
+13. [Open-plan kitchen](#example-13-open-plan-kitchen-virtual-combined-occupancy-sensor): two motion sensors and an mmWave sensor merged into one occupancy signal
 
 See [REFERENCE.md](REFERENCE.md) for the full field reference.
 
@@ -426,6 +427,49 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 - Switching the porch off by hand turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
+
+---
+
+### Example 13: Open-plan kitchen (Virtual Combined Occupancy Sensor)
+
+One room, two PIRs that each cover half of it, and an mmWave sensor over the table. Instead of wiring three sensors into the light, merge them into one occupancy signal that any light can use. Four entries, plus the Virtual Light.
+
+**1. to 3. Virtual Occupancy Sensor**: one per real sensor, as in Example 2
+
+```text
+Name:               Kitchen Motion A           # → binary_sensor.kitchen_motion_a
+Source sensor:      binary_sensor.kitchen_pir_a
+Occupancy timeout:  30
+
+Name:               Kitchen Motion B           # → binary_sensor.kitchen_motion_b
+Source sensor:      binary_sensor.kitchen_pir_b
+Occupancy timeout:  30
+
+Name:               Kitchen Table Presence     # → binary_sensor.kitchen_table_presence
+Source sensor:      binary_sensor.kitchen_mmwave
+Occupancy timeout:  120
+```
+
+**4. Virtual Combined Occupancy Sensor**
+
+```text
+Name:              Kitchen Occupancy           # → binary_sensor.kitchen_occupancy
+Trigger sensors:   binary_sensor.kitchen_motion_a, binary_sensor.kitchen_motion_b
+Maintain sensors:  binary_sensor.kitchen_table_presence   # extends occupancy, never starts it
+```
+
+**5. Virtual Light**
+
+```text
+Name:              Kitchen                     # → light.kitchen
+Lights to control: light.kitchen_real
+Turn-off timeout:  180                         # must be >= 120, the largest constituent timeout
+Occupancy sensor:  binary_sensor.kitchen_occupancy
+```
+
+Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's own hold time is respected.
+
+Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on by hand: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a hand-lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
 
 ---
 
