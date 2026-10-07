@@ -158,6 +158,11 @@ jobs:
             slug: stable
             image: ghcr.io/home-assistant/home-assistant:stable
             experimental: true
+          # A week's warning of a break before it ships.
+          - label: HA beta canary
+            slug: beta
+            image: ghcr.io/home-assistant/home-assistant:beta
+            experimental: true
     steps:
       - uses: actions/checkout@v7
         with:

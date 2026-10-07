@@ -168,9 +168,9 @@ the repository, and clears that directory at the start of each run.
 CI runs the live suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
-minimum-supported/current matrix plus an advisory floating `stable` canary;
-the nightly run covers both `main` and `develop`. Release tags run every
-suite on the current and minimum-supported images, and write their release
+minimum-supported/current matrix plus advisory floating `stable` and `beta`
+canaries; the nightly run covers both `main` and `develop`. Release tags run
+every suite on the current and minimum-supported images, and write their release
 notes only after all of them pass. Every CI job uploads what its lane
 retained (the run directory with the HA config and Compose logs, plus
 `tests/e2e/artifacts/browser` for the browser suite) as a workflow artifact
