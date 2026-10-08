@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_RESTORED
-from homeassistant.core import callback
+from homeassistant.core import CoreState, callback
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 
@@ -316,13 +316,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # here (torn down with the entry); its Last Action sensor rides the
         # normal platform forwarding below.
         entry.async_on_unload(async_setup_remote(hass, entry))
-    # The Auto-off switch restores its hold before the light seeds from it:
-    # a light set up while Home Assistant runs seeds as soon as it is added.
-    if "switch" in platforms:
+    # Once running, the Auto-off switch restores first: the light seeds when added.
+    # At startup one call, as HA bills all but the last import wait (core #184898).
+    rest = platforms
+    if hass.state is CoreState.running and "switch" in platforms:
         await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
-    await hass.config_entries.async_forward_entry_setups(
-        entry, [platform for platform in platforms if platform != "switch"]
-    )
+        rest = [platform for platform in platforms if platform != "switch"]
+    await hass.config_entries.async_forward_entry_setups(entry, rest)
 
     # Reload the entry whenever options are updated so entities pick up new values.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.core import CoreState
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -40,6 +41,7 @@ from custom_components.molight.const import (
     SCHEDULE_MODE_FOLLOW,
 )
 from tests.conftest import (
+    finish_startup,
     make_light_entry,
     make_scheduled_light_entry,
     restart_entries,
@@ -129,6 +131,28 @@ async def test_entry_registers_exactly_its_own_entities(
         e.domain for e in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
     assert domains == Counter(TYPE_ENTRIES[entity_type][1])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("running", [False, True], ids=["startup", "running"])
+async def test_light_entry_forwards_in_one_call_at_startup(
+    hass: HomeAssistant, running: bool
+) -> None:
+    """At startup every platform goes in one call: HA bills each earlier call's
+    import wait to MoLight's startup time. Once running, the switch goes first."""
+    entry = _make_entry(ENTITY_TYPE_LIGHT)
+    if not running:
+        hass.set_state(CoreState.starting)
+    with patch.object(
+        hass.config_entries,
+        "async_forward_entry_setups",
+        wraps=hass.config_entries.async_forward_entry_setups,
+    ) as forward:
+        await setup_entries(hass, entry)
+    calls = [sorted(call.args[1]) for call in forward.call_args_list]
+    assert calls == ([["switch"], ["light"]] if running else [["light", "switch"]])
+    if not running:
+        await finish_startup(hass)
 
 
 @pytest.mark.asyncio

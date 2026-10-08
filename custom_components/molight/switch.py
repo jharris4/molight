@@ -7,8 +7,8 @@ turned back on. Turn-ons and manual control are never affected.
 
 The switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies
 the light through the dispatcher, so the coupling doesn't depend on entity
-ids. The entry sets this platform up before the light's, so a light that
-seeds as soon as it is added already reads the restored state.
+ids. Once Home Assistant runs, the entry sets this platform up before the
+light's, so a light that seeds as soon as it is added reads the restored state.
 """
 
 from __future__ import annotations

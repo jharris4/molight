@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from homeassistant.components.light import (
@@ -32,12 +33,14 @@ from homeassistant.core import (
     State,
     callback,
 )
+from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.util import color as color_util
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     mock_restore_cache,
 )
 
+from custom_components.molight import switch
 from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
@@ -56,6 +59,7 @@ from custom_components.molight.const import (
     CONF_STANDBY_BRIGHTNESS,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
+    DOMAIN,
     ILLUMINANCE_MODE_CONTROL,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
@@ -1628,5 +1632,52 @@ async def test_late_setup_with_auto_off_enabled_applies_a_missed_end(
     await stop_entries(hass, entry)
     hass.states.async_set(SCHED, "off")
     calls = await _set_up_late(hass, entry)
+    assert light_targets(calls, "turn_off") == [[REAL]]
+    assert _state(hass).state == "off"
+
+
+# ---------------------------------------------------------------------------
+# Startup sets every platform up at once
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", END_MODES)
+async def test_restart_holds_a_missed_end_for_a_light_added_before_its_switch(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """The light seeds at start, so the switch's saved hold holds an end that
+    passed while held, whichever of the two is added first."""
+    entry = _end_entry(mode, [REAL])
+    real = await _lit_in_window(hass, entry, [REAL])
+    await _auto_off(hass, on=False)
+    hass.states.async_set(SCHED, "off")
+    await settle(hass)
+    assert _state(hass).state == "on"
+    setup_switch = switch.async_setup_entry
+
+    def _light_added() -> bool:
+        return any(
+            platform.domain == "light" and platform.entities
+            for platform in async_get_platforms(hass, DOMAIN)
+        )
+
+    async def _after_light(hass, entry, async_add_entities) -> None:
+        for _ in range(1000):
+            if _light_added():
+                break
+            await asyncio.sleep(0)
+        assert _light_added()
+        await setup_switch(hass, entry, async_add_entities)
+
+    with patch.object(switch, "async_setup_entry", _after_light):
+        calls = await _restart_across_end(hass, entry, real, {REAL: "on"})
+
+    assert hass.states.get(SWITCH).state == "off"
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _end_owed(hass, mode)
+
+    await _auto_off(hass, on=True)
     assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
