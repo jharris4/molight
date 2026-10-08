@@ -7,7 +7,7 @@ export MOLIGHT_E2E_PLAYWRIGHT_VERSION
 
 # The Home Assistant release of the e2e image. CI checks it is the one the
 # pinned test dependencies install, so both layers test the same release.
-MOLIGHT_E2E_HA_VERSION=2026.9.4
+MOLIGHT_E2E_HA_VERSION=2026.10.0
 # "floor" picks the minimum release hacs.json declares.
 if [ "${MOLIGHT_E2E_HA_IMAGE:-}" = floor ]; then
     MOLIGHT_E2E_HA_VERSION="$(sed -n 's/.*"homeassistant": *"\([^"]*\)".*/\1/p' hacs.json)"
