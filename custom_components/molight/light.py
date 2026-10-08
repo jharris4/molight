@@ -415,6 +415,11 @@ def _is_group(state: State | None) -> bool:
     )
 
 
+# A door binary sensor is open while on; a cover stays open until it is closed.
+_DOOR_OPEN_STATES = ("on", "open", "opening", "closing")
+_DOOR_KNOWN_STATES = (*_DOOR_OPEN_STATES, "off", "closed")
+
+
 # What a virtual light stamps when a person changes it, at the wall or through it.
 _HUMAN_STAMPS = (
     "last_on_physical",
@@ -1908,8 +1913,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         With same, a door already known open keeps when it was seen to open.
         """
         was_open = same and self._door_open
-        self._door_open = door is not None and door.state == "on"
-        self._door_seen = door is not None and door.state in ("on", "off")
+        self._door_open = door is not None and door.state in _DOOR_OPEN_STATES
+        self._door_seen = door is not None and door.state in _DOOR_KNOWN_STATES
         if not self._door_open:
             self._door_open_since = None
         elif not was_open or self._door_open_since is None:
@@ -2577,7 +2582,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if entity_id == self._door_entity:
             self._cancel_door_dropout()
             door_was_open = self._door_open
-            self._door_open = new_state.state == "on"
+            self._door_open = new_state.state in _DOOR_OPEN_STATES
             if not self._door_open:
                 self._door_open_since = None
             elif not door_was_open or self._door_open_since is None:
@@ -2585,7 +2590,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # An open door first seen since startup may predate a manual off.
             first_open = self._door_open and recovered and not self._door_seen
             self._door_seen = True
-            if (not recovered or self._door_open != door_was_open) and not (
+            # A cover going from open to closing is still open: no edge.
+            edge = (
+                self._door_open != door_was_open
+                if recovered
+                else self._door_open != (old_state.state in _DOOR_OPEN_STATES)
+            )
+            if edge and not (
                 first_open and self._may_replay_manual_off(new_state, observed=False)
             ):
                 self._on_door_change(self._door_open)

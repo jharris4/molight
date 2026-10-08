@@ -9767,6 +9767,27 @@ _LIGHT_FORMS = [
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("form", _LIGHT_FORMS)
+async def test_light_forms_offer_door_sensors_and_door_covers(
+    hass: HomeAssistant, form: str
+) -> None:
+    """The door picker takes a door binary sensor or a door, garage or gate cover."""
+    hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
+    await _setup_night_schedule(hass)
+    result = await _reach_light_settings_form(hass, form)
+
+    assert _section_selector_config(result, SECTION_SENSORS, CONF_DOOR_ENTITY)[
+        "filter"
+    ] == [
+        {
+            "domain": ["binary_sensor"],
+            "device_class": ["door", "garage_door", "opening", "window"],
+        },
+        {"domain": ["cover"], "device_class": ["door", "garage", "gate"]},
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("form", _LIGHT_FORMS)
 async def test_light_forms_do_not_save_a_sensor_deleted_while_open(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str
 ) -> None:

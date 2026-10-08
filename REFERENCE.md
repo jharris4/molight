@@ -172,7 +172,7 @@ At the top level:
 | **Illuminance mode** | Default **Control** (`control`): dark gates turn-ons AND turning bright forces the lights off. **Gate only** (`gate`): dark gates only turning an off light on; bright never turns lights off, and occupancy and the door hold and re-trigger an on light whatever the reading. Use **Gate only** when the lux sensor can see the controlled lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight schedule: a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor. The picker offers only MoLight schedules; a legacy non-schedule reference from before this narrowing stays selectable until changed |
 | **Schedule mode** | Default **Follow** (`follow`): the window turns the lights on at its start and off at its end (porch lights). The three **Gate** modes let occupancy and the door turn the lights on inside the window only, and differ in what the window's end does to a light that is still on (see [Schedule modes](#schedule-modes)) |
-| **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open). Opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy (see [Door sensor](#door-sensor)) |
+| **Door sensor** *(optional)* | A real door/contact binary sensor (`on` = open), or a door, garage or gate cover (open until `closed`). Opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy (see [Door sensor](#door-sensor)) |
 | **Door mode** | Default **On open** (`open`): opening turns the lights on with the normal timeout; the door is otherwise ignored. **Open & close** (`open_close`): the lights stay on while the door is open and start the countdown when it closes |
 | **Keep-on entities** *(optional)* | Any entities with an on/off state. While any is `on`, auto-off is held (see [Holding auto-off](#holding-auto-off)). A media player, person or climate entity never reads `on`, so the picker leaves them out: wrap one in a template binary sensor. The light's own lights are refused too, as is a light or any group that includes the light or shares one of its lights, since each is on whenever the light is |
 
@@ -332,7 +332,7 @@ The three Gate modes are the same three choices as a Virtual Scheduled Light's *
 
 ### Door sensor
 
-A door sensor drives the light straight from a real door/contact `binary_sensor` (`on` = open), such as a pantry, closet, wardrobe, or garage light. Opening the door is a turn-on trigger, gated by illuminance and a gate-mode schedule exactly like occupancy: it only lights the room when it's dark (if an illuminance sensor is set) and inside a gate window. What happens next depends on the **door mode**:
+A door sensor drives the light straight from a real door/contact `binary_sensor` (`on` = open), such as a pantry, closet, wardrobe, or garage light. A garage door opener, door or gate that Home Assistant has as a `cover` works too: it counts as open in every state but `closed`, so `opening` lights the room and `closing` still holds it. Opening the door is a turn-on trigger, gated by illuminance and a gate-mode schedule exactly like occupancy: it only lights the room when it's dark (if an illuminance sensor is set) and inside a gate window. What happens next depends on the **door mode**:
 
 - **On open** (`open`): opening turns the lights on with the normal turn-off timeout (`ACTIVE`), then the door is ignored. Closing does nothing and the lights time out even if the door stays open. Re-opening re-triggers the timer. Use it as a momentary "someone came through here" trigger. Because only the opening counts, a door already standing open when a gate lifts (the room going dark or a gate-mode schedule window starting) does nothing in this mode; close and re-open it (contrast **Open & close** below).
 - **Open & close** (`open_close`): the open door *holds* the lights on with no timer (`OCCUPIED`, just like occupancy) for as long as it stays open, and closing starts the auto-off countdown.
@@ -342,7 +342,7 @@ A door sensor drives the light straight from a real door/contact `binary_sensor`
   - *Forced offs* (bright in illuminance **Control** mode, a **Gate and turn off** window ending, a manual off) still win over a held-open door, just as they do over occupancy.
   - *An unavailable door sensor:* the door's last known state is cached, so a sensor that blips `unavailable` keeps holding. One that stays `unavailable` for 60 seconds, like a dead battery sensor, counts as closed, as it would at startup: the countdown starts, and an open door it reports later lights the room like one first seen at startup, unless the light was turned off by hand since. A door sensor that is deleted or disabled is no blip: it counts as closed.
 
-The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening, window) rather than to MoLight virtual sensors.
+The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening and window binary sensors; door, garage and gate covers) rather than to MoLight virtual sensors.
 
 ### Holding auto-off
 

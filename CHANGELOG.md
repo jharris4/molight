@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Garage door openers and gates as the door sensor**: a door, garage or gate
+  cover can now drive a Virtual Light, open in every state but closed.
+
 ## [1.9.0] - 2026-10-06
 
 This release adds **standby** for Virtual Scheduled Lights and makes sure each

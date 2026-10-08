@@ -372,7 +372,8 @@ SCHEDULE_END_ACTIONS = [
 ]
 DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 
-# Optional real door/contact binary_sensor (on = open) that drives the light.
+# Optional real door/contact binary_sensor (on = open) or door/garage/gate
+# cover (open until closed) that drives the light.
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
 # like occupancy (only lights up when dark and inside a gate-mode window).
 # door_mode controls what the door state does after that:

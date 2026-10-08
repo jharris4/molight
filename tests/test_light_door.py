@@ -12,7 +12,8 @@ occupancy. door_mode then decides what the door state does afterwards:
 
 The watched entities are plain states set via hass.states.async_set; the
 light only reads their state, so these stay independent of the real
-door/occupancy implementations.
+door/occupancy implementations. Every test runs against a door binary sensor
+(on/off) and a garage door cover (open/closed).
 """
 
 from __future__ import annotations
@@ -43,6 +44,8 @@ from tests.conftest import make_light_entry, settle, setup_entries
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 DOOR = "binary_sensor.door"
+OPEN = "on"
+CLOSED = "off"
 OCC = "binary_sensor.occ"
 MAINT = "binary_sensor.maint"
 ILLUM = "binary_sensor.illum"
@@ -51,6 +54,16 @@ HOLD = "input_boolean.guest"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
+
+
+@pytest.fixture(autouse=True, params=["binary_sensor", "cover"])
+def door_kind(request, monkeypatch) -> str:
+    """Run each test against a door contact sensor and a garage door cover."""
+    if request.param == "cover":
+        monkeypatch.setitem(globals(), "DOOR", "cover.garage_door")
+        monkeypatch.setitem(globals(), "OPEN", "open")
+        monkeypatch.setitem(globals(), "CLOSED", "closed")
+    return request.param
 
 
 def _state(hass: HomeAssistant):
@@ -86,7 +99,7 @@ async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None
     await setup_entries(hass, entry)
 
     freezer.tick(timedelta(seconds=90))
-    hass.states.async_set(DOOR, "on")  # opened
+    hass.states.async_set(DOOR, OPEN)  # opened
     await settle(hass)
     state = _state(hass)
     assert state.state == "on"
@@ -107,11 +120,11 @@ async def test_open_mode_close_is_noop(hass: HomeAssistant, freezer) -> None:
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    hass.states.async_set(DOOR, "off")  # closed, ignored
+    hass.states.async_set(DOOR, CLOSED)  # closed, ignored
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -128,16 +141,16 @@ async def test_open_mode_reopen_retriggers_timer(hass: HomeAssistant, freezer) -
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
 
     # 40s in, re-open: a fresh 60s timer starts.
     freezer.tick(timedelta(seconds=40))
     async_fire_time_changed(hass)
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
@@ -209,7 +222,7 @@ async def _assert_door_open_gating(
         hass.states.async_set(SCHED, sched)
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
 
     state = _state(hass)
@@ -229,7 +242,7 @@ async def test_open_close_holds_while_open(hass: HomeAssistant, freezer) -> None
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")  # opened
+    hass.states.async_set(DOOR, OPEN)  # opened
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -242,7 +255,7 @@ async def test_open_close_holds_while_open(hass: HomeAssistant, freezer) -> None
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # Closing starts the countdown toward off.
-    hass.states.async_set(DOOR, "off")  # closed
+    hass.states.async_set(DOOR, CLOSED)  # closed
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -261,12 +274,12 @@ async def test_open_close_close_defers_to_occupancy(hass: HomeAssistant) -> None
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # Someone walked in and shut the door; occupancy still holds the light.
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -289,7 +302,7 @@ async def test_open_close_occupancy_clear_defers_to_open_door(
     )
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     hass.states.async_set(sensor, "on")
     await settle(hass)
@@ -315,12 +328,12 @@ async def test_open_close_close_defers_to_hold_entity(hass: HomeAssistant) -> No
     hass.states.async_set(HOLD, "on")  # auto-off held
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # Closing moves to COUNTDOWN but the hold means no timer is armed.
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
     assert _state(hass).attributes["auto_off_held"] is True
@@ -337,7 +350,7 @@ async def test_open_close_bright_forces_off_over_held_door(
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -363,7 +376,7 @@ async def test_open_close_dark_arrival_lights_open_door(
     hass.states.async_set(ILLUM, "on")  # bright
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")  # opened while bright: gated, no light
+    hass.states.async_set(DOOR, OPEN)  # opened while bright: gated, no light
     await settle(hass)
     assert _state(hass).state == "off"
 
@@ -390,7 +403,7 @@ async def test_open_close_dark_return_re_holds_open_door(
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -436,7 +449,7 @@ async def test_gate_window_start_reevaluates_open_door(
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")  # opened outside the window: gated
+    hass.states.async_set(DOOR, OPEN)  # opened outside the window: gated
     await settle(hass)
     assert _state(hass).state == "off"
 
@@ -448,7 +461,7 @@ async def test_gate_window_start_reevaluates_open_door(
         assert state.attributes["molight_state"] == STATE_OCCUPIED
         assert state.attributes["last_on_door"] is not None
         # Closing hands over to the normal countdown.
-        hass.states.async_set(DOOR, "off")
+        hass.states.async_set(DOOR, CLOSED)
         await settle(hass)
         assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -474,7 +487,7 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
             schedule_mode=SCHEDULE_MODE_GATE,
         ),
     )
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
     if event == "door_closes":
@@ -483,7 +496,10 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
 
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
-    hass.states.async_set(MAINT if event == "maintain_clears" else DOOR, "off")
+    if event == "maintain_clears":
+        hass.states.async_set(MAINT, "off")
+    else:
+        hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == (
         STATE_OCCUPIED if event == "maintain_clears" else STATE_COUNTDOWN
@@ -505,7 +521,7 @@ async def test_open_close_unavailable_door_keeps_holding(
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -519,7 +535,7 @@ async def test_open_close_unavailable_door_keeps_holding(
     await _tick(hass, freezer, 59)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    hass.states.async_set(DOOR, "off")  # recovers closed: countdown starts
+    hass.states.async_set(DOOR, CLOSED)  # recovers closed: countdown starts
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -534,7 +550,7 @@ async def test_open_close_door_unavailable_for_a_minute_counts_as_closed(
     await setup_entries(
         hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     )
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     hass.states.async_set(DOOR, dead)
     await settle(hass)
@@ -557,7 +573,7 @@ async def test_unavailable_door_counted_closed_defers_to_presence(
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
     hass.states.async_set(OCC, "on")
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -577,14 +593,14 @@ async def test_door_back_from_unavailable_restarts_the_minute(
     await setup_entries(
         hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     )
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     for _ in range(2):
         hass.states.async_set(DOOR, "unavailable")
         await settle(hass)
         await _tick(hass, freezer, 50)
         assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
-        hass.states.async_set(DOOR, "on")
+        hass.states.async_set(DOOR, OPEN)
         await settle(hass)
 
 
@@ -598,7 +614,7 @@ async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
     await setup_entries(
         hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     )
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -610,7 +626,7 @@ async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     if manual_off:
         assert _state(hass).state == "off"
@@ -632,7 +648,7 @@ async def test_dead_door_does_not_light_the_room_when_it_gets_dark(
         illuminance_mode=ILLUMINANCE_MODE_GATE,
     )
     await setup_entries(hass, entry)
-    hass.states.async_set(DOOR, "on")  # gated
+    hass.states.async_set(DOOR, OPEN)  # gated
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -657,7 +673,7 @@ async def test_dead_door_does_not_light_the_room_at_a_gate_window_start(
         schedule_mode=SCHEDULE_MODE_GATE,
     )
     await setup_entries(hass, entry)
-    hass.states.async_set(DOOR, "on")  # gated
+    hass.states.async_set(DOOR, OPEN)  # gated
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -689,18 +705,18 @@ async def test_follow_window_ignores_door(hass: HomeAssistant) -> None:
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
     assert _state(hass).attributes["last_on_door"] is None
 
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     # Window end forces off even though the door reopened meanwhile.
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     hass.states.async_set(SCHED, "off")
     await settle(hass)
@@ -723,7 +739,7 @@ async def test_open_mode_occupancy_holds_after_trigger(
 
     hass.states.async_set(OCC, "on")
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -746,9 +762,9 @@ async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> No
     )
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
-    hass.states.async_set(DOOR, "off")  # ignored in open mode
+    hass.states.async_set(DOOR, CLOSED)  # ignored in open mode
     await settle(hass)
 
     freezer.tick(timedelta(seconds=61))  # timeout → warning (EFFECT) begins
@@ -756,7 +772,7 @@ async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> No
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 
-    hass.states.async_set(DOOR, "on")  # re-open mid-warning: a re-trigger
+    hass.states.async_set(DOOR, OPEN)  # re-open mid-warning: a re-trigger
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -767,7 +783,7 @@ async def test_open_close_seed_adopts_open_door(hass: HomeAssistant, freezer) ->
     """At startup an already-on light with the door open is adopted as OCCUPIED."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     hass.states.async_set("light.real_1", "on")
-    hass.states.async_set(DOOR, "on")  # door already open at startup
+    hass.states.async_set(DOOR, OPEN)  # door already open at startup
     await setup_entries(hass, entry)
     await settle(hass)
 
@@ -796,7 +812,7 @@ async def test_door_open_applies_auto_on_brightness_and_transition(
     await setup_entries(hass, entry)
     calls = _record_service_calls(hass)
 
-    hass.states.async_set(DOOR, "on")  # opened
+    hass.states.async_set(DOOR, OPEN)  # opened
     await settle(hass)
 
     state = _state(hass)
@@ -827,7 +843,7 @@ async def test_auto_on_brightness_below_one_percent_is_unset(
     await setup_entries(hass, entry)
     calls = _record_service_calls(hass)
 
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
 
     assert _state(hass).state == "on"
@@ -852,12 +868,12 @@ async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> No
     hass.states.async_set(ILLUM, "on")  # bright
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")  # opened: bright-gated, no turn-on
+    hass.states.async_set(DOOR, OPEN)  # opened: bright-gated, no turn-on
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
-    hass.states.async_set(DOOR, "off")  # closed: nothing to count down
+    hass.states.async_set(DOOR, CLOSED)  # closed: nothing to count down
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
@@ -894,11 +910,11 @@ async def test_open_close_close_mid_warning_lets_it_finish(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 
-    hass.states.async_set(DOOR, "on")  # opened mid-warning: bright-gated
+    hass.states.async_set(DOOR, OPEN)  # opened mid-warning: bright-gated
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 
-    hass.states.async_set(DOOR, "off")  # closed mid-warning: let it finish
+    hass.states.async_set(DOOR, CLOSED)  # closed mid-warning: let it finish
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 
@@ -922,7 +938,7 @@ async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
-    hass.states.async_set(DOOR, "on")  # opened
+    hass.states.async_set(DOOR, OPEN)  # opened
     await settle(hass)
     assert _state(hass).state == "on"
 
@@ -935,14 +951,14 @@ async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
     # The battery sensor blips and recovers, still reporting open.
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).state == "off"
 
     # A real close and re-open is still a fresh opening.
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await settle(hass)
     assert _state(hass).state == "on"
 
@@ -955,7 +971,7 @@ async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_mode(
     so the door closing over it starts no countdown."""
     hass.states.async_set(ILLUM, "on")  # bright
     hass.states.async_set(OCC, "on")
-    hass.states.async_set(DOOR, "on")
+    hass.states.async_set(DOOR, OPEN)
     await setup_entries(
         hass,
         make_light_entry(
@@ -970,7 +986,7 @@ async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_mode(
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
 
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
     await _tick(hass, freezer, 3600)
@@ -1007,7 +1023,7 @@ async def test_open_close_close_ignores_gated_occupancy(
         )
         hass.states.async_set(SCHED, "off")
     hass.states.async_set(OCC, "on")
-    hass.states.async_set(DOOR, "on")  # standing open
+    hass.states.async_set(DOOR, OPEN)  # standing open
     await setup_entries(hass, entry)
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -1018,7 +1034,7 @@ async def test_open_close_close_ignores_gated_occupancy(
     )
 
     freezer.tick(timedelta(seconds=5))
-    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(DOOR, CLOSED)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == (
         STATE_COUNTDOWN if door_holds else STATE_ACTIVE
