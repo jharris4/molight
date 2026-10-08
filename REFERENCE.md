@@ -159,7 +159,7 @@ At the top level:
 
 | Config | Description |
 |---|---|
-| **Lights to control** | The `light` entities to control: usually real lights, but another MoLight virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
+| **Lights to control** | The `light` entities to control: usually real lights, but another MoLight virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A `switch`, such as a smart plug or a wall switch, isn't offered: wrap it as a light with Home Assistant's *Switch as X* helper first. A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
 | **Turn-off timeout** | Seconds. Default `300`, range 1 to 14400 (4 h). Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors |
 
 ***Sensors & triggers*** (expanded):
