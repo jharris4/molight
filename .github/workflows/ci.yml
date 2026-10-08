@@ -24,7 +24,7 @@ jobs:
   lint:
     name: Lint
     # A bump PR only moves the pinned Home Assistant.
-    if: ${{ !inputs.pinned_only }}
+    if: ${{ !inputs.pinned_only && !startsWith(github.head_ref, 'ha-bump/') }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -63,7 +63,7 @@ jobs:
   # Separate from the pinned job, which a bump PR runs alone.
   compatibility:
     name: pytest (${{ matrix.label }})
-    if: ${{ !inputs.pinned_only }}
+    if: ${{ !inputs.pinned_only && !startsWith(github.head_ref, 'ha-bump/') }}
     runs-on: ubuntu-26.04
     # The newest leg reports an upstream break without turning the build red.
     continue-on-error: ${{ matrix.experimental }}
