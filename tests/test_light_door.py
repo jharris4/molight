@@ -39,7 +39,7 @@ from custom_components.molight.const import (
     STATE_SCHEDULED,
     STATE_WARN,
 )
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import make_light_entry, restart_entries, settle, setup_entries
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -795,6 +795,82 @@ async def test_open_close_seed_adopts_open_door(hass: HomeAssistant, freezer) ->
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("illum", [None, "on"], ids=["no_lux", "bright"])
+async def test_open_close_seed_lights_off_room_with_open_door(
+    hass: HomeAssistant, freezer, illum: str | None
+) -> None:
+    """At startup an off light with the door open comes on, as when the door
+    reports after the seed, unless it is bright."""
+    entry = make_light_entry(
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=illum and ILLUM
+    )
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(DOOR, OPEN)
+    hass.states.async_set(ILLUM, "on")
+    await setup_entries(hass, entry)
+    await settle(hass)
+
+    if illum:
+        assert _state(hass).state == "off"
+        assert _state(hass).attributes["molight_state"] == STATE_IDLE
+        return
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    assert _state(hass).attributes["last_on_door"] is not None
+    hass.states.async_set(DOOR, CLOSED)
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
+    await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_open_close_seed_outside_gate_window_ignores_open_door(
+    hass: HomeAssistant,
+) -> None:
+    """Outside a gate window an open door at startup leaves the room off."""
+    entry = make_light_entry(
+        door=DOOR,
+        door_mode=DOOR_MODE_OPEN_CLOSE,
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_GATE,
+    )
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(DOOR, OPEN)
+    hass.states.async_set(SCHED, "off")
+    await setup_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_open_close_seed_keeps_manual_off_over_open_door(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A door standing open at startup may predate a manual off that still
+    stands, so it does not light the room."""
+    entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(DOOR, CLOSED)
+    await setup_entries(hass, entry)
+    hass.states.async_set(DOOR, OPEN)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    freezer.tick(timedelta(seconds=10))
+
+    await restart_entries(hass, entry)
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
 
 @pytest.mark.asyncio

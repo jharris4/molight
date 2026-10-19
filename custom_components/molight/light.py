@@ -2064,6 +2064,19 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._on_occupancy_change(occupied=True)
                 return
 
+        # A door that opened while Home Assistant was down lights the room,
+        # as one that reports after the seed would.
+        if (
+            not self._attr_is_on
+            and self._door_holds()
+            and not self._bright_gates_presence()
+            and not self._gate_schedule_inactive()
+            and (door_state := self.hass.states.get(self._door_entity)) is not None
+            and not self._may_replay_manual_off(door_state, observed=False)
+        ):
+            self._on_door_change(is_open=True)
+            return
+
         if self._attr_is_on and (self._maintain_active() or self._door_holds()):
             # Not a turn-on, so only a hard-gate window keeps the door from
             # holding; the maintain entity clearing, or the door closing,
