@@ -40,6 +40,7 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_GATE,
     RELOAD_GRACE,
     SCHEDULE_MODE_FOLLOW,
+    SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
     STATE_IDLE,
@@ -182,6 +183,55 @@ async def test_open_door_that_goes_missing_counts_as_closed(
     await remove(hass, how, INPUT)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
     await expect_fresh_timeout(hass, freezer)
+
+
+async def first_reading_while_open_door_awaits_its_reload(
+    hass: HomeAssistant, freezer, role: str
+) -> None:
+    """A first illuminance or schedule reading while an unregistered door
+    that stood open has its grace to come back still honors a manual off."""
+    source = {"illuminance": "binary_sensor.illum", "schedule": "binary_sensor.sched"}[
+        role
+    ]
+    config = {
+        "illuminance": {"illuminance": source},
+        "schedule": {"schedule": source, "schedule_mode": SCHEDULE_MODE_GATE},
+    }[role]
+    await provide(hass, "unregistered", RealBinary("input"))
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(
+        hass, make_light_entry(door=INPUT, door_mode=DOOR_MODE_OPEN_CLOSE, **config)
+    )
+    hass.states.async_set(INPUT, "on")
+    await settle(hass)
+    await turn_on(hass)
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    hass.states.async_remove(INPUT)
+    await settle(hass)
+    hass.states.async_set(source, "off" if role == "illuminance" else "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+    await tick(hass, freezer, RELOAD_GRACE)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert attrs(hass)["molight_state"] == STATE_IDLE
+
+
+async def test_first_illuminance_reading_while_open_door_awaits_its_reload(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    await first_reading_while_open_door_awaits_its_reload(hass, freezer, "illuminance")
+
+
+@pytest.mark.regular_virtual_light_only
+async def test_first_schedule_reading_while_open_door_awaits_its_reload(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    await first_reading_while_open_door_awaits_its_reload(hass, freezer, "schedule")
 
 
 @pytest.mark.parametrize("how", GONE)

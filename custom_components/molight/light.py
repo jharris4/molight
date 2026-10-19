@@ -3979,15 +3979,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and not self._gate_schedule_inactive()
         )
 
-    def _may_replay_manual_off(self, state: State, *, observed: bool) -> bool:
+    def _may_replay_manual_off(self, state: State | None, *, observed: bool) -> bool:
         """Return True when presence may be the visit a manual off ended.
 
         Only while that off stands: a visit the sensor dates after it may
         light the light, and one it cannot date only when seen to start live.
+        A sensor with no state, such as a door awaiting its reload, dates nothing.
         """
         if self._is_lit() or not self._manual_off_stands():
             return False
-        if "last_on_time" not in state.attributes:
+        if state is None or "last_on_time" not in state.attributes:
             return not observed
         raw = state.attributes["last_on_time"]
         try:
