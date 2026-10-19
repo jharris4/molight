@@ -89,7 +89,7 @@ The form has a **Window start** and a **Window end** section; each edge is a fix
 |---|---|
 | **Time** | Fixed local time for this edge |
 | **Sun event** | Anchor the edge to **Sunset** or **Sunrise** either instead of the fixed time or alongside it |
-| **Sun offset** | Minutes to shift the sun event; negative is before it (`-15` = 15 min before). Range -720 to 720 |
+| **Sun offset** | Minutes to shift the sun event; negative is before it (`-15` = 15 min before). Range -720 to 720. Needs a sun event on the same edge |
 | **Time vs. sun** | When both are set, whichever this picks wins: **Latest of the two** (`latest`, the default) or **Earliest of the two** (`earliest`) |
 
 e.g. *start at the later of 15 min before sunset and 21:00*.

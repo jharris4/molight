@@ -501,6 +501,15 @@ def _window_from_input(user_input: dict[str, Any]) -> dict | None:
     return None
 
 
+def _offset_without_sun(user_input: dict[str, Any]) -> bool:
+    """Return True when an edge has a sun offset but no sun event to shift."""
+    return any(
+        int((user_input.get(key) or {}).get(EDGE_OFFSET) or 0)
+        and (user_input.get(key) or {}).get(EDGE_SUN) in (None, "none")
+        for key in ("start", "end")
+    )
+
+
 def _window_input_provided(user_input: dict[str, Any]) -> bool:
     """Return True when the user filled in any window edge field at all."""
     return any(
@@ -3670,6 +3679,8 @@ class MoLightConfigFlow(
                     if _window_input_provided(user_input)
                     else "window_required"
                 )
+            elif _offset_without_sun(user_input):
+                errors["base"] = "offset_requires_sun"
             elif not window_ever_opens(self.hass, window):
                 errors["base"] = "window_never_opens"
             elif not errors:
@@ -4456,6 +4467,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     if _window_input_provided(user_input)
                     else "window_required"
                 )
+            elif _offset_without_sun(user_input):
+                errors["base"] = "offset_requires_sun"
             elif not window_ever_opens(self.hass, window):
                 errors["base"] = "window_never_opens"
             elif not errors:

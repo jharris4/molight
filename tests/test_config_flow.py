@@ -497,6 +497,49 @@ async def test_config_flow_schedule_rejects_a_window_that_never_opens(
     assert result["data"][CONF_SCHEDULE_INVERT] is True
 
 
+_OFFSET_WITHOUT_SUN = [
+    ({"time": "21:00:00", "sun": "none", "offset": -30}, {"time": "23:00:00"}),
+    ({"time": "21:00:00"}, {"time": "23:00:00", "offset": 15}),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("start", "end"), _OFFSET_WITHOUT_SUN)
+@pytest.mark.parametrize("form", ["create", "configure"])
+async def test_schedule_rejects_a_sun_offset_without_a_sun_event(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry, form: str, start, end
+) -> None:
+    """An offset with no sun event to shift is refused rather than dropped;
+    with the offset cleared the same window saves."""
+    if form == "create":
+        result = await _start_create(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
+        )
+        result = await _choose_time_schedule(hass, result)
+        configure = hass.config_entries.flow.async_configure
+        extra = {SECTION_ADVANCED: {}}
+    else:
+        await setup_entries(hass, schedule_entry)
+        result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
+        result = await _choose_time_schedule_options(hass, result)
+        configure = hass.config_entries.options.async_configure
+        extra = {}
+    window = {CONF_NAME: "Evening", "start": start, "end": end, **extra}
+
+    result = await configure(result["flow_id"], window)
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "offset_requires_sun"}
+
+    window["start"] = {**start, "offset": 0}
+    window["end"] = {**end, "offset": 0}
+    result = await configure(result["flow_id"], window)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TIME_WINDOWS] == [
+        {"start": {"time": "21:00:00"}, "end": {"time": "23:00:00"}}
+    ]
+
+
 @pytest.mark.asyncio
 async def test_config_flow_schedule_accepts_a_window_empty_part_of_the_year(
     hass: HomeAssistant,
