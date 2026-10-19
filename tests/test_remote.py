@@ -1895,6 +1895,14 @@ NATIVE_VOCABULARIES = {
         None,
         ["long_press", "long_release"],
     ),
+    # tuya: WXKG scene switch DP enum options, where `press` is a long press.
+    "tuya_wxkg": (
+        ["click", "double_click", "press"],
+        "click",
+        "double_click",
+        ["press"],
+    ),
+    "tuya_wxkg_two_state": (["click", "press"], "click", None, ["press"]),
     "govee_ble": (["press"], "press", None, []),
     "switchbot": (["press"], "press", None, []),
 }

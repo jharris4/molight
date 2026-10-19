@@ -30,6 +30,8 @@ of which only one may fire the binding:
     where the bridge reports multi-taps.
   - BTHome, Xiaomi BLE, SwitchBot, Govee BLE, native Lutron raise/lower:
     single = `press`, double = `double_press` where advertised.
+  - Tuya scene switches: `click` / `double_click`; their `press` is a long
+    press, so `click` outranks `press`.
   - Hue-style / Matter without MSM: `short_release` (preferred over
     `initial_press`, which also precedes a long press). No double click.
 
@@ -91,6 +93,7 @@ _SINGLE_EVENT_TYPES = (
     "single_press",
     "single_push",
     "KeyPressed",
+    "click",
     "press",
     "short_release",
     "initial_press",
@@ -103,6 +106,7 @@ _DOUBLE_EVENT_TYPES = (
     "double_press",
     "double_push",
     "KeyPressed2x",
+    "double_click",
     "multi_tap",
 )
 
