@@ -4344,6 +4344,9 @@ ALLOWED_WARNINGS = (
     "has no schedule; using outside-schedule settings",
     # Deliberately provoked by the turn-on selection scenario (target unavailable).
     "Turn-on selection target select.e2e_target_mode is unavailable",
+    # Deliberately provoked by the faulty-member scenario (testbed `reject`).
+    "Unable to turn on light.e2e_multi_on_off",
+    "Unable to turn off light.e2e_multi_on_off",
 )
 
 
@@ -7696,11 +7699,21 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
         client.wait_state(raw, lambda state: state["state"] == "off", "off")
 
-    # One member rejects every command, one applies them silently.
+    # One member rejects every command, one applies them silently. The light
+    # stays on for the member that lit (a plain turn-on would leave the raw
+    # at its stored brightness 0, which counts as dark).
     client.set_behavior(RAW_MULTI_ON_OFF, reject=True)
     client.set_behavior(RAW_MULTI_DIMMER, silent=True)
-    client.call_service("light", "turn_on", {"entity_id": FAULTY_LIGHT})
-    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
+    client.call_service(
+        "light", "turn_on", {"entity_id": FAULTY_LIGHT, "brightness": 150}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 150
+        ),
+        "on at 150",
+    )
     wait_machine_state(client, "active", FAULTY_LIGHT)
     assert_state_stays(
         client,
@@ -7741,6 +7754,66 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", FAULTY_LIGHT)
     checkpoint("a silent member's late contradicting report was adopted")
+
+    # A lit member that rejects the turn-off still burns: the light reports
+    # on again, not off over a lit room.
+    client.call_service(
+        "light", "turn_on", {"entity_id": FAULTY_LIGHT, "brightness": 150}
+    )
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: (
+            state["state"] == "on" and state["attributes"].get("brightness") == 150
+        ),
+        "on at 150",
+    )
+    wait_machine_state(client, "active", FAULTY_LIGHT)
+    off_before = client.state(FAULTY_LIGHT)["attributes"].get("last_off_manual")
+    client.set_behavior(RAW_MULTI_RGB, reject=True)
+    client.call_service("light", "turn_off", {"entity_id": FAULTY_LIGHT})
+    client.wait_state(RAW_MULTI_ON_OFF, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        FAULTY_LIGHT,
+        lambda state: (
+            state["state"] == "on"
+            and state["attributes"].get("molight_state") == "active"
+            and state["attributes"].get("last_off_manual") != off_before
+        ),
+        "on and active again: the rejecting member is still lit",
+    )
+    client.set_behavior(RAW_MULTI_RGB, reject=False)
+    client.call_service("light", "turn_off", {"entity_id": FAULTY_LIGHT})
+    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
+    wait_machine_state(client, "idle", FAULTY_LIGHT)
+    checkpoint("a member rejecting the turn-off kept the light reporting on")
+
+    # Every member rejects the turn-on: nothing is lit, so the light does not
+    # stay on over a dark room.
+    on_before = client.state(FAULTY_LIGHT)["attributes"].get("last_on_virtual")
+    for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        client.set_behavior(raw, reject=True)
+    client.call_service(
+        "light", "turn_on", {"entity_id": FAULTY_LIGHT, "brightness": 150}
+    )
+    client.wait_state(
+        FAULTY_LIGHT,
+        lambda state: (
+            state["state"] == "off"
+            and state["attributes"].get("molight_state") == "idle"
+            and state["attributes"].get("last_on_virtual") != on_before
+        ),
+        "off and idle after the turn-on: no member took it",
+    )
+    assert_state_stays(
+        client,
+        FAULTY_LIGHT,
+        lambda state: state["state"] == "off",
+        "off: nothing relights a room no member lit",
+        duration=2,
+    )
+    for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
+        client.set_behavior(raw, reject=False)
+    checkpoint("a turn-on every member rejected left the light off")
 
     # A slow bulb whose full reply arrives after HA stops reusing our context
     # is still an echo: the countdown is not restarted by it.

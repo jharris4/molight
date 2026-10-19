@@ -9,6 +9,7 @@ fresh events.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,8 @@ from homeassistant.const import (
     EVENT_CALL_SERVICE,
     EVENT_HOMEASSISTANT_STARTED,
 )
-from homeassistant.core import CoreState, State, callback
+from homeassistant.core import CoreState, ServiceCall, State, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -377,6 +379,267 @@ async def test_real_light_reporting_in_off_mid_warning_gets_the_stage(
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_WARN
+
+
+class _MemberLight:
+    """A light service standing in for a member's integration.
+
+    It lights the members named under the call's context, as a bulb answers,
+    then fails as told. A call to the virtual light itself still reaches
+    Home Assistant's own handler.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        service: str,
+        *,
+        error: Exception | None = None,
+        hang: bool = False,
+        lit: tuple[str, ...] = (),
+    ) -> None:
+        self._hass = hass
+        self._lit = lit
+        self._original = hass.services.async_services_for_domain("light")[service]
+        self.error = error
+        self.hang = hang
+        hass.services.async_register(
+            "light", service, self._handle, schema=self._original.schema
+        )
+
+    async def _handle(self, call: ServiceCall) -> None:
+        if VIRTUAL in call.data["entity_id"]:
+            await self._original.job.target(call)
+            return
+        params = call.data.get("params", call.data)
+        for entity_id in self._lit:
+            self._hass.states.async_set(
+                entity_id,
+                "on",
+                {"brightness": params.get("brightness")},
+                context=call.context,
+            )
+        if self.hang:
+            await asyncio.Event().wait()
+        if self.error is not None:
+            raise self.error
+
+
+_OFFLINE = HomeAssistantError("device offline")
+
+
+async def _pass(hass: HomeAssistant, freezer, seconds: float) -> None:
+    """Let time pass while a member call may be parked."""
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    for _ in range(4):
+        await asyncio.sleep(0)
+
+
+async def _trigger(hass: HomeAssistant, trigger: str) -> None:
+    if trigger == "manual":
+        await hass.services.async_call(
+            "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
+        )
+    else:
+        hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "on")
+    # Dispatched before time passes; settle() would wait for the member call.
+    for _ in range(4):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", ["occupancy", "manual", "door"])
+@pytest.mark.parametrize("how", ["raises", "hangs"])
+@pytest.mark.allow_warning_log
+async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
+    hass: HomeAssistant, freezer, caplog, trigger: str, how: str
+) -> None:
+    """A member whose integration raises at a turn-on, or never answers it,
+    was not lit: the light reports off and idle, not on over a dark room,
+    and the next trigger sends the turn-on again."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(DOOR, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(occupancy=OCC, door=DOOR, auto_on_brightness=40)
+    )
+    await settle(hass)
+    calls = _record_calls(hass)
+    member = _MemberLight(hass, "turn_on", error=_OFFLINE, hang=how == "hangs")
+
+    await _trigger(hass, trigger)
+    if how == "hangs":
+        await _pass(hass, freezer, 29)
+        assert _state(hass).state == "on"
+        await _pass(hass, freezer, 2)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["last_off_manual"] is None
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [_LEVEL[trigger]]
+    assert f"Unable to turn on {REAL}" in caplog.text
+    assert ("TimeoutError" in caplog.text) == (how == "hangs")
+
+    member.error = None
+    member.hang = False
+    if trigger != "manual":
+        hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "off")
+        await settle(hass)
+    await _trigger(hass, trigger)
+    await settle(hass)
+
+    assert _state(hass).state == "on"
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [
+        _LEVEL[trigger]
+    ] * 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_failed_turn_on_that_lit_one_member_leaves_the_light_on(
+    hass: HomeAssistant, caplog
+) -> None:
+    """A turn-on that lit one member before failing for another leaves the
+    light on; the member still dark is no longer taken to be answering."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(REAL2, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, lights=[REAL, REAL2], auto_on_brightness=40),
+    )
+    await settle(hass)
+    _MemberLight(hass, "turn_on", error=_OFFLINE, lit=(REAL2,))
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["brightness"] == 102
+    assert f"Unable to turn on {REAL}, {REAL2}" in caplog.text
+
+    # The lit member turned off by hand leaves nothing lit: an off.
+    hass.states.async_set(REAL2, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_failed_stage_turn_on_with_nothing_lit_ends_the_on_period(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """A warn stage whose turn-on fails while no member is lit ends the
+    on-period instead of leaving the light on over a dark room."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC, auto_on_brightness=40, warn_timeout=20, warn_brightness=50
+        ),
+    )
+    await settle(hass)
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    _MemberLight(hass, "turn_on", error=_OFFLINE)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert f"Unable to turn on {REAL}" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_failed_turn_off_leaves_the_light_reporting_on_until_sent_again(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """A member whose integration raises at the timeout's turn-off still
+    burns: the light reports on, not off over a lit room, and sends the off
+    again after another timeout."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_brightness=40))
+    await settle(hass)
+    _MemberLight(hass, "turn_on", lit=(REAL,))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    calls = _record_calls(hass)
+    member = _MemberLight(hass, "turn_off", error=_OFFLINE)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == 102
+    assert state.attributes["last_off_manual"] is None
+    assert len(_real_calls(calls, "turn_off")) == 1
+    assert f"Unable to turn off {REAL}" in caplog.text
+
+    member.error = None
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    assert _state(hass).state == "off"
+    assert len(_real_calls(calls, "turn_off")) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_failed_manual_turn_off_leaves_the_light_reporting_on(
+    hass: HomeAssistant, caplog
+) -> None:
+    """A turn-off through this entity that a member's integration refuses
+    leaves that member burning: the light reports on again."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_brightness=40))
+    await settle(hass)
+    _MemberLight(hass, "turn_on", lit=(REAL,))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    calls = _record_calls(hass)
+    member = _MemberLight(hass, "turn_off", error=_OFFLINE)
+
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert len(_real_calls(calls, "turn_off")) == 1
+    assert f"Unable to turn off {REAL}" in caplog.text
+
+    member.error = None
+    await hass.services.async_call(
+        "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+
+    assert _state(hass).state == "off"
+    assert len(_real_calls(calls, "turn_off")) == 2
 
 
 @pytest.mark.asyncio

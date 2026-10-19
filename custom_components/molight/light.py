@@ -526,6 +526,7 @@ async def async_setup_entry(
 # Context alone cannot tell: Home Assistant reuses our service-call context on
 # a member for 5 s, and a slow bulb's genuine reply arrives under its own.
 TURN_ON_SELECT_TIMEOUT = 10.0  # seconds a turn-on waits for its select call
+MEMBER_CALL_TIMEOUT = 30.0  # seconds a command to the real lights may take
 ECHO_SETTLE_SECONDS = 3.0  # partial replies (power first, fade steps) count
 ECHO_LATE_SECONDS = 30.0  # only a reply matching the command still counts
 ECHO_HISTORY = 8  # commands per member whose reply may still be on its way
@@ -759,6 +760,8 @@ class _EchoExpectation:
     came_on: float | None = None
     # Where a command that named no level ends: what the member came on at.
     remembered_brightness: int | None = None
+    # The command's context, so a call that fails can take its expectation back.
+    context_id: str | None = None
 
     @property
     def target_brightness(self) -> int | None:
@@ -3175,6 +3178,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         color: dict | None,
         transition: float | None,
         members: list[str] | None = None,
+        *,
+        context_id: str | None = None,
     ) -> None:
         """Record what the members commanded (all, by default) should report."""
         expectation = _EchoExpectation(
@@ -3184,6 +3189,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             float(transition or 0),
             self.hass.loop.time(),
             mirror=members is None,
+            context_id=context_id,
         )
         for expectations in self._echo_expectations.values():
             for earlier in expectations:
@@ -4809,6 +4815,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 group_color,
                 transition,
                 None if group == self._lights else group,
+                context_id=context.id,
             )
         self._resend_after_select = bool(self._waiting_turn_ons)
         transition_data = (
@@ -4822,8 +4829,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._adopt_color_data(color)
         for group, group_brightness, group_color in groups:
             if group_brightness:
-                await self.hass.services.async_call(
-                    "light",
+                self._command_members(
                     "turn_on",
                     {
                         "entity_id": group,
@@ -4831,16 +4837,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                         **(group_color or {}),
                         **transition_data,
                     },
-                    blocking=False,
-                    context=context,
+                    context,
                 )
             else:
-                await self.hass.services.async_call(
-                    "light",
-                    "turn_off",
-                    {"entity_id": group, **transition_data},
-                    blocking=False,
-                    context=context,
+                self._command_members(
+                    "turn_off", {"entity_id": group, **transition_data}, context
                 )
         self.async_write_ha_state()
 
@@ -5007,6 +5008,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 group_color,
                 transition,
                 None if members is None and group == self._lights else group,
+                context_id=context.id,
             )
         if members is None:
             self._resend_after_select = on and bool(self._waiting_turn_ons)
@@ -5023,15 +5025,85 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # filters/converts it per real light, so mixed-capability
                 # members each show what they can.
                 service_data.update(group_color)
-            await self.hass.services.async_call(
-                "light",
-                "turn_on" if on else "turn_off",
-                service_data,
-                blocking=False,
-                context=context,
+            self._command_members(
+                "turn_on" if on else "turn_off", service_data, context
             )
         self.async_write_ha_state()
         return True
+
+    def _command_members(
+        self, service: str, service_data: dict, context: Context
+    ) -> None:
+        """Send one command to some of the real lights, and notice it failing.
+
+        Home Assistant only logs a member's integration raising, or never
+        answering, so the call is awaited apart from the caller, which goes
+        on as if it were sent.
+        """
+        self.hass.async_create_task(
+            self._await_member_command(service, service_data, context)
+        )
+
+    async def _await_member_command(
+        self, service: str, service_data: dict, context: Context
+    ) -> None:
+        on = service == "turn_on"
+        group = service_data["entity_id"]
+        try:
+            async with asyncio.timeout(MEMBER_CALL_TIMEOUT):
+                await self.hass.services.async_call(
+                    "light", service, service_data, blocking=True, context=context
+                )
+        except Exception:
+            _LOGGER.warning(
+                "Unable to turn %s %s",
+                "on" if on else "off",
+                ", ".join(group),
+                exc_info=True,
+            )
+            # A call that fails at once fails inside its caller: judge the
+            # light once the caller has moved the state machine on.
+            await asyncio.sleep(0)
+            if not self._removed:
+                self._on_member_command_failed(group, on, context)
+
+    def _on_member_command_failed(
+        self, group: list[str], on: bool, context: Context
+    ) -> None:
+        """Take back a command the members will not answer, and judge the light.
+
+        A member a newer command has reached since is left to that one. With
+        nothing lit, a light reporting on goes idle, as it does when its lit
+        member is deleted; one reporting off while a member still burns
+        adopts it, as it would a bulb lit by nobody.
+        """
+        for entity_id in group:
+            expectations = self._echo_expectations.get(entity_id)
+            if expectations and expectations[-1].context_id != context.id:
+                continue
+            if expectations:
+                kept = [e for e in expectations if e.context_id != context.id]
+                if kept:
+                    self._echo_expectations[entity_id] = deque(
+                        kept, maxlen=ECHO_HISTORY
+                    )
+                else:
+                    del self._echo_expectations[entity_id]
+            self._commanded_power.pop(entity_id, None)
+        if self._turn_on_waiting() or any(
+            self._awaited_power(entity_id) is not None for entity_id in self._lights
+        ):
+            return  # another command may still light, or darken, the room
+        if on:
+            if self._machine_state != STATE_IDLE and self._all_lights_off():
+                self._go_idle()
+        elif not self._attr_is_on and not self._all_lights_off():
+            if color := self._physical_color():
+                self._set_color_state(*color)
+            self._on_light_state_change(
+                "on", self._physical_brightness(), manual=False, claim=False
+            )
+        self.async_write_ha_state()
 
     def _on_turn_on_cancelled(self, waiting: _WaitingTurnOn) -> None:
         """Take back the on a turn-on reported when its caller was stopped.
