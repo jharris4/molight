@@ -90,17 +90,18 @@ from .const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    RELOAD_GRACE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
     SCHEDULE_OPERATOR_ALL,
     SUN_EVENTS,
 )
 from .helpers import (
+    GoneJudge,
     RenamableRestoreEntity,
     entity_gone,
     molight_config,
     renamed_to,
-    run_unless_renamed,
     same_entity,
     sensor_dependencies,
     suggested_entity_id,
@@ -116,10 +117,6 @@ if TYPE_CHECKING:
     from homeassistant.helpers.restore_state import RestoreEntity
 
 _LOGGER = logging.getLogger(__name__)
-
-# How long a constituent of a combined occupancy sensor may take to come back
-# from a reload of its entry before it counts as gone (seconds).
-_RELOAD_GRACE = 10
 
 # How long after an input loads a combined occupancy sensor waits for the
 # maintain sensor reading it to show the presence it loaded with (seconds).
@@ -258,6 +255,8 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to the source sensor."""
         await super().async_added_to_hass()
+        self._gone = GoneJudge(self.hass)
+        self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
         # A cycle's anchor, its clear's classification and an occupied
@@ -408,12 +407,10 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             return
         new_state = event.data.get("new_state")
         if new_state is None:
-            # A renamed source did not drop out: this sensor is about to
-            # reload with the new ID.
-            self.async_on_remove(
-                run_unless_renamed(
-                    self.hass, self._source_sensor, self._on_source_unavailable
-                )
+            # A renamed source did not drop out, and the dropout countdown
+            # is grace enough for a reload.
+            self._gone.run_unless_renamed(
+                self._source_sensor, self._on_source_unavailable, grace=False
             )
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
@@ -621,6 +618,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to all constituent sensors."""
         await super().async_added_to_hass()
+        self._gone = GoneJudge(self.hass)
+        self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
         extra = await self.async_get_last_extra_data()
@@ -828,14 +827,9 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             # A renamed constituent did not drop out: this sensor is about to
             # reload with the new ID.
             dropout = datetime.now(UTC)
-            self.async_on_remove(
-                run_unless_renamed(
-                    self.hass,
-                    entity_id,
-                    lambda: self._reevaluate_on_dropout(
-                        event, dropout, showed=was_showing
-                    ),
-                )
+            self._gone.run_unless_renamed(
+                entity_id,
+                lambda: self._reevaluate_on_dropout(event, dropout, showed=was_showing),
             )
             return
         if not _real_state_change(event):
@@ -943,9 +937,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             del self._reloading[entity_id]
             self._reevaluate_on_dropout(event, dropout, showed=True)
 
-        self._reloading[entity_id] = async_call_later(
-            self.hass, _RELOAD_GRACE, _expired
-        )
+        self._reloading[entity_id] = async_call_later(self.hass, RELOAD_GRACE, _expired)
 
     def _reevaluate_on_dropout(
         self, event: Event[EventStateChangedData], dropout: datetime, *, showed: bool
@@ -1121,6 +1113,8 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Restore state and subscribe to the illuminance source."""
         await super().async_added_to_hass()
+        self._gone = GoneJudge(self.hass)
+        self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         # A held reading and its side of the hysteresis band belong to their
         # source. A save that predates the source record is trusted.
@@ -1161,9 +1155,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
         new_state = event.data.get("new_state")
         if new_state is None:
             # Deleted or disabled, unless it is only being renamed.
-            self.async_on_remove(
-                run_unless_renamed(self.hass, self._source_entity, self._on_source_gone)
-            )
+            self._gone.run_unless_renamed(self._source_entity, self._on_source_gone)
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return  # hold last known value while the source is unavailable

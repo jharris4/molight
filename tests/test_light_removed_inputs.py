@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
+from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
@@ -35,6 +37,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    RELOAD_GRACE,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
     STATE_COUNTDOWN,
@@ -46,6 +49,7 @@ from tests.conftest import (
     light_targets,
     make_light_entry,
     record_service_calls,
+    remove_unregistered,
     restart_entries,
     settle,
     setup_entries,
@@ -62,7 +66,7 @@ from tests.real_entities import (
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import Event, HomeAssistant
 
 VIRTUAL = "light.matrix_light"
 MEMBER = "light.real_1"
@@ -98,7 +102,7 @@ async def remove(hass: HomeAssistant, how: str, entity_id: str) -> None:
             entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
     else:
-        hass.states.async_remove(entity_id)
+        await remove_unregistered(hass, entity_id)
     await settle(hass)
     assert hass.states.get(entity_id) is None
 
@@ -654,6 +658,94 @@ async def test_real_lights_entry_reloading_is_sent_the_light_again(
     assert hass.states.get(MEMBER).state == "on"
 
 
+async def reload_unregistered(hass: HomeAssistant, freezer, entity_id: str) -> None:
+    """Remove a registry-less entity and add it back, as its integration's reload."""
+    state = hass.states.get(entity_id)
+    hass.states.async_remove(entity_id)
+    await settle(hass)
+    await tick(hass, freezer, 1)
+    hass.states.async_set(entity_id, state.state, state.attributes)
+    await settle(hass)
+
+
+@pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
+async def test_unregistered_sensor_reloading_keeps_holding(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
+) -> None:
+    """A sensor with no registry entry that reloads has not gone missing."""
+    hass.states.async_set(INPUT, "on")
+    hass.states.async_set(MEMBER, "off")
+    config = {
+        "occupancy": {"occupancy": INPUT},
+        "maintain": {"maintain": INPUT},
+        "hold": {"hold_entities": [INPUT]},
+        "door": {"door": INPUT, "door_mode": DOOR_MODE_OPEN_CLOSE},
+    }[role]
+    await setup_entries(hass, make_light_entry(**config, timeout=60))
+    await turn_on(hass)
+    held = attrs(hass)["molight_state"], attrs(hass)["auto_off_held"]
+    seen: set[tuple[str, bool]] = set()
+
+    @callback
+    def _record(event: Event) -> None:
+        if event.data["entity_id"] == VIRTUAL:
+            new = event.data["new_state"].attributes
+            seen.add((new["molight_state"], new["auto_off_held"]))
+
+    unsub = hass.bus.async_listen(EVENT_STATE_CHANGED, _record)
+
+    await reload_unregistered(hass, freezer, INPUT)
+    await tick(hass, freezer, 3600)
+    unsub()
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert seen <= {held}
+
+
+async def test_unregistered_real_light_reloading_keeps_its_timer(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """A real light with no registry entry that reloads is not a new turn-on."""
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(hass, make_light_entry(timeout=60))
+    await turn_on(hass)
+    await tick(hass, freezer, 30)
+    stamp = attrs(hass)["last_on_physical"]
+
+    await reload_unregistered(hass, freezer, MEMBER)
+    assert attrs(hass)["molight_state"] == STATE_ACTIVE
+    assert attrs(hass)["last_on_physical"] == stamp
+    await tick(hass, freezer, 28)
+    assert hass.states.get(VIRTUAL).state == "on"
+    await tick(hass, freezer, 2)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+async def test_unregistered_entity_removed_again_is_judged_once(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """Reloads leave nothing behind, and a removal that stays is judged once."""
+    hass.states.async_set(INPUT, "on")
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(hass, make_light_entry(hold_entities=[INPUT], timeout=60))
+    await turn_on(hass)
+    light = hass.data["entity_components"]["light"].get_entity(VIRTUAL)
+    cleanups = len(light._on_remove)
+    for _ in range(3):
+        await reload_unregistered(hass, freezer, INPUT)
+    await tick(hass, freezer, RELOAD_GRACE)
+    assert len(light._on_remove) == cleanups
+    assert light._gone._pending == {}
+
+    hass.states.async_remove(INPUT)
+    await settle(hass)
+    await tick(hass, freezer, RELOAD_GRACE - 1)
+    assert attrs(hass)["auto_off_held"] is True
+    await tick(hass, freezer, 1)
+    assert attrs(hass)["auto_off_held"] is False
+    assert light._gone._pending == {}
+    await expect_fresh_timeout(hass, freezer)
+
+
 @pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
 async def test_sensor_whose_entry_is_disabled_stops_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
@@ -853,6 +945,19 @@ async def test_illuminance_entry_reloading_keeps_the_room_dark(
     calls = record_service_calls(hass)
     assert await hass.config_entries.async_reload(sensor.entry_id)
     await settle(hass)
+    assert hass.states.get(ROOM_LUX).state == "on"
+    assert light_targets(calls, "turn_on") == []
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
+async def test_unregistered_illuminance_source_reloading_keeps_the_room_dark(
+    hass: HomeAssistant, freezer, virtual_light_behavior_variant
+) -> None:
+    """A source with no registry entry that reloads keeps its reading."""
+    await bright_occupied_room(hass, "unregistered")
+    calls = record_service_calls(hass)
+    await reload_unregistered(hass, freezer, LUX)
+    await tick(hass, freezer, RELOAD_GRACE)
     assert hass.states.get(ROOM_LUX).state == "on"
     assert light_targets(calls, "turn_on") == []
     assert hass.states.get(VIRTUAL).state == "off"

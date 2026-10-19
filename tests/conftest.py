@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextvars import ContextVar
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -15,6 +16,7 @@ from homeassistant.helpers import restore_state
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
+    async_fire_time_changed,
     async_mock_load_restore_state_from_storage,
 )
 
@@ -67,6 +69,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
+    RELOAD_GRACE,
 )
 
 if TYPE_CHECKING:
@@ -128,6 +131,14 @@ async def settle(hass: HomeAssistant) -> None:
     for _ in range(4):
         await asyncio.sleep(0)
         await hass.async_block_till_done()
+
+
+async def remove_unregistered(hass: HomeAssistant, entity_id: str) -> None:
+    """Remove an entity with no registry entry, past its grace to come back."""
+    hass.states.async_remove(entity_id)
+    await settle(hass)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=RELOAD_GRACE))
+    await settle(hass)
 
 
 def make_light_entry(

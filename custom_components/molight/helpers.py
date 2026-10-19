@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.light import (
@@ -20,7 +21,9 @@ from homeassistant.const import (
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er, restore_state
 from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ENTITY_ID,
@@ -36,11 +39,13 @@ from .const import (
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
+    RELOAD_GRACE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
+    from datetime import datetime
 
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State
@@ -132,26 +137,74 @@ def entity_gone(hass: HomeAssistant, entity_id: str) -> bool:
     return registry_entry.disabled
 
 
-@callback
-def run_unless_renamed(
-    hass: HomeAssistant, entity_id: str, action: Callable[[], None]
-) -> CALLBACK_TYPE:
-    """Run action for an entity whose state was removed, unless it was renamed.
+def _just_deleted(hass: HomeAssistant, entity_id: str) -> bool:
+    """Return True when the registry deleted this ID moments ago."""
+    since = dt_util.utcnow() - timedelta(seconds=RELOAD_GRACE)
+    return any(
+        entry.entity_id == entity_id and entry.modified_at >= since
+        for entry in er.async_get(hass).deleted_entities.values()
+    )
 
-    A rename removes the state under the former ID too, possibly before the
-    registry has finished announcing it: an ID the registry no longer knows
-    is judged one loop pass later. Returns what cancels that judgment.
-    """
-    if er.async_get(hass).async_get(entity_id) is not None:
-        action()
-        return lambda: None
+
+class GoneJudge:
+    """Judge whether entities whose state was removed are gone, one per ID."""
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Start with nothing pending."""
+        self._hass = hass
+        self._pending: dict[str, CALLBACK_TYPE] = {}
 
     @callback
-    def _judge() -> None:
-        if hass.states.get(entity_id) is None and renamed_to(hass, entity_id) is None:
-            action()
+    def run_unless_renamed(
+        self, entity_id: str, action: Callable[[], None], *, grace: bool = True
+    ) -> None:
+        """Run action for an entity whose state was removed, unless it was renamed.
 
-    return hass.loop.call_soon(_judge).cancel
+        A rename removes the state under the former ID too, possibly before
+        the registry has finished announcing it: an ID the registry no
+        longer knows is judged one loop pass later. Unless the registry just
+        deleted it, it may be an entity with no registry entry whose
+        integration is reloading, so with grace it gets RELOAD_GRACE to come
+        back.
+        """
+        hass = self._hass
+        if (cancel := self._pending.pop(entity_id, None)) is not None:
+            cancel()
+        if er.async_get(hass).async_get(entity_id) is not None:
+            action()
+            return
+
+        def _gone() -> bool:
+            return (
+                hass.states.get(entity_id) is None
+                and renamed_to(hass, entity_id) is None
+            )
+
+        @callback
+        def _expired(_now: datetime) -> None:
+            del self._pending[entity_id]
+            if _gone():
+                action()
+
+        @callback
+        def _judge() -> None:
+            if grace and _gone() and not _just_deleted(hass, entity_id):
+                self._pending[entity_id] = async_call_later(
+                    hass, RELOAD_GRACE, _expired
+                )
+                return
+            del self._pending[entity_id]
+            if _gone():
+                action()
+
+        self._pending[entity_id] = hass.loop.call_soon(_judge).cancel
+
+    @callback
+    def cancel_all(self) -> None:
+        """Drop every pending judgment."""
+        for cancel in self._pending.values():
+            cancel()
+        self._pending.clear()
 
 
 class RenamableRestoreEntity(RestoreEntity):

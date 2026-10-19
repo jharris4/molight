@@ -34,12 +34,14 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    RELOAD_GRACE,
 )
 from custom_components.molight.helpers import molight_config
 from tests.conftest import (
     crash_entries,
     finish_startup,
     make_light_entry,
+    remove_unregistered,
     restart_entries,
     settle,
     setup_entries,
@@ -1212,7 +1214,7 @@ async def _remove_lux(
             source.entry_id, ConfigEntryDisabler.USER
         )
     else:
-        hass.states.async_remove(LUX)
+        await remove_unregistered(hass, LUX)
     await settle(hass)
 
 
@@ -2135,9 +2137,33 @@ async def test_combined_clears_when_last_constituent_is_removed(
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
 
+    await remove_unregistered(hass, "binary_sensor.m1")
+    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+
+
+@pytest.mark.asyncio
+async def test_combined_holds_through_an_unregistered_constituent_reloading(
+    hass: HomeAssistant,
+) -> None:
+    """A constituent with no registry entry that reloads still counts as on."""
+    entry = _raw_combined_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    seen = _room_states(hass, "binary_sensor.seed_combined")
+
     hass.states.async_remove("binary_sensor.m1")
     await settle(hass)
-    assert hass.states.get("binary_sensor.seed_combined").state == "off"
+    hass.states.async_set("binary_sensor.m1", "on")
+    await settle(hass)
+    async_fire_time_changed(
+        hass, datetime.now(UTC) + timedelta(seconds=RELOAD_GRACE + 1)
+    )
+    await settle(hass)
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+    assert "off" not in seen
 
 
 @pytest.mark.asyncio
@@ -2265,6 +2291,9 @@ async def test_combined_reload_grace_ends_when_constituent_reports_gone(
     hass: HomeAssistant, after: str
 ) -> None:
     """A clear, a real outage or a removal after the unload clears at once."""
+    er.async_get(hass).async_get_or_create(
+        "binary_sensor", "test", "m1", suggested_object_id="m1"
+    )
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -2276,6 +2305,8 @@ async def test_combined_reload_grace_ends_when_constituent_reports_gone(
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
 
     if after == "removed":
+        # Removing the entry deletes the registry entry, then the placeholder.
+        er.async_get(hass).async_remove("binary_sensor.m1")
         hass.states.async_remove("binary_sensor.m1")
     else:
         hass.states.async_set("binary_sensor.m1", after)

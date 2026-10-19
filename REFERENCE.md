@@ -467,7 +467,7 @@ Entities dropping to `unavailable`/`unknown` are never read as state changes, at
 
 **Deleted or disabled entities**
 
-An entity that is deleted or disabled while Home Assistant runs, in its entity settings or along with its integration entry, can never report again, so it is treated as startup treats a missing one and not as an outage.
+An entity that is deleted or disabled while Home Assistant runs, in its entity settings or along with its integration entry, can never report again, so it is treated as startup treats a missing one and not as an outage. An entity with no registry entry, such as a YAML template without a `unique_id`, gets 10 seconds to come back first, so reloading its integration changes nothing.
 
 - **Keep-on entities, doors and occupancy:** a keep-on entity stops holding, an **Open & close** door counts as closed, and an occupancy or maintain sensor counts as clear. A light it was holding gets a fresh full timeout, unless other presence still holds it; a sensor that comes back is read again as when first seen.
 - **Real lights:** one that is deleted or disabled no longer counts as possibly on: turning the remaining real lights off turns the virtual light off, and when the only lit real light goes, the virtual light reports off without recording a manual off or commanding the others. A disabled real light is owed nothing after a restart either.

@@ -393,6 +393,9 @@ DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
 # An open door whose sensor stays unavailable/unknown this long counts as
 # closed, as an occupancy sensor clears after its default unavailable timeout.
 DOOR_UNAVAILABLE_TIMEOUT = 60
+# How long an entity removed by a reload of its integration may take to come
+# back before it counts as gone (seconds).
+RELOAD_GRACE = 10
 
 # --- Virtual Remote ---
 # A Virtual Remote entry drives one or more lights from the buttons of a

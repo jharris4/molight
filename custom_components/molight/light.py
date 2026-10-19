@@ -382,6 +382,7 @@ from .const import (
 from .helpers import (
     HOLD_ENTITY_DOMAINS,
     MEMBER_LIGHT_TYPES,
+    GoneJudge,
     RenamableRestoreEntity,
     entity_gone,
     group_leaves,
@@ -392,7 +393,6 @@ from .helpers import (
     match_option,
     molight_config,
     molight_light_entries,
-    run_unless_renamed,
     same_entity,
     shared_lights,
     suggested_entity_id,
@@ -1227,6 +1227,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """
         await super().async_added_to_hass()
         self._removed = False  # a rename removes and adds the same entity
+        self._gone = GoneJudge(self.hass)
+        self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         if last is not None:
             if self._is_scheduled_light:
@@ -2311,12 +2313,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         old_state = event.data.get("old_state")
         if new_state is None:
             # Deleted or disabled, unless it is only being renamed.
-            self.async_on_remove(
-                run_unless_renamed(
-                    self.hass,
-                    entity_id,
-                    partial(self._on_entity_gone, entity_id, old_state),
-                )
+            self._gone.run_unless_renamed(
+                entity_id, partial(self._on_entity_gone, entity_id, old_state)
             )
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
