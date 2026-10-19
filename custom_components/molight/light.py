@@ -2598,7 +2598,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._door_open_since = None
             elif not door_was_open or self._door_open_since is None:
                 self._door_open_since = new_state.last_changed
-            # An open door first seen since startup may predate a manual off.
+            # An open door first seen since startup may predate a manual off,
+            # and is no opening for an On open door.
             first_open = self._door_open and recovered and not self._door_seen
             self._door_seen = True
             # A cover going from open to closing is still open: no edge.
@@ -2608,7 +2609,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 else self._door_open != (old_state.state in _DOOR_OPEN_STATES)
             )
             if edge and not (
-                first_open and self._may_replay_manual_off(new_state, observed=False)
+                first_open
+                and (
+                    self._door_mode != DOOR_MODE_OPEN_CLOSE
+                    or self._may_replay_manual_off(new_state, observed=False)
+                )
             ):
                 self._on_door_change(self._door_open)
         if entity_id in self._hold_entities and not holding:
@@ -2660,9 +2665,11 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if entity_id == self._illuminance_entity:
             self._illuminance_gone()
         if entity_id == self._door_entity:
+            # As at startup: closed, and its next report is a first sighting.
             self._cancel_door_dropout()
             self._door_open = False
             self._door_open_since = None
+            self._door_seen = False
         if entity_id in (
             self._occupancy_entity,
             self._maintain_entity,

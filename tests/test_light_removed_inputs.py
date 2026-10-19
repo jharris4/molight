@@ -32,6 +32,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     DOMAIN,
+    DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
@@ -203,6 +204,40 @@ async def test_presence_sensor_that_goes_missing_counts_as_clear(
     await remove(hass, how, INPUT)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
     await expect_fresh_timeout(hass, freezer)
+
+
+@pytest.mark.parametrize("manual_off", [False, True], ids=["closed", "manual_off"])
+@pytest.mark.parametrize("mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
+@pytest.mark.parametrize("how", GONE)
+async def test_door_back_open_after_going_missing_is_a_first_sighting(
+    hass: HomeAssistant,
+    virtual_light_behavior_variant,
+    how: str,
+    mode: str,
+    manual_off: bool,
+) -> None:
+    """A door that comes back open is seen as at startup: no opening for an
+    On open door, and presence for an Open & close one unless a manual off
+    stands."""
+    await provide(hass, how, RealBinary("input"))
+    hass.states.async_set(MEMBER, "off")
+    await setup_entries(hass, make_light_entry(door=INPUT, door_mode=mode))
+    if manual_off:
+        hass.states.async_set(INPUT, "on")
+        await settle(hass)
+        assert hass.states.get(VIRTUAL).state == "on"
+        await hass.services.async_call(
+            "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
+        )
+        await settle(hass)
+
+    await remove(hass, how, INPUT)
+    if how == "disabled":
+        er.async_get(hass).async_update_entity(INPUT, disabled_by=None)
+    hass.states.async_set(INPUT, "on")
+    await settle(hass)
+    lit = mode == DOOR_MODE_OPEN_CLOSE and not manual_off
+    assert hass.states.get(VIRTUAL).state == ("on" if lit else "off")
 
 
 async def test_presence_that_remains_keeps_holding_when_another_goes_missing(

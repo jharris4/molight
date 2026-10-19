@@ -66,6 +66,12 @@ def door_kind(request, monkeypatch) -> str:
     return request.param
 
 
+@pytest.fixture(autouse=True)
+def door_closed(hass: HomeAssistant, door_kind: str) -> None:
+    """Start each test with the door reported closed, as a loaded sensor is."""
+    hass.states.async_set(DOOR, CLOSED)
+
+
 def _state(hass: HomeAssistant):
     return hass.states.get(VIRTUAL)
 
@@ -633,6 +639,44 @@ async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
     else:
         assert _state(hass).state == "on"
         assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
+@pytest.mark.parametrize("first", ["late", "dropout"])
+async def test_door_first_seen_open_is_no_opening_in_open_mode(
+    hass: HomeAssistant, freezer, mode: str, first: str
+) -> None:
+    """A door first seen open, after startup or after counting as closed, may
+    have stood open for hours: an On open door ignores it until it opens
+    again, while an Open & close door holds the room as at startup."""
+    entry = make_light_entry(door=DOOR, door_mode=mode)
+    if first == "late":
+        hass.states.async_remove(DOOR)
+        await setup_entries(hass, entry)
+    else:
+        await setup_entries(hass, entry)
+        hass.states.async_set(DOOR, OPEN)
+        await settle(hass)
+        hass.states.async_set(DOOR, "unavailable")
+        await settle(hass)
+        await _tick(hass, freezer, 61)
+        await _tick(hass, freezer, 61)
+    assert _state(hass).state == "off"
+
+    hass.states.async_set(DOOR, OPEN)
+    await settle(hass)
+    if mode == DOOR_MODE_OPEN_CLOSE:
+        assert _state(hass).state == "on"
+        assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+        return
+    assert _state(hass).state == "off"
+    hass.states.async_set(DOOR, CLOSED)
+    await settle(hass)
+    hass.states.async_set(DOOR, OPEN)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
 
 @pytest.mark.asyncio
