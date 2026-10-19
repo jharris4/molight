@@ -587,6 +587,7 @@ Each button may appear in several actions, as long as no *(button, click)* pair 
 - HomeKit controller buttons announce `single_press`/`double_press`, and native Lutron (RadioRA 2) keypad buttons `single_press`: single = `single_press`, double = `double_press`.
 - Shelly Gen2 and later inputs announce `single_push`/`double_push`; their `btn_down`/`btn_up` never fire a binding.
 - Z-Wave scene controllers announce `KeyPressed`/`KeyPressed2x`: single = `KeyPressed`, double = `KeyPressed2x`.
+- SmartThings buttons announce `pushed` with `double` and/or `pushed_2x`: single = `pushed`, double = `double`, or `pushed_2x` when the button doesn't announce `double`.
 - BTHome and Xiaomi BLE buttons announce `press`/`double_press`: single = `press`, double = `double_press`. SwitchBot, Govee BLE and native Lutron raise/lower buttons announce `press` alone.
 - Tuya scene switches announce `click`/`double_click`: single = `click`, double = `double_click`. Their `press` is a long press, so it never fires a binding.
 - Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps; a double-click binding is accepted but only fires if the bridge does.

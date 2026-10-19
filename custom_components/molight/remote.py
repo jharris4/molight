@@ -24,6 +24,7 @@ of which only one may fire the binding:
     `double_press`.
   - Shelly Gen2+: `single_push` / `double_push` (btn_down/btn_up ignored).
   - Z-Wave central scene: `KeyPressed` / `KeyPressed2x`.
+  - SmartThings: `pushed` / `double`, else `pushed_2x`.
   - Lutron Caséta buttons (event entities provided by the companion
     lutron-caseta-events integration; HA's own lutron_caseta creates
     none): single = `press` (`release` is ignored), double = `multi_tap`
@@ -94,6 +95,7 @@ _SINGLE_EVENT_TYPES = (
     "single_press",
     "single_push",
     "KeyPressed",
+    "pushed",
     "click",
     "press",
     "short_release",
@@ -104,6 +106,7 @@ _SINGLE_EVENT_TYPES = (
 _DOUBLE_EVENT_TYPES = (
     "multi_press_2",
     "double",
+    "pushed_2x",
     "double_press",
     "double_push",
     "KeyPressed2x",

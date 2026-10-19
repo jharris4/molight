@@ -1940,6 +1940,26 @@ NATIVE_VOCABULARIES = {
         ["press"],
     ),
     "tuya_wxkg_two_state": (["click", "press"], "click", None, ["press"]),
+    # smartthings: HA's button fixture, then BUTTON_EVENT_TYPES in
+    # smartthings/event.py for a button that doesn't report its values.
+    "smartthings": (["pushed", "held", "pushed_2x"], "pushed", "pushed_2x", ["held"]),
+    "smartthings_all_values": (
+        [
+            "pushed",
+            "held",
+            "double",
+            "pushed_2x",
+            "pushed_3x",
+            "down",
+            "down_hold",
+            "up",
+            "up_hold",
+            "swipe_up",
+        ],
+        "pushed",
+        "double",
+        ["held", "pushed_3x", "down", "down_hold", "up", "up_hold", "swipe_up"],
+    ),
     "govee_ble": (["press"], "press", None, []),
     "switchbot": (["press"], "press", None, []),
 }
