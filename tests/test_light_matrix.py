@@ -532,6 +532,105 @@ async def test_gate_window_end_while_bright_off_ends_the_on_period(
 
 
 @pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+)
+async def test_dark_edge_outside_a_gate_window_resumes_a_bright_off(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """Outside a gate window going dark still resumes an on-period that
+    brightness cut short: the gate blocks presence lighting an off room, not
+    continuing an on-period that already exists."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(SCHED, "off")  # outside the window
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            illuminance=ILLUM, schedule=SCHED, schedule_mode=mode, timeout=300
+        ),
+    )
+
+    # Manual control is never gated.
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+    freezer.tick(timedelta(seconds=100))
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["bright_forced_off"] is True
+
+    freezer.tick(timedelta(seconds=100))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    assert _state(hass).attributes["bright_forced_off"] is False
+    await _assert_resumed_for(hass, freezer, 100)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("mode", "held"),
+    [
+        (SCHEDULE_MODE_GATE, False),
+        (SCHEDULE_MODE_GATE_SWITCH, True),
+        (SCHEDULE_MODE_GATE_KEEP, True),
+    ],
+)
+async def test_dark_edge_outside_a_gate_window_resumes_for_presence_as_the_mode_allows(
+    hass: HomeAssistant, freezer, mode: str, held: bool
+) -> None:
+    """Presence lights no off room outside a gate window, but once the resume
+    has the light on, Switch and Keep state let it hold the light as they do
+    any on light outside the window; Gate and turn off ignores it."""
+    hass.states.async_set(ILLUM, "off")  # dark
+    hass.states.async_set(SCHED, "off")  # outside the window
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(
+            occupancy=OCC,
+            illuminance=ILLUM,
+            schedule=SCHED,
+            schedule_mode=mode,
+            timeout=300,
+        ),
+    )
+
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).attributes["molight_state"] == (
+        STATE_OCCUPIED if held else STATE_ACTIVE
+    )
+    freezer.tick(timedelta(seconds=100))
+    hass.states.async_set(ILLUM, "on")
+    await settle(hass)
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["bright_forced_off"] is True
+
+    freezer.tick(timedelta(seconds=100))
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    if not held:
+        await _assert_resumed_for(hass, freezer, 100)
+        return
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
+    hass.states.async_set(
+        OCC, "off", {"latest_occupied_time": datetime.now(UTC).isoformat()}
+    )
+    await settle(hass)
+    await _assert_resumed_for(hass, freezer, 300)
+
+
+@pytest.mark.asyncio
 async def test_dark_edge_resumes_the_timeout_of_a_light_adopted_at_startup(
     hass: HomeAssistant, freezer
 ) -> None:

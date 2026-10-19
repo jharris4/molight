@@ -4284,8 +4284,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 if self._occupancy_holds() or self._door_holds():
                     self._adopt_active_occupancy()
                 return
-            if self._gate_schedule_inactive():
-                return  # outside the schedule window, so no activation
+            # Outside a gate-mode window presence lights no off room, but an
+            # on-period brightness cut short still resumes: it already exists.
+            gated = self._gate_schedule_inactive()
 
             # Check whether we should activate due to occupancy, a held-open
             # door, or recent history.
@@ -4303,7 +4304,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 door_holds = door_holds and not self._may_replay_manual_off(
                     self.hass.states.get(self._door_entity), observed=False
                 )
-            if occ_active or door_holds:
+            if (occ_active or door_holds) and not gated:
                 self._last_on_illuminance = datetime.now(UTC)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
@@ -4317,16 +4318,20 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # Resumed ahead of standby: its timer ends there anyway.
                 self._last_on_illuminance = datetime.now(UTC)
                 self.hass.async_create_task(self._auto_lights_on())
-                if self._maintain_active():
+                if self._maintain_active() or (
+                    (occ_active or door_holds)
+                    and not self._hard_gate_schedule_inactive()
+                ):
                     # Recent history justified the turn-on; the maintain
-                    # entity now holds the re-lit light.
+                    # entity, or presence an activation-only gate let through
+                    # once the light is on, now holds the re-lit light.
                     self._machine_state = STATE_OCCUPIED
                     self._cancel_timer()
                 else:
                     self._machine_state = STATE_COUNTDOWN
                     self._start_timer(countdown)
                 self.async_write_ha_state()
-            elif self._can_rest_at_standby():
+            elif not gated and self._can_rest_at_standby():
                 # Control mode kept standby off while bright.
                 self._last_on_illuminance = datetime.now(UTC)
                 self._enter_standby(self._auto_on_transition, selection=True)

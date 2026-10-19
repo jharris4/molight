@@ -35,7 +35,10 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
+    SCHEDULE_MODE_GATE_KEEP,
+    SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
+    STATE_COUNTDOWN,
     STATE_EFFECT,
     STATE_IDLE,
     STATE_OCCUPIED,
@@ -593,6 +596,53 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["schedule_window_start"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    "mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP]
+)
+async def test_restart_outside_a_gate_window_keeps_a_bright_off_for_the_dark_edge(
+    hass: HomeAssistant, freezer, mode: str
+) -> None:
+    """A gate window that ended while HA was down ends no on-period brightness
+    cut short, so the room going dark after the restart still resumes it."""
+    ends = datetime.now(UTC) + timedelta(seconds=30)
+    mock_restore_cache(
+        hass,
+        [
+            State(
+                VIRTUAL,
+                "off",
+                {"bright_forced_off": True, "bright_resume_until": ends.isoformat()},
+            )
+        ],
+    )
+    hass.states.async_set(ILLUM, "on")  # still bright
+    hass.states.async_set(SCHED, "off")  # the window ended during the downtime
+    hass.states.async_set(REAL, "off")
+    await setup_entries(
+        hass, make_light_entry(illuminance=ILLUM, schedule=SCHED, schedule_mode=mode)
+    )
+    await settle(hass)
+    assert _state(hass).attributes["bright_forced_off"] is True
+    assert _state(hass).attributes["bright_resume_until"] == ends.isoformat()
+
+    hass.states.async_set(ILLUM, "off")
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_COUNTDOWN
+    assert state.attributes["bright_forced_off"] is False
+    freezer.tick(timedelta(seconds=29))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "on"
+    freezer.tick(timedelta(seconds=2))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert _state(hass).state == "off"
 
 
 @pytest.mark.asyncio
