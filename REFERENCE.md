@@ -574,7 +574,7 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 |---|---|
 | **Lights to control** | The `light` entities every bound button drives (at least one is required) |
 | **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
-| **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it |
+| **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it. Toggle moves the lights together, as a light group does: if any is on it turns them all off, otherwise all on |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
 | **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* an **RGB color**; its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
 

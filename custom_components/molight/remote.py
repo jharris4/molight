@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.event import ATTR_EVENT_TYPE, ATTR_EVENT_TYPES
 from homeassistant.const import (
     EVENT_HOMEASSISTANT_STARTED,
+    STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
@@ -224,6 +225,14 @@ def _brightness_step_calls(
     return calls
 
 
+def _any_on(hass: HomeAssistant, targets: list[str]) -> bool:
+    """Return True if any target light is on now."""
+    return any(
+        (state := hass.states.get(entity_id)) is not None and state.state == STATE_ON
+        for entity_id in targets
+    )
+
+
 def _fired_since(state: State, since: datetime) -> bool:
     """Return True for an event fired after `since`: its state is its time."""
     fired = dt_util.parse_datetime(state.state)
@@ -307,6 +316,9 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         if binding is None:
             return
         action, service, data = binding
+        if action == REMOTE_ACTION_TOGGLE and len(targets) > 1:
+            # One unit, as a light group toggles: any target on turns all off.
+            service = "turn_off" if _any_on(hass, targets) else "turn_on"
         calls = (
             _brightness_step_calls(hass, targets, data)
             if action in (REMOTE_ACTION_BRIGHTNESS_UP, REMOTE_ACTION_BRIGHTNESS_DOWN)

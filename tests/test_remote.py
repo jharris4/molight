@@ -889,6 +889,43 @@ async def test_brightness_step_mid_warning_leaves_other_targets_stepping(
 
 
 @pytest.mark.asyncio
+async def test_toggle_on_several_targets_moves_them_together(
+    hass: HomeAssistant,
+) -> None:
+    """A toggle on mixed targets turns them all off, then all on, as a light
+    group does; a missing target counts as off."""
+    from tests.real_entities import RealLight, add_real  # noqa: PLC0415
+
+    await add_real(hass, RealLight("left", on=True), RealLight("right"))
+    targets = ["light.left", "light.right", "light.missing"]
+    remote = _remote_entry(
+        **{
+            CONF_TARGET_LIGHTS: targets,
+            CONF_TOGGLE_BUTTONS_SINGLE: ["event.pico_on"],
+        }
+    )
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, remote)
+    calls = _record_service_calls(hass)
+
+    def _states() -> list[str]:
+        return [hass.states.get(t).state for t in targets[:2]]
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _states() == ["off", "off"]
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _states() == ["on", "on"]
+    assert [
+        (c["service"], c["service_data"]["entity_id"])
+        for c in calls
+        if c["domain"] == "light"
+    ] == [("turn_off", targets), ("turn_on", targets)]
+    assert hass.states.get("sensor.test_remote_last_action").state == "toggle"
+
+
+@pytest.mark.asyncio
 async def test_preset_turns_on_with_values(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
