@@ -158,6 +158,7 @@ from .helpers import (
     MEMBER_LIGHT_TYPES as _MEMBER_LIGHT_TYPES,
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
+    light_owners as _light_owners,
     lights_commanded as _lights_commanded,
     lights_lit_with as _lights_lit_with,
     lights_support_brightness,
@@ -1693,8 +1694,9 @@ def _discovery_candidates(
     if domain == "light":
         for entity_id in _groups_with_virtual_lights(hass, list(candidates)):
             del candidates[entity_id]
+        owners = _light_owners(hass)
         for entity_id in list(candidates):
-            if _shared_lights(hass, [entity_id]):
+            if _shared_lights(hass, [entity_id], owners=owners):
                 del candidates[entity_id]
     return candidates
 
@@ -1807,10 +1809,11 @@ def _shared_light_candidates(
 ) -> list[str]:
     """Light entity ids that would add a light another virtual light commands."""
     own = edited_entry.entry_id if edited_entry is not None else None
+    owners = _light_owners(hass, own_entry_id=own)
     return sorted(
         entity_id
         for entity_id in _all_light_ids(hass)
-        if _shared_lights(hass, [entity_id], own_entry_id=own)
+        if _shared_lights(hass, [entity_id], owners=owners)
     )
 
 

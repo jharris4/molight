@@ -7525,6 +7525,36 @@ async def test_create_picker_hides_lights_other_virtual_lights_control(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("form", ["create", "discovery"])
+async def test_light_pickers_scan_virtual_lights_once_per_render(
+    hass: HomeAssistant, form: str
+) -> None:
+    """Hiding shared lights reads the virtual lights once per render, not once
+    per light in Home Assistant, which stalls a large home's event loop."""
+    from custom_components.molight import helpers  # noqa: PLC0415
+
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, hall)
+
+    async def _scans(lights: int) -> int:
+        for n in range(lights):
+            hass.states.async_set(f"light.bulb_{n}", "off")
+        with patch.object(
+            helpers, "molight_light_entries", wraps=helpers.molight_light_entries
+        ) as scan:
+            if form == "create":
+                result = await _start_create(hass)
+                await hass.config_entries.flow.async_configure(
+                    result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+                )
+            else:
+                await _reach_discovery_select(hass, "discover_light")
+        return scan.call_count
+
+    assert await _scans(2) == await _scans(40)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
 async def test_create_refuses_a_light_wrapped_while_the_form_was_open(
     hass: HomeAssistant, scheduled: bool

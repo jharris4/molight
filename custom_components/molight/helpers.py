@@ -491,20 +491,16 @@ def group_leaves(
     }
 
 
-def shared_lights(
-    hass: HomeAssistant, members: Sequence[str], *, own_entry_id: str | None = None
-) -> dict[str, str]:
-    """Return lights among these members another virtual light commands.
+def light_owners(
+    hass: HomeAssistant, *, own_entry_id: str | None = None
+) -> tuple[dict[str, ConfigEntry], dict[str, str]]:
+    """Return the virtual light entries and the owner of each light they command.
 
-    Maps each such light to that virtual light's entity id, or its entry's
-    title while it has no light entity. Two virtual lights commanding one
-    light fight over it, so each light belongs to one; a light under a
-    wrapped virtual light is that light's, not the wrapper's.
+    An owner is named by its light's entity id, or its entry's title while it
+    has no light entity; the first owner by name wins a light two command.
     """
     lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
-    mine = lights_commanded(hass, members, lights)
-    shared: dict[str, str] = {}
     # An entry whose light entity was deleted or not yet set up still has its lights.
     owners = sorted(
         (
@@ -515,13 +511,32 @@ def shared_lights(
         ),
         key=lambda owner: owner[0],
     )
+    owned: dict[str, str] = {}
     for name, entry in owners:
-        theirs = lights_commanded(
+        for light in lights_commanded(
             hass, molight_config(entry).get(CONF_LIGHTS, []), lights
-        )
-        for light in sorted(mine & theirs):
-            shared.setdefault(light, name)
-    return shared
+        ):
+            owned.setdefault(light, name)
+    return lights, owned
+
+
+def shared_lights(
+    hass: HomeAssistant,
+    members: Sequence[str],
+    *,
+    own_entry_id: str | None = None,
+    owners: tuple[dict[str, ConfigEntry], dict[str, str]] | None = None,
+) -> dict[str, str]:
+    """Return lights among these members another virtual light commands.
+
+    Maps each such light to its owner (see light_owners), which a caller
+    checking many member lists computes once and passes in. Two virtual
+    lights commanding one light fight over it, so each light belongs to one;
+    a light under a wrapped virtual light is that light's, not the wrapper's.
+    """
+    lights, owned = owners or light_owners(hass, own_entry_id=own_entry_id)
+    mine = lights_commanded(hass, members, lights)
+    return {light: owned[light] for light in sorted(mine) if light in owned}
 
 
 # A keep-on entity holds while it is "on", so only these domains can hold.
