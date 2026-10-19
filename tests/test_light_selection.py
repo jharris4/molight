@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -385,6 +386,72 @@ async def test_selection_skipped_when_target_is_missing_or_unavailable(
     assert state.attributes["last_turn_on_selection_option"] is None
     assert state.attributes["last_turn_on_selection_source"] is None
     assert f"Turn-on selection target select.ambient_theme is {target}" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["missing", "unavailable", "unresolved", "failed"])
+@pytest.mark.allow_warning_log
+async def test_skipped_selection_warns_once_until_one_applies(
+    hass: HomeAssistant, caplog, reason: str
+) -> None:
+    """Each turn-on still tries the selection, but the same failure warns only
+    once; repeats log at debug, and a selection applied again logs one line
+    and lets the next failure warn."""
+    caplog.set_level(logging.DEBUG, logger="custom_components.molight")
+    selected: list[str] = []
+    fail = reason == "failed"
+
+    async def select_option(call: ServiceCall) -> None:
+        if fail:
+            raise HomeAssistantError
+        selected.append(call.data["option"])
+
+    def _break() -> None:
+        if reason == "missing":
+            hass.states.async_remove("select.ambient_theme")
+        elif reason == "unavailable":
+            hass.states.async_set("select.ambient_theme", "unavailable")
+        elif reason == "unresolved":
+            hass.states.async_set("select.ambient_theme", "Normal", {"options": ["X"]})
+
+    async def _cycle() -> None:
+        for service in ("turn_off", "turn_on"):
+            await hass.services.async_call(
+                "light", service, {"entity_id": "light.selection_light"}, blocking=True
+            )
+            await settle(hass)
+
+    def _logged(level: int) -> list[str]:
+        return [
+            r.getMessage()
+            for r in caplog.records
+            if r.levelno == level and "turn-on selection" in r.getMessage().lower()
+        ]
+
+    hass.services.async_register("select", "select_option", select_option)
+    hass.states.async_set("light.ambient", "off")
+    _break()
+    await setup_entries(hass, _selection_entry())
+    for _ in range(3):
+        await _cycle()
+    assert len(_logged(logging.WARNING)) == 1
+    assert len(_logged(logging.DEBUG)) == 2
+    assert selected == []
+
+    fail = False
+    hass.states.async_set("select.ambient_theme", "Normal", {"options": ["Cozy"]})
+    await _cycle()
+    assert selected == ["Cozy"]
+    assert _logged(logging.INFO) == [
+        "Turn-on selection using select.ambient_theme applied again"
+    ]
+    await _cycle()
+    assert len(_logged(logging.INFO)) == 1
+
+    fail = reason == "failed"
+    _break()
+    await _cycle()
+    assert len(_logged(logging.WARNING)) == 2
 
 
 @pytest.mark.asyncio

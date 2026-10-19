@@ -997,6 +997,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
         self._last_turn_on_selection_option: str | None = None
         self._last_turn_on_selection_source: str | None = None
+        # The (select entity, reason) last warned about, so repeats log at debug.
+        self._selection_warned: tuple[str, str] | None = None
         # True while the current on-period was started by occupancy (not by
         # the user), the only case where a false-detection clear may cut the
         # lights short.
@@ -5152,10 +5154,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if target is None or target.state == STATE_UNAVAILABLE:
             # HA only logs a call to such a target, so it would otherwise be
             # recorded as applied. An unknown one (no current option) accepts it.
-            _LOGGER.warning(
+            state = "missing" if target is None else target.state
+            _LOGGER.log(
+                self._selection_log_level(select_entity, state),
                 "Turn-on selection target %s is %s; turning on the lights without it",
                 select_entity,
-                "missing" if target is None else target.state,
+                state,
             )
             return
         option, source = self._resolve_turn_on_selection()
@@ -5165,7 +5169,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 parts.append(f"the source {self._turn_on_select_source_entity}")
             if self._turn_on_select_option:
                 parts.append(f"the fixed fallback {self._turn_on_select_option!r}")
-            _LOGGER.warning(
+            _LOGGER.log(
+                self._selection_log_level(select_entity, "unresolved"),
                 "Unable to resolve a turn-on selection option for %s: %s; "
                 "turning on the lights without one",
                 select_entity,
@@ -5191,7 +5196,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # renamed option, a failing integration or one that never answers
             # must never leave the room dark, or the light reporting on with
             # nothing lit.
-            _LOGGER.warning(
+            _LOGGER.log(
+                self._selection_log_level(select_entity, "failed"),
                 "Unable to apply turn-on selection option %r using %s; turning on the "
                 "lights without it",
                 option,
@@ -5201,6 +5207,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         else:
             self._last_turn_on_selection_option = option
             self._last_turn_on_selection_source = source
+            if self._selection_warned is not None:
+                self._selection_warned = None
+                _LOGGER.info("Turn-on selection using %s applied again", select_entity)
+
+    def _selection_log_level(self, select_entity: str, reason: str) -> int:
+        """Return the level for a skipped selection: warn once, then debug."""
+        warned = (select_entity, reason)
+        level = logging.DEBUG if warned == self._selection_warned else logging.WARNING
+        self._selection_warned = warned
+        return level
 
     def _resolve_turn_on_selection(self) -> tuple[str | None, str | None]:
         """Resolve the source state, falling back to the configured option."""
