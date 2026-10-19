@@ -9,7 +9,6 @@ fresh events.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -395,14 +394,12 @@ class _MemberLight:
         service: str,
         *,
         error: Exception | None = None,
-        hang: bool = False,
         lit: tuple[str, ...] = (),
     ) -> None:
         self._hass = hass
         self._lit = lit
         self._original = hass.services.async_services_for_domain("light")[service]
         self.error = error
-        self.hang = hang
         hass.services.async_register(
             "light", service, self._handle, schema=self._original.schema
         )
@@ -419,21 +416,11 @@ class _MemberLight:
                 {"brightness": params.get("brightness")},
                 context=call.context,
             )
-        if self.hang:
-            await asyncio.Event().wait()
         if self.error is not None:
             raise self.error
 
 
 _OFFLINE = HomeAssistantError("device offline")
-
-
-async def _pass(hass: HomeAssistant, freezer, seconds: float) -> None:
-    """Let time pass while a member call may be parked."""
-    freezer.tick(timedelta(seconds=seconds))
-    async_fire_time_changed(hass)
-    for _ in range(4):
-        await asyncio.sleep(0)
 
 
 async def _trigger(hass: HomeAssistant, trigger: str) -> None:
@@ -443,21 +430,18 @@ async def _trigger(hass: HomeAssistant, trigger: str) -> None:
         )
     else:
         hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "on")
-    # Dispatched before time passes; settle() would wait for the member call.
-    for _ in range(4):
-        await asyncio.sleep(0)
+    await settle(hass)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["occupancy", "manual", "door"])
-@pytest.mark.parametrize("how", ["raises", "hangs"])
 @pytest.mark.allow_warning_log
 async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
-    hass: HomeAssistant, freezer, caplog, trigger: str, how: str
+    hass: HomeAssistant, caplog, trigger: str
 ) -> None:
-    """A member whose integration raises at a turn-on, or never answers it,
-    was not lit: the light reports off and idle, not on over a dark room,
-    and the next trigger sends the turn-on again."""
+    """A member whose integration raises at a turn-on was not lit: the light
+    reports off and idle, not on over a dark room, and the next trigger
+    sends the turn-on again."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(DOOR, "off")
     hass.states.async_set(REAL, "off")
@@ -466,14 +450,9 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     )
     await settle(hass)
     calls = _record_calls(hass)
-    member = _MemberLight(hass, "turn_on", error=_OFFLINE, hang=how == "hangs")
+    member = _MemberLight(hass, "turn_on", error=_OFFLINE)
 
     await _trigger(hass, trigger)
-    if how == "hangs":
-        await _pass(hass, freezer, 29)
-        assert _state(hass).state == "on"
-        await _pass(hass, freezer, 2)
-    await settle(hass)
 
     state = _state(hass)
     assert state.state == "off"
@@ -481,10 +460,8 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     assert state.attributes["last_off_manual"] is None
     assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [_LEVEL[trigger]]
     assert f"Unable to turn on {REAL}" in caplog.text
-    assert ("TimeoutError" in caplog.text) == (how == "hangs")
 
     member.error = None
-    member.hang = False
     if trigger != "manual":
         hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "off")
         await settle(hass)

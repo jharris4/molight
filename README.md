@@ -156,7 +156,7 @@ Follow-mode Virtual Lights are not offered for conversion because their schedule
 MoLight writes no debug logs. It logs an error when discovery fails to create an entry, and a warning only when it cannot do what it was asked:
 
 - a turn-on selection it could not apply;
-- a command a real light's integration refused or never answered (the Virtual Light then reports what its real lights show);
+- a command a real light's integration refused (the Virtual Light then reports what its real lights show);
 - a Virtual Scheduled Light with no schedule;
 - a combined schedule that includes itself;
 - a Virtual Schedule Sensor saved with a window that never opens at the home location;

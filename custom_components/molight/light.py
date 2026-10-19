@@ -526,7 +526,6 @@ async def async_setup_entry(
 # Context alone cannot tell: Home Assistant reuses our service-call context on
 # a member for 5 s, and a slow bulb's genuine reply arrives under its own.
 TURN_ON_SELECT_TIMEOUT = 10.0  # seconds a turn-on waits for its select call
-MEMBER_CALL_TIMEOUT = 30.0  # seconds a command to the real lights may take
 ECHO_SETTLE_SECONDS = 3.0  # partial replies (power first, fade steps) count
 ECHO_LATE_SECONDS = 30.0  # only a reply matching the command still counts
 ECHO_HISTORY = 8  # commands per member whose reply may still be on its way
@@ -5036,9 +5035,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     ) -> None:
         """Send one command to some of the real lights, and notice it failing.
 
-        Home Assistant only logs a member's integration raising, or never
-        answering, so the call is awaited apart from the caller, which goes
-        on as if it were sent.
+        Home Assistant only logs a member's integration raising, so the call
+        is awaited apart from the caller, which goes on as if it were sent.
         """
         self.hass.async_create_task(
             self._await_member_command(service, service_data, context)
@@ -5050,10 +5048,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         on = service == "turn_on"
         group = service_data["entity_id"]
         try:
-            async with asyncio.timeout(MEMBER_CALL_TIMEOUT):
-                await self.hass.services.async_call(
-                    "light", service, service_data, blocking=True, context=context
-                )
+            await self.hass.services.async_call(
+                "light", service, service_data, blocking=True, context=context
+            )
         except Exception:
             _LOGGER.warning(
                 "Unable to turn %s %s",

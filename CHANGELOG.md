@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tuya scene switches**: their click and double click now bind; the long
   press no longer fires the single-click action.
-- **Commands a real light refuses**: a member that raises or never answers no
+- **Commands a real light refuses**: a member whose integration raises no
   longer leaves the Virtual Light on over a dark room, or off over a lit one.
 
 ## [1.9.0] - 2026-10-06
