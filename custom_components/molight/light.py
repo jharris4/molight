@@ -397,6 +397,14 @@ from .helpers import (
     shared_lights,
     suggested_entity_id,
 )
+from .issues import (
+    ISSUE_HOLD_ALWAYS_ON,
+    ISSUE_HOLD_NEVER_ON,
+    ISSUE_LIGHT_MEMBER_CYCLE,
+    ISSUE_LIGHT_SHARED_MEMBER,
+    ISSUE_SCHEDULED_LIGHT_NO_SCHEDULE,
+    async_raise_issue,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -1496,6 +1504,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 member,
                 self.entity_id,
             )
+            async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_LIGHT_MEMBER_CYCLE,
+                {"entity": self.entity_id, "member": member},
+                about=member,
+            )
         self._lights = [m for m in self._lights if m not in cyclic]
         return bool(cyclic)
 
@@ -1554,6 +1569,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 other,
                 light,
             )
+            async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_LIGHT_SHARED_MEMBER,
+                {"entity": self.entity_id, "other": other, "light": light},
+                about=light,
+            )
 
     @callback
     def _warn_refused_holds(self) -> None:
@@ -1572,9 +1594,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         always = lights_lit_with(self.hass, [self.entity_id], self._lights, holds)
         for entity_id in holds:
             if entity_id in always:
-                reason = "is on whenever this light is"
+                reason, key = "is on whenever this light is", ISSUE_HOLD_ALWAYS_ON
             elif split_entity_id(entity_id)[0] not in HOLD_ENTITY_DOMAINS:
-                reason = "never reads on"
+                reason, key = "never reads on", ISSUE_HOLD_NEVER_ON
             else:
                 continue
             _LOGGER.warning(
@@ -1582,6 +1604,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self.entity_id,
                 entity_id,
                 reason,
+            )
+            async_raise_issue(
+                self.hass,
+                self._entry_id,
+                key,
+                {"entity": self.entity_id, "hold": entity_id},
+                about=entity_id,
             )
 
     def _show_restored(self, last: State) -> None:
@@ -1676,6 +1705,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 "Virtual Scheduled Light %s has no schedule; "
                 "using outside-schedule settings",
                 self._attr_name,
+            )
+            async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_SCHEDULED_LIGHT_NO_SCHEDULE,
+                {"entity": self.entity_id},
             )
         self._inside_schedule = inside
         self._settings_window_seen = (

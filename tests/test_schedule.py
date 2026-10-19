@@ -54,6 +54,7 @@ from tests.conftest import (
     TORONTO,
     TROMSO,
     make_light_entry,
+    molight_issues,
     restart_entries,
     set_home,
     settle,
@@ -2279,10 +2280,14 @@ async def test_saved_window_that_never_opens_is_logged_at_setup(
     off, and says why in the log."""
     tz = await set_home(hass, *TORONTO)
     freezer.move_to(_local(tz, "2026-06-22 12:00"))
+    entry = _schedule_entry([{"start": edges[0], "end": edges[1]}])
     with caplog.at_level(logging.WARNING):
-        await _setup(hass, _schedule_entry([{"start": edges[0], "end": edges[1]}]))
+        await _setup(hass, entry)
     assert hass.states.get(NIGHT).state == "off"
     assert ("never opens" in caplog.text) is warned
+    assert molight_issues(hass, entry.entry_id) == (
+        {"schedule_window_never_opens": {"entity": NIGHT}} if warned else {}
+    )
 
 
 # ---------------------------------------------------------------------------

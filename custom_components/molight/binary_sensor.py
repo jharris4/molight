@@ -106,6 +106,14 @@ from .helpers import (
     sensor_dependencies,
     suggested_entity_id,
 )
+from .issues import (
+    ISSUE_COMBINED_SCHEDULE_CYCLE,
+    ISSUE_OCCUPANCY_SOURCE_CYCLE,
+    ISSUE_SCHEDULE_SOURCE_CYCLE,
+    ISSUE_SCHEDULE_WINDOW_NEVER_OPENS,
+    async_clear_issue,
+    async_raise_issue,
+)
 
 if TYPE_CHECKING:
     import asyncio
@@ -224,6 +232,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
+        self._entry_id = entry.entry_id
         self._source_sensor: str = cfg[CONF_OCCUPANCY_SENSOR]
         self._timeout: int = int(
             cfg.get(CONF_OCCUPANCY_TIMEOUT, DEFAULT_OCCUPANCY_TIMEOUT)
@@ -248,6 +257,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         self._dropout: datetime | None = None
         # Whether the source is computed from this sensor, as a group can be.
         self._source_cycle = False
+        self._cycle_issue: str | None = None
         # What the source is computed from, watched for coming to include it.
         self._inputs: set[str] = set()
         self._inputs_unsub: CALLBACK_TYPE | None = None
@@ -362,6 +372,15 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
                 self.entity_id,
                 self._source_sensor,
             )
+            self._cycle_issue = async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_OCCUPANCY_SOURCE_CYCLE,
+                {"entity": self.entity_id, "source": self._source_sensor},
+            )
+        elif not cyclic and self._cycle_issue is not None:
+            async_clear_issue(self.hass, self._cycle_issue)
+            self._cycle_issue = None
         self._source_cycle = cyclic
         return cyclic
 
@@ -1490,6 +1509,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._next_transition: datetime | None = None
         self._unsub_transition = None
         self._source_cycle = False
+        self._cycle_issue: str | None = None
         # What the source is computed from, watched for coming to include it.
         self._inputs: set[str] = set()
         self._inputs_unsub: CALLBACK_TYPE | None = None
@@ -1563,6 +1583,12 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                     "Schedule %s has a window that never opens at this home "
                     "location: its end always comes before its start",
                     self._attr_name,
+                )
+                async_raise_issue(
+                    self.hass,
+                    self._entry_id,
+                    ISSUE_SCHEDULE_WINDOW_NEVER_OPENS,
+                    {"entity": self.entity_id},
                 )
             self._refresh()
 
@@ -1702,6 +1728,15 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                 self.entity_id,
                 self._source,
             )
+            self._cycle_issue = async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_SCHEDULE_SOURCE_CYCLE,
+                {"entity": self.entity_id, "source": self._source},
+            )
+        elif not cyclic and self._cycle_issue is not None:
+            async_clear_issue(self.hass, self._cycle_issue)
+            self._cycle_issue = None
         self._source_cycle = cyclic
         return cyclic
 
@@ -1985,6 +2020,8 @@ class _ScheduleTree:
         self.plain_schedules: set[str] = set()
         # An input reached by several routes is one shared node, evaluated once.
         self.nodes: dict[str, _ScheduleNode] = {}
+        # Inputs that led back into the chain being expanded.
+        self.cycles: set[str] = set()
 
     def combined(
         self,
@@ -2040,6 +2077,7 @@ class _ScheduleTree:
                 "Combined schedule %s includes itself; treating it as unknown",
                 entity_id,
             )
+            self.cycles.add(entity_id)
             return None
         self.configs.setdefault(entry.entry_id, cfg)
         self.disabled[entry.entry_id] = entry.disabled_by
@@ -2114,6 +2152,14 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         }
         self._input_disabled = tree.disabled
         self._input_entities = tree.entities
+        for entity_id in sorted(tree.cycles):
+            async_raise_issue(
+                self.hass,
+                self._entry_id,
+                ISSUE_COMBINED_SCHEDULE_CYCLE,
+                {"entity": self.entity_id, "loop": entity_id},
+                about=entity_id,
+            )
 
         # An unavailable state is saved without attributes or on/off value,
         # so both are also kept as extra data; the state serves older saves.

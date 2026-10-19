@@ -46,6 +46,7 @@ from .const import (
     REMOTE_ACTION_FIELDS,
 )
 from .helpers import molight_config
+from .issues import async_clear_entry_issues, async_clear_issues_naming
 from .remote import async_setup_remote
 
 if TYPE_CHECKING:
@@ -217,8 +218,8 @@ def _entries_naming(hass: HomeAssistant, entity_id: str) -> set[str]:
     return {
         entry.entry_id
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if entity_id in _referenced_ids(entry.data)
-        or entity_id in _referenced_ids(entry.options)
+        if entity_id in referenced_entity_ids(entry.data)
+        or entity_id in referenced_entity_ids(entry.options)
     }
 
 
@@ -235,12 +236,16 @@ def current_references(
     )
     removed = hass.data.get(DATA_REMOVED, set())
     return current, next(
-        (entity_id for entity_id in _referenced_ids(current) if entity_id in removed),
+        (
+            entity_id
+            for entity_id in referenced_entity_ids(current)
+            if entity_id in removed
+        ),
         None,
     )
 
 
-def _referenced_ids(cfg: Mapping[str, Any]) -> Iterator[str]:
+def referenced_entity_ids(cfg: Mapping[str, Any]) -> Iterator[str]:
     """Yield every entity ID cfg stores, in both settings mappings too."""
     for settings in (
         cfg,
@@ -351,6 +356,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
+        # A corrected entry starts clean; one still broken raises them again.
+        async_clear_entry_issues(hass, entry.entry_id)
         entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, {})
         hass.data.setdefault(DATA_AUTO_OFF_KEPT, {})[entry.entry_id] = entry_data.get(
             DATA_AUTO_OFF_ENABLED, True
@@ -366,6 +373,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     them is updated (which reloads it), so lights lose their sensor instead of
     keeping a reference to an entity that no longer exists.
     """
+    async_clear_entry_issues(hass, entry.entry_id)
     hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, None)
     if watch := hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(entry.entry_id, None):
         watch.unsub()
@@ -383,6 +391,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     if not removed:
         return
     hass.data.setdefault(DATA_REMOVED, set()).update(removed)
+    async_clear_issues_naming(hass, removed)
     # The unload left restored placeholders that read as a reload in
     # progress; drop them now, as HA's registry cleanup would after the
     # reloads below, so the watchers see the removal for what it is.

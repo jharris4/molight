@@ -12,7 +12,7 @@ import pytest
 from freezegun import freeze_time
 from homeassistant.const import EVENT_CALL_SERVICE, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState, callback
-from homeassistant.helpers import restore_state
+from homeassistant.helpers import issue_registry as ir, restore_state
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -317,6 +317,16 @@ async def set_home(
     hass.config.latitude = latitude
     hass.config.longitude = longitude
     return dt_util.get_time_zone(time_zone)
+
+
+def molight_issues(hass: HomeAssistant, entry_id: str) -> dict[str, dict[str, str]]:
+    """Return the Repairs issues an entry raised, by ID without the entry prefix."""
+    prefix = f"{entry_id}_"
+    return {
+        issue_id[len(prefix) :]: dict(issue.translation_placeholders or {})
+        for (domain, issue_id), issue in ir.async_get(hass).issues.items()
+        if domain == DOMAIN and issue_id.startswith(prefix)
+    }
 
 
 async def setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:

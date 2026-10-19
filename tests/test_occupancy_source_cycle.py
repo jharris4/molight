@@ -35,7 +35,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
 )
 from custom_components.molight.helpers import molight_config
-from tests.conftest import make_light_entry, settle, setup_entries
+from tests.conftest import make_light_entry, molight_issues, settle, setup_entries
 from tests.real_entities import RealBinary, RealLight, add_real
 from tests.test_schedule_source_cycle import (
     BELOW,
@@ -137,6 +137,8 @@ async def test_a_source_group_changed_to_include_the_sensor_is_not_followed(
         assert lamp.is_on
     await _close_cycle(hass, groups, topology)
     assert WARNING in caplog.text
+    issue = {"entity": SEEN, "source": GROUP}
+    assert molight_issues(hass, seen.entry_id) == {"occupancy_source_cycle": issue}
     if unavailable_timeout == 0:
         # No clear-after-unavailable to wait for.
         assert hass.states.get(SEEN).state == "off"
@@ -155,11 +157,13 @@ async def test_a_source_group_changed_to_include_the_sensor_is_not_followed(
     assert await hass.config_entries.async_reload(seen.entry_id)
     await settle(hass)
     assert hass.states.get(SEEN).state == "off"
+    assert molight_issues(hass, seen.entry_id) == {"occupancy_source_cycle": issue}
 
     # Taking the sensor out again does, with the room still occupied.
     await _set_members(hass, groups["below"], [REAL])
     await _set_members(hass, groups["source"], [REAL, BELOW])
     assert hass.states.get(SEEN).state == "on"
+    assert molight_issues(hass, seen.entry_id) == {}
     real.set(False)
     await settle(hass)
     assert hass.states.get(SEEN).state == "off"

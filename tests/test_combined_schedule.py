@@ -56,6 +56,7 @@ from tests.conftest import (
     finish_startup,
     light_targets,
     make_light_entry,
+    molight_issues,
     record_service_calls,
     restart_entries,
     set_home,
@@ -1133,6 +1134,16 @@ async def test_loop_is_unknown_instead_of_hanging(
 
     assert "includes itself" in caplog.text
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    for entry, entity_id in (
+        (loop_a, "binary_sensor.loop_a"),
+        (loop_b, "binary_sensor.loop_b"),
+    ):
+        assert molight_issues(hass, entry.entry_id) == {
+            f"combined_schedule_cycle_{entity_id}": {
+                "entity": entity_id,
+                "loop": entity_id,
+            }
+        }
     assert hass.states.get("binary_sensor.loop_a").state == "unavailable"
     assert hass.states.get("binary_sensor.loop_b").state == "unavailable"
 

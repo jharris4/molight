@@ -1819,5 +1819,43 @@
       "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again.",
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }
+  },
+  "issues": {
+    "combined_schedule_cycle": {
+      "title": "{entity} includes itself",
+      "description": "The inputs of {entity} lead back to {loop}, so the combination cannot be resolved and the schedule is unavailable. Remove the schedule that closes the loop from the inputs in Configure."
+    },
+    "hold_always_on": {
+      "title": "{hold} cannot hold {entity} on",
+      "description": "{hold} is on whenever {entity} is, so as a keep-on entity it would hold the light on for good, or never. Change the keep-on entities in Configure."
+    },
+    "hold_never_on": {
+      "title": "{hold} cannot hold {entity} on",
+      "description": "{hold} never reads on, so as a keep-on entity it never holds the light. Wrap it in a template binary sensor and choose that instead in Configure."
+    },
+    "light_member_cycle": {
+      "title": "{entity} does not control {member}",
+      "description": "{member} includes {entity} itself, directly or through a light group inside it, so driving it would make the light command itself. Remove {member} from the lights in Configure and add its other lights directly."
+    },
+    "light_shared_member": {
+      "title": "{entity} and {other} both control {light}",
+      "description": "Two virtual lights commanding one light fight over it. Give {light} to one of them in Configure, and add that virtual light to the other instead."
+    },
+    "occupancy_source_cycle": {
+      "title": "{entity} does not follow its source",
+      "description": "The source {source} is computed from {entity} itself, so following it would keep the sensor on by its own state. The sensor reads as clear until {entity} is removed from {source}, or another source is chosen in Configure."
+    },
+    "schedule_source_cycle": {
+      "title": "{entity} is unavailable because its source includes it",
+      "description": "The source {source} is computed from {entity} itself, so the schedule would hold itself on. It stays unavailable until {entity} is removed from {source}, or another source is chosen in Configure."
+    },
+    "schedule_window_never_opens": {
+      "title": "{entity} has a window that never opens",
+      "description": "The window's end always comes before its start at the home location, so the schedule stays off. Change the window in Configure; to run from a sun event into the same half of the next day, invert the opposite window."
+    },
+    "scheduled_light_no_schedule": {
+      "title": "{entity} has no schedule",
+      "description": "A Virtual Scheduled Light switches settings on a schedule, and this one has none, so its outside-schedule settings are used all the time. Choose a schedule in Configure."
+    }
   }
 }

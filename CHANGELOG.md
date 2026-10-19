@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Garage door openers and gates as the door sensor**: a door, garage or gate
   cover can now drive a Virtual Light, open in every state but closed.
+- **Repairs and diagnostics**: a setting MoLight cannot act on, such as two
+  virtual lights that control one light, is raised as a Repairs issue, and
+  every entry offers a diagnostics download to attach to a bug report.
 
 ### Fixed
 

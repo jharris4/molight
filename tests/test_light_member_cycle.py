@@ -21,6 +21,7 @@ from custom_components.molight import light as ml
 from tests.conftest import (
     light_targets,
     make_light_entry,
+    molight_issues,
     record_service_calls,
     settle,
     setup_entries,
@@ -110,11 +111,13 @@ async def test_a_member_group_that_includes_the_light_is_not_driven(
             suggested_object_id="cycle_group",
         )
     caplog.set_level(logging.WARNING)
-    await setup_entries(
-        hass, make_light_entry(name="Cycle Light", lights=[GROUP, LAMP])
-    )
+    light = make_light_entry(name="Cycle Light", lights=[GROUP, LAMP])
+    await setup_entries(hass, light)
     await settle(hass)
     assert f"{VIRTUAL} does not control {GROUP}" in caplog.text
+    assert molight_issues(hass, light.entry_id) == {
+        f"light_member_cycle_{GROUP}": {"entity": VIRTUAL, "member": GROUP}
+    }
 
     calls = record_service_calls(hass)
     await hass.services.async_call(
