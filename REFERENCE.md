@@ -107,7 +107,7 @@ Edge cases:
 
 Attributes: `current_window_start` (identifies the effective `on` period, where overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_transition`, `source_entity`, `inverted`.
 
-**Source outages.** Source-backed schedules preserve their effective state and window marker across a temporary source outage, and Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic activation while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state.
+**Source outages.** Source-backed schedules preserve their effective state and window marker across a temporary source outage, and Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic turn-ons while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state.
 
 - As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
 - A schedule disabled or reloaded while Home Assistant keeps running still follows its source, so it comes back with a window the source started meanwhile.
@@ -423,7 +423,7 @@ A virtual light can control another MoLight virtual light. The wrapped light kee
 
 ### Brightness, color, and fades
 
-The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs advertises on/off rather than offering a slider none of them can move. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last activated (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
+The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs advertises on/off rather than offering a slider none of them can move. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last turned on (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
 Color works the same way, and its capabilities come from the real lights:
 

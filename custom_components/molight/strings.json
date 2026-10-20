@@ -1131,9 +1131,9 @@
     "schedule_mode": {
       "options": {
         "follow": "Follow: turn on at window start, off at window end",
-        "gate": "Gate and turn off: automatic activation only inside the window; off at the end",
-        "gate_switch": "Gate and switch state: automatic activation only inside the window; recalculate at the end",
-        "gate_keep": "Gate and keep state: automatic activation only inside the window; preserve state and timer at the end"
+        "gate": "Gate and turn off: automatic turn-on only inside the window; off at the end",
+        "gate_switch": "Gate and switch state: automatic turn-on only inside the window; recalculate at the end",
+        "gate_keep": "Gate and keep state: automatic turn-on only inside the window; preserve state and timer at the end"
       }
     },
     "schedule_end_action": {

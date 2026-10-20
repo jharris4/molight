@@ -164,7 +164,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   Follow    # on at window start, off at window end
 ```
 
-**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should activate the light *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
+**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should turn the light on *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
 
 ---
 
