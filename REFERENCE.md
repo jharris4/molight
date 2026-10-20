@@ -423,7 +423,7 @@ A virtual light can control another MoLight virtual light. The wrapped light kee
 
 ### Brightness, color, and fades
 
-The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs advertises on/off rather than offering a slider none of them can move. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last turned on (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
+The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs offers on/off only, rather than a slider none of them can move. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last turned on (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
 Color works the same way, and its capabilities come from the real lights:
 
@@ -436,7 +436,7 @@ Color works the same way, and its capabilities come from the real lights:
 
 **Fades.** Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions; flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
 
-Those configured fades are separate from a `transition` you pass on the service call yourself. A virtual light forwards that to its real lights, so `light.turn_on`/`light.turn_off` with a fade, or a scene applied with one, works as it would against the real lights. Home Assistant drops the fade per member for any bulb that can't do one. Transition support is advertised whenever any member can fade, and stays advertised while a member hasn't reported in yet, so a bulb that is slow to appear at startup can't silently cost you a fade.
+Those configured fades are separate from a `transition` you pass on the service call yourself. A virtual light forwards that to its real lights, so `light.turn_on`/`light.turn_off` with a fade, or a scene applied with one, works as it would against the real lights. Home Assistant drops the fade per member for any bulb that can't do one. The virtual light offers fades whenever any member can fade, and keeps offering them while a member hasn't reported in yet, so a bulb that is slow to appear at startup can't silently cost you a fade.
 
 ### Turn-on selection
 
@@ -449,7 +449,7 @@ An optional **turn-on selection entity** lets MoLight choose a preset, theme, mo
 
 **Option source.** For conditional behavior, choose an **option source entity**: an `input_select` or another `select` whose current state is copied to the target at turn-on time. Home Assistant can then change that helper from a calendar or automation. For example, it can select a holiday theme during a date range, a game-night theme when the local team is playing, and the normal theme otherwise.
 
-- When both entities advertise their option lists during setup, MoLight requires them to have at least one option in common; the source may still be a subset or superset of the target.
+- When both entities offer their option lists during setup, MoLight requires them to have at least one option in common; the source may still be a subset or superset of the target.
 - If the source is unusable or its current value is not offered by the target, MoLight uses the required fixed fallback.
 - The source is read only when MoLight turns the light on; changing it while the light is already on does not reapply the selection.
 
@@ -628,20 +628,20 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 
 Each button may appear in several actions, as long as no *(button, click)* pair is bound twice, e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
 
-**How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is resolved per button from the event entity's advertised `event_types`:
+**How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is read per button from the event entity's `event_types`:
 
-- Buttons that announce `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
+- Buttons that have `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
 - Zigbee2MQTT-style and Shelly Gen1 buttons with literal `single`/`double` map directly.
-- HomeKit controller buttons announce `single_press`/`double_press`, and native Lutron (RadioRA 2) keypad buttons `single_press`: single = `single_press`, double = `double_press`.
-- Shelly Gen2 and later inputs announce `single_push`/`double_push`; their `btn_down`/`btn_up` never fire a binding.
-- Z-Wave scene controllers announce `KeyPressed`/`KeyPressed2x`: single = `KeyPressed`, double = `KeyPressed2x`.
-- SmartThings buttons announce `pushed` with `double` and/or `pushed_2x`: single = `pushed`, double = `double`, or `pushed_2x` when the button doesn't announce `double`.
-- BTHome and Xiaomi BLE buttons announce `press`/`double_press`: single = `press`, double = `double_press`. SwitchBot, Govee BLE and native Lutron raise/lower buttons announce `press` alone.
-- Tuya scene switches announce `click`/`double_click`: single = `click`, double = `double_click`. Their `press` is a long press, so it never fires a binding.
-- Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) announce `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps; a double-click binding is accepted but only fires if the bridge does.
-- Hue-style buttons (and Matter without multi-press): single = `short_release`, falling back to `initial_press` for buttons that announce nothing better (it is last in priority because it also precedes a long press).
+- HomeKit controller buttons have `single_press`/`double_press`, and native Lutron (RadioRA 2) keypad buttons `single_press`: single = `single_press`, double = `double_press`.
+- Shelly Gen2 and later inputs have `single_push`/`double_push`; their `btn_down`/`btn_up` never fire a binding.
+- Z-Wave scene controllers have `KeyPressed`/`KeyPressed2x`: single = `KeyPressed`, double = `KeyPressed2x`.
+- SmartThings buttons have `pushed` with `double` and/or `pushed_2x`: single = `pushed`, double = `double`, or `pushed_2x` when the button doesn't have `double`.
+- BTHome and Xiaomi BLE buttons have `press`/`double_press`: single = `press`, double = `double_press`. SwitchBot, Govee BLE and native Lutron raise/lower buttons have `press` alone.
+- Tuya scene switches have `click`/`double_click`: single = `click`, double = `double_click`. Their `press` is a long press, so it never fires a binding.
+- Lutron Caséta buttons (via [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)) have `press`/`multi_tap`: single = `press`, double = `multi_tap`. Note classic Caséta bridges may never report multi-taps; a double-click binding is accepted but only fires if the bridge does.
+- Hue-style buttons (and Matter without multi-press): single = `short_release`, falling back to `initial_press` for buttons that have nothing better (it is last in priority because it also precedes a long press).
 
-Long, held and triple presses never fire a binding. A click whose spelling a button doesn't announce is rejected at setup (a rotary dial or a doorbell has no single click), while a button that advertises no event types yet (one Home Assistant has never loaded) is accepted and fires once it reports a matching event.
+Long, held and triple presses never fire a binding. A click whose spelling a button doesn't have is rejected at setup (a rotary dial or a doorbell has no single click), while a button with no event types yet (one Home Assistant has never loaded) is accepted, and its binding runs whenever the button fires a matching event.
 
 Two things worth knowing:
 
