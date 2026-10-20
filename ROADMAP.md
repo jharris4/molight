@@ -26,10 +26,11 @@ Chosen 2026-10-19. Order within the batch is the order to build.
 
 1. Row 8, diagnostics and Repairs: every bug report from then on starts with a diagnostics file, and the Repairs half converts warnings that already exist.
 2. Row 7, events: a public contract once automations listen for them, so the event names and payload keys are settled before later features need to emit them.
+3. Row 6, services: chosen 2026-10-20 after rows 1 and 2 were demoted. The one row left whose workaround is clumsy, an input_boolean keep-on entity plus an automation that clears it after a delay; the countdown already exists and the services move its deadline.
 
 After that, in order:
 
-1. Rows 6, 11 and 4, with row 12 if there is room. A "turns off at" sensor (row 11) earns its place once a service can extend that countdown (row 6). None touches the precedence rules.
+1. Rows 11 and 4, with row 12 if there is room. A "turns off at" sensor (row 11) earns its place once a service can extend that countdown (row 6). None touches the precedence rules.
 2. Row 3 on its own, with its own matrix tests and e2e run, because it is the one high-demand item that reaches into echo detection.
 3. Rows 9, 14, 15, 19 and 20 wait for user evidence: each has a workaround or a high verification cost.
 
@@ -42,7 +43,7 @@ After that, in order:
 | 3 | A scene or script as the turn-on action | High | Med | High | High | Partial | Fair | None | Idea |
 | 4 | Weekday selection on time-window schedules | Med | Low | Med | Med | Yes | Good | None | Idea |
 | 5 | Virtual Remote: hold to dim | Med | Med | Low | Low | No | Good | None | Idea |
-| 6 | Services: extend the timer, hold auto-off for a duration, restart the countdown | High | Med | Med | Med | Partial | Good | None | Idea |
+| 6 | Services: extend the timer, hold auto-off for a duration, restart the countdown | High | Med | Med | Med | Partial | Good | None | Scheduled |
 | 7 | Events fired at state transitions | Med | Low | Low | Low | Partial | Good | None | Scheduled |
 | 8 | Diagnostics download and Repairs issues | Low | Low | Low | Low | Yes | Good | None | Scheduled |
 | 9 | Standby on a plain Virtual Light | Med | Med | High | Med | Yes | Good | None | Idea |
