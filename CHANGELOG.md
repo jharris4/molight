@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Repairs and diagnostics**: a setting MoLight cannot act on, such as two
   virtual lights that control one light, is raised as a Repairs issue, and
   every entry offers a diagnostics download to attach to a bug report.
+- **Events entity**: every virtual light and occupancy sensor gets a
+  `<name> Events` entity recording what it last did and why, for a spoken off
+  warning or a "why did it turn off" notification (see
+  [Events](https://github.com/jharris4/molight/blob/main/REFERENCE.md#events)).
 
 ### Fixed
 

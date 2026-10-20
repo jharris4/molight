@@ -90,6 +90,7 @@ from .const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
+    EVENT_FALSE_DETECTION,
     RELOAD_GRACE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
@@ -99,6 +100,7 @@ from .const import (
 from .helpers import (
     GoneJudge,
     RenamableRestoreEntity,
+    announce_event,
     entity_gone,
     molight_config,
     renamed_to,
@@ -480,6 +482,13 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         self._last_clear_unavailable = False
         if self._last_clear_false:
             self._false_count += 1
+            announce_event(
+                self.hass,
+                self._entry_id,
+                self.entity_id,
+                EVENT_FALSE_DETECTION,
+                on_duration=round((cleared - self._last_on_time).total_seconds(), 1),
+            )
             return
         candidate = cleared - timedelta(seconds=self._timeout)
         if self._latest_occupied_time is None or candidate > self._latest_occupied_time:
@@ -601,6 +610,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         cfg = molight_config(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
+        self._entry_id = entry.entry_id
         self._trigger_sensors: list[str] = cfg.get(CONF_TRIGGER_SENSORS, [])
         self._maintain_sensors: list[str] = cfg.get(CONF_MAINTAIN_SENSORS, [])
         self._attr_is_on = False
@@ -928,6 +938,19 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._last_clear_false = not self._cycle_genuine
             if self._last_clear_false:
                 self._false_count += 1
+                announce_event(
+                    self.hass,
+                    self._entry_id,
+                    self.entity_id,
+                    EVENT_FALSE_DETECTION,
+                    on_duration=(
+                        round(
+                            (datetime.now(UTC) - self._last_on_time).total_seconds(), 1
+                        )
+                        if self._last_on_time is not None
+                        else None
+                    ),
+                )
 
         self.async_write_ha_state()
 

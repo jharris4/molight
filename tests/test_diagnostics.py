@@ -67,7 +67,7 @@ async def test_light_diagnostics_hold_its_settings_entities_and_references(
     assert diag["entry"]["state"] == "loaded"
     assert diag["entry"]["data"][CONF_LIGHTS] == [REAL]
     entities = {e["entity_id"]: e for e in diag["entities"]}
-    assert set(entities) == {"light.hall", "switch.hall_auto_off"}
+    assert set(entities) == {"light.hall", "switch.hall_auto_off", "event.hall_events"}
     assert entities["light.hall"]["state"] == "off"
     assert entities["light.hall"]["attributes"]["molight_state"] == "idle"
     assert set(diag["references"]) == {REAL, MOTION, GUEST}
@@ -100,8 +100,9 @@ async def test_sensor_diagnostics_name_the_entries_that_use_it(
 
     diag = await get_diagnostics_for_config_entry(hass, hass_client, occupancy)
 
-    assert [e["entity_id"] for e in diag["entities"]] == [MOTION]
-    assert diag["entities"][0]["state"] == "on"
+    entities = {e["entity_id"]: e for e in diag["entities"]}
+    assert set(entities) == {MOTION, "event.hall_motion_events"}
+    assert entities[MOTION]["state"] == "on"
     assert set(diag["references"]) == {PIR}
     assert diag["references"][PIR]["molight_entry"] is None
     assert diag["referenced_by"] == [

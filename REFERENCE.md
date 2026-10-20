@@ -26,6 +26,8 @@ Details:
 
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted) and `entity_id`, when a clear is flagged false (see [Events](#events)).
+
 ## Virtual Combined Occupancy Sensor
 
 Combines multiple MoLight occupancy sensors into one. Constituents are usually simple Virtual Occupancy Sensors, but other combined sensors can be nested too; the flows reject self-references and cycles, and a sensor can't hold both roles at once.
@@ -47,6 +49,8 @@ Restarts, reloads and edits:
 - **A constituent reloading:** editing a constituent's options unloads its entry and brings it back a moment later, so a constituent that was `on` when its entry unloaded keeps counting as `on` for up to 10 seconds, and occupancy clears only if it has not reported by then.
 
 Attributes: `latest_occupied_time` (max across all constituents), `last_on_time` (when the visit started, by its trigger sensors; null when they did not see it start), `last_clear_false_detection`, `false_detection_count`.
+
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted, null when its start was not seen) and `entity_id`, when a clear is flagged false (see [Events](#events)).
 
 ## Virtual Illuminance Sensor
 
@@ -364,6 +368,42 @@ Details:
 - **Unavailable keep-on entities:** one dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released", or as engaged). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding.
 - **Restarts:** the switch state survives restarts, and a held light adopted at startup won't start a timer.
 - **Deleted or disabled:** disabling or deleting the Auto-off switch entity releases its hold straight away, since such a switch can't be turned back on; re-enabling a disabled one brings back the state it had. A keep-on entity that is deleted or disabled stops holding in the same way.
+
+### Events
+
+Each virtual light also creates a companion **`<name> Events` entity** (`event.<name>_events`; an [Entity ID](README.md#choosing-the-entity-id) typed when creating the light shapes it like the switch, so `light.kitchen` gives `event.kitchen_events`). It records what the light last did: its state is the time, `event_type` says what happened, and the attributes say why and what was set. Every event carries `entity_id`, the virtual light. Trigger on it with Home Assistant's **Event received** trigger, which lists the event types; an attribute such as `reason` is a condition on `trigger.to_state.attributes`.
+
+| Event type | When | Attributes |
+|---|---|---|
+| `turned_on` | An on-period started, or a light resting at standby was raised | `reason`: `manual` (through the virtual light), `physical` (a real light changed by something other than MoLight: a wall switch, another automation, the HA UI), `occupancy`, `door`, `illuminance` (going dark with presence), `resume` (going dark resumed an on-period brightness cut short), `schedule_start` (a follow window, or a Virtual Scheduled Light's inside settings taking over), `startup` (a restart found the light off where it rests at standby). `standby`: whether the lights came on at the standby level. `brightness` (0 to 255), `color` (`color_temp_kelvin` or `hs_color`) and `selection` (the turn-on selection option): what MoLight commanded, null when it sent none; for `physical`, what the real light reported |
+| `turned_off` | An on-period ended | `reason`: `manual`, `physical`, `timer`, `false_detection` (the quick off after a false cycle), `bright`, `schedule_end` (a follow window, a **Gate and turn off** window or a Virtual Scheduled Light's turn-off boundary, including one applied after a restart or a hold). `standby`: whether the lights rested at standby instead of going dark |
+| `off_warning` | The effect/warn sequence advanced | `stage`: `effect`, `warn` or `cancelled` (a re-trigger ended the sequence with the lights on). `off_in`: seconds until the lights go off from this moment, null at `cancelled`. `standby`: whether the sequence ends at standby. `brightness`, `color`: the stage's look; at `cancelled`, the look the lights show after it |
+| `turn_on_blocked` | A trigger that would have lit the room was refused by a gate | `trigger`: `occupancy` or `door`. `reason`: `bright`, or `schedule` (outside a gate-mode window) |
+| `adjusted` | A person changed the brightness or color of a light that is on | `reason`: `manual` or `physical`. `brightness`, `color`: what changed, null for the one that did not |
+
+Values are only ever added, never renamed or removed, so an automation written against them keeps working. A re-send after a slow turn-on selection, a real light back from `unavailable` and a restart that re-applies a look are not events: they continue an on-period. What a wrapped virtual light does by itself (see [Wrapping another virtual light](#wrapping-another-virtual-light)) is its own entity's event, not the wrapping light's.
+
+A spoken warning before an automatic off needs no cue on the light itself: set the **Effect warning duration** to `0` and leave the **Warning brightness** and colors blank, so the grace period changes nothing visible, then:
+
+```yaml
+triggers:
+  - trigger: event.received
+    target:
+      entity_id: event.hallway_events
+    options:
+      event_type:
+        - off_warning
+conditions:
+  - condition: template
+    value_template: "{{ trigger.to_state.attributes.stage == 'warn' }}"
+actions:
+  - action: tts.speak
+    target:
+      entity_id: tts.home_assistant_cloud
+    data:
+      media_player_entity_id: media_player.hallway
+      message: "Hallway lights off in {{ trigger.to_state.attributes.off_in }} seconds."
+```
 
 ### Wrapping another virtual light
 

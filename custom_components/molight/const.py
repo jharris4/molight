@@ -3,7 +3,7 @@
 DOMAIN = "molight"
 
 # Union of every platform below; the fallback for an unrecognized entity type.
-PLATFORMS = ["binary_sensor", "light", "sensor", "switch"]
+PLATFORMS = ["binary_sensor", "event", "light", "sensor", "switch"]
 
 # Entity type discriminator stored in config entry data
 ENTITY_TYPE_OCCUPANCY = "occupancy"
@@ -29,13 +29,13 @@ ENTITY_TYPES = [
 # Forwarding only the platforms an entry actually uses avoids setting up (and
 # immediately returning from) the other three on every sensor entry.
 PLATFORMS_BY_ENTITY_TYPE = {
-    ENTITY_TYPE_OCCUPANCY: ["binary_sensor"],
-    ENTITY_TYPE_COMBINED_OCCUPANCY: ["binary_sensor"],
+    ENTITY_TYPE_OCCUPANCY: ["binary_sensor", "event"],
+    ENTITY_TYPE_COMBINED_OCCUPANCY: ["binary_sensor", "event"],
     ENTITY_TYPE_ILLUMINANCE: ["binary_sensor"],
     ENTITY_TYPE_SCHEDULE: ["binary_sensor"],
     ENTITY_TYPE_COMBINED_SCHEDULE: ["binary_sensor"],
-    ENTITY_TYPE_LIGHT: ["light", "switch"],
-    ENTITY_TYPE_SCHEDULED_LIGHT: ["light", "switch"],
+    ENTITY_TYPE_LIGHT: ["light", "switch", "event"],
+    ENTITY_TYPE_SCHEDULED_LIGHT: ["light", "switch", "event"],
     ENTITY_TYPE_REMOTE: ["sensor"],
 }
 
@@ -313,6 +313,49 @@ DATA_DISCOVERY_RESERVED = DOMAIN + "_discovery_reserved"
 # entry type changed in between (a light/scheduled-light conversion).
 DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
+
+# --- Events entity ---
+# A Virtual Light or occupancy sensor announces what it did on this signal
+# (event type, attributes); its "<name> Events" entity records the last one.
+SIGNAL_EVENT = DOMAIN + "_event_{}"
+
+# A light's event types. The lists are a public contract: values are only
+# ever added, so an automation written against one keeps working.
+EVENT_TURNED_ON = "turned_on"
+EVENT_TURNED_OFF = "turned_off"
+EVENT_OFF_WARNING = "off_warning"
+EVENT_TURN_ON_BLOCKED = "turn_on_blocked"
+EVENT_ADJUSTED = "adjusted"
+LIGHT_EVENT_TYPES = [
+    EVENT_TURNED_ON,
+    EVENT_TURNED_OFF,
+    EVENT_OFF_WARNING,
+    EVENT_TURN_ON_BLOCKED,
+    EVENT_ADJUSTED,
+]
+# An occupancy sensor's.
+EVENT_FALSE_DETECTION = "false_detection"
+OCCUPANCY_EVENT_TYPES = [EVENT_FALSE_DETECTION]
+
+# The `reason` of a turned_on, turned_off or turn_on_blocked event.
+REASON_MANUAL = "manual"  # through the virtual light entity
+REASON_PHYSICAL = "physical"  # a real light changed by something other than MoLight
+REASON_OCCUPANCY = "occupancy"
+REASON_DOOR = "door"
+REASON_ILLUMINANCE = "illuminance"  # going dark with presence
+REASON_RESUME = "resume"  # going dark resumed an on-period brightness cut short
+REASON_SCHEDULE_START = "schedule_start"
+REASON_STARTUP = "startup"  # a restart found the light off where it rests at standby
+REASON_TIMER = "timer"
+REASON_FALSE_DETECTION = "false_detection"
+REASON_BRIGHT = "bright"
+REASON_SCHEDULE_END = "schedule_end"
+REASON_SCHEDULE = "schedule"  # blocked: outside a gate-mode window
+
+# The `stage` of an off_warning event.
+STAGE_EFFECT = "effect"
+STAGE_WARN = "warn"
+STAGE_CANCELLED = "cancelled"
 
 # How a referenced illuminance entity affects the light:
 #   control:  dark gates turn-ons AND turning bright forces the lights off

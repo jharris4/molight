@@ -20,6 +20,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er, restore_state
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import async_generate_entity_id
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -41,6 +42,7 @@ from .const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     RELOAD_GRACE,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
+    SIGNAL_EVENT,
 )
 
 if TYPE_CHECKING:
@@ -83,6 +85,26 @@ def suggested_entity_id(
     if not obj:
         return None
     return async_generate_entity_id(entity_id_format, f"{obj}{suffix}", hass=hass)
+
+
+def announce_event(
+    hass: HomeAssistant,
+    entry_id: str,
+    entity_id: str,
+    event_type: str,
+    **attributes: Any,
+) -> None:
+    """Record on an entry's Events entity what its light or sensor did.
+
+    Nobody listens while the entity is disabled or not yet added, and the
+    event is simply dropped.
+    """
+    async_dispatcher_send(
+        hass,
+        SIGNAL_EVENT.format(entry_id),
+        event_type,
+        {"entity_id": entity_id, **attributes},
+    )
 
 
 def renamed_to(hass: HomeAssistant, entity_id: str) -> str | None:

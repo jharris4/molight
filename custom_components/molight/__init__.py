@@ -321,12 +321,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # here (torn down with the entry); its Last Action sensor rides the
         # normal platform forwarding below.
         entry.async_on_unload(async_setup_remote(hass, entry))
-    # Once running, the Auto-off switch restores first: the light seeds when added.
-    # At startup one call, as HA bills all but the last import wait (core #184898).
+    # Once running, the Auto-off switch restores first, and the Events entity
+    # listens first: the light seeds when added, reading the one and
+    # announcing on the other. At startup one call, as HA bills all but the
+    # last import wait (core #184898).
     rest = platforms
-    if hass.state is CoreState.running and "switch" in platforms:
-        await hass.config_entries.async_forward_entry_setups(entry, ["switch"])
-        rest = [platform for platform in platforms if platform != "switch"]
+    first = [platform for platform in ("switch", "event") if platform in platforms]
+    if hass.state is CoreState.running and first:
+        await hass.config_entries.async_forward_entry_setups(entry, first)
+        rest = [platform for platform in platforms if platform not in first]
     await hass.config_entries.async_forward_entry_setups(entry, rest)
 
     # Reload the entry whenever options are updated so entities pick up new values.

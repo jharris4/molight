@@ -8662,7 +8662,7 @@ async def test_light_options_reject_own_keep_on_entities(
     result = await hass.config_entries.options.async_init(hall.entry_id)
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.hall", "switch.hall_auto_off"]
+    ] == ["event.hall_events", "light.hall", "switch.hall_auto_off"]
     # A stale form still knows the switch by its old id.
     er.async_get(hass).async_update_entity(
         "switch.hall_auto_off", new_entity_id="switch.hall_hold"
@@ -8700,7 +8700,7 @@ async def test_scheduled_light_options_reject_own_keep_on_entities(
     assert result["step_id"] == "scheduled_light_outside"
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.night", "switch.night_auto_off"]
+    ] == ["event.night_events", "light.night", "switch.night_auto_off"]
     er.async_get(hass).async_update_entity(
         "switch.night_auto_off", new_entity_id="switch.night_hold"
     )
@@ -8722,7 +8722,7 @@ async def test_scheduled_light_options_reject_own_keep_on_entities(
     assert result["step_id"] == "scheduled_light_inside"
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.night", "switch.night_hold"]
+    ] == ["event.night_events", "light.night", "switch.night_hold"]
 
 
 @pytest.mark.asyncio
@@ -8739,7 +8739,7 @@ async def test_light_options_stored_own_keep_on_entity_gets_friendly_error(
     result = await hass.config_entries.options.async_init(hall.entry_id)
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.hall"]
+    ] == ["event.hall_events", "light.hall"]
     result = await _submit_light_options(
         hass,
         result,
@@ -8811,7 +8811,7 @@ async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_e
     assert result["step_id"] == "scheduled_light_outside"
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.night"]
+    ] == ["event.night_events", "light.night"]
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -8830,7 +8830,7 @@ async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_e
     assert result["step_id"] == "scheduled_light_inside"
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
-    ] == ["light.night", "switch.night_auto_off"]
+    ] == ["event.night_events", "light.night", "switch.night_auto_off"]
 
 
 # ---------------------------------------------------------------------------
@@ -10179,6 +10179,7 @@ async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
         for e in er.async_entries_for_config_entry(
             er.async_get(hass), sensor_entry.entry_id
         )
+        if e.domain == "binary_sensor"
     ]
     result = await _reach_assign_kind(
         hass, "assign_occupancy" if kind == "assign_maintain" else kind

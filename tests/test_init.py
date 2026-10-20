@@ -61,14 +61,14 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_init",
             CONF_OCCUPANCY_TIMEOUT: 30,
         },
-        {"binary_sensor": 1},
+        {"binary_sensor": 1, "event": 1},
     ),
     ENTITY_TYPE_COMBINED_OCCUPANCY: (
         {
             CONF_NAME: "Init Combined",
             CONF_TRIGGER_SENSORS: ["binary_sensor.trigger_init"],
         },
-        {"binary_sensor": 1},
+        {"binary_sensor": 1, "event": 1},
     ),
     ENTITY_TYPE_ILLUMINANCE: (
         {
@@ -90,7 +90,7 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
             CONF_LIGHTS: ["light.real_init"],
             CONF_LIGHT_TIMEOUT: 60,
         },
-        {"light": 1, "switch": 1},
+        {"light": 1, "switch": 1, "event": 1},
     ),
     ENTITY_TYPE_REMOTE: (
         {
@@ -139,7 +139,8 @@ async def test_light_entry_forwards_in_one_call_at_startup(
     hass: HomeAssistant, running: bool
 ) -> None:
     """At startup every platform goes in one call: HA bills each earlier call's
-    import wait to MoLight's startup time. Once running, the switch goes first."""
+    import wait to MoLight's startup time. Once running, the switch and the
+    Events entity go first."""
     entry = _make_entry(ENTITY_TYPE_LIGHT)
     if not running:
         hass.set_state(CoreState.starting)
@@ -150,7 +151,9 @@ async def test_light_entry_forwards_in_one_call_at_startup(
     ) as forward:
         await setup_entries(hass, entry)
     calls = [sorted(call.args[1]) for call in forward.call_args_list]
-    assert calls == ([["switch"], ["light"]] if running else [["light", "switch"]])
+    assert calls == (
+        [["event", "switch"], ["light"]] if running else [["event", "light", "switch"]]
+    )
     if not running:
         await finish_startup(hass)
 
@@ -182,7 +185,7 @@ async def test_light_entry_seeds_and_clears_hass_data(hass: HomeAssistant) -> No
     await setup_entries(hass, entry)
     assert hass.data[DOMAIN][entry.entry_id] == {
         DATA_AUTO_OFF_ENABLED: True,
-        DATA_PLATFORMS: ["light", "switch"],
+        DATA_PLATFORMS: ["light", "switch", "event"],
     }
 
     assert await hass.config_entries.async_unload(entry.entry_id)
