@@ -130,7 +130,7 @@ Warning color:           255, 0, 0   # red: bulbs that can show color turn red f
 
 Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel, shown in red on any color-capable bulb for an unmissable cue (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
 
-At each MoLight off-to-on transition, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
+Each time MoLight turns the light on, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
 Set **Illuminance mode** to **Gate only** instead if your lux sensor can *see* the lights it controls (otherwise they'd oscillate).
 
@@ -193,7 +193,7 @@ Schedule sensor:   binary_sensor.home_schedule
 Schedule mode:     Gate and turn off
 ```
 
-While someone is home, occupancy can turn the entryway light on normally. When away mode turns on, the inverted schedule turns off and **Gate and turn off** switches the light off. If the source becomes unavailable, the gate blocks new automatic activation but does not invent a schedule-end transition for a light that is already on.
+While someone is home, occupancy can turn the entryway light on normally. When away mode turns on, the inverted schedule turns off and **Gate and turn off** switches the light off. If the source becomes unavailable, the gate blocks new automatic turn-ons but does not treat the outage as a schedule end for a light that is already on.
 
 ---
 
