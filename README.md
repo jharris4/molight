@@ -2,7 +2,7 @@
 
 A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation: wrap your real sensors and lights in virtual entities, wire them together from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
 
-Writing these automations by hand is tedious, and the complexity grows fast once you account for real-world behavior: sensors with different hold timeouts, sensors that are good at *triggering* occupancy but not *maintaining* it (or vice versa), schedules that mix fixed times with sun events, Home Assistant restarts, and sources that drop to `unavailable` at the worst moment. MoLight handles all of that in a small set of reusable entities.
+Writing these automations by hand is tedious, and the complexity grows fast once you account for real-world behavior: sensors that stay on for different lengths of time after the last motion, sensors that are good at *triggering* occupancy but not *maintaining* it (or vice versa), schedules that mix fixed times with sun events, Home Assistant restarts, and sources that drop to `unavailable` at the worst moment. MoLight handles all of that in a small set of reusable entities.
 
 **The building blocks** (each is its own config entry, so create as many as you like):
 
