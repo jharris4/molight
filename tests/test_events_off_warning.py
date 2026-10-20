@@ -31,6 +31,7 @@ from custom_components.molight.const import (
 from tests.conftest import (
     make_light_entry,
     make_scheduled_light_entry,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -205,3 +206,27 @@ async def test_a_warning_ending_at_standby_says_so(hass, freezer) -> None:
             "standby": True,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_restart_mid_warning_cancels_it(hass, freezer) -> None:
+    """A restart undoes the stage it lands in, which reports cancelled."""
+    entry = make_light_entry(
+        name="Hall", timeout=60, occupancy=OCC, warn_timeout=15, warn_brightness=100
+    )
+    records = await _setup(hass, entry)
+    await tick(hass, freezer, 61)
+    assert records == [_warning(STAGE_WARN, 15, brightness=255)]
+    before = hass.states.get(EVENTS).state
+
+    await restart_entries(hass, entry)
+
+    after = hass.states.get(EVENTS)
+    assert after.state != before
+    assert {k: after.attributes[k] for k in ("event_type", "stage", "off_in")} == {
+        "event_type": EVENT_OFF_WARNING,
+        "stage": STAGE_CANCELLED,
+        "off_in": None,
+    }
+    assert after.attributes["brightness"] == 200
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] != "warn"
