@@ -25,6 +25,7 @@ The examples build on each other:
 11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
 12. [Porch light with standby](#example-12-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
 13. [Open-plan kitchen](#example-13-open-plan-kitchen-virtual-combined-occupancy-sensor): two motion sensors and an mmWave sensor merged into one occupancy signal
+14. [TV hold](#example-14-tv-hold-template-helper-as-a-keep-on-entity): a media player keeps the lights on through a Home Assistant Template helper
 
 See [REFERENCE.md](REFERENCE.md) for the full field reference.
 
@@ -470,6 +471,35 @@ Occupancy sensor:  binary_sensor.kitchen_occupancy
 Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's own hold time is respected.
 
 Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on by hand: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a hand-lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
+
+---
+
+### Example 14: TV hold (Template helper as a keep-on entity)
+
+A living room with one PIR and no presence sensor goes dark while everyone sits still through a film. A keep-on entity holds auto-off while it is `on`, and a media player never reads `on` (its states are `playing`, `paused`, `idle`, `off`), so the picker leaves it out. A Home Assistant Template helper turns "the TV is playing" into a binary sensor that does read `on`, and the rule stays visible: you decide whether `paused` counts.
+
+**1. Template helper**, not a MoLight entry: go to **Settings → Devices & Services → Helpers → Create helper → Template → Template a binary sensor** and enter:
+
+```text
+Name:            TV Playing                    # → binary_sensor.tv_playing
+State template:  {{ is_state('media_player.living_room_tv', 'playing') }}
+```
+
+To hold through pauses as well, use `{{ states('media_player.living_room_tv') in ['playing', 'paused'] }}`. A TV that is off or unavailable makes the template `off`, which is "not holding", never a hold.
+
+**2. Virtual Light**
+
+```text
+Name:              Living Room                     # → light.living_room
+Lights to control: light.living_room_real
+Turn-off timeout:  300
+Occupancy sensor:  binary_sensor.living_occupancy  # a Virtual Occupancy Sensor over the PIR, as in Example 2
+Keep-on entities:  binary_sensor.tv_playing
+```
+
+While the TV plays, the timer and every other automatic turn-off are suspended; a manual off still works. When the TV stops, the hold releases: if the PIR still sees someone the light stays on as usual, and otherwise a fresh full timeout starts, so the lights go out five minutes after the film ends if nobody moves.
+
+The same shape covers a numeric reading: a **Threshold** helper over `sensor.bathroom_humidity` with an upper limit and a hysteresis gives a binary sensor that is `on` while the shower is running, and it goes in the same field.
 
 ---
 

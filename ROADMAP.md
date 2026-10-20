@@ -26,7 +26,6 @@ Chosen 2026-10-19. Order within the batch is the order to build.
 
 1. Row 8, diagnostics and Repairs: every bug report from then on starts with a diagnostics file, and the Repairs half converts warnings that already exist.
 2. Row 7, events: a public contract once automations listen for them, so the event names and payload keys are settled before later features need to emit them.
-3. Row 2, keep-on and maintain from more entity kinds: the picker rules change, the hold logic does not, and a timer helper as a keep-on entity gives "hold for two hours" before row 6 exists.
 
 After that, in order:
 
@@ -39,7 +38,7 @@ After that, in order:
 | # | Feature | Demand | Build | Verify | Risk | Workaround | Fit | Migration | Status |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | Virtual Illuminance Sensor from any binary sensor | Low | Low | Med | Low | Yes | Good | None | Idea |
-| 2 | Keep-on and maintain from media players, timers and numeric thresholds | High | Med | Med | Med | Yes | Good | None | Scheduled |
+| 2 | Keep-on and maintain from media players, timers and numeric thresholds | Low | Med | Med | Med | Yes | Good | None | Idea |
 | 3 | A scene or script as the turn-on action | High | Med | High | High | Partial | Fair | None | Idea |
 | 4 | Weekday selection on time-window schedules | Med | Low | Med | Med | Yes | Good | None | Idea |
 | 5 | Virtual Remote: hold to dim | Med | Med | Low | Low | No | Good | None | Idea |
@@ -63,7 +62,7 @@ After that, in order:
 ## Notes and evidence
 
 1. Most homes have no lux sensor, so "only when dark" today spends the light's single schedule slot on a sunset to sunrise window. A sun-elevation source is a new definition on the existing sensor, like the schedule sensor's two definitions, and the lights do not change. Polar days need the same care as the schedule sensor gives them. Demoted 2026-10-20: a Virtual Combined Schedule Sensor set to All already gives a plain light "dark and in a window", and a sun-backed illuminance sensor in Control mode forces lights off at dawn over an occupied room, so the sun elevation half is dropped.
-2. "Don't turn the lights off while the TV plays" and "hold the bathroom light while the humidity is high". A template binary sensor does it today. The picker rules tightened in 1.9.0 (an entity must read `on`) are what change; a timer helper reading `active` as a hold covers most of row 6.
+2. "Don't turn the lights off while the TV plays" and "hold the bathroom light while the humidity is high". A template binary sensor does it today. The picker rules tightened in 1.9.0 (an entity must read `on`) are what change; a timer helper reading `active` as a hold covers most of row 6. Demoted 2026-10-20: a Template helper or a Threshold helper does it from the Helpers page and keeps the rule that a keep-on entity holds while its state is `on`, where a per-domain reading of `playing` or `active` would be a judgment hidden in the picker; EXAMPLES Example 14 shows the TV case.
 3. Scenes are the standard way to set a multi-light look. A scene lights the bulbs itself, so echo detection must not read that as a change at the wall. The same-device rule for a WLED preset select is the precedent, but a scene can touch any light.
 4. "Weekday mornings only" takes a workday sensor plus a combined All schedule today. An overnight window must decide which day it belongs to, and `next_transition` must skip days.
 5. Pico raise/lower and Hue dimmer hold. Release events differ per ecosystem, so this doubles the vocabulary re-checked on every Home Assistant bump.
