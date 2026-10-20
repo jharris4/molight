@@ -381,6 +381,7 @@ from .const import (
     REASON_SCHEDULE_START,
     REASON_STARTUP,
     REASON_TIMER,
+    REASON_WRAPPED,
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_MODE_FOLLOW,
@@ -2572,6 +2573,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 claim=claim and human,
                 touched=entity_id,
                 announce=claim,
+                human=human,
             )
             return
         if same_state:
@@ -2875,19 +2877,22 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         claim: bool = True,
         touched: str | None = None,
         announce: bool = True,
+        human: bool = True,
     ) -> None:
         """Handle a real light being turned on/off externally.
 
         claim is False for a turn-on our own select call caused. touched is
         the real light that changed. announce is False when our own select
-        call, not a person or another automation, changed it.
+        call, not a person or another automation, changed it. human is False
+        for a wrapped virtual light acting by itself, which the event says.
         """
+        reason = REASON_PHYSICAL if human else REASON_WRAPPED
         if state == "on" and brightness == 0:
             # "On" at brightness 0 is an off in disguise, matching the dimming
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
             # dim is then handled as the turn-on (in _on_light_attrs_change).
             if self._all_lights_off():
-                self._go_idle(manual=manual, reason=REASON_PHYSICAL)
+                self._go_idle(manual=manual, reason=reason)
             return
         if state == "on":
             # Mirror the real light's brightness so the virtual light always
@@ -2900,7 +2905,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             ):
                 self._announce(
                     EVENT_TURNED_ON,
-                    reason=REASON_PHYSICAL,
+                    reason=reason,
                     standby=False,
                     brightness=self._attr_brightness,
                     color=self._current_color(),
@@ -2913,7 +2918,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._restore_untouched(touched)
             self._transition_on(rejoin=claim)
         elif self._all_lights_off():
-            self._go_idle(manual=manual, reason=REASON_PHYSICAL)
+            self._go_idle(manual=manual, reason=reason)
         elif touched is not None and self._in_warning():
             # Switched off while the warning runs on: a re-trigger leaves it off.
             self._pre_warn_members[touched] = None
@@ -2962,7 +2967,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
             if new_b == 0:
                 if self._all_lights_off():
-                    self._go_idle(manual=human, reason=REASON_PHYSICAL)
+                    self._go_idle(
+                        manual=human,
+                        reason=REASON_PHYSICAL if human else REASON_WRAPPED,
+                    )
                     return
                 if self._in_warning():
                     # Dimmed out while the warning runs on: it stays off.
@@ -2978,7 +2986,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # color-only change on a light we consider off is just
                 # mirrored.
                 self._on_light_state_change(
-                    "on", claim=claim and human, announce=claim and human
+                    "on", claim=claim and human, announce=claim, human=human
                 )
             self.async_write_ha_state()
             return

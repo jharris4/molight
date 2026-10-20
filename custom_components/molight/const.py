@@ -340,6 +340,7 @@ OCCUPANCY_EVENT_TYPES = [EVENT_FALSE_DETECTION]
 # The `reason` of a turned_on, turned_off or turn_on_blocked event.
 REASON_MANUAL = "manual"  # through the virtual light entity
 REASON_PHYSICAL = "physical"  # a real light changed by something other than MoLight
+REASON_WRAPPED = "wrapped"  # a wrapped virtual light acting by itself
 REASON_OCCUPANCY = "occupancy"
 REASON_DOOR = "door"
 REASON_ILLUMINANCE = "illuminance"  # going dark with presence
