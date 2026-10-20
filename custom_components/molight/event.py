@@ -10,6 +10,7 @@ triggers on it with Home Assistant's "Event received" trigger.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.event import ENTITY_ID_FORMAT, EventEntity
@@ -33,6 +34,9 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+# EventEntity's private last-event time, as Python names it from outside.
+_LAST_TRIGGERED = "_EventEntity__last_event_triggered"
 
 _EVENT_TYPES = {
     ENTITY_TYPE_LIGHT: LIGHT_EVENT_TYPES,
@@ -85,5 +89,13 @@ class MoLightEvents(EventEntity, RenamableRestoreEntity):
     @callback
     def _on_event(self, event_type: str, attributes: dict[str, Any]) -> None:
         """Record an announcement as the last event."""
+        last = getattr(self, _LAST_TRIGGERED, None)
         self._trigger_event(event_type, attributes)
+        # Home Assistant 2026.8+ does this itself: two events in one
+        # millisecond must still be two state changes.
+        if last is not None:
+            triggered = max(
+                getattr(self, _LAST_TRIGGERED), last + timedelta(milliseconds=1)
+            )
+            setattr(self, _LAST_TRIGGERED, triggered)
         self.async_write_ha_state()
