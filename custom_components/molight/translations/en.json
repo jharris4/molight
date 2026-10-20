@@ -216,7 +216,7 @@
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
             }
           }
@@ -350,7 +350,7 @@
               "entity_id": "Entity ID"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value).",
               "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; rename later via Home Assistant's entity settings."
             }
@@ -1415,7 +1415,7 @@
               "clear_on_unavailable_timeout": "Clear after unavailable"
             },
             "data_description": {
-              "false_detection_grace": "A cycle that ends within this many seconds after the hold timeout contained a single instantaneous detection, almost certainly a false trigger (a fly, a heat blip). Flagged so lights lit by it can turn off quickly. 0 disables.",
+              "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off quickly. 0 disables.",
               "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
             }
           }
