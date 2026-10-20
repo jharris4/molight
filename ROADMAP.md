@@ -59,6 +59,7 @@ After that, in order:
 | 18 | Translations beyond English | Med | High | Low | Low | No | Good | None | Idea |
 | 19 | More than two settings sets on a Virtual Scheduled Light | Low | High | High | High | Partial | Fair | Options | Idea |
 | 20 | Auto-on values per member light | Med | High | High | Med | Yes | Fair | None | Idea |
+| 21 | One Home Assistant device per entry, grouping its entities | Low | Med | Low | Low | No | Good | None | Idea |
 
 ## Notes and evidence
 
@@ -82,6 +83,7 @@ After that, in order:
 18. strings.json is large. Expected to be community work.
 19. Morning, day, evening and night profiles. Two sets already cover most asks when combined with combined schedules.
 20. A lamp at 30% and the ceiling at 100% from one trigger. Two Virtual Lights sharing the sensors do it today.
+21. A light's companion entities ("<name> Auto-off", "<name> Events") are tied to it by name alone. A device per entry groups them on one page, as Home Assistant does for a bulb and its sensors; entity IDs and friendly names stay as they are.
 
 ## Already covered
 
@@ -170,7 +172,13 @@ disagree, this section is the intent.
    nothing in MoLight reads the events. The one design constraint: it is a public contract. Once an
    automation listens for an event name, renaming it breaks them, so the real work is choosing a
    small, stable set of event types and payload keys, settled before later features need to emit
-   them. Scheduled second so every feature after it emits events from the start.
+   them. Scheduled second so every feature after it emits events from the start. The docs must say
+   the warning event can drive a notification on its own: for no cue on the light, set the effect
+   duration to 0 and leave the warn brightness and color blank. Decided 2026-10-19: delivered as
+   event entities, one "<name> Events" per light and per occupancy sensor, rather than bus events.
+   The developer docs allow integrations one bus type, `<domain>_event`, and steer new work to
+   event entities, whose declared type list enforces the closed contract and whose last event
+   restores across restarts. Each event carries the owning entity's ID, reason and the look set.
 8. **Diagnostics and Repairs.** Scheduled first because every bug report from then on starts with a
    diagnostics file, saving a round trip per issue, and the Repairs half converts warnings that
    already existed, so there was no design work, only wiring. Landed 2026-10-19 as commit 3e652cd:
@@ -210,6 +218,14 @@ disagree, this section is the intent.
     asks.
 20. **Auto-on values per member light.** A lamp at 30% and the ceiling at 100% from one trigger.
     Two Virtual Lights sharing the sensors do it today.
+21. **A device per entry.** Added 2026-10-19 while naming row 7's entity. MoLight registers no
+    devices, so a companion entity carries its whole relationship in its name: "Hallway Auto-off",
+    "Hallway Events". Home Assistant's own answer is the device: a bulb's light, power sensor and
+    update entity sit under one device, each named by function, and the entity picker shows the
+    device beside each. One device per entry would group the light, its switch and its events the
+    same way. Registry IDs are kept and the composed names come out as they are today, so nothing
+    breaks; the cost is a device page per entry in Settings, which may read as clutter for a
+    single-entity sensor entry. Low demand on its own, and it waits on how row 7's entity lands.
 
 ### Sequencing
 
