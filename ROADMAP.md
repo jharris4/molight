@@ -22,89 +22,109 @@ Every new setting starts blank or off, so an existing entry behaves exactly as b
 
 ## Next batch
 
-Chosen 2026-10-19. Order within the batch is the order to build.
+Rows 8 and 7 landed on 2026-10-19 and wait for the release. The plan was reviewed on
+2026-10-20 (see Discussion notes): rows with an exact workaround in existing blocks were dropped, two
+rows were cut down to their cheap form, and three rows were added. Order within a batch is the order
+to build.
 
-1. Row 8, diagnostics and Repairs: every bug report from then on starts with a diagnostics file, and the Repairs half converts warnings that already exist.
-2. Row 7, events: a public contract once automations listen for them, so the event names and payload keys are settled before later features need to emit them.
-3. Row 6, services: chosen 2026-10-20 after rows 1 and 2 were demoted. The one row left whose workaround is clumsy, an input_boolean keep-on entity plus an automation that clears it after a delay; the countdown already exists and the services move its deadline.
+1. Row 22, manual-off lockout, on its own: it adds an input to the precedence rules, so it ships
+   alone with matrix tests and an e2e run, as standby did.
 
 After that, in order:
 
-1. Rows 11 and 4, with row 12 if there is room. A "turns off at" sensor (row 11) earns its place once a service can extend that countdown (row 6). None touches the precedence rules.
-2. Row 3 on its own, with its own matrix tests and e2e run, because it is the one high-demand item that reaches into echo detection.
-3. Rows 9, 14, 15, 19 and 20 wait for user evidence: each has a workaround or a high verification cost.
+1. Rows 4, 11 and 21 together: a schedule source, an attribute and a device, none touching the
+   precedence rules.
+2. Row 23 on its own, since it changes what a change at the wall does.
+3. Row 24.
+4. Rows 10 and 3 wait for a user to ask; row 3 ships alone when it comes.
 
 ## Features
 
 | # | Feature | Demand | Build | Verify | Risk | Workaround | Fit | Migration | Status |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | Virtual Illuminance Sensor from any binary sensor | Low | Low | Med | Low | Yes | Good | None | Idea |
-| 2 | Keep-on and maintain from media players, timers and numeric thresholds | Low | Med | Med | Med | Yes | Good | None | Idea |
+| 1 | Virtual Illuminance Sensor from any binary sensor | Low | Low | Med | Low | Yes | Good | None | Not planned |
+| 2 | Keep-on and maintain from media players, timers and numeric thresholds | Low | Med | Med | Med | Yes | Good | None | Not planned |
 | 3 | A scene or script as the turn-on action | High | Med | High | High | Partial | Fair | None | Idea |
-| 4 | Weekday selection on time-window schedules | Med | Low | Med | Med | Yes | Good | None | Idea |
-| 5 | Virtual Remote: hold to dim | Med | Med | Low | Low | No | Good | None | Idea |
-| 6 | Services: extend the timer, hold auto-off for a duration, restart the countdown | High | Med | Med | Med | Partial | Good | None | Scheduled |
+| 4 | Home Assistant's Schedule helper as a schedule source | Med | Low | Low | Low | Partial | Good | None | Scheduled |
+| 5 | Virtual Remote: hold to dim | Med | Med | Low | Low | No | Good | None | Not planned |
+| 6 | Services: extend the timer, hold auto-off for a duration, restart the countdown | High | Med | Med | Med | Yes | Good | None | Not planned |
 | 7 | Events fired at state transitions | Med | Low | Low | Low | Partial | Good | None | Scheduled |
 | 8 | Diagnostics download and Repairs issues | Low | Low | Low | Low | Yes | Good | None | Scheduled |
-| 9 | Standby on a plain Virtual Light | Med | Med | High | Med | Yes | Good | None | Idea |
+| 9 | Standby on a plain Virtual Light | Med | Med | High | Med | Yes | Good | None | Not planned |
 | 10 | Auto-on brightness and color read from entities at each turn-on | Med | Med | Med | Low | No | Good | None | Idea |
-| 11 | Countdown and state as entities, disabled by default | Med | Med | Low | Low | Partial | Good | Entities | Idea |
-| 12 | Virtual Remote: more actions (toggle auto-off hold, all off, color temperature step, run script) | Med | Low | Low | Low | Partial | Good | None | Idea |
-| 13 | Virtual Remote: targets per binding | Med | Med | Med | Med | Yes | Good | Options | Idea |
-| 14 | Block entities: while any is on, no automatic turn-ons | Med | Low | High | Med | Yes | Good | None | Idea |
-| 15 | Re-trigger cooldown after an automatic off | Med | Med | High | Med | No | Fair | None | Idea |
-| 16 | Area wizard: wire an area's sensors and lights in one pass | Med | Med | Med | Low | Partial | Good | None | Idea |
-| 17 | Setup presets that prefill the light form (hallway, bathroom, porch, closet) | Med | Low | Med | Low | Yes | Good | None | Idea |
-| 18 | Translations beyond English | Med | High | Low | Low | No | Good | None | Idea |
-| 19 | More than two settings sets on a Virtual Scheduled Light | Low | High | High | High | Partial | Fair | Options | Idea |
-| 20 | Auto-on values per member light | Med | High | High | Med | Yes | Fair | None | Idea |
-| 21 | One Home Assistant device per entry, grouping its entities | Low | Med | Low | Low | No | Good | None | Idea |
+| 11 | A `timer_ends` attribute on the virtual light | Med | Low | Low | Low | No | Good | None | Scheduled |
+| 12 | Virtual Remote: more actions (toggle auto-off hold, all off, color temperature step, run script) | Med | Low | Low | Low | Partial | Good | None | Not planned |
+| 13 | Virtual Remote: targets per binding | Med | Med | Med | Med | Yes | Good | Options | Not planned |
+| 14 | Block entities: while any is on, no automatic turn-ons | Med | Low | High | Med | Yes | Good | None | Not planned |
+| 15 | Re-trigger cooldown after an automatic off | Med | Med | High | Med | No | Fair | None | Not planned |
+| 16 | Area wizard: wire an area's sensors and lights in one pass | Med | Med | Med | Low | Partial | Good | None | Not planned |
+| 17 | Setup presets that prefill the light form (hallway, bathroom, porch, closet) | Med | Low | Med | Low | Yes | Good | None | Not planned |
+| 18 | Translations beyond English | Med | High | Low | Low | No | Good | None | Not planned |
+| 19 | More than two settings sets on a Virtual Scheduled Light | Low | High | High | High | Partial | Fair | Options | Not planned |
+| 20 | Auto-on values per member light | Med | High | High | Med | Yes | Fair | None | Not planned |
+| 21 | One Home Assistant device per entry, grouping its entities | Low | Med | Low | Low | No | Good | None | Scheduled |
+| 22 | Manual-off lockout: after an off by hand, occupancy waits for the room to clear | High | Med | High | Med | No | Good | None | Scheduled |
+| 23 | Adjustments by other automations leave the timer alone (Adaptive Lighting) | Med | Low | Med | Med | No | Good | None | Idea |
+| 24 | Occupancy timeout check: a Repairs issue when the source's hold time disagrees | Low | Med | Med | Low | No | Good | None | Idea |
 
 ## Notes and evidence
 
-1. Most homes have no lux sensor, so "only when dark" today spends the light's single schedule slot on a sunset to sunrise window. A sun-elevation source is a new definition on the existing sensor, like the schedule sensor's two definitions, and the lights do not change. Polar days need the same care as the schedule sensor gives them. Demoted 2026-10-20: a Virtual Combined Schedule Sensor set to All already gives a plain light "dark and in a window", and a sun-backed illuminance sensor in Control mode forces lights off at dawn over an occupied room, so the sun elevation half is dropped.
-2. "Don't turn the lights off while the TV plays" and "hold the bathroom light while the humidity is high". A template binary sensor does it today. The picker rules tightened in 1.9.0 (an entity must read `on`) are what change; a timer helper reading `active` as a hold covers most of row 6. Demoted 2026-10-20: a Template helper or a Threshold helper does it from the Helpers page and keeps the rule that a keep-on entity holds while its state is `on`, where a per-domain reading of `playing` or `active` would be a judgment hidden in the picker; EXAMPLES Example 14 shows the TV case.
-3. Scenes are the standard way to set a multi-light look. A scene lights the bulbs itself, so echo detection must not read that as a change at the wall. The same-device rule for a WLED preset select is the precedent, but a scene can touch any light.
-4. "Weekday mornings only" takes a workday sensor plus a combined All schedule today. An overnight window must decide which day it belongs to, and `next_transition` must skip days.
-5. Pico raise/lower and Hue dimmer hold. Release events differ per ecosystem, so this doubles the vocabulary re-checked on every Home Assistant bump.
-6. "Keep the lights on for two hours" by voice. A timed hold must survive a restart.
-7. Lets users build notifications or a text-to-speech warning with their own automations, so MoLight never has to own those.
+1. Most homes have no lux sensor, so "only when dark" today spends the light's single schedule slot on a sunset to sunrise window. A sun-elevation source is a new definition on the existing sensor, like the schedule sensor's two definitions, and the lights do not change. Polar days need the same care as the schedule sensor gives them. Not planned since 2026-10-20: a Virtual Combined Schedule Sensor set to All already gives a plain light "dark and in a window", and a sun-backed illuminance sensor in Control mode forces lights off at dawn over an occupied room.
+2. "Don't turn the lights off while the TV plays" and "hold the bathroom light while the humidity is high". Not planned since 2026-10-20: a Template helper or a Threshold helper does it from the Helpers page and keeps the rule that a keep-on entity holds while its state is `on`, where a per-domain reading of `playing` or `active` would be a judgment hidden in the picker; EXAMPLES Example 14 shows the TV case.
+3. Scenes are the standard way to set a multi-light look. A scene lights the bulbs itself, so echo detection must not read that as a change at the wall. The same-device rule for a WLED preset select is the precedent, but a scene can touch any light. Kept 2026-10-20 as the one idea with real demand; it waits for a user to ask, since auto-on brightness and color already cover a single room.
+4. "Weekday mornings only". Home Assistant's own Schedule helper has per-weekday blocks and several blocks a day, edited on the Helpers page, but the source picker accepts binary sensors only. Reworded 2026-10-20 from "weekday selection on time-window schedules": accepting the `schedule` domain as a source is a picker change plus reading the helper's `next_event`, and the window logic is untouched. A workday sensor plus a combined All schedule does weekdays today.
+5. Pico raise/lower and Hue dimmer hold. Release events differ per ecosystem, so this doubles the vocabulary re-checked on every Home Assistant bump. Not planned since 2026-10-20: the remote is a side feature.
+6. "Keep the lights on for two hours" by voice. Not planned since 2026-10-20: a Timer helper read through a Template helper, as Example 14 reads the TV, is a timed hold that survives a restart, and the voice sentence is an automation either way. The one thing a service would add, turn off and stay off, is row 22.
+7. Lets users build notifications or a text-to-speech warning with their own automations, so MoLight never has to own those. Landed 2026-10-19 as commit d51b86f.
 8. User demand is low; the value is in triaging issues. The load-time warnings listed under Troubleshooting in the README would become Repairs issues.
-9. A night light at 5% at all times. Issue #1 asked for standby on a Virtual Scheduled Light, shipped in 1.9.0. A plain Virtual Light has no schedule boundary to release a manual off, so it needs its own release rule. A Virtual Scheduled Light on an all-day schedule does it today.
-10. The option-source pattern of the turn-on selection, applied to brightness and color. The cheap route to time-of-day lighting: Home Assistant computes the value, MoLight reads it at each automatic turn-on.
-11. A "turns off at" timestamp sensor for dashboards. The attributes carry it today.
-12. A Pico favorite button as a guest-mode toggle.
-13. A five-button Pico driving two rooms. Two remote entries on different buttons of the same remote do it today.
-14. Sleep mode. An inverted source-backed schedule in a gate mode does it today, but it takes the schedule slot. A new gate sits in the precedence rules, hence the verification cost.
-15. Stops the person walking out from re-lighting the room they just left. Interacts with going dark resuming an on-period, adoption at startup and false detections.
-16. Discovery already filters by area; this would create the occupancy sensors, the combined sensor and the light together.
-17. EXAMPLES.md covers the same ground in prose.
-18. strings.json is large. Expected to be community work.
-19. Morning, day, evening and night profiles. Two sets already cover most asks when combined with combined schedules.
-20. A lamp at 30% and the ceiling at 100% from one trigger. Two Virtual Lights sharing the sensors do it today.
-21. A light's companion entities ("<name> Auto-off", "<name> Events") are tied to it by name alone. A device per entry groups them on one page, as Home Assistant does for a bulb and its sensors; entity IDs and friendly names stay as they are.
+9. A night light at 5% at all times. Issue #1 asked for standby on a Virtual Scheduled Light, shipped in 1.9.0. Not planned since 2026-10-20: a Virtual Scheduled Light on an all-day schedule is an exact fit.
+10. The option-source pattern of the turn-on selection, applied to brightness and color. The cheap route to time-of-day lighting: Home Assistant computes the value, MoLight reads it at each automatic turn-on. Kept 2026-10-20 as the answer to more than two profiles.
+11. A "turns off at" timestamp for dashboards. Reworded 2026-10-20 from "countdown and state as entities": the light keeps the deadline in memory but exposes no attribute for it, so one `timer_ends` attribute gives a template sensor everything the entities would, with no registry churn.
+12. A Pico favorite button as a guest-mode toggle. Not planned since 2026-10-20: one automation on the button's event toggles the Auto-off switch, and the remote stays a light controller.
+13. A five-button Pico driving two rooms. Not planned since 2026-10-20: two remote entries on different buttons of the same remote do it.
+14. Sleep mode. Not planned since 2026-10-20: a Virtual Combined Schedule Sensor set to All joins the real window and an inverted source-backed sleep schedule, so the gate costs no slot; the earlier note that it took the schedule slot was wrong.
+15. Stops the person walking out from re-lighting the room they just left. Not planned since 2026-10-20: a sensor's hold time means it has rarely cleared by the time the person reaches the door, and the case that matters, a light turned off by hand coming back on, is row 22.
+16. Discovery already filters by area. Not planned since 2026-10-20: Discover plus Assign a sensor to several lights covers it.
+17. EXAMPLES.md covers the same ground in prose. Not planned since 2026-10-20.
+18. strings.json is large. Not a feature: community work, noted in CONTRIBUTING.
+19. Morning, day, evening and night profiles. Not planned since 2026-10-20: two sets with combined schedules cover most asks, and row 10 covers the rest.
+20. A lamp at 30% and the ceiling at 100% from one trigger. Not planned since 2026-10-20: two Virtual Lights sharing the sensors do it today, and row 3 would too.
+21. A light's companion entities ("<name> Auto-off", "<name> Events") are tied to it by name alone. A device per entry groups them on one page, as Home Assistant does for a bulb and its sensors; entity IDs and friendly names stay as they are. Scheduled 2026-10-20 with rows 4 and 11.
+22. The most common complaint about motion lighting: a light turned off by hand to watch a film comes back on as soon as the sensor clears and sees the person again. Today a manual off stands only over the visit it ended (REFERENCE.md, "A manual off across a restart"); the sensor's next on-cycle is a new visit. A **lockout**, in seconds, makes occupancy and the door wait until the sensor has been clear for that long after an off by hand; 0 keeps today's rule. Turning the light on by hand or at the wall ends it, as does a schedule boundary. It is an input to precedence rule 5, so it ships alone. A remote's Turn off or a voice off then means "turn off and stay off", which is what row 6 was for.
+23. Adaptive Lighting adjusts every light it controls every minute or two, and an external brightness or color change restarts a running timer (REFERENCE.md, "Brightness, color, and fades"), so a light it adapts under MoLight never turns off. A per-light option under which an adjustment that is not a turn-on leaves the timer alone. Verify the failure with a fixture first. It changes what a change at the wall does, so it ships alone.
+24. The occupancy timeout is the anchor for everything downstream and MoLight cannot read it, but it can check it: the shortest on-duration a PIR shows over many cycles is its hold time. A configured timeout far from the observed one raises a Repairs issue naming both, once there are enough cycles to judge. Diagnostic only, in the spirit of row 8.
 
 ## Already covered
 
 Not features, but asks that existing blocks answer:
 
 - Vacancy-only control (turn off after people leave, never turn on): a maintain occupancy sensor alone.
-- Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode (EXAMPLES.md, example 5).
+- Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode (EXAMPLES.md, example 5). To keep the real window too, join both in a Virtual Combined Schedule Sensor set to All (row 14).
+- Only when dark and inside a window, on a plain Virtual Light: a Virtual Combined Schedule Sensor set to All (row 1).
 - Dim before turning off: the effect and warn stages.
-- An always-on night light that brightens on motion: a Virtual Scheduled Light on an all-day schedule with standby.
+- An always-on night light that brightens on motion: a Virtual Scheduled Light on an all-day schedule with standby (row 9).
+- A TV or humidity hold: a Template or Threshold helper as a keep-on entity (EXAMPLES.md, example 14; row 2).
+- A timed hold, "keep the lights on for two hours": a Timer helper read through a Template helper as a keep-on entity (row 6).
+- Weekdays only: a workday sensor and a combined All schedule, until row 4 lands.
+- One remote driving two rooms: two remote entries on different buttons of the same remote (row 13).
+- Different levels per lamp from one trigger: two Virtual Lights sharing the sensors (row 20).
 
 ## Not planned
 
 - Vacation presence simulation.
 - YAML configuration.
-- Adaptive or circadian lighting computed by MoLight itself (row 10 reads such values from the integrations that compute them).
+- Adaptive or circadian lighting computed by MoLight itself (row 10 reads such values from the integrations that compute them; row 23 lets Adaptive Lighting adjust a light MoLight controls).
 - Controlling `switch` entities directly: Home Assistant's Switch as X helper wraps one as a light.
+- Hold to dim and further remote actions (rows 5 and 12): the remote binds clicks to light actions and no more.
+- Setup presets and an area wizard (rows 16 and 17): Discover, bulk assignment and EXAMPLES.md cover them.
+- More than two settings sets (row 19): row 10 covers it.
+- Translations (row 18): community work, see CONTRIBUTING.md.
 
 ## Discussion notes
 
-What was said when the rows were scored and the first batch chosen, on 2026-10-19, kept here so the
-intent behind each row survives. The table and the Next batch section summarize this; when they
-disagree, this section is the intent.
+What was said when the rows were scored and each batch chosen, kept here so the intent behind each
+row survives. Each review is dated, and the latest stands where they disagree. The table and the Next
+batch section summarize this; when they disagree, this section is the intent.
 
 ### Where the scores come from
 
@@ -130,7 +150,7 @@ disagree, this section is the intent.
   finished, since the click vocabulary is already re-checked on every Home Assistant bump and
   hold-to-dim doubles that surface.
 
-### Row by row
+### Row by row (2026-10-19)
 
 1. **Illuminance from sun elevation.** Most homes have no lux sensor, so "only when dark" today
    spends the light's single schedule slot on a sunset to sunrise window, which conflates schedule
@@ -228,7 +248,7 @@ disagree, this section is the intent.
     Decided 2026-10-20: the Events entity carries no attribute naming its light or sensor, so this
     device is what links the two.
 
-### Sequencing
+### Sequencing (2026-10-19)
 
 - Risk is the gate and cost is the batch: rows that only add a source kind, a platform, a service or
   a remote action can ship several per release; anything that adds an input to the precedence rules
@@ -243,6 +263,41 @@ disagree, this section is the intent.
 - Row 3 is the third release, alone.
 - Rows 9, 14, 15, 19 and 20 wait for user evidence: each has a workaround or a high verification
   cost, and a poll should decide them.
+
+### Review of 2026-10-20
+
+Rows 8 and 7 had landed and both felt worth their cost; the question was whether the rest did.
+
+- **The drop rule.** A row whose ask is met exactly by existing blocks plus a Home Assistant helper
+  is not an idea waiting for demand, it is covered, and a row kept "until someone asks" for it is
+  clutter the next review walks again. So rows 1, 2, 9, 13, 14, 16, 17, 19 and 20 went to Not planned,
+  with the workaround listed under Already covered where one exists. Two of the notes were wrong and are corrected: note
+  11 said the attributes carry the countdown deadline, and they do not; note 14 said a sleep gate takes
+  the schedule slot, and a combined All schedule means it does not.
+- **Row 6 came out of the batch.** A Timer helper behind a Template helper is a timed hold that
+  survives a restart, and the voice sentence that starts it is an automation whether it calls
+  `timer.start` or a MoLight service. The only ask a service would meet that no helper does is "turn
+  off and stay off", and that is a rule on the light, not a service: row 22.
+- **Rows 5 and 12 went too.** The remote binds clicks to light actions; hold-to-dim doubles what is
+  re-checked on every bump, and the other actions each have a one-automation workaround.
+- **Rows 4 and 11 were cut down.** Weekday selection on MoLight's own window is a rewrite of the
+  overnight and clock-change logic for something Home Assistant's Schedule helper already edits on the
+  Helpers page; the source picker just does not offer the `schedule` domain. The countdown entities
+  of row 11 are registry churn for a value a one-line attribute exposes to a template sensor.
+- **Three rows added**, from reading what a user of the existing blocks still cannot get:
+  - Row 22, manual-off lockout. The light-comes-back-on-after-I-turned-it-off complaint is the most
+    common one in motion lighting, and the current rule (a manual off stands only over the visit it
+    ended) leaves it open the moment the sensor cycles. Highest demand in the table, and it reaches
+    precedence rule 5, so it ships alone.
+  - Row 23, coexisting with Adaptive Lighting. Its periodic adjustments count as dims at the wall
+    and restart the timer, so the light never turns off. One of the most installed HACS integrations;
+    the fix is an option, but it changes what a change at the wall does, so it ships alone.
+  - Row 24, the occupancy timeout check. The README calls the setting the anchor for everything and
+    says MoLight cannot read it; a Repairs issue when the observed hold time disagrees is the same
+    kind of win as row 8, with no state-machine risk.
+- **Kept.** Row 10 (the answer to more than two profiles) and row 3 (real demand, high risk, waits
+  for a user) stay ideas. Row 21 (cheap, and the link the Events entity needs) is scheduled with rows
+  4 and 11.
 
 ### How the plan is maintained
 
