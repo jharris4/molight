@@ -24,6 +24,12 @@ npm test
 
 A daily workflow opens a PR when a newer stable Home Assistant is out, moving that pin and the e2e image in `tests/e2e/env.sh` together, and runs pytest and every e2e suite on the new version only. `scripts/ha-bump` previews the same bump locally.
 
+## Translations
+
+MoLight ships English only. `strings.json` holds every form label and description, and `translations/`
+holds the per-language copies Home Assistant loads. A translation is a pull request adding one file
+there; it needs no code change. Keep the English file as the source of truth and translate from it.
+
 ## Releasing
 
 Development is done on the `develop` branch. Start a release by fast-forwarding
