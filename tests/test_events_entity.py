@@ -156,7 +156,6 @@ async def test_last_event_survives_a_restart(hass, freezer) -> None:
     assert after.state == before.state
     assert after.attributes["event_type"] == "turned_on"
     assert after.attributes["reason"] == REASON_MANUAL
-    assert after.attributes["entity_id"] == "light.hall"
 
 
 @pytest.mark.asyncio

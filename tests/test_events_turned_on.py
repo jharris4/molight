@@ -59,7 +59,6 @@ MARKER = "2026-01-14T18:00:00+00:00"
 def _turned_on(reason: str, **look) -> dict:
     return {
         "event_type": EVENT_TURNED_ON,
-        "entity_id": VIRTUAL,
         "reason": reason,
         "standby": False,
         "brightness": None,
@@ -183,7 +182,6 @@ async def test_going_dark_with_presence(hass) -> None:
     assert records == [
         {
             "event_type": EVENT_TURN_ON_BLOCKED,
-            "entity_id": VIRTUAL,
             "trigger": REASON_OCCUPANCY,
             "reason": REASON_BRIGHT,
         },
@@ -261,7 +259,6 @@ async def test_presence_outside_a_gate_window_is_blocked_then_lit_at_its_start(
     assert records == [
         {
             "event_type": EVENT_TURN_ON_BLOCKED,
-            "entity_id": VIRTUAL,
             "trigger": REASON_OCCUPANCY,
             "reason": REASON_SCHEDULE,
         },

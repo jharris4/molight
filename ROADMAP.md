@@ -226,6 +226,8 @@ disagree, this section is the intent.
     same way. Registry IDs are kept and the composed names come out as they are today, so nothing
     breaks; the cost is a device page per entry in Settings, which may read as clutter for a
     single-entity sensor entry. Low demand on its own, and it waits on how row 7's entity lands.
+    Decided 2026-10-20: the Events entity carries no attribute naming its light or sensor, so this
+    device is what links the two.
 
 ### Sequencing
 

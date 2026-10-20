@@ -34,7 +34,6 @@ TEMP_CAPS = {
 def _adjusted(reason: str, **look) -> dict:
     return {
         "event_type": EVENT_ADJUSTED,
-        "entity_id": VIRTUAL,
         "reason": reason,
         "brightness": None,
         "color": None,

@@ -4757,9 +4757,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
 
     def _announce(self, event_type: str, **attributes: Any) -> None:
         """Record what the light did on its Events entity."""
-        announce_event(
-            self.hass, self._entry_id, self.entity_id, event_type, **attributes
-        )
+        announce_event(self.hass, self._entry_id, event_type, **attributes)
 
     def _announce_blocked(self, trigger: str, reason: str) -> None:
         """Record a trigger a gate refused, when it would have lit the room."""

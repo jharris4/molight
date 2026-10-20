@@ -26,7 +26,7 @@ Details:
 
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
-A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted) and `entity_id`, when a clear is flagged false (see [Events](#events)).
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted), when a clear is flagged false (see [Events](#events)).
 
 ## Virtual Combined Occupancy Sensor
 
@@ -50,7 +50,7 @@ Restarts, reloads and edits:
 
 Attributes: `latest_occupied_time` (max across all constituents), `last_on_time` (when the visit started, by its trigger sensors; null when they did not see it start), `last_clear_false_detection`, `false_detection_count`.
 
-A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted, null when its start was not seen) and `entity_id`, when a clear is flagged false (see [Events](#events)).
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted, null when its start was not seen), when a clear is flagged false (see [Events](#events)).
 
 ## Virtual Illuminance Sensor
 
@@ -371,7 +371,7 @@ Details:
 
 ### Events
 
-Each virtual light also creates a companion **`<name> Events` entity** (`event.<name>_events`; an [Entity ID](README.md#choosing-the-entity-id) typed when creating the light shapes it like the switch, so `light.kitchen` gives `event.kitchen_events`). It records what the light last did: its state is the time, `event_type` says what happened, and the attributes say why and what was set. Every event carries `entity_id`, the virtual light. Trigger on it with Home Assistant's **Event received** trigger, which lists the event types; an attribute such as `reason` is a condition on `trigger.to_state.attributes`.
+Each virtual light also creates a companion **`<name> Events` entity** (`event.<name>_events`; an [Entity ID](README.md#choosing-the-entity-id) typed when creating the light shapes it like the switch, so `light.kitchen` gives `event.kitchen_events`). It records what the light last did: its state is the time, `event_type` says what happened, and the attributes say why and what was set. Trigger on it with Home Assistant's **Event received** trigger, which lists the event types; an attribute such as `reason` is a condition on `trigger.to_state.attributes`.
 
 | Event type | When | Attributes |
 |---|---|---|

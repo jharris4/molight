@@ -64,7 +64,6 @@ MARKER = "2026-01-14T18:00:00+00:00"
 def _turned_off(reason: str, *, standby: bool = False) -> dict:
     return {
         "event_type": EVENT_TURNED_OFF,
-        "entity_id": VIRTUAL,
         "reason": reason,
         "standby": standby,
     }

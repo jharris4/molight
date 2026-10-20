@@ -485,7 +485,6 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             announce_event(
                 self.hass,
                 self._entry_id,
-                self.entity_id,
                 EVENT_FALSE_DETECTION,
                 on_duration=round((cleared - self._last_on_time).total_seconds(), 1),
             )
@@ -941,7 +940,6 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
                 announce_event(
                     self.hass,
                     self._entry_id,
-                    self.entity_id,
                     EVENT_FALSE_DETECTION,
                     on_duration=(
                         round(

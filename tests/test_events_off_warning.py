@@ -48,7 +48,6 @@ SCHED = "binary_sensor.sched"
 def _warning(stage: str, off_in: int | None, **look) -> dict:
     return {
         "event_type": EVENT_OFF_WARNING,
-        "entity_id": VIRTUAL,
         "stage": stage,
         "off_in": off_in,
         "standby": False,
@@ -98,7 +97,6 @@ async def test_effect_then_warn_then_off(hass, freezer) -> None:
     assert records[2:] == [
         {
             "event_type": EVENT_TURNED_OFF,
-            "entity_id": VIRTUAL,
             "reason": REASON_TIMER,
             "standby": False,
         }
@@ -162,7 +160,6 @@ async def test_a_turn_on_by_hand_cancels_the_warning_with_its_own_look(
     assert records[1:] == [
         {
             "event_type": EVENT_ADJUSTED,
-            "entity_id": VIRTUAL,
             "reason": REASON_MANUAL,
             "brightness": 90,
             "color": None,
@@ -204,7 +201,6 @@ async def test_a_warning_ending_at_standby_says_so(hass, freezer) -> None:
         _warning(STAGE_WARN, 10, standby=True, brightness=153),
         {
             "event_type": EVENT_TURNED_OFF,
-            "entity_id": VIRTUAL,
             "reason": REASON_TIMER,
             "standby": True,
         },

@@ -70,7 +70,6 @@ async def test_a_blip_fires_with_its_duration(hass, freezer) -> None:
     assert records == [
         {
             "event_type": EVENT_FALSE_DETECTION,
-            "entity_id": "binary_sensor.motion",
             "on_duration": 31.0,
         }
     ]
@@ -99,7 +98,6 @@ async def test_a_combined_sensor_fires_its_own(hass, freezer) -> None:
     assert records == [
         {
             "event_type": EVENT_FALSE_DETECTION,
-            "entity_id": "binary_sensor.room",
             "on_duration": 31.0,
         }
     ]

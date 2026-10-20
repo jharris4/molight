@@ -35,7 +35,6 @@ SCHED = "binary_sensor.sched"
 def _blocked(trigger: str, reason: str) -> dict:
     return {
         "event_type": EVENT_TURN_ON_BLOCKED,
-        "entity_id": VIRTUAL,
         "trigger": trigger,
         "reason": reason,
     }
