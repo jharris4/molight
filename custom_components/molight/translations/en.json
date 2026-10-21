@@ -272,7 +272,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the false-detection off delay, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -564,7 +564,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the false-detection off delay, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -691,7 +691,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color, selection, and fade overrides for automatic actions, plus the quick-off delay after a false detection.",
+            "description": "Optional brightness, color, turn-on selection, and fade overrides for automatic turn-ons and turn-offs, plus the false-detection off delay.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -781,7 +781,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color, selection, and fade overrides for automatic actions, plus the quick-off delay after a false detection.",
+            "description": "Optional brightness, color, turn-on selection, and fade overrides for automatic turn-ons and turn-offs, plus the false-detection off delay.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -1220,7 +1220,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color, selection, and fade overrides for automatic actions, plus the quick-off delay after a false detection.",
+            "description": "Optional brightness, color, turn-on selection, and fade overrides for automatic turn-ons and turn-offs, plus the false-detection off delay.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -1310,7 +1310,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color, selection, and fade overrides for automatic actions, plus the quick-off delay after a false detection.",
+            "description": "Optional brightness, color, turn-on selection, and fade overrides for automatic turn-ons and turn-offs, plus the false-detection off delay.",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",
@@ -1570,7 +1570,7 @@
           },
           "behavior": {
             "name": "Turn-on & turn-off behavior",
-            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the quick-off delay after a false detection, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
+            "description": "Optional brightness, color and fade overrides for automatic turn-ons and turn-offs, the false-detection off delay, and a turn-on selection applied before the lights come on. Manual control is unaffected, except that the selection also covers turn-ons through this virtual light (never physical ones).",
             "data": {
               "false_detection_off_delay": "False-detection off delay",
               "auto_on_brightness": "Auto-on brightness",

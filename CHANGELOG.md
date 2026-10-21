@@ -95,8 +95,9 @@ Remote buttons.
 - **Real lights coming back**: a real light that loads late or returns from
   `unavailable` as off while the virtual light is on is sent its settings
   again, instead of being recorded as a manual off.
-- **False detections**: only a light that the false detection itself lit gets
-  the quick off; a blip after a genuine visit keeps that visit's countdown.
+- **False detections**: only a light that the false detection itself lit is
+  turned off after the false-detection off delay; a blip after a genuine visit
+  keeps that visit's countdown.
 - **Doors**: a door sensor in *Open & close* door mode that stays
   `unavailable` for 60 seconds, such as one with a dead battery, counts as
   closed instead of holding the light on until a restart.

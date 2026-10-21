@@ -74,8 +74,9 @@ Ships alone.
 ### 4. Occupancy timeout check
 
 - **Problem.** The README calls the occupancy timeout the anchor for everything downstream and says
-  MoLight cannot read it. Set too high, a short visit is classified as a false detection and gets the
-  quick off; set wrong either way, turn-off timing drifts. Nothing tells the user.
+  MoLight cannot read it. Set too high, a short visit is classified as a false detection and is
+  turned off after the false-detection off delay; set wrong either way, turn-off timing drifts.
+  Nothing tells the user.
 - **Design.** The sensor keeps the shortest on-duration it has seen; a PIR's hold time is that floor.
   Once there are enough cycles to judge and the configured timeout is far from the floor, a Repairs
   issue names both. Diagnostic only.
