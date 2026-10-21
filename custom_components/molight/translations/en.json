@@ -57,7 +57,7 @@
       },
       "assign_sensor": {
         "title": "Assign a sensor to lights",
-        "description": "Attach one virtual sensor to several virtual lights at once. Pick the kind of sensor to assign.",
+        "description": "Assign one virtual sensor to several virtual lights at once. Pick the kind of sensor to assign.",
         "menu_options": {
           "assign_occupancy": "Assign an occupancy sensor",
           "assign_illuminance": "Assign an illuminance sensor",
@@ -1009,7 +1009,7 @@
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
-      "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",
+      "occupancy_source_molight": "Select a real occupancy sensor, not an occupancy sensor created by MoLight.",
       "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
@@ -1768,7 +1768,7 @@
       "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or any group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
-      "occupancy_source_molight": "Select a physical occupancy sensor, not an occupancy sensor created by MoLight.",
+      "occupancy_source_molight": "Select a real occupancy sensor, not an occupancy sensor created by MoLight.",
       "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
