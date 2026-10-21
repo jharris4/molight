@@ -330,7 +330,7 @@ A schedule window has two edges: the **start**, when the schedule sensor goes `o
 
 Take a hallway light gated 22:00 to 06:00 with a 5-minute timeout, and someone walking in at 05:58: under **Gate and turn off** the light goes out at 06:00; under **Gate and keep state** its timer finishes normally at 06:03; under **Gate and switch state** the deadline is recomputed at 06:00 from when occupancy last saw them.
 
-The modes also differ for a light that is on outside the window. **Gate and switch state** and **Gate and keep state** only gate turning an off light on, so occupancy and an **Open & close** door can still hold or re-hold it. Under **Gate and turn off**, a light that is on outside the window (turned on by hand, or held) ignores them.
+The modes also differ for a light that is on outside the window. **Gate and switch state** and **Gate and keep state** only gate turning an off light on, so occupancy and an **Open & close** door can still hold or re-hold it. Under **Gate and turn off**, a light that is on outside the window (turned on by hand, or kept on past the window end while auto-off was held) ignores them.
 
 The three Gate modes are the same three choices as a Virtual Scheduled Light's **At schedule end** action (**Turn off**, **Switch state** and **Keep state**); see [Virtual Scheduled Light](#virtual-scheduled-light).
 
@@ -352,7 +352,7 @@ The door sensor is a plain real sensor, so its picker is narrowed to door-ish de
 
 Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-off is *held* while that switch is off **or** any configured keep-on entity is on:
 
-- **Every automatic turn-off is suspended:** the timer, the false-detection off delay, bright-forces-off, and schedule window ends. The state machine keeps transitioning; it just never arms a timer.
+- **Every automatic turn-off is suspended:** the timer, the false-detection off delay, bright-forces-off, and schedule window ends. The state machine keeps changing state; it just never arms a timer.
 - **Turn-ons are unaffected** (occupancy, going dark, and schedule window starts still light the room), and a manual off always works.
 - **When the last hold releases**, the light re-evaluates its rules:
   - A follow or **Gate and turn off** schedule window that ended while held turns it off now, as does being bright in illuminance **Control** mode.
@@ -365,7 +365,7 @@ Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtu
 Details:
 
 - **A keep-on entity that also has another role** holds before that role acts, so a sensor that is both the illuminance input and a keep-on entity holds the light as it gets bright instead of turning it off.
-- **Unavailable keep-on entities:** one dropping to `unavailable`/`unknown` holds its last known value (a dead toggle never reads as "hold released", or as engaged). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding.
+- **Unavailable keep-on entities:** one dropping to `unavailable`/`unknown` keeps its last known value (an unavailable keep-on entity never reads as releasing its hold, or as starting one). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding.
 - **Restarts:** the switch state survives restarts, and a held light adopted at startup won't start a timer.
 - **Deleted or disabled:** disabling or deleting the Auto-off switch entity releases its hold straight away, since such a switch can't be turned back on; re-enabling a disabled one brings back the state it had. A keep-on entity that is deleted or disabled stops holding in the same way.
 
@@ -417,7 +417,7 @@ actions:
 
 A virtual light can control another MoLight virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a page that points this out before the light is saved.
 
-- **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a change at the wall for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes dark after 60 s without recording a manual off. Hold the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
+- **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a change at the wall for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes dark after 60 s without recording a manual off. Turn off the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
 - **A person's change counts for both:** a change at the wall on the wrapped light's bulbs, or a command through its entity, also a turn-on of a wrapped light that is already on.
 - **Light groups:** a light group that contains a virtual light is refused, since through the group what that light does by itself would look like a person's change; add the group's lights directly instead. A light group changed afterwards to contain a virtual light is still controlled, and what that light does by itself is told apart from a person's change there too.
 
