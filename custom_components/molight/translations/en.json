@@ -642,7 +642,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until an outside sensor next changes. Switch state: its state and timer are recalculated from the outside sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside sensors in every case."
+          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until a sensor in the outside-schedule settings next changes. Switch state: its state and timer are recalculated from the outside-schedule settings' sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside-schedule settings' sensors in every case."
         },
         "sections": {
           "advanced": {
@@ -1029,7 +1029,7 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",
       "threshold_too_low": "The threshold must be above 0. Dark means a reading below the threshold, and no lux sensor reports below 0, so this sensor could never report dark.",
-      "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
+      "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports fading.",
       "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
       "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
       "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
@@ -1072,8 +1072,8 @@
     },
     "abort": {
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
-      "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its options.",
-      "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its options.",
+      "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its Configure button.",
+      "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its Configure button.",
       "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
@@ -1183,7 +1183,7 @@
         "data_description": {
           "lights": "The real lights this virtual light controls as one.",
           "schedule_entity": "When this schedule is off, outside-schedule settings are used. When it is on, inside-schedule settings are used.",
-          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until an outside sensor next changes. Switch state: its state and timer are recalculated from the outside sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside sensors in every case."
+          "schedule_end_action": "What the schedule's end does to a light that is still on. Turn off: it goes off and stays off until a sensor in the outside-schedule settings next changes. Switch state: its state and timer are recalculated from the outside-schedule settings' sensors and history. Keep state: it keeps only its running timer. An off light is re-checked against the outside-schedule settings' sensors in every case."
         }
       },
       "scheduled_light_outside": {
@@ -1785,7 +1785,7 @@
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",
       "threshold_too_low": "The threshold must be above 0. Dark means a reading below the threshold, and no lux sensor reports below 0, so this sensor could never report dark.",
-      "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports transitions.",
+      "transition_unsupported": "None of the selected lights support fading, so a fade time would be ignored. Clear the fade fields, or include a light that supports fading.",
       "color_temp_unsupported": "None of the selected lights support a white color temperature, so a configured color temperature would be ignored. Clear it (set its color mode to None), or include a light that supports color temperature.",
       "color_unsupported": "None of the selected lights can show a color, so a configured color would be ignored. Clear the color fields (set their color mode to None), or include a light that supports color.",
       "brightness_unsupported": "None of the selected lights are dimmable, so a brightness setting would be ignored. Clear it, or include a light that supports brightness. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
