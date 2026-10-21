@@ -34,7 +34,7 @@ Ships alone.
   virtual light or at the wall) occupancy and the door do not turn the light on until the room has
   been empty for the turn-off timeout, by the same rule the countdown uses, so there is no new
   number to set. A turn-on by hand or at the wall ends it, as does a schedule boundary, as they end a
-  manual off today. A refused trigger reports it on the Events entity.
+  manual off today. A blocked turn-on fires a `turn_on_blocked` event on the Events entity.
 - **Why now.** It is the one gap a remote or a voice assistant cannot paper over: a Turn off then
   means "turn off and stay off", which is what the services idea under Not planned was for.
 - **Cost.** It is an input to precedence rule 5, so matrix tests, an e2e run and a REFERENCE.md
@@ -100,7 +100,7 @@ Asks that existing blocks answer:
 
 - Vacancy-only control (turn off after people leave, never turn on): a maintain occupancy sensor alone.
 - Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode
-  (EXAMPLES.md, example 5); to keep the real window too, join both in a Virtual Combined Schedule
+  (EXAMPLES.md, example 5); to keep the time window too, join both in a Virtual Combined Schedule
   Sensor set to All.
 - Only when dark and inside a schedule window, on a plain Virtual Light: a Virtual Combined Schedule
   Sensor set to All.
