@@ -164,7 +164,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   Follow    # on at window start, off at window end
 ```
 
-**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** behaviors instead if occupancy should turn the light on *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
+**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** modes instead if occupancy should turn the light on *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
 
 ---
 
@@ -256,7 +256,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 ### Example 8: Hallway night light (Virtual Scheduled Light)
 
-Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both behaviors; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below): a light belongs to one virtual light, and the form refuses `light.hallway_real` while the Hallway light still controls it. It's a schedule sensor, then the light's three forms in a row:
+Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both sets of settings; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below): a real light belongs to one virtual light, and the form refuses `light.hallway_real` while the Hallway light still controls it. It's a schedule sensor, then the light's three forms in a row:
 
 **1. Virtual Schedule Sensor** (the "night" window)
 
