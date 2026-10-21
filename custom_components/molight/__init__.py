@@ -323,7 +323,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(async_setup_remote(hass, entry))
     # Once running, the Auto-off switch restores first, and the Events entity
     # listens first: the light seeds when added, reading the one and
-    # announcing on the other. At startup one call, as HA bills all but the
+    # sending on the other. At startup one call, as HA bills all but the
     # last import wait (core #184898).
     rest = platforms
     first = [platform for platform in ("switch", "event") if platform in platforms]

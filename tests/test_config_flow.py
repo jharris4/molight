@@ -9937,7 +9937,7 @@ async def test_light_forms_follow_a_sensor_renamed_while_open(
 
 
 class _SingleButton(RealButton):
-    """A remote button that only reports single clicks."""
+    """A remote button with only the single event type."""
 
     _attr_event_types = ["single"]  # noqa: RUF012
 

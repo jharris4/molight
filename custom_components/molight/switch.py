@@ -70,7 +70,7 @@ class AutoOffSwitch(SwitchEntity, RenamableRestoreEntity):
         self._attr_is_on = True
 
     async def async_added_to_hass(self) -> None:
-        """Restore the previous state and publish it to the light."""
+        """Restore the previous state and send it to the light."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._attr_is_on = last is None or last.state != STATE_OFF

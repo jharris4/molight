@@ -537,7 +537,7 @@ class HomeAssistantClient:
         event_type: str,
         attributes: dict[str, Any] | None = None,
     ) -> None:
-        """Emit an event from a simulated event entity."""
+        """Fire an event from a simulated event entity."""
         self.call_service(
             "molight_testbed",
             "fire_event",
@@ -8691,7 +8691,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         "Vocab light",
     )
     assert_entry_loaded(client, light_id)
-    # A button that never reports double clicks cannot be bound to one.
+    # A button that has no double click cannot be bound to one.
     result = submit_create(
         client,
         "remote",

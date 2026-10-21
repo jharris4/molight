@@ -174,7 +174,7 @@ class GoneJudge:
         """Run action for an entity whose state was removed, unless it was renamed.
 
         A rename removes the state under the former ID too, possibly before
-        the registry has finished announcing it: an ID the registry no
+        the registry has fired its update: an ID the registry no
         longer knows is judged one loop pass later. Unless the registry just
         deleted it, it may be an entity with no registry entry whose
         integration is reloading, so with grace it gets RELOAD_GRACE to come

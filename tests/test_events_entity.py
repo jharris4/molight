@@ -2,7 +2,7 @@
 
 Every Virtual Light, Virtual Scheduled Light and occupancy sensor entry gets
 one; it follows a typed Entity ID the way the Auto-off switch does, restores
-its last event across a restart, and an event announced while it is disabled
+its last event across a restart, and an event sent while it is disabled
 is simply dropped.
 """
 
@@ -78,7 +78,7 @@ def _entry(entity_type: str, **data) -> MockConfigEntry:
 async def test_events_entity_is_created_with_its_owner_types(
     hass, make, event_types: list[str]
 ) -> None:
-    """Each light and occupancy entry gets "<name> Events" declaring its types."""
+    """Each light and occupancy entry gets "<name> Events" with its event types."""
     hass.states.async_set("binary_sensor.settings_schedule", "off")
     await setup_entries(hass, make())
 
@@ -103,7 +103,7 @@ async def test_events_entity_is_created_with_its_owner_types(
     ids=["illuminance", "schedule"],
 )
 async def test_other_entries_get_no_events_entity(hass, make) -> None:
-    """A sensor that announces nothing gets no entity to announce it on."""
+    """A sensor with no events gets no Events entity."""
     entry = make()
     await setup_entries(hass, entry)
 
@@ -207,7 +207,7 @@ async def test_renamed_events_entity_keeps_its_last_event(hass) -> None:
 
 
 @pytest.mark.asyncio
-async def test_occupancy_sensor_announces_on_its_own_entity(hass, freezer) -> None:
+async def test_occupancy_sensor_sends_to_its_own_entity(hass, freezer) -> None:
     """The sensor's blip lands on the sensor's entity, not the light's."""
     sensor = _entry(
         ENTITY_TYPE_OCCUPANCY,

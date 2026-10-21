@@ -73,15 +73,14 @@ from tests.test_light_selection import _SlowSelect
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-# Advertised event_types of the remote shapes under test. A Pico-style
-# button only knows press/release; a Bilresa (Matter multi-press) button
-# announces a completed single click as multi_press_1 and a double as
+# The event_types of the remote shapes under test. A Pico-style
+# button has only press/release; a Bilresa (Matter multi-press) button
+# fires a completed single click as multi_press_1 and a double as
 # multi_press_2, with initial_press/short_release as constituent noise that
 # must never fire. A Lutron Caséta button re-exposed as an event entity (the
-# lutron-caseta-events integration) speaks press/multi_tap.
+# lutron-caseta-events integration) has press/multi_tap.
 PICO_TYPES = ["press", "release"]
-# Hue's default button vocabulary; a Hue tap switch announces only
-# initial_press.
+# Hue's default button vocabulary; a Hue tap switch has only initial_press.
 HUE_TYPES = ["initial_press", "repeat", "short_release", "long_press", "long_release"]
 HUE_TAP_TYPES = ["initial_press"]
 LUTRON_EVENT_TYPES = ["press", "release", "multi_tap", "long_press"]
@@ -355,7 +354,7 @@ async def test_device_resolved_click_vocabularies(
 async def test_native_lutron_keypad_single_press(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A native lutron keypad button advertises only single_press."""
+    """A native lutron keypad button has only single_press."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.keypad_button"]})
     hass.states.async_set("light.living_room", "off")
     _seed(hass, "event.keypad_button", ["single_press"])
@@ -1543,10 +1542,10 @@ async def test_remote_flow_validation(hass: HomeAssistant) -> None:
 async def test_double_click_binding_allowed_when_capable_or_unknown(
     hass: HomeAssistant,
 ) -> None:
-    """A double-click binding is accepted on a button that advertises one,
+    """A double-click binding is accepted on a button that has one,
     and on a button with no state yet (it can't be judged, so it is allowed
-    and simply never fires until the entity proves itself). An advertised
-    empty event_types list is judged, and rejected."""
+    and simply never fires until the entity proves itself). An empty
+    event_types list is judged, and rejected."""
     _seed(hass, "event.bilresa", BILRESA_TYPES)
     hass.states.async_set("event.no_types", "unknown", {"event_types": []})
     base = {
@@ -1555,7 +1554,7 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
         **EMPTY_REMOTE_SECTIONS,
     }
 
-    # Advertised empty event_types → judged unsupported.
+    # Empty event_types → judged unsupported.
     result = await _start_remote_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -1613,13 +1612,13 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
         ("double", None, None),
     ],
 )
-async def test_click_binding_judged_on_advertised_vocabulary(
+async def test_click_binding_judged_on_its_event_types(
     hass: HomeAssistant,
     click: str,
     event_types: list[str] | None,
     error: str | None,
 ) -> None:
-    """A binding is rejected only when the button advertises event types and
+    """A binding is rejected only when the button has event types and
     none of them is that click. A button with no event_types (a state but
     no capability yet) or no state at all can't be judged and is allowed."""
     attributes = {} if event_types is None else {"event_types": event_types}
@@ -1819,7 +1818,7 @@ async def test_remote_options_reject_missing_targets(hass: HomeAssistant) -> Non
 # Native integration vocabularies
 # ---------------------------------------------------------------------------
 
-# Each button's advertised event_types as Home Assistant 2026.9's own
+# Each button's event_types as Home Assistant 2026.9's own
 # integrations build them (the components' event.py unless noted), with the
 # single and double click MoLight must resolve (None: the button has none)
 # and the events that must never fire a binding.
@@ -1975,7 +1974,7 @@ NATIVE_NON_CLICK_VOCABULARIES = {
 
 
 class _NativeButton(EventEntity):
-    """A real event entity advertising one integration's vocabulary."""
+    """A real event entity with one integration's vocabulary."""
 
     _attr_should_poll = False
 

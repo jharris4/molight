@@ -9,7 +9,7 @@ otherwise only exist in debug logs.
 
 Deliberately not a RestoreEntity: the sensor starts unknown after a restart,
 because a stale "last action" from before the restart reads as recent
-activity. The runtime announces executions via SIGNAL_REMOTE_ACTION, so the
+activity. The runtime sends executions via SIGNAL_REMOTE_ACTION, so the
 coupling doesn't depend on entity ids or platform setup order (same pattern
 as the Auto-off switch).
 """
@@ -64,7 +64,7 @@ class RemoteLastActionSensor(SensorEntity):
         self._attrs: dict[str, Any] = {}
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to the runtime's action announcements."""
+        """Subscribe to the actions the runtime sends."""
         await super().async_added_to_hass()
         self.async_on_remove(
             async_dispatcher_connect(

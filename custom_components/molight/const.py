@@ -315,7 +315,7 @@ DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
 # --- Events entity ---
-# A Virtual Light or occupancy sensor announces what it did on this signal
+# A Virtual Light or occupancy sensor sends what it did on this signal
 # (event type, attributes); its "<name> Events" entity records the last one.
 SIGNAL_EVENT = DOMAIN + "_event_{}"
 
@@ -451,8 +451,8 @@ RELOAD_GRACE = 10
 # cancels a warning sequence, restarts the timer).
 #
 # Which event_type string means a single vs. a double click differs per
-# ecosystem and is resolved per button from the event entity's advertised
-# event_types (see remote.py).
+# ecosystem and is resolved per button from the event_types its event
+# entity has (see remote.py).
 CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
 # Percent step applied per brightness up/down press (one step per click; a
 # step below the minimum turns the light off, per the light domain's own
@@ -523,7 +523,7 @@ REMOTE_ACTION_FIELDS = (
 )
 
 # Each Virtual Remote entry also creates a diagnostic "<name> Last Action"
-# sensor. The runtime announces every executed binding on this dispatcher
+# sensor. The runtime sends every executed binding on this dispatcher
 # signal (formatted with the entry_id); the payload is a dict with the
 # executed action, the source button entity_id, the resolved click, the raw
 # event_type, and the time.

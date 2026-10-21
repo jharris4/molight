@@ -5,16 +5,16 @@ A Virtual Remote config entry's runtime lives here rather than in an entity
 subscribes to the state changes of the `event` entities Home Assistant
 exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
 ...) and turns each configured (button, click) pair into one service call on
-the target lights, announcing each execution on SIGNAL_REMOTE_ACTION.
+the target lights, sending each execution on SIGNAL_REMOTE_ACTION.
 Routing through the light domain's public services means a press on a
 MoLight virtual light behaves exactly like a dashboard tap: never gated by
 darkness or a schedule, cancels an effect/warn sequence, restarts the timer.
 
-Single vs. double click is resolved per button from the event entity's
-advertised `event_types`, because the same physical click is spelled
-differently per ecosystem, and a button that supports multi-press announces
-one click with several events (initial_press, short_release, multi_press_1),
-of which only one may fire the binding:
+Single vs. double click is resolved per button from the `event_types` its
+event entity has, because the same physical click is spelled differently
+per ecosystem, and a button that supports multi-press fires several events
+for one click (initial_press, short_release, multi_press_1), of which only
+one may fire the binding:
 
   - multi-press capable (Matter with MSM, e.g. Bilresa): a completed single
     click is `multi_press_1`, a double is `multi_press_2`; the constituent
@@ -28,9 +28,9 @@ of which only one may fire the binding:
   - Lutron Caséta buttons (event entities provided by the companion
     lutron-caseta-events integration; HA's own lutron_caseta creates
     none): single = `press` (`release` is ignored), double = `multi_tap`
-    where the bridge reports multi-taps.
+    where the button has it.
   - BTHome, Xiaomi BLE, SwitchBot, Govee BLE, native Lutron raise/lower:
-    single = `press`, double = `double_press` where advertised.
+    single = `press`, double = `double_press` where the button has it.
   - Tuya scene switches: `click` / `double_click`; their `press` is a long
     press, so `click` outranks `press`.
   - Hue-style / Matter without MSM: `short_release` (preferred over
@@ -86,8 +86,8 @@ if TYPE_CHECKING:
 CLICK_SINGLE = "single"
 CLICK_DOUBLE = "double"
 
-# Event types announcing a completed click, in priority order: only the first
-# type a button advertises counts, so a multi-press button's short_release
+# Event types for a completed click, in priority order: only a button's first
+# match counts, so a multi-press button's short_release
 # never double-fires alongside its multi_press_1.
 _SINGLE_EVENT_TYPES = (
     "multi_press_1",
@@ -126,10 +126,10 @@ def double_click_event_type(event_types: list[str]) -> str | None:
 
 
 def _advertised_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | None:
-    """Return the event_types an event entity advertises, or None if unknown.
+    """Return the event_types an event entity has, or None if unknown.
 
     An absent state, or one without the event_types capability, can't be
-    judged; an advertised list, even an empty one, can.
+    judged; a list, even an empty one, can.
     """
     state = hass.states.get(entity_id)
     if state is None:
@@ -138,7 +138,7 @@ def _advertised_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | 
 
 
 def entity_single_click_supported(hass: HomeAssistant, entity_id: str) -> bool | None:
-    """Whether this event entity can report a single click; None if unknown."""
+    """Whether this event entity can fire a single click; None if unknown."""
     event_types = _advertised_event_types(hass, entity_id)
     if event_types is None:
         return None
@@ -146,11 +146,11 @@ def entity_single_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
 
 
 def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool | None:
-    """Whether this event entity can report a double click; None if unknown.
+    """Whether this event entity can fire a double click; None if unknown.
 
-    Resolved from the advertised event_types of the entity's current state,
+    Resolved from the event_types of the entity's current state,
     so the config flow can reject a double-click binding on a button that
-    will never emit one. An unknown capability can't be judged, so the
+    will never fire one. An unknown capability can't be judged, so the
     binding is allowed and simply never fires until the entity proves itself.
     """
     event_types = _advertised_event_types(hass, entity_id)
@@ -336,7 +336,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
                     blocking=False,
                 )
             )
-        # Announce the executed binding to the entry's Last Action sensor.
+        # Send the executed binding to the entry's Last Action sensor.
         async_dispatcher_send(
             hass,
             SIGNAL_REMOTE_ACTION.format(entry.entry_id),

@@ -15,17 +15,17 @@ from .entity import TestbedEntity
 
 
 class TestbedButtonEvent(TestbedEntity, EventEntity):
-    """A button whose events are emitted by the testbed service."""
+    """A button whose events are fired by the testbed service."""
 
     _attr_device_class = EventDeviceClass.BUTTON
 
     def __init__(self, *args: Any, event_types: list[str]) -> None:
-        """Initialize a button advertising one ecosystem's click vocabulary."""
+        """Initialize a button with one ecosystem's click vocabulary."""
         super().__init__(*args)
         self._attr_event_types = list(event_types)
 
     def fire_test_event(self, event_type: str, attributes: dict[str, Any]) -> None:
-        """Publish one event as a normal EventEntity state change."""
+        """Fire one event as a normal EventEntity state change."""
         self._trigger_event(event_type, attributes)
         self.async_write_ha_state()
 
@@ -74,8 +74,8 @@ async def async_setup_entry(
                 "E2E Caseta Button",
                 event_types=["press", "multi_tap"],
             ),
-            # Hue-style button announcing only initial_press: it is the single
-            # click fallback and reports no double click at all.
+            # Hue-style button with only initial_press: it is the single
+            # click fallback and has no double click at all.
             TestbedButtonEvent(
                 controller,
                 EVENT_HUE,
