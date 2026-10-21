@@ -982,7 +982,7 @@ def _stale_light_settings(
 ) -> tuple[str | None, dict[str, str]]:
     """Recheck a light payload's timeouts and keep-on entities as things are now.
 
-    A sensor's timeout can be raised, or a keep-on group edited, while a later
+    An occupancy timeout can be raised, or a keep-on group edited, while a later
     page of the light's form is open, since the unsaved light is not yet its
     dependent. Returns the failing scheduled-light side (None for a regular
     light) and the errors.
@@ -2422,7 +2422,7 @@ class MoLightConfigFlow(
         create = pending["create"]
         if create["entity_type"] == ENTITY_TYPE_SCHEDULED_LIGHT:
             return await self._finish_scheduled_light()
-        # A sensor's timeout or a keep-on group may have changed meanwhile.
+        # An occupancy timeout or a keep-on group may have changed meanwhile.
         data = create["data"]
         _, errors = _stale_light_settings(self.hass, data, self._new_light_ids(data))
         if not errors:
@@ -2444,7 +2444,7 @@ class MoLightConfigFlow(
             )
         side, errors = _stale_light_settings(self.hass, data, self._new_light_ids(data))
         if errors:
-            # A sensor's timeout or a keep-on group changed while the menu was open.
+            # An occupancy timeout or keep-on group changed while the menu was open.
             if side is not None:
                 return self._show_scheduled_light_side_form(side, None, errors)
             return self._show_light_form(pending["user_input"], errors)
@@ -3948,7 +3948,7 @@ class MoLightConfigFlow(
                     members=self._discovery["selected"] if discovery else None,
                 )[1]
             ):
-                # A sensor timeout or keep-on group changed while this page was open.
+                # An occupancy timeout or keep-on group changed with this page open.
                 if discovery:
                     return self._show_discover_light_defaults(_nest_light(flat), errors)
                 return self._show_light_form(pending["prefill"], errors)
@@ -4078,7 +4078,7 @@ class MoLightConfigFlow(
                 )
         side, errors = _stale_light_settings(self.hass, data, self._hold_exclusions())
         if errors:
-            # A sensor's timeout or a keep-on group changed while a later page was open.
+            # An occupancy timeout or keep-on group changed while a later page was open.
             return self._show_scheduled_light_side_form(side, None, errors)
         result, errors = await self._resolve_and_create(
             entity_type=ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -4229,7 +4229,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if self._cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
             return await self._finish_scheduled_light()
         data = pending["data"]
-        # A sensor's timeout or a keep-on group may have changed meanwhile.
+        # An occupancy timeout or a keep-on group may have changed meanwhile.
         if errors := _stale_light_settings(
             self.hass,
             {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **data},
@@ -4272,8 +4272,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             )
             errors.update(_validate_name(flat))
             if not errors:
-                # Raising this sensor's timeout must not outgrow any virtual light
-                # that depends on it (directly or through a combined sensor).
+                # A raised occupancy timeout must not outgrow any virtual light
+                # that uses this sensor (directly or through a combined sensor).
                 min_light = _min_dependent_light_timeout(
                     self.hass, self._entry.entry_id
                 )
@@ -4719,7 +4719,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self._hold_exclusions(),
                 )[1]
             ):
-                # A sensor timeout or keep-on group changed while this page was open.
+                # An occupancy timeout or keep-on group changed with this page open.
                 return self._show_light_form(_nest_light(flat), errors)
             if not errors:
                 clean = {k: v for k, v in flat.items() if v is not None}
@@ -4832,7 +4832,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             self._hold_exclusions(),
         )
         if errors:
-            # A sensor's timeout or a keep-on group changed while a later page was open.
+            # An occupancy timeout or keep-on group changed while a later page was open.
             return self._show_scheduled_light_side_form(side, None, errors)
         return self._finish(data)
 

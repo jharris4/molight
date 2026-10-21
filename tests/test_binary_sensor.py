@@ -118,7 +118,7 @@ async def test_occupancy_clear_records_latest_occupied_time(
 
     latest_occupied_time = clear time - occupancy_timeout (30s in fixture),
     estimating when the person actually left before the real sensor's own
-    hardware delay elapsed.
+    hold time elapsed.
     """
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
@@ -371,7 +371,7 @@ async def test_occupancy_ignores_attribute_only_updates(
 
 @pytest.mark.asyncio
 async def test_early_clear_is_false_detection(hass: HomeAssistant, freezer) -> None:
-    """A clear before the sensor timeout is still a false detection."""
+    """A clear before the occupancy timeout is still a false detection."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -495,7 +495,7 @@ async def test_false_detection_classification_and_count(
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # False cycle: one detection, cleared right after the 30s hold (31s on).
+    # False cycle: one detection, cleared just after the 30s occupancy timeout (31s on).
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
     freezer.tick(timedelta(seconds=31))
@@ -508,7 +508,7 @@ async def test_false_detection_classification_and_count(
     assert state.attributes["false_detection_count"] == 6
     assert state.attributes["latest_occupied_time"] is None  # not advanced
 
-    # Real cycle: re-triggered, on well past the hold time (45s).
+    # Real cycle: re-triggered, on well past the occupancy timeout (45s).
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
     freezer.tick(timedelta(seconds=45))

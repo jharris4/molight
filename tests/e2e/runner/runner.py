@@ -4122,7 +4122,7 @@ def run_unavailable_sensors_schedule_first() -> None:
 
 
 def run_auto_off_prepare() -> None:
-    """Disable auto-off and prove it holds a cleared occupancy timeout."""
+    """Disable auto-off and prove it holds the light past its turn-off timeout."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()

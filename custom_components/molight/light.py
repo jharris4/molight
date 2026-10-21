@@ -4506,8 +4506,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Seconds to wait after occupancy clears before turning lights off.
 
         Anchors to the latest_occupied_time across the occupancy and maintain
-        entities (whichever saw the person last) so that each sub-sensor's
-        individual timeout is respected: the lights go off light_timeout
+        entities (whichever saw the person last) so that each sensor's
+        occupancy timeout is respected: the lights go off light_timeout
         seconds after the person actually left, i.e. at
         latest_occupied_time + light_timeout, which is why light_timeout must
         be >= the sensor's occupancy_timeout (the flows enforce it).

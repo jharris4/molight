@@ -805,7 +805,7 @@ async def test_false_detection_off_delay(hass: HomeAssistant, freezer) -> None:
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"
 
-    # Single-blip clear (31s on vs 30s hold) → false detection.
+    # Single-blip clear (31s on vs 30s occupancy timeout) → false detection.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
