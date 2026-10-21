@@ -349,7 +349,7 @@ Single vs. double is read from each button's own event types (`multi_press_1` vs
 
 ### Example 11: Bedside lamp, morning and evening (Virtual Combined Schedule Sensor)
 
-On from 06:30 to 08:00 and again from sunset until 23:00. Each window is its own schedule; a combined schedule joins them, and the lamp follows that. Far enough north that the summer sun sets after 23:00, the evening window is empty on those days and the lamp only comes on in the morning.
+On from 06:30 to 08:00 and again from sunset until 23:00. Each schedule window is its own schedule; a combined schedule joins them, and the lamp follows that. Far enough north that the summer sun sets after 23:00, the evening window is empty on those days and the lamp only comes on in the morning.
 
 **1. Two Virtual Schedule Sensors**
 
@@ -386,13 +386,13 @@ Schedule sensor:   binary_sensor.bedside_schedule
 Schedule mode:     Follow
 ```
 
-Each window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a source-backed schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
+Each schedule window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a source-backed schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
 
 ---
 
 ### Example 12: Porch light with standby (Virtual Scheduled Light)
 
-Through Example 4's window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
+Through Example 4's schedule window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
 
 **1. Virtual Scheduled Light** (shared form)
 

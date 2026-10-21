@@ -44,7 +44,7 @@ Ships alone.
 
 One release, none touching the precedence rules.
 
-- **Home Assistant's Schedule helper as a schedule source.** "Weekday mornings only", or three
+- **Home Assistant's Schedule helper as a schedule source.** "Weekday mornings only", or three schedule
   windows a day, takes a workday sensor plus a combined All schedule, or several schedule entries,
   while the Schedule helper edits all of that on the Helpers page. The source picker of the Virtual
   Schedule Sensor takes `binary_sensor` only. Offer the `schedule` domain too: its state is on/off
@@ -102,8 +102,8 @@ Asks that existing blocks answer:
 - Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode
   (EXAMPLES.md, example 5); to keep the real window too, join both in a Virtual Combined Schedule
   Sensor set to All.
-- Only when dark and inside a window, on a plain Virtual Light: a Virtual Combined Schedule Sensor
-  set to All.
+- Only when dark and inside a schedule window, on a plain Virtual Light: a Virtual Combined Schedule
+  Sensor set to All.
 - Dim before turning off: the effect and warn stages.
 - An always-on night light that brightens on motion: a Virtual Scheduled Light on an all-day
   schedule with standby.
