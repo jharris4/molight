@@ -241,7 +241,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -296,7 +296,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -533,7 +533,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -588,7 +588,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -664,7 +664,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -715,7 +715,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -754,7 +754,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -805,7 +805,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1013,7 +1013,7 @@
       "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
-      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy and maintain occupancy sensors.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
@@ -1076,7 +1076,7 @@
       "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or removed, since you picked them. Edit any of them further via its options.",
       "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
-      "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's timeout): {skipped}.",
+      "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
       "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
       "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
       "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
@@ -1193,7 +1193,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1244,7 +1244,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1283,7 +1283,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1334,7 +1334,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1539,7 +1539,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
         },
         "sections": {
           "sensors": {
@@ -1594,7 +1594,7 @@
           },
           "warning": {
             "name": "Off warning sequence",
-            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at a holding brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
+            "description": "Warn before an automatic turn-off: a brief attention cue (effect), then a grace period at the warning brightness (warn). A stage with duration 0 is skipped, so leave both at 0 to turn straight off.",
             "data": {
               "effect_timeout": "Effect warning duration",
               "effect_brightness": "Effect brightness",
@@ -1772,8 +1772,8 @@
       "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
-      "light_timeout_too_short": "The turn-off timeout must be at least the timeout of the selected occupancy and maintain occupancy sensors.",
-      "occupancy_timeout_too_long": "This timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
+      "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
+      "occupancy_timeout_too_long": "This occupancy timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
@@ -1810,7 +1810,7 @@
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the standby color mode to choose which applies.",
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the standby color mode to None for no standby.",
       "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor.",
-      "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that uses this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter timeouts."
+      "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that uses this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter occupancy timeouts."
     },
     "abort": {
       "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",

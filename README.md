@@ -135,7 +135,7 @@ A final form then lets you adjust the default settings applied to every pick; fo
 
 The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
-Because occupancy feeds the turn-off countdown, a light's turn-off timeout must be at least its occupancy sensor's timeout (for a combined sensor, the largest of its constituents'; see [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light)). Lights that break that rule are skipped and named in the summary, so you can raise their timeouts and re-run.
+Because occupancy feeds the turn-off countdown, a light's turn-off timeout must be at least the occupancy timeout of its occupancy sensor (for a combined sensor, the largest of its constituents'; see [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light)). Lights that break that rule are skipped and named in the summary, so you can raise their timeouts and re-run.
 
 Bulk assignment currently applies only to regular Virtual Lights. Configure the sensors for a Virtual Scheduled Light in its outside- and inside-schedule settings instead.
 
