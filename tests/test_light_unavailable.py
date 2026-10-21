@@ -1767,7 +1767,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     The virtual occupancy sensor clears itself after its clear-on-unavailable
     timeout (default 60s), and because the clear is not flagged as a false
     detection, the light runs its normal countdown (anchored to the dropout
-    moment) instead of the quick-off.
+    moment) instead of the off delay.
     """
     occupancy = MockConfigEntry(
         domain=DOMAIN,
@@ -1800,7 +1800,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Not the 5s quick-off, and not off yet halfway through the countdown.
+    # Not the 5s off delay, and not off yet halfway through the countdown.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)

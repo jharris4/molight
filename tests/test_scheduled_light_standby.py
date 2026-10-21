@@ -551,7 +551,7 @@ async def test_warning_leads_into_an_rgb_standby_on_mixed_members(
 async def test_false_detection_drops_back_to_standby_quickly(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A boost from standby counts as lit by occupancy for the quick off."""
+    """A boost from standby counts as lit by occupancy for the off delay."""
     await _setup_porch(hass, _porch())
     await _set(hass, OCCUPANCY, "on")
     await _set(hass, OCCUPANCY, "off", last_clear_false_detection=True)
@@ -2592,7 +2592,7 @@ async def test_standby_during_a_waiting_raise_keeps_standby(
     await settle(hass)
 
     _assert_standby(hass)
-    # At startup, when the raise's quick off dropped back, and after the call.
+    # At startup, when the off delay dropped the raise back, and after the call.
     assert [c["brightness"] for c in _light_calls(calls, "turn_on")] == [STANDBY] * 3
 
 

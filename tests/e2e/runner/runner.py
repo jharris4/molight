@@ -4436,7 +4436,7 @@ def run_false_detection_prepare() -> None:
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
     # A blip shorter than timeout + grace is a false detection: not counted as
-    # presence, and the light it lit goes off after the short delay.
+    # presence, and the light it lit goes off after the off delay.
     set_grace_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_grace_motion(client, False)
@@ -6976,7 +6976,7 @@ def set_source(client: HomeAssistantClient, raw: str, virtual: str, on: bool) ->
 
 
 def run_maintain_scenarios(client: HomeAssistantClient) -> None:
-    """Maintain holds a manually lit light; both-false is the only quick-off clear."""
+    """Maintain holds a manually lit light; only both-false clears get the off delay."""
     manual_entry_id = create_entry(
         client,
         "light",
@@ -7037,7 +7037,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     for entry_id in (trigger_entry_id, maintain_entry_id, both_entry_id):
         assert_entry_loaded(client, entry_id)
 
-    # Both clears false (blips shorter than timeout + grace): quick off.
+    # Both clears false (blips shorter than timeout + grace): off delay.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, True)

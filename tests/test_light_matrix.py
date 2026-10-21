@@ -2096,7 +2096,7 @@ async def test_false_off_delay_never_outlasts_the_turn_off_timeout(
     hass: HomeAssistant, freezer, hold: str, delay: int, off_after: int
 ) -> None:
     """A false detection's light goes off after the off delay, or after the
-    turn-off timeout when that is shorter, on either quick-off path."""
+    turn-off timeout when that is shorter, held by occupancy or maintain."""
     old = (datetime.now(UTC) - timedelta(seconds=600)).isoformat()
     sensors = (OCC, MAINT) if hold == "maintain" else (OCC,)
     _real_light_reports(hass)
@@ -2163,7 +2163,7 @@ async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timeout(
     hass: HomeAssistant, freezer, when: str, door_mode: str
 ) -> None:
     """A door opened while a blip has the light on is a person: a false clear
-    then runs the full timeout from the opening, not the quick off."""
+    then runs the full timeout from the opening, not the off delay."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     false_clear = {"latest_occupied_time": old, "last_clear_false_detection": True}
     _real_light_reports(hass)
@@ -2178,7 +2178,7 @@ async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timeout(
 
     if when == "countdown":
         freezer.tick(timedelta(seconds=31))
-        hass.states.async_set(OCC, "off", false_clear)  # quick off armed
+        hass.states.async_set(OCC, "off", false_clear)  # off delay armed
         await settle(hass)
         freezer.tick(timedelta(seconds=2))  # T0+33
     else:

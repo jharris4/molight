@@ -797,8 +797,8 @@ def _fd_light_entry() -> MockConfigEntry:
 
 
 @pytest.mark.asyncio
-async def test_false_detection_quick_off(hass: HomeAssistant, freezer) -> None:
-    """Lights lit by a false-detection cycle turn off after the short delay."""
+async def test_false_detection_off_delay(hass: HomeAssistant, freezer) -> None:
+    """Lights lit by a false-detection cycle turn off after the off delay."""
     await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
 
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -811,7 +811,7 @@ async def test_false_detection_quick_off(hass: HomeAssistant, freezer) -> None:
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"  # short countdown running
 
-    # The 5s quick-off fires instead of the normal 30s countdown.
+    # The 5s off delay applies instead of the normal 30s countdown.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -826,7 +826,7 @@ async def test_false_detection_quick_off(hass: HomeAssistant, freezer) -> None:
 async def test_false_detection_off_delay_is_configurable(
     hass: HomeAssistant, freezer, delay: int
 ) -> None:
-    """The quick-off delay honors a configured value (the other quick-off
+    """The off delay honors a configured value (the other off delay
     tests all ride the default of 5s)."""
     light = MockConfigEntry(
         domain=DOMAIN,
@@ -881,7 +881,7 @@ async def test_false_detection_never_cuts_manual_lights(
     assert attrs["molight_state"] == STATE_OCCUPIED
 
     # False clear, but occupancy didn't light these lights, so the normal
-    # countdown (60s here, lot never advanced) applies, not the 5s quick-off.
+    # countdown (60s here, lot never advanced) applies, not the 5s off delay.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
@@ -945,7 +945,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
 
-    # The quick-off (5s) must NOT fire; the user owns this on-period.
+    # The off delay (5s) must NOT apply; the user owns this on-period.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)

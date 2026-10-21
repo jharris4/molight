@@ -928,10 +928,10 @@ async def test_gate_switch_end_into_bright_control_respects_a_hold(
 
 
 @pytest.mark.asyncio
-async def test_hold_suppresses_false_detection_quick_off(
+async def test_hold_suppresses_false_detection_off_delay(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The false-detection quick off is an automatic off; held like the rest."""
+    """The false-detection off delay ends in an automatic off; held like the rest."""
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
@@ -941,7 +941,7 @@ async def test_hold_suppresses_false_detection_quick_off(
     hass.states.async_set(OCC, "off", {"last_clear_false_detection": MARKER})
     await settle(hass)
 
-    # Default false-off delay is 5s; held lights must survive far longer.
+    # Default false-detection off delay is 5s; held lights must survive far longer.
     await _tick(hass, freezer, 600)
     assert _state(hass).state == "on"
 

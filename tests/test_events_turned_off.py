@@ -1,7 +1,7 @@
 """Tests for the turned_off event on a light's Events entity.
 
 It fires once per on-period end, with why: a person, the timer, a false
-detection's quick off, brightness, or a schedule end, including one held
+detection's off delay, brightness, or a schedule end, including one held
 by an auto-off hold or missed during a restart. A rest at standby is a
 turned_off with standby set.
 """
@@ -125,7 +125,7 @@ async def test_timer_turn_off(hass, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_false_detection_quick_off(hass, freezer) -> None:
+async def test_false_detection_off_delay(hass, freezer) -> None:
     """A light a blip lit goes off quickly, and says so."""
     sensor = MockConfigEntry(
         domain=DOMAIN,

@@ -271,12 +271,12 @@ async def test_countdown_anchors_to_the_later_of_occupancy_and_maintain(
 
 
 # ---------------------------------------------------------------------------
-# False-detection quick off
+# False-detection off delay
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_no_quick_off_when_maintain_clear_genuine(
+async def test_no_off_delay_when_maintain_clear_genuine(
     hass: HomeAssistant, freezer
 ) -> None:
     """A false occupancy clear followed by a genuine maintain clear runs the
@@ -298,7 +298,7 @@ async def test_no_quick_off_when_maintain_clear_genuine(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Past the false-off delay (5s) but inside the normal countdown.
+    # Past the false-detection off delay (5s) but inside the normal countdown.
     await _tick(hass, freezer, 10)
     assert _state(hass).state == "on"
 
@@ -307,7 +307,7 @@ async def test_no_quick_off_when_maintain_clear_genuine(
 
 
 @pytest.mark.asyncio
-async def test_quick_off_when_both_clears_false(hass: HomeAssistant, freezer) -> None:
+async def test_off_delay_when_both_clears_false(hass: HomeAssistant, freezer) -> None:
     """Both sensors flagging their clears false → the whole episode was a
     false detection; the occupancy-lit light turns off quickly."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT, timeout=60)
@@ -557,7 +557,7 @@ async def test_maintain_only_false_clear_gets_normal_countdown(
     hass: HomeAssistant, freezer
 ) -> None:
     """With no regular occupancy sensor a false-flagged maintain clear still
-    earns the normal countdown: the quick off only cuts short occupancy-lit
+    earns the normal countdown: the off delay only cuts short occupancy-lit
     lights, and without an occupancy sensor no light is ever occupancy-lit."""
     entry = make_light_entry(maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
@@ -573,7 +573,7 @@ async def test_maintain_only_false_clear_gets_normal_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Past the 5s false-detection quick off: the normal 60s countdown runs.
+    # Past the 5s false-detection off delay: the normal 60s countdown runs.
     await _tick(hass, freezer, 10)
     assert _state(hass).state == "on"
     await _tick(hass, freezer, 51)

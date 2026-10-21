@@ -894,8 +894,8 @@ async def test_occupancy_on_during_a_waiting_manual_on_defers_to_it(
     assert state.attributes["molight_state"] == "occupied"
     assert state.attributes["brightness"] == 200
 
-    # A quick clear flagged false gets the normal countdown, not the quick
-    # off reserved for lights that occupancy lit.
+    # A quick clear flagged false gets the normal countdown, not the off
+    # delay reserved for lights that occupancy lit.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set(
         "binary_sensor.occ", "off", {"last_clear_false_detection": True}
@@ -949,7 +949,7 @@ async def test_wall_turn_on_during_slow_selection_keeps_its_level(
     if trigger == "door":
         return
 
-    # A clear flagged false gets the normal countdown, not the quick off.
+    # A clear flagged false gets the normal countdown, not the off delay.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set(sensor, "off", {"last_clear_false_detection": True})
     await settle(hass)
@@ -2207,7 +2207,7 @@ async def test_device_push_from_the_selection_is_not_a_wall_turn_on(
     if trigger != "occupancy":
         return
 
-    # Still lit by occupancy: a false detection gets the quick off.
+    # Still lit by occupancy: a false detection gets the off delay.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set(
         "binary_sensor.occ", "off", {"last_clear_false_detection": True}
@@ -2886,7 +2886,7 @@ async def test_preset_push_during_a_resend_into_a_stage_keeps_the_warning(
 async def test_automatic_turn_on_waiting_into_a_stage_sends_the_stage(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Motion lights the room, a false detection ends it and its quick off
+    """Motion lights the room, a false detection ends it and its off delay
     reaches the warning while the select call still runs: the warning is
     what the lights show, not the level motion asked for."""
     select = await _park_automatic_turn_on(

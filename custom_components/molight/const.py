@@ -265,7 +265,7 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 #                         illuminance going dark, a window start); manual and
 #                         physical turn-ons are untouched.
 #   auto_off_transition:  automatic turn-offs (timer expiry, false-detection
-#                         quick off, bright-forces-off, window end); a manual
+#                         off delay, bright-forces-off, window end); a manual
 #                         off is untouched.
 #   effect_transition:    fade into the effect stage's brightness.
 #   warn_transition:      fade into the warn stage's brightness.
@@ -286,7 +286,7 @@ CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
 # Keep-on entities: while ANY of these entities is "on", every automatic
-# turn-off (timer expiry, false-detection quick off, bright-forces-off,
+# turn-off (timer expiry, false-detection off delay, bright-forces-off,
 # schedule window end) is suspended. Turn-ons and manual control are never
 # affected. When the last hold releases the light re-evaluates its rules.
 CONF_HOLD_ENTITIES = "hold_entities"

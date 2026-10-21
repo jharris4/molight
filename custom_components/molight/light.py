@@ -148,7 +148,7 @@ Maintain occupancy (when a maintain occupancy entity is configured)
   - The countdown starts only when both the regular occupancy entity and the
     maintain entity are clear, anchored to the max of their
     latest_occupied_time attributes.
-  - The false-detection quick off applies on a maintain clear only when both
+  - The false-detection off delay applies on a maintain clear only when both
     sensors flagged their clears false (a genuine presence on either side
     means the light earns its normal countdown).
   - Startup: a light that is already on with the maintain entity on is
@@ -178,8 +178,8 @@ illuminance_mode:
 Holding auto-off
   Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
   any configured keep-on entity (hold_entities) is on. While held, every
-  automatic turn-off is suspended (timer expiry, the false-detection quick
-  off, bright-forces-off, and schedule window ends), but turn-ons and manual
+  automatic turn-off is suspended (timer expiry, the false-detection off
+  delay, bright-forces-off, and schedule window ends), but turn-ons and manual
   control work exactly as usual (a manual off still turns the lights off).
   State-machine transitions keep happening; they just never arm a timer.
 
