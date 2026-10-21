@@ -152,7 +152,7 @@ Window start:
   Time vs. sun: Latest of the two   # whichever of time / sun is later wins
 
 Window end:
-  Time:        07:00       # (no sun anchor on this edge)
+  Time:        07:00       # (no sun event on this edge)
 ```
 
 **2. Virtual Light**
@@ -298,7 +298,7 @@ Auto-on color temperature: 2200                  # warm night light
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
 - With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
-- Choose **Switch state** to replace an on light's state and deadline using the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
+- Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
 - Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
 

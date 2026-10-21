@@ -297,7 +297,7 @@ By default the light turns off the instant its timer expires. Setting an **effec
 1. **Effect**: a brief cue for *effect warning duration* seconds, during which the real lights that are on are driven to the *effect brightness* (`0` blinks them fully off). Skipped when its duration is `0`.
 2. **Warn**: a grace period of *warning grace period* seconds at the *warning brightness* (or, if blank, the brightness each real light already had), then the lights turn off. Skipped when its duration is `0`.
 
-Each stage can also show an optional **color**: a white color temperature *or* an RGB color, so temp-only bulbs get a cue too, and a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
+Each stage can also show an optional **color**: a white color temperature *or* a color, so temp-only bulbs get a cue too, and a red warn stage is a much clearer "about to turn off" cue than a dim. Color-capable members show it; brightness-only members just show the stage brightness. A warn stage without a color of its own undoes an effect-stage recolor. One caveat: most lights restore their last color on the next turn-on, so after an auto-off that ended at the warning color, the *real* lights' next manual turn-on may come back in that color (the same already applies to the warning brightness).
 
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade, brightness, or color on a disabled stage is rejected rather than silently ignored).
 
@@ -553,13 +553,13 @@ If either settings set uses a turn-on selection entity, its usual selection form
 Crossing the schedule boundary in either direction switches which settings are used and immediately re-checks the light against the newly active settings: its sensors are re-read, newly selected active occupancy or a held-open **Open & close** door can turn an off light on, a newly selected illuminance sensor that is bright in **Control** mode forces an on light off, and keep-on holds are picked up. The start boundary (`off → on`) always does exactly this. Only the end boundary (`on → off`) is configurable, through **At schedule end**, which has the same three choices as a Virtual Light's Gate modes (see [Schedule modes](#schedule-modes)):
 
 - **Keep state** (the default) makes the end boundary behave exactly like the start. The only thing it preserves is a countdown or warning already running, which keeps its original duration and deadline; if the old settings held the light but the new settings do not, a fresh timeout starts.
-- **Switch state** differs from **Keep state** in that one respect only: on the `on → off` boundary it replaces an already-on light's running state and deadline using the outside settings.
-  - An outgoing effect/warning presentation is cancelled first and its pre-warning appearance restored.
+- **Switch state** differs from **Keep state** in that one respect only: on the `on → off` boundary it recalculates an already-on light's running state and timer from the outside settings.
+  - An effect/warn sequence still running is cancelled first and the pre-warning brightness and color restored.
   - Bright outside illuminance in **Control** mode forces the light off; active occupancy, maintain occupancy, or an **Open & close** door adopts it as `OCCUPIED`.
   - Otherwise the remaining timeout is calculated from the outside occupancy/maintain history. With no configured presence sensor, or with no usable history, the outside settings receive a fresh full timeout. If the resulting deadline is already due, the outside settings' effect/warning/automatic-off settings apply immediately.
   - While Auto-off is held, the state is still recalculated but its timer or off is suppressed; releasing the hold follows the normal hold-release rules, including a fresh full timeout when no other current rule keeps or turns the light off.
   - An end boundary missed during a restart is caught up exactly once at startup, with the same recalculation.
-- **Turn off** uses the inside settings' automatic-off fade as the outside settings take over.
+- **Turn off** uses the inside settings' auto-off fade as the outside settings take over.
   - This automatic off respects Auto-off and the newly active outside settings' keep-on entities; a held boundary is applied when the hold releases (unless the light is turned off first, which discards it), and a boundary missed during a restart is caught up exactly once.
   - A light that is already off at the boundary simply takes the outside settings' sensor check like the other actions, while a light the boundary turned off stays off until the outside settings' next sensor edge.
   - Manual and automatic operation under the outside settings remain allowed.
@@ -624,7 +624,7 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 | **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
 | **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it. Toggle moves the lights together, as a light group does: if any is on it turns them all off, otherwise all on |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
-| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* an **RGB color**; its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
+| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* a **color**; its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
 
 Each button may appear in several actions, as long as no *(button, click)* pair is bound twice, e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
 
