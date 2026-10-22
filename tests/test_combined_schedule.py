@@ -268,7 +268,7 @@ async def test_any_follows_each_window(hass: HomeAssistant, freezer) -> None:
 async def test_back_to_back_windows_are_one_period(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Where one input ends as another starts there is no off blip and the
+    """Where one input ends as another starts there is no brief off and the
     marker stays the start of the whole period."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
@@ -660,7 +660,7 @@ async def test_unavailable_input_only_matters_when_it_could_change_the_result(
     assert hass.states.get("binary_sensor.all").state == "off"
 
     # House recovers on. Nothing shows the combination was ever off, so the
-    # outage reads as a blip in the same on-period.
+    # outage stays inside the same on-period.
     hass.states.async_set("binary_sensor.house_mode", "on")
     await settle(hass)
     any_state = hass.states.get("binary_sensor.any")

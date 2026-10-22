@@ -1883,8 +1883,8 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     wait_profile(client, PROFILE_OUTSIDE)
 
 
-def run_sensor_blip_scenarios(client: HomeAssistantClient) -> None:
-    """A door or lux source blipping unavailable and back unchanged is no event."""
+def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> None:
+    """A door or lux source briefly unavailable and back unchanged is no event."""
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
@@ -3618,7 +3618,7 @@ def run_primary() -> None:
     run_assign_scenarios(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint("illuminance gate/control and door open/open-close behavior per profile")
-    run_sensor_blip_scenarios(client)
+    run_sensor_briefly_unavailable_scenarios(client)
 
     reset_trigger(client)
     client.call_service(

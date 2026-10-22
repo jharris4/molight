@@ -119,7 +119,7 @@ async def test_open_close_holds_until_the_cover_is_closed(
 async def test_open_mode_recovering_in_another_open_state_is_no_opening(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A blip that comes back closing instead of open replays no opening."""
+    """A cover briefly unavailable, back closing, not open, replays no opening."""
     hass.states.async_set(GARAGE, "closed")
     await setup_entries(hass, make_light_entry(door=GARAGE, door_mode=DOOR_MODE_OPEN))
 
@@ -136,7 +136,7 @@ async def test_open_mode_recovering_in_another_open_state_is_no_opening(
 async def test_open_close_recovering_in_another_open_state_keeps_holding(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A held-open cover back from a blip as closing still holds the light."""
+    """A held-open cover briefly unavailable, back closing, still holds the light."""
     hass.states.async_set(GARAGE, "closed")
     await setup_entries(
         hass, make_light_entry(door=GARAGE, door_mode=DOOR_MODE_OPEN_CLOSE)

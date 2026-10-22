@@ -860,8 +860,8 @@ async def test_recovery_to_on_preserves_false_detection_clock(
 ) -> None:
     """An unavailable→on recovery mid-cycle must not restart the on-duration clock.
 
-    Otherwise a long, genuine occupancy whose source blips just before the
-    clear measures its duration from the recovery moment and gets
+    Otherwise a long, genuine occupancy whose source is briefly unavailable
+    just before the clear measures its duration from the recovery moment and gets
     misclassified as a false detection (skipping the latest_occupied_time
     advance and giving dependent lights the off delay).
     """

@@ -540,7 +540,7 @@ async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     await settle(hass)
     assert _mstate(hass) == STATE_IDLE
 
-    # The schedule blips unavailable, then someone lights the room physically:
+    # The schedule is briefly unavailable, then someone lights the room physically:
     # with the window unreadable the light runs a normal ACTIVE timer.
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)

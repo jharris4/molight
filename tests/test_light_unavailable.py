@@ -2,8 +2,8 @@
 
 Each entity the light watches (real lights, occupancy, illuminance,
 schedule) can drop to unavailable/unknown at any time, e.g. a Zigbee
-device falling off the mesh or an integration reloading. Those blips must
-never be read as state changes, and recovery transitions must behave like
+device falling off the mesh or an integration reloading. Being briefly
+unavailable is never a state change, and recovery transitions must behave like
 fresh events.
 """
 
@@ -117,7 +117,9 @@ def _real_calls(calls: list[dict], service: str) -> list[dict]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
-async def test_real_light_blip_and_recovery(hass: HomeAssistant, bad: str) -> None:
+async def test_real_light_briefly_unavailable_and_back(
+    hass: HomeAssistant, bad: str
+) -> None:
     """A real light dropping out is not an 'off'; coming back 'on' re-adopts it."""
     await setup_entries(hass, make_light_entry())
 
@@ -146,11 +148,11 @@ async def test_real_light_blip_and_recovery(hass: HomeAssistant, bad: str) -> No
 async def test_real_light_recovery_keeps_running_countdown(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A member blip/recovery mid-countdown must not win a fresh full timer.
+    """A member briefly unavailable mid-countdown must not win a fresh full timer.
 
     Regression: unavailable → on used to be handled as an external turn-on,
     replacing an occupancy-anchored countdown with a full ACTIVE timer: a
-    bulb that blips off the mesh every few minutes never turned off.
+    bulb that briefly drops off the mesh every few minutes never turned off.
     """
     await setup_entries(hass, make_light_entry(occupancy=OCC, timeout=60))
 
@@ -620,7 +622,9 @@ async def test_failed_manual_turn_off_leaves_the_light_reporting_on(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_blip_keeps_occupied(hass: HomeAssistant, freezer) -> None:
+async def test_occupancy_briefly_unavailable_keeps_occupied(
+    hass: HomeAssistant, freezer
+) -> None:
     """Occupancy going unavailable must not start the countdown."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
@@ -632,7 +636,7 @@ async def test_occupancy_blip_keeps_occupied(hass: HomeAssistant, freezer) -> No
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # No timer was started by the blip.
+    # Being briefly unavailable started no timer.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -665,7 +669,7 @@ async def test_occupancy_recovers_directly_to_on(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
-async def test_occupancy_blip_respects_manual_off(
+async def test_occupancy_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant, bad: str
 ) -> None:
     """on → outage → on is no new occupancy: a manual off stands."""
@@ -701,7 +705,7 @@ async def test_occupancy_blip_respects_manual_off(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_seen_on_at_startup_blip_respects_manual_off(
+async def test_occupancy_seen_on_at_startup_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant,
 ) -> None:
     """The value read at startup counts as known, not only observed edges."""
@@ -875,7 +879,7 @@ async def test_occupancy_recovery_applies_a_settings_switch_during_outage(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_blip_after_a_gate_lifted_earlier_keeps_manual_off(
+async def test_occupancy_briefly_unavailable_after_a_gate_lift_keeps_manual_off(
     hass: HomeAssistant, freezer
 ) -> None:
     """A gate that lifted before the outage is not applied on recovery."""
@@ -980,7 +984,7 @@ async def test_occupancy_recovery_applies_a_gate_lifted_after_a_manual_off(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_blip_keeps_occupied_light_untouched(
+async def test_occupancy_briefly_unavailable_keeps_occupied_light_untouched(
     hass: HomeAssistant,
 ) -> None:
     """An occupied light sees no command and no new attribution on recovery."""
@@ -1210,7 +1214,7 @@ async def test_occupancy_outage_across_a_settings_switch(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_blip_holds_state(hass: HomeAssistant) -> None:
+async def test_illuminance_briefly_unavailable_holds_state(hass: HomeAssistant) -> None:
     """Illuminance going unavailable changes nothing; recovery acts on the value."""
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
@@ -1235,7 +1239,7 @@ async def test_illuminance_blip_holds_state(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
+async def test_schedule_briefly_unavailable_keeps_window(hass: HomeAssistant) -> None:
     """A follow-mode schedule dropping out mid-window keeps the lights on."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(
@@ -1260,8 +1264,10 @@ async def test_schedule_blip_keeps_window(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
-    """A schedule blip mid-window must not re-light a manually turned-off light.
+async def test_schedule_briefly_unavailable_respects_manual_off(
+    hass: HomeAssistant,
+) -> None:
+    """A schedule briefly unavailable mid-window must not undo a manual off.
 
     The window was already applied; recovering to 'on' with the same
     current_window_start is not a new window start, so a manual off in
@@ -1279,7 +1285,7 @@ async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
     await settle(hass)
     assert _state(hass).state == "off"
 
-    # The schedule entity blips and recovers inside the same window.
+    # The schedule entity is briefly unavailable inside the same window.
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -1302,7 +1308,7 @@ async def test_schedule_blip_respects_manual_off(hass: HomeAssistant) -> None:
     ],
 )
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
-async def test_schedule_blip_outside_window_keeps_manual_light(
+async def test_schedule_briefly_unavailable_outside_window_keeps_manual_light(
     hass: HomeAssistant, freezer, mode: str, bad: str
 ) -> None:
     """Outside any window, off → outage → off is not a window end."""
@@ -1339,7 +1345,7 @@ async def test_schedule_blip_outside_window_keeps_manual_light(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
-async def test_schedule_without_marker_blip_respects_manual_off(
+async def test_schedule_without_marker_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant, bad: str
 ) -> None:
     """A schedule publishing no window marker: on → outage → on is no start."""
@@ -1435,7 +1441,7 @@ async def test_schedule_outage_spanning_a_window_end_applies_it(
     [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
 @pytest.mark.parametrize("bad", ["unavailable", "unknown"])
-async def test_gate_blip_inside_window_respects_manual_off(
+async def test_gate_briefly_unavailable_inside_window_respects_manual_off(
     hass: HomeAssistant, mode: str, bad: str
 ) -> None:
     """Inside the window, on → outage → on must not re-light an occupied room."""
@@ -1554,7 +1560,7 @@ async def test_gate_recovery_respects_a_manual_off_after_the_blocked_start(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_gate_blip_with_door_standing_open_respects_manual_off(
+async def test_gate_briefly_unavailable_with_door_standing_open_respects_manual_off(
     hass: HomeAssistant,
 ) -> None:
     """A door open since before the outage does not re-light the room."""
@@ -1897,7 +1903,7 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
 async def test_schedule_recovery_readopts_externally_relit_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Recovering mid-window re-adopts a light that was cycled during the blip.
+    """Recovering mid-window re-adopts a light that was cycled during the outage.
 
     While the schedule was unavailable the real light was switched off and
     back on, leaving the machine ACTIVE with a timer. Recovery to the same
@@ -1916,7 +1922,7 @@ async def test_schedule_recovery_readopts_externally_relit_light(
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
 
-    # The light is cycled externally during the blip: off, then on again.
+    # The light is cycled externally during the outage: off, then on again.
     hass.states.async_set(REAL, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
@@ -1939,12 +1945,12 @@ async def test_schedule_recovery_readopts_externally_relit_light(
 async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
     hass: HomeAssistant,
 ) -> None:
-    """A bright sensor blipping unavailable must not replay the bright edge.
+    """A bright sensor briefly unavailable must not replay the bright edge.
 
     A manual turn-on while steadily bright stands (control mode only forces
     off on the bright edge); the sensor recovering to the same value is not
-    that edge. The sensor holds through its source's outages, so its blip is
-    the placeholder of its entry reloading.
+    that edge. The sensor holds through its source's outages, so it is only
+    briefly unavailable here as a placeholder while its entry reloads.
     """
     illum = "binary_sensor.illum"
     hass.states.async_set(illum, "on")  # bright
@@ -2105,8 +2111,8 @@ async def test_follow_manual_off_mid_window_is_lost_on_reboot(
 ) -> None:
     """A manual off mid-window does not survive a member reboot either.
 
-    Contrast test_schedule_blip_respects_manual_off: there the *schedule*
-    blipped and the member's off was observed directly, so it stands.
+    Contrast test_schedule_briefly_unavailable_respects_manual_off: there the *schedule*
+    was briefly unavailable and the member's off was observed directly, so it stands.
     """
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(
@@ -2847,7 +2853,7 @@ async def test_gate_recovery_tells_a_reloaded_visit_from_a_new_one(
 async def test_gate_recovery_tells_a_door_dropout_from_an_opening(
     hass: HomeAssistant, freezer, fresh: bool
 ) -> None:
-    """A held-open door whose sensor blips during a gate outage did not open."""
+    """A held-open door briefly unavailable during a gate outage did not open."""
     hass.states.async_set(WINDOW_SOURCE, "on")
     hass.states.async_set(DOOR, "off")
     hass.states.async_set(REAL, "off")

@@ -2091,7 +2091,7 @@ async def test_rapid_schedule_changes_finish_with_latest_settings(
 async def test_schedule_unavailable_keeps_last_selected_settings(
     hass: HomeAssistant, bad_state: str
 ) -> None:
-    """A schedule blip keeps the last side active until a valid state returns."""
+    """A bad schedule state keeps the last side active until a valid one returns."""
     outside_occupancy = "binary_sensor.outside_occupancy"
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
@@ -2123,7 +2123,7 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
 
-    # The retained inside settings remain fully active during the blip.
+    # The retained inside settings remain fully active meanwhile.
     hass.states.async_set(inside_occupancy, "on")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
@@ -2189,7 +2189,7 @@ async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_state", ["unavailable", "unknown"])
-async def test_schedule_blip_does_not_restart_running_timeout(
+async def test_schedule_briefly_unavailable_does_not_restart_running_timeout(
     hass: HomeAssistant, freezer, bad_state: str
 ) -> None:
     """Dropping out and recovering on the same side leaves its timer alone."""
@@ -2921,10 +2921,10 @@ async def test_scheduled_light_gets_shared_auto_off_switch(
 
 
 @pytest.mark.asyncio
-async def test_boundary_keeps_door_hold_through_unavailable_blip(
+async def test_boundary_keeps_door_hold_while_briefly_unavailable(
     hass: HomeAssistant,
 ) -> None:
-    """A door blipping unavailable at the boundary must not drop its hold."""
+    """A door briefly unavailable at the boundary must not drop its hold."""
     door = "binary_sensor.shared_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -2954,7 +2954,7 @@ async def test_boundary_keeps_door_hold_through_unavailable_blip(
 async def test_boundary_does_not_carry_one_door_hold_onto_another_door(
     hass: HomeAssistant,
 ) -> None:
-    """Only the same door keeps its cached open through a blip at the
+    """Only the same door keeps its cached open while briefly unavailable at the
     boundary; a different door reading unavailable counts as closed."""
     door_a = "binary_sensor.outside_door"
     door_b = "binary_sensor.inside_door"
@@ -3017,7 +3017,7 @@ async def test_boundary_and_a_door_unavailable_for_a_minute(
 async def test_boundary_off_defers_to_unavailable_keep_on_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A keep-on hold blipping unavailable at the window end still defers the off."""
+    """A keep-on hold briefly unavailable at the window end still defers the off."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")

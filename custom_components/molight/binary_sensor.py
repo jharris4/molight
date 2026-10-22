@@ -136,8 +136,8 @@ _LATE_SETTLE = 2
 def _real_state_change(event: Event[EventStateChangedData]) -> bool:
     """Return True when the event is an actual state transition.
 
-    Filters out entities going unavailable/unknown (sensor blips must not be
-    read as occupancy or darkness changes) and attribute-only updates (many
+    Filters out entities going unavailable/unknown (being briefly unavailable
+    is no occupancy or darkness change) and attribute-only updates (many
     real sensors push battery/lux attributes while their state is unchanged).
     """
     new_state = event.data.get("new_state")
@@ -2408,7 +2408,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         value = timeline.value_at(ts)
 
         if value is None:
-            # Keep the last value and marker so a recovery reads as a blip; while HA
+            # Keep the last value and marker so a recovery reads as unchanged; while HA
             # starts, hold the restored state as inputs may not have reported yet.
             self._attr_available = not self._startup_done and self._restored
         else:

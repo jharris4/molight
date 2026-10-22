@@ -475,11 +475,11 @@ async def test_gate_window_start_reevaluates_open_door(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("event", ["maintain_clears", "door_closes"])
-async def test_gate_schedule_blip_keeps_the_doors_part(
+async def test_gate_schedule_briefly_unavailable_keeps_the_doors_part(
     hass: HomeAssistant, event: str
 ) -> None:
-    """Only a gate window that has ended makes the door ignored: through a
-    blip of the schedule the open door still holds, and its close still
+    """Only a gate window that has ended makes the door ignored: while the
+    schedule is briefly unavailable the open door still holds, and its close still
     starts the countdown."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(MAINT, "on")
@@ -513,7 +513,7 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
 
 
 # ---------------------------------------------------------------------------
-# unavailability: the hold survives a sensor blip
+# unavailability: the hold survives a sensor being briefly unavailable
 # ---------------------------------------------------------------------------
 
 
@@ -521,7 +521,7 @@ async def test_gate_schedule_blip_keeps_the_doors_part(
 async def test_open_close_unavailable_door_keeps_holding(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A held-open door that blips unavailable keeps its hold until it closes."""
+    """A held-open door that is briefly unavailable keeps its hold until it closes."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
 
@@ -531,9 +531,9 @@ async def test_open_close_unavailable_door_keeps_holding(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    hass.states.async_set(DOOR, "unavailable")  # battery sensor blip
+    hass.states.async_set(DOOR, "unavailable")  # battery sensor briefly unavailable
     await settle(hass)
-    hass.states.async_set(OCC, "off")  # occupancy clears during the blip
+    hass.states.async_set(OCC, "off")  # occupancy clears meanwhile
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -1051,10 +1051,10 @@ async def test_open_close_close_mid_warning_lets_it_finish(
 
 
 @pytest.mark.asyncio
-async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
+async def test_open_mode_briefly_unavailable_is_not_a_fresh_opening(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A standing-open door's sensor blip must not replay the opening edge."""
+    """A standing-open door briefly unavailable must not replay the opening edge."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
@@ -1068,7 +1068,7 @@ async def test_open_mode_unavailable_blip_is_not_a_fresh_opening(
     await settle(hass)
     assert _state(hass).state == "off"
 
-    # The battery sensor blips and recovers, still reporting open.
+    # The battery sensor is briefly unavailable, then reports open again.
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
     hass.states.async_set(DOOR, OPEN)
