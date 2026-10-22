@@ -164,7 +164,7 @@ async def test_schedule_change_rechecks_already_active_occupancy(
 
 @pytest.mark.asyncio
 async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
-    """The explicit end action turns off before leaving the inside profile."""
+    """The explicit end action turns off before leaving the inside settings."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -189,7 +189,7 @@ async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
 async def test_schedule_end_off_still_checks_outside_sensors_for_off_light(
     hass: HomeAssistant,
 ) -> None:
-    """turn_off on an already-off light applies the outside profile's sensors."""
+    """turn_off on an already-off light applies the outside settings' sensors."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -275,10 +275,10 @@ async def test_schedule_end_off_leaves_forced_off_light_off(
 
 
 @pytest.mark.asyncio
-async def test_schedule_end_off_uses_outgoing_profile_transition(
+async def test_schedule_end_off_uses_outgoing_settings_transition(
     hass: HomeAssistant,
 ) -> None:
-    """The boundary off fades with the inside profile being left."""
+    """The boundary off fades with the inside settings being left."""
     calls: list[dict] = []
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -429,7 +429,7 @@ async def test_schedule_end_switch_uses_remaining_outside_occupancy_timeout(
 async def test_schedule_end_switch_without_presence_sensor_uses_full_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """No incoming presence sensor gives the outside profile a full timeout."""
+    """No incoming presence sensor gives the outside settings a full timeout."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -462,7 +462,7 @@ async def test_schedule_end_switch_without_presence_sensor_uses_full_timeout(
 async def test_schedule_end_switch_adopts_active_outside_occupancy(
     hass: HomeAssistant,
 ) -> None:
-    """The fully selected outside profile holds an already-on light."""
+    """The fully selected outside settings hold an already-on light."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -631,7 +631,7 @@ async def test_schedule_end_switch_replaces_inside_warning_with_outside_timer(
 async def test_schedule_end_switch_obeys_outside_bright_control(
     hass: HomeAssistant,
 ) -> None:
-    """Switch-state turns off for the incoming profile's bright control sensor."""
+    """Switch-state turns off for the incoming settings' bright control sensor."""
     illuminance = "binary_sensor.outside_illuminance"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -852,8 +852,8 @@ async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
 async def test_schedule_end_switch_into_bright_control_respects_a_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A held light crossing a Switch state end into a bright control profile
-    stays on; releasing the hold applies the brightness."""
+    """A held light crossing a Switch state end into settings with a bright
+    control sensor stays on; releasing the hold applies the brightness."""
     illuminance = "binary_sensor.outside_illuminance"
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
@@ -933,7 +933,7 @@ async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    # Releasing a normal auto-off hold starts the incoming profile's complete
+    # Releasing a normal auto-off hold starts the incoming settings' complete
     # timeout, just as it does when a hold begins outside a schedule boundary.
     hass.states.async_set(hold, "off")
     await settle(hass)
@@ -954,7 +954,7 @@ async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
 async def test_restart_catches_up_missed_schedule_end_switch(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A restored inside side proves an offline switch-state boundary occurred."""
+    """Restored inside settings prove an offline switch-state boundary occurred."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
@@ -1037,7 +1037,7 @@ async def test_restart_missed_schedule_end_switch_replaces_inside_warning(
 async def test_schedule_end_off_waits_for_hold_release(
     hass: HomeAssistant,
 ) -> None:
-    """A keep-on entity from the newly active outside profile defers the off."""
+    """A keep-on entity from the newly active outside settings defers the off."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1285,7 +1285,7 @@ async def test_schedule_change_rechecks_already_open_door(
 async def test_schedule_change_ignores_a_standing_open_momentary_door(
     hass: HomeAssistant,
 ) -> None:
-    """In plain open mode the door is a momentary trigger, so a profile switch
+    """In plain open mode the door is a momentary trigger, so switching settings
     is not an opening, matching startup, illuminance going dark and a
     gate-mode window starting, which all ignore a door that is merely open."""
     door = "binary_sensor.inside_door"
@@ -1596,7 +1596,7 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).attributes["auto_off_held"] is False
 
-    # Entering the schedule selects the inside side, where the schedule
+    # Entering the schedule selects the inside settings, where the schedule
     # itself is the keep-on entity, and it is on.
     hass.states.async_set(SCHEDULE, "on")
     await settle(hass)
@@ -1608,7 +1608,7 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    # Leaving it drops both the side and the hold; a fresh timeout runs.
+    # Leaving it drops both the inside settings and the hold; a fresh timeout runs.
     hass.states.async_set(SCHEDULE, "off")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
@@ -1756,7 +1756,7 @@ async def test_each_schedule_side_applies_its_turn_on_selection(
 async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     hass: HomeAssistant, freezer, end_action: str
 ) -> None:
-    """A turn-on the inside profile has not sent yet is judged as an on light."""
+    """A turn-on the inside settings have not sent yet is judged as an on light."""
     select = _SlowSelect(hass)
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set("select.light_mode", "Night", {"options": ["Night"]})
@@ -1788,7 +1788,7 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     if end_action == SCHEDULE_END_ACTION_TURN_OFF:
         assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
         return
-    # The outside profile has no presence sensor, so its own timeout runs:
+    # The outside settings have no presence sensor, so their own timeout runs:
     # recalculated as a fresh one by switch, started for the lost hold by keep.
     expected = (
         STATE_ACTIVE if end_action == SCHEDULE_END_ACTION_SWITCH else STATE_COUNTDOWN
@@ -2142,7 +2142,7 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
 async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
     hass: HomeAssistant,
 ) -> None:
-    """A real source propagates through its schedule wrapper to profile selection."""
+    """A real source propagates through its schedule wrapper to the active settings."""
     source = "binary_sensor.house_mode"
     schedule_entity = "binary_sensor.profile_schedule"
     hass.states.async_set(source, "off")
@@ -2171,7 +2171,7 @@ async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
     )
 
     # Losing the real source makes the wrapper unavailable but does not invent
-    # a profile boundary in the consumer.
+    # a schedule boundary in the consumer.
     hass.states.async_set(source, "unavailable")
     await settle(hass)
     assert hass.states.get(schedule_entity).state == "unavailable"
@@ -2261,7 +2261,7 @@ async def test_restart_valid_schedule_state_overrides_restore(
 async def test_restart_catches_up_missed_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """A restored inside profile plus an off schedule applies the missed edge."""
+    """Restored inside settings plus an off schedule apply the missed edge."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
     mock_restore_cache(
@@ -2813,7 +2813,7 @@ async def test_options_reload_to_keep_drops_deferred_schedule_end_off(
 async def test_first_start_without_usable_schedule_defaults_outside(
     hass: HomeAssistant, bad_state: str | None
 ) -> None:
-    """Without valid or restored schedule state, startup uses the outside side."""
+    """Without valid or restored schedule state, startup uses the outside settings."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     if bad_state is not None:
@@ -2843,7 +2843,7 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
     bad_state: str | None,
     restored: str,
 ) -> None:
-    """An unusable schedule keeps the settings side restored after a restart."""
+    """An unusable schedule keeps the restored set of settings after a restart."""
     hass.states.async_set(REAL, "off")
     if bad_state is not None:
         hass.states.async_set(SCHEDULE, bad_state)
@@ -3162,7 +3162,7 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
 
 
 @pytest.mark.asyncio
-async def test_profile_switch_preserves_illuminance_cache_through_outage(
+async def test_settings_switch_preserves_illuminance_cache_through_outage(
     hass: HomeAssistant,
 ) -> None:
     """A boundary crossed during an illuminance outage keeps the cached level.
@@ -3210,7 +3210,7 @@ async def test_profile_switch_preserves_illuminance_cache_through_outage(
 @pytest.mark.parametrize(
     "role", [CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY]
 )
-async def test_profile_switch_keeps_the_hold_of_unreadable_presence(
+async def test_settings_switch_keeps_the_hold_of_unreadable_presence(
     hass: HomeAssistant, role: str
 ) -> None:
     """A boundary crossed while a holding presence sensor is out keeps its hold."""
@@ -3342,11 +3342,11 @@ async def test_boundary_missed_while_down_ends_a_manual_off_for_later_restarts(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("how", ["live", "restart"])
-async def test_leaving_a_standby_profile_ends_its_manual_off(
+async def test_leaving_settings_with_standby_ends_their_manual_off(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
     """The end boundary ends a standby window's manual off for the outside
-    profile too, which has no standby to scope it."""
+    settings too, which have no standby to scope it."""
     entry = await _manual_off_then_boundary(hass, freezer, "end", standby=True)
     if how == "restart":
         await restart_entries(hass, entry, started=False)

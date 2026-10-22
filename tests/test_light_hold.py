@@ -1127,7 +1127,7 @@ async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
 async def test_load_warns_once_for_a_keep_on_entity_on_both_scheduled_sides(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A scheduled light checks both settings sides, naming each entity once."""
+    """A scheduled light checks both sets of settings, naming each entity once."""
     hass.states.async_set(REAL, "off")
     hold = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
     await setup_entries(

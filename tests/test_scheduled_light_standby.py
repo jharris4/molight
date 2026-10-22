@@ -1158,7 +1158,7 @@ async def test_raised_period_cut_short_by_brightness_resumes_when_dark(
     if maintained:
         assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
         return
-    # The rest of the 30 s period runs out, and ends where the profile rests.
+    # The rest of the 30 s period runs out, and ends where the settings rest.
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     await _tick(hass, freezer, 27)
     if standby:
@@ -1232,7 +1232,7 @@ async def test_hold_freezes_the_raised_level_and_release_times_back_to_standby(
 
 @pytest.mark.asyncio
 async def test_schedule_end_turn_off_turns_standby_off(hass: HomeAssistant) -> None:
-    """Turn off ends standby with the inside profile's off fade."""
+    """Turn off ends standby with the inside settings' off fade."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_OFF_TRANSITION: 4}))
     _assert_standby(hass)
 
@@ -1280,7 +1280,7 @@ async def test_schedule_end_hands_over_a_light_raised_by_presence(
 async def test_schedule_end_keep_gives_standby_the_outside_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Keep state starts the outside profile's timeout from the boundary."""
+    """Keep state starts the outside settings' timeout from the boundary."""
     await _setup_porch(
         hass,
         _porch(end_action=SCHEDULE_END_ACTION_KEEP, outside={CONF_LIGHT_TIMEOUT: 300}),
@@ -1682,7 +1682,7 @@ async def test_held_schedule_end_off_waits_for_the_hold(hass: HomeAssistant) -> 
 
 
 @pytest.mark.asyncio
-async def test_outside_profile_without_standby_still_turns_off(
+async def test_outside_settings_without_standby_still_turn_off(
     hass: HomeAssistant, freezer
 ) -> None:
     """Standby belongs to the inside settings only."""

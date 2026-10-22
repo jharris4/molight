@@ -1387,7 +1387,7 @@ async def test_scheduled_light_validates_each_side_timeout(
 async def test_occupancy_edit_checks_both_scheduled_light_sides(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Raising an occupancy timeout respects the shorter settings side."""
+    """Raising an occupancy timeout respects the shorter of the two light timeouts."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1540,7 +1540,7 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
     assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
     assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
 
-    # Submitting the carried values unchanged stores them on the inside side.
+    # Submitting the carried values unchanged stores them in the inside settings.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -1687,7 +1687,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
 async def test_scheduled_light_options_inside_selection_page(
     hass: HomeAssistant,
 ) -> None:
-    """The inside side reaches its own selection page and stores its result."""
+    """The inside settings reach their own selection page and store the result."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
     entry = MockConfigEntry(
@@ -4632,7 +4632,7 @@ async def test_assign_aborts_when_no_lights(
 async def test_assign_aborts_when_only_scheduled_lights_exist(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Scheduled lights take their sensors per profile, so none can be picked."""
+    """Scheduled lights have sensors in each set of settings, so none can be picked."""
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry, _scheduled_light_entry("Porch", "porch"))
 
@@ -5310,7 +5310,7 @@ async def test_conversion_picker_labels_and_sorts_lights(hass: HomeAssistant) ->
 async def test_convert_gated_light_to_scheduled_in_place(
     hass: HomeAssistant,
 ) -> None:
-    """Conversion retains identity and maps gate settings into two profiles."""
+    """Conversion retains identity and maps gate settings into two sets of settings."""
     source = _light_entry(
         "Kitchen",
         "kitchen",
@@ -5415,7 +5415,7 @@ async def test_convert_gated_light_to_scheduled_in_place(
 async def test_convert_scheduled_light_back_to_gate(
     hass: HomeAssistant, end_action: str, expected_mode: str
 ) -> None:
-    """Reverse conversion keeps the inside profile and maps the end action."""
+    """Reverse conversion keeps the inside settings and maps the end action."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -6668,7 +6668,7 @@ async def test_light_flow_allows_brightness_when_lights_cannot_be_judged(
 # ---------------------------------------------------------------------------
 # Bulk assignment and Virtual Scheduled Lights
 #
-# A scheduled light keeps a separate sensor set per profile, so there is no
+# A scheduled light has its own sensors in each set of settings, so there is no
 # single reference to write. It used to be offered and then silently dropped,
 # leaving the summary reporting a successful no-op.
 # ---------------------------------------------------------------------------
@@ -8682,7 +8682,7 @@ async def test_light_options_reject_own_keep_on_entities(
 async def test_scheduled_light_options_reject_own_keep_on_entities(
     hass: HomeAssistant,
 ) -> None:
-    """Each scheduled-light profile applies the same keep-on rule."""
+    """A scheduled light's inside and outside settings apply the same keep-on rule."""
     await _setup_night_schedule(hass)
     night = _scheduled_light_entry("Night", "night")
     await setup_entries(hass, night)
@@ -8790,7 +8790,7 @@ async def test_light_options_stored_member_cycle_gets_friendly_error(
 async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_error(
     hass: HomeAssistant,
 ) -> None:
-    """Each profile form keeps a stored own keep-on entity selectable."""
+    """Each settings form keeps a stored own keep-on entity selectable."""
     await _setup_night_schedule(hass)
     night = _scheduled_light_entry("Night", "night")
     night.data[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_HOLD_ENTITIES] = [
@@ -8823,7 +8823,7 @@ async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_e
     assert result["step_id"] == "scheduled_light_outside"
     assert result["errors"] == {"base": "hold_entity_own"}
 
-    # The inside profile stores none, so the switch is excluded there.
+    # The inside settings store none, so the switch is excluded there.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
@@ -8941,7 +8941,7 @@ async def _reach_light_settings_form(hass: HomeAssistant, form: str) -> dict:
                 CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
             },
         )
-        # The inside side, so the two scheduled forms cover both sides.
+        # The inside settings, so the two scheduled forms cover both sets.
         return await hass.config_entries.options.async_configure(
             result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
         )
@@ -9807,7 +9807,7 @@ async def _change_occupancy_sensor(
 async def _submit_subject_settings(
     hass: HomeAssistant, form: str, result: dict, settings: dict
 ) -> dict:
-    """Submit one light settings form, and the inside side after a create's outside."""
+    """Submit one light settings form, and the inside form after a create's outside."""
     submitted = {**EMPTY_LIGHT_SECTIONS, **settings}
     if form in ("create", "options"):
         submitted.update({CONF_NAME: "Subject", CONF_LIGHTS: [SUBJECT_MEMBER]})
@@ -10842,7 +10842,7 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
 
 
 def _dependent_light(scheduled: bool, key: str, sensor: str) -> MockConfigEntry:
-    """A 60 s light, or a scheduled light's inside side, that uses the sensor."""
+    """A 60 s light, or a scheduled light's inside settings, that uses the sensor."""
     if not scheduled:
         return _light_entry("Hall", "hall", **{key: sensor})
     entry = _scheduled_light_entry("Hall", "hall")

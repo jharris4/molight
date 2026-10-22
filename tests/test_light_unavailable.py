@@ -837,10 +837,10 @@ async def test_occupancy_recovery_applies_a_window_started_during_outage(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_occupancy_recovery_applies_a_profile_switch_during_outage(
+async def test_occupancy_recovery_applies_a_settings_switch_during_outage(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A scheduled light switching to a profile without the bright gate while
+    """A scheduled light switching to settings without the bright gate while
     occupancy is unavailable lights the room once the sensor is back."""
     hass.states.async_set("binary_sensor.settings_schedule", "off")
     hass.states.async_set(ILLUM, "on")
@@ -1167,9 +1167,9 @@ async def test_combined_occupancy_constituent_reload_changes_nothing(
 async def test_occupancy_outage_across_a_settings_switch(
     hass: HomeAssistant, same_sensor: bool
 ) -> None:
-    """A profile switch re-evaluates standing occupancy, so a sensor unreadable
+    """Switching settings re-evaluates standing occupancy, so a sensor unreadable
     at the switch lights the room on its return: a shared sensor's return is a
-    replay that applies the switch it missed, and the other side's sensor is
+    replay that applies the switch it missed, and the other settings' sensor is
     seen for the first time."""
     settings_schedule = "binary_sensor.settings_schedule"
     scheduled = "light.scheduled_light"

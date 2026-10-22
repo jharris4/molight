@@ -436,8 +436,8 @@ async def test_remove_entry_strips_scheduled_light_references(
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
     await settle(hass)
-    # Pin the selected side before loading the light; deleting the schedule
-    # must visibly move an inside-schedule light to its outside settings.
+    # Select the inside settings before loading the light; deleting the
+    # schedule must visibly move the light to its outside settings.
     hass.states.async_set("binary_sensor.rm_schedule", "on")
     light.add_to_hass(hass)
     assert await hass.config_entries.async_setup(light.entry_id)
@@ -579,8 +579,8 @@ async def test_remove_entry_without_references_leaves_others_alone(
 async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
-    """A scheduled light missing a settings side must not be rewritten just to
-    materialize that side as an empty dict; that would differ from its stored
+    """A scheduled light missing a set of settings must not be rewritten just to
+    materialize that set as an empty dict; that would differ from its stored
     config and force a reload of an entry referencing nothing removed."""
     occupancy = _occupancy_entry()
     partial = MockConfigEntry(
@@ -590,7 +590,7 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
             CONF_NAME: "Partial Scheduled",
             CONF_LIGHTS: ["light.real_1"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.some_schedule",
-            # Only one side stored; the other is absent entirely.
+            # Only one set of settings stored; the other is absent entirely.
             CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
         },
     )

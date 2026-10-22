@@ -2001,9 +2001,9 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
 
 _SCHEDULED_LIGHT_SIDES = (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS)
 # Keys that live at the top level of a light entry (identity, members, the
-# schedule and its policy, the two profiles) rather than inside a settings
-# profile; conversion strips them when lifting a flat config into a profile
-# and when flattening a profile back out.
+# schedule and its policy, the two sets of settings) rather than inside one;
+# conversion strips them when lifting a flat config into a set of settings
+# and when flattening one back out.
 _LIGHT_ENTRY_KEYS = frozenset(
     {
         CONF_ENTITY_TYPE,
@@ -3071,7 +3071,7 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_scheduled_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map one gated Virtual Light into two scheduled settings profiles."""
+        """Map one gated Virtual Light into outside and inside settings."""
         inside = {
             key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
@@ -3104,9 +3104,9 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_regular_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map a scheduled light's inside profile back to a gated light.
+        """Map a scheduled light's inside settings back to a gated light.
 
-        A gated light has no standby, so the inside profile's is dropped.
+        A gated light has no standby, so the inside settings' standby is dropped.
         """
         inside = {
             key: value
@@ -3332,7 +3332,7 @@ class MoLightConfigFlow(
         timeout are skipped and reported rather than silently misconfigured.
 
         Only regular Virtual Lights can be assigned this way: a Virtual
-        Scheduled Light keeps a separate sensor set per profile, so there is no
+        Scheduled Light has its own sensors in each set of settings, so there is no
         single reference to write. They are kept out of the picker and rejected
         on submit (a stale form can still offer one), rather than being
         accepted and silently dropped.

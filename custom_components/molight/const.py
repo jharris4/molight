@@ -393,8 +393,8 @@ DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
 
 # A Virtual Scheduled Light's shared schedule selects its inside/outside
 # settings. Its end action chooses whether the on -> off boundary turns an on
-# light off, recalculates it from the outside profile, or preserves its running
-# state/timer while the outside profile takes over.
+# light off, recalculates it from the outside settings, or preserves its running
+# state/timer while the outside settings take over.
 CONF_SCHEDULE_END_ACTION = "schedule_end_action"
 ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
 # The schedule entity active_settings was last derived from; a missed

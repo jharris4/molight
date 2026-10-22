@@ -191,7 +191,7 @@ LIGHT_ENTRY_KEYS = (
     "schedule_end_action",
     "entity_id",
 )
-# Inputs conversion strips from the outside profile when promoting a light.
+# Inputs conversion strips from the outside settings when promoting a light.
 CONVERSION_INPUT_KEYS = (
     "occupancy_entity",
     "maintain_occupancy_entity",
@@ -787,7 +787,7 @@ def run_cold_illuminance_scenario(client: HomeAssistantClient) -> None:
 
 
 def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
-    """Build one profile with deliberately distinct illuminance/door modes."""
+    """Build one set of settings with deliberately distinct illuminance/door modes."""
     return {
         **(EMPTY_INSIDE_LIGHT_SECTIONS if inside else EMPTY_LIGHT_SECTIONS),
         "light_timeout": 30,
@@ -807,7 +807,7 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
 
 
 def flat_light_settings(payload: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a sectioned light form into the per-profile settings MoLight stores."""
+    """Flatten a sectioned light form into the set of settings MoLight stores."""
     flat: dict[str, Any] = {}
     for key, value in payload.items():
         if isinstance(value, dict):
@@ -827,7 +827,7 @@ SCHEDULED_INSIDE_SETTINGS = {
 def submit_selection(
     client: HomeAssistantClient, result: dict[str, Any]
 ) -> dict[str, Any]:
-    """Finish a scheduled profile's target-dependent selection page."""
+    """Finish the target-dependent selection page of one set of settings."""
     expect_step(result, "scheduled_light_selection")
     return client.continue_flow(
         result,
@@ -839,7 +839,7 @@ def submit_selection(
 
 
 def create_scheduled_light(client: HomeAssistantClient) -> str:
-    """Create a two-profile scheduled light through the backend config flow."""
+    """Create a scheduled light through the backend config flow."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -1064,7 +1064,7 @@ def convert_light(
 
 
 def wait_profile(client: HomeAssistantClient, profile: str) -> dict[str, Any]:
-    """Wait for a scheduled light to expose the selected settings profile."""
+    """Wait for a scheduled light to expose the selected settings."""
     return client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: (
@@ -1715,11 +1715,11 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
-    """Exercise profile-specific illuminance and door behavior live."""
+    """Exercise each set of settings' own illuminance and door behavior live."""
     reset_trigger(client)
     wait_profile(client, PROFILE_OUTSIDE)
 
-    # Outside profile: gate-mode illuminance suppresses the initial occupancy
+    # Outside settings: gate-mode illuminance suppresses the initial occupancy
     # activation and going dark admits it, but returning bright does not force
     # an already-on light off.
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -1780,9 +1780,9 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     )
     reset_trigger(client)
 
-    # Inside profile: control-mode illuminance forces an occupied light off
+    # Inside settings: control-mode illuminance forces an occupied light off
     # when it becomes bright, and open_close holds until closing starts the
-    # countdown. These contrasts prove the profile settings switch together.
+    # countdown. These contrasts prove the settings switch together.
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_profile(client, PROFILE_INSIDE)
@@ -2280,7 +2280,7 @@ def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
 
 
 def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str:
-    """Create a scheduled light whose inside profile is occupied, outside inert."""
+    """Create a scheduled light whose inside settings are occupied, outside inert."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -2341,7 +2341,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
             "on at the inside profile's brightness",
         )
         wait_machine_state(client, "occupied", END_ACTION_LIGHT)
-        # Leave the window during the inside profile's 30 s countdown, so keep
+        # Leave the window during the inside settings' 30 s countdown, so keep
         # and switch are told apart by which timer the light runs on.
         set_timer_motion(client, False)
         wait_machine_state(client, "countdown", END_ACTION_LIGHT)
@@ -2365,7 +2365,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
             )
             wait_machine_state(client, "idle", END_ACTION_LIGHT)
         elif end_action == "switch":
-            # Recalculated against the outside profile: its 4 s timeout, not
+            # Recalculated against the outside settings: their 4 s timeout, not
             # the inside countdown, now decides when the light goes off.
             assert_state_stays(
                 client,
@@ -3481,7 +3481,7 @@ def assert_subset(actual: dict[str, Any], expected: dict[str, Any], what: str) -
 def assert_converted_to_regular(
     entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
 ) -> None:
-    """Assert a demoted entry stores the inside profile as a gated light."""
+    """Assert a demoted entry stores the inside settings as a gated light."""
     effective = wait_stored_entry(
         entry_id, lambda cfg: cfg.get("entity_type") == "light", "a regular light"
     )
@@ -3840,7 +3840,7 @@ def run_browser_prepare() -> None:
     client.authenticate()
     client.finish_onboarding()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
-    # Off, so the smoke test knows which profile its scheduled light uses.
+    # Off, so the smoke test knows which settings its scheduled light uses.
     client.set_state(RAW_SCHEDULE, "off")
     create_virtual_schedule(client)
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
@@ -5376,7 +5376,7 @@ def create_two_profile_light(
     outside: dict[str, Any],
     inside: dict[str, Any],
 ) -> str:
-    """Create a scheduled light with explicit outside and inside profiles."""
+    """Create a scheduled light with explicit outside and inside settings."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -5488,7 +5488,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             )
     remove_entry_and_entity(client, hold_entry_id, END_HOLD_LIGHT)
 
-    # Standby: the inside profile rests at 20 % instead of turning off.
+    # Standby: the inside settings rest at 20 % instead of turning off.
     standby_entry_id = create_two_profile_light(
         client,
         "E2E End Standby",
@@ -5873,7 +5873,7 @@ def run_end_restart_verify() -> None:
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
-    # The light stays off under the outside profile until its next sensor edge.
+    # The light stays off under the outside settings until its next sensor edge.
     set_timer_motion(client, False)
     assert_state_stays(
         client,
@@ -7333,7 +7333,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(REF_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_end_light(client, REF_SCHEDULED_LIGHT, PROFILE_INSIDE)
 
-    # Deleting the schedule: the light falls back to its outside profile, drops
+    # Deleting the schedule: the light falls back to its outside settings, drops
     # the stored reference, and stays manually usable.
     client.remove_entry(schedule_entry_id)
     wait_entity_absent(client, REF_SCHEDULE)

@@ -770,7 +770,7 @@ def _switch_entry() -> MockConfigEntry:
 
 
 async def _lit_before_switch_end(hass: HomeAssistant, entry) -> _Members:
-    """Lit inside the window; the outside profile's room emptied an hour ago."""
+    """Lit inside the window; the outside settings' room emptied an hour ago."""
     left = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(OCC, "off", {"latest_occupied_time": left})
     return await _lit_in_window(hass, entry, [REAL])
@@ -781,7 +781,7 @@ async def _lit_before_switch_end(hass: HomeAssistant, entry) -> _Members:
 async def test_missed_switch_end_with_the_member_known(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """The outside profile's history says the light is already due off."""
+    """The outside settings' history says the light is already due off."""
     entry = _switch_entry()
     real = await _lit_before_switch_end(hass, entry)
     calls = await _restart_across_end(hass, entry, real, {REAL: boot})
@@ -814,7 +814,7 @@ async def test_missed_switch_end_is_owed_to_a_member_that_loads_late(
 
 @pytest.mark.asyncio
 async def test_new_on_period_replaces_an_owed_switch_end(hass: HomeAssistant) -> None:
-    """A light turned on under the outside profile runs its normal timeout."""
+    """A light turned on under the outside settings runs its normal timeout."""
     entry = _switch_entry()
     real = await _lit_before_switch_end(hass, entry)
     calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})

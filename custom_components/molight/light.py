@@ -1838,7 +1838,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         old_held = self._held
         self._held = self._compute_held()
         # A turn-on still waiting for its selection is judged as on: the off
-        # below overtakes it, and the new profile's rules take it over.
+        # below overtakes it, and the new settings take it over.
         lit = self._is_lit()
 
         if leaving_inside and self._schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
@@ -1851,7 +1851,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and lit
         ):
             # An already-off light has nothing to turn off: it takes the
-            # normal off-light path below so the outside profile's active
+            # normal off-light path below so the outside settings' active
             # sensors are checked exactly as with the keep action. After a
             # forced off the room stays dark until the next sensor edge.
             if not self._held:
@@ -1872,9 +1872,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             and self._schedule_end_action == SCHEDULE_END_ACTION_SWITCH
             and lit
         ):
-            # The outside profile is now fully active. Recalculate an on
+            # The outside settings are now fully active. Recalculate an on
             # light's state and deadline from its sensors/history instead of
-            # preserving the timer that belonged to the inside profile.
+            # preserving the timer that belonged to the inside settings.
             self._switch_running_state()
             return
 
@@ -1925,7 +1925,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._on_occupancy_change(occupied=True)
         elif dark and self._door_holds():
             # Not _door_open: in plain open mode the door is momentary,
-            # and a profile switch is not an opening.
+            # and switching settings is not an opening.
             self._on_door_change(True)
         elif self._can_rest_at_standby():
             self._enter_standby(
@@ -3731,7 +3731,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         was_warning = self._in_warning()
         self._cancel_timer()
         if was_warning:
-            # Discard an outgoing profile's warning presentation before the
+            # Discard the outgoing settings' warning presentation before the
             # newly applicable settings decide whether/how auto-off is due.
             self._machine_state = STATE_ACTIVE
             self._resume_lights()
@@ -3956,7 +3956,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         Every member gets them, so one reporting in while the select call
         runs is lit too. A stage that blinks the lights off has none to send.
         """
-        # The stage running decides, not the settings a profile change brought.
+        # The stage running decides, not the newly active settings.
         if self._in_warning() and self._stage_look and not self._stage_look[0]:
             return
         brightness, color = self._attr_brightness, self._current_color()
@@ -4196,7 +4196,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         """Return True when a turn-on gate opened at or after `since`.
 
         Illuminance going dark or losing its reading, a gate-mode window
-        starting, or a scheduled light switching profiles each re-read
+        starting, or a scheduled light switching settings each re-read
         occupancy live, and an unreadable sensor counted as clear then.
         """
         checks = [(self._illuminance_entity, ("off", STATE_UNAVAILABLE))]
@@ -4631,7 +4631,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _finish_schedule_end_off(self) -> None:
         """Apply a held end-boundary off now.
 
-        A scheduled light fades off with the profile being left, a Gate and
+        A scheduled light fades off with the settings being left, a Gate and
         turn off light with its own fade; going idle clears the pending flag.
         """
         self.hass.async_create_task(
@@ -4850,7 +4850,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._pre_warn_brightness = self._attr_brightness
         self._pre_warn_color = self._current_color()
         self._pre_warn_members = self._member_looks()
-        # Recorded rather than re-derived in _enter_warn: a profile switch
+        # Recorded rather than re-derived in _enter_warn: switching settings
         # mid-effect can swap _effect_color out from under the running stage.
         self._effect_sent_color = (
             self._effect_timeout > 0 and self._effect_color is not None
@@ -5130,7 +5130,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         return self._set_lights(False, transition=self._auto_off_transition)
 
     def _scheduled_end_lights_off(self) -> Coroutine[Any, Any, bool]:
-        """Turn off at a scheduled-light boundary using the outgoing profile."""
+        """Turn off at a scheduled-light boundary using the outgoing settings."""
         transition = _opt_transition(
             self._inside_schedule_settings.get(CONF_AUTO_OFF_TRANSITION)
         )
