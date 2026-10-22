@@ -3076,7 +3076,7 @@ class MoLightConfigFlow(
             key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
         # Outside the former gate, retain manual behavior/timing but remove
-        # every input that could activate or indefinitely hold the light.
+        # every input that could turn on or indefinitely hold the light.
         outside = {
             key: value
             for key, value in inside.items()

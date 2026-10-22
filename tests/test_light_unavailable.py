@@ -1735,7 +1735,7 @@ async def test_hard_gate_outage_does_not_force_off_on_hold_release(
     "mode",
     [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
-async def test_gate_outage_preserves_on_light_but_blocks_new_activation(
+async def test_gate_outage_preserves_on_light_but_blocks_new_turn_on(
     hass: HomeAssistant, mode: str
 ) -> None:
     """Every gate mode fails closed without treating an outage as a boundary."""
@@ -1755,7 +1755,7 @@ async def test_gate_outage_preserves_on_light_but_blocks_new_activation(
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # Once off, the unreadable gate blocks a fresh occupancy activation.
+    # Once off, the unreadable gate blocks a fresh occupancy turn-on.
     hass.states.async_set(REAL, "off")
     await settle(hass)
     hass.states.async_set(OCC, "on")

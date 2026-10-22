@@ -90,7 +90,7 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
     back from unavailable is re-sent the standby settings.
 
 Turn-on attribution
-  Five timestamps record the last time the virtual light was activated and why:
+  Five timestamps record the last time the virtual light was turned on and why:
     last_on_physical:    an underlying real light entity changed to ON from an
                          external source (physical switch, another automation, HA
                          UI acting on the real entity), whether this virtual
@@ -204,11 +204,11 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     missed while HA was down is applied exactly once at startup, while a
     manual off mid-window is respected. Occupancy/illuminance are ignored
     while SCHEDULED.
-  - gate: occupancy may only activate lights inside the window; window end
+  - gate: occupancy may only turn lights on inside the window; window end
     forces lights off (like illuminance turning bright), window start
     re-evaluates occupancy. Outside the window a light that is on ignores
     occupancy and the door: neither holds it.
-  - gate_switch: the same activation gate for an OFF light. Window end
+  - gate_switch: the same turn-on gate for an OFF light. Window end
     recalculates an ON light's state and timer from current occupancy history;
     active presence adopts it, bright illuminance in control mode turns it off,
     and an expired timeout applies the configured effect/warn/off behavior.
@@ -3559,13 +3559,13 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
 
     def _gate_schedule_inactive(self) -> bool:
-        """Return True when a gate-mode schedule forbids activating lights.
+        """Return True when a gate-mode schedule blocks turning lights on.
 
-        gate_switch and gate_keep gate activation only: once the lights are
+        gate_switch and gate_keep gate turn-ons only: once the lights are
         on, occupancy and the door behave as inside the window (adopt, hold,
         re-hold). Their difference is whether the window-end boundary
         recalculates or preserves the running state/timer. An unreadable
-        schedule blocks activation, but ends no hold its window allowed.
+        schedule blocks turn-ons, but ends no hold its window allowed.
         """
         if not self._schedule_entity or self._schedule_mode not in (
             SCHEDULE_MODE_GATE,
@@ -3834,7 +3834,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._go_idle(reason=REASON_SCHEDULE_END)
             return
 
-        # All gate modes block automatic activation outside the window and
+        # All gate modes block automatic turn-ons outside the window and
         # re-evaluate occupancy/a held-open door when it starts. At the end,
         # the original hard gate forces off, gate_switch recalculates an on
         # light from current sensor history, and gate_keep leaves its current
@@ -4442,7 +4442,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # on-period brightness cut short still resumes: it already exists.
             gated = self._gate_schedule_inactive()
 
-            # Check whether we should activate due to occupancy, a held-open
+            # Check whether we should turn on due to occupancy, a held-open
             # door, or recent history.
             occ_state = (
                 self.hass.states.get(self._occupancy_entity)
@@ -4479,7 +4479,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     and not self._hard_gate_schedule_inactive()
                 ):
                     # Recent history justified the turn-on; the maintain
-                    # entity, or presence an activation-only gate let through
+                    # entity, or presence a gate blocking only turn-ons let through
                     # once the light is on, now holds the re-lit light.
                     self._machine_state = STATE_OCCUPIED
                     self._cancel_timer()
@@ -4593,8 +4593,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # Turning the light back on after a manual off rejoins standby.
             self._standby_suppressed = False
         self._close_owed_ends()
-        # Set before the hold checks: activation-only gate modes only gate turning
-        # an off light on, so occupancy may hold this turn-on outside it.
+        # Set before the hold checks: gate modes that only block an off light
+        # turning on let occupancy hold this turn-on outside the schedule window.
         self._attr_is_on = True
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
             # Already managed by occupancy / schedule window; publish the

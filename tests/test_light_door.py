@@ -204,7 +204,7 @@ async def test_door_open_is_illuminance_gated_like_occupancy(
 async def test_door_open_is_schedule_gated_like_occupancy(
     hass: HomeAssistant, sched: str, expect_on: bool
 ) -> None:
-    """A regular light's gate schedule also controls automatic door activation."""
+    """A regular light's gate schedule also controls the door's automatic turn-on."""
     await _assert_door_open_gating(hass, "dark", sched, expect_on)
 
 

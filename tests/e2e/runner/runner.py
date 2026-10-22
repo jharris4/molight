@@ -1720,7 +1720,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     wait_profile(client, PROFILE_OUTSIDE)
 
     # Outside settings: gate-mode illuminance suppresses the initial occupancy
-    # activation and going dark admits it, but returning bright does not force
+    # turn-on and going dark admits it, but returning bright does not force
     # an already-on light off.
     client.set_state(RAW_ILLUMINANCE, 50)
     client.wait_state(

@@ -372,11 +372,11 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How a referenced schedule entity affects the light:
 #   follow:       lights turn on at window start and off at window end (porch lights)
-#   gate:         occupancy may only activate lights inside the window; the
+#   gate:         occupancy may only turn lights on inside the window; the
 #                 window end forces the lights off (the original behavior)
-#   gate_switch:  the same activation gate, but the window end reconciles an
+#   gate_switch:  the same turn-on gate, but the window end reconciles an
 #                 already-on light from current sensor state and history
-#   gate_keep:    the same activation gate, but the window end leaves an
+#   gate_keep:    the same turn-on gate, but the window end leaves an
 #                 already-on light under its current state-machine policy
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"

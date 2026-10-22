@@ -492,10 +492,10 @@ async def test_same_entity_as_occupancy_and_maintain(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_reactivation_adopted_by_maintain(
+async def test_illuminance_turn_back_on_adopted_by_maintain(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Dark re-activation while the maintain entity is on is held, not timed."""
+    """Turning back on when dark while the maintain entity is on is held, not timed."""
     entry = make_light_entry(maintain=MAINT, illuminance=ILLUM)
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(MAINT, "off")

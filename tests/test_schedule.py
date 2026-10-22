@@ -555,9 +555,7 @@ async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_invalid_window_edges_never_activate(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_invalid_window_edges_never_turn_on(hass: HomeAssistant, freezer) -> None:
     """Unresolvable edges (bad times, wrong types, missing end) yield no window."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")

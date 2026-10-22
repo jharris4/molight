@@ -127,7 +127,7 @@ async def _assert_occupancy_trigger_gating(
 
 
 # ---------------------------------------------------------------------------
-# Illuminance bright→dark activation x occupancy x gate-schedule
+# Illuminance bright→dark turn-on x occupancy x gate-schedule
 # ---------------------------------------------------------------------------
 
 
@@ -144,14 +144,14 @@ async def _assert_occupancy_trigger_gating(
         pytest.param(None, None, STATE_IDLE, id="no-occ-no-history"),
     ],
 )
-async def test_illuminance_dark_activation(
+async def test_illuminance_dark_turn_on(
     hass: HomeAssistant,
     occ: str | None,
     lot: str | None,
     expect_state: str,
 ) -> None:
-    """Going dark activates lights based on occupancy state and history."""
-    await _assert_illuminance_dark_activation(hass, occ, lot, None, expect_state)
+    """Going dark turns lights on based on occupancy state and history."""
+    await _assert_illuminance_dark_turn_on(hass, occ, lot, None, expect_state)
 
 
 @pytest.mark.asyncio
@@ -163,21 +163,21 @@ async def test_illuminance_dark_activation(
         pytest.param("off", STATE_IDLE, id="out-of-window"),
     ],
 )
-async def test_illuminance_dark_activation_obeys_gate_schedule(
+async def test_illuminance_dark_turn_on_obeys_gate_schedule(
     hass: HomeAssistant, sched: str, expect_state: str
 ) -> None:
-    """A regular light's gate schedule controls dark-triggered activation."""
-    await _assert_illuminance_dark_activation(hass, "on", None, sched, expect_state)
+    """A regular light's gate schedule controls dark-triggered turn-ons."""
+    await _assert_illuminance_dark_turn_on(hass, "on", None, sched, expect_state)
 
 
-async def _assert_illuminance_dark_activation(
+async def _assert_illuminance_dark_turn_on(
     hass: HomeAssistant,
     occ: str | None,
     lot: str | None,
     sched: str | None,
     expect_state: str,
 ) -> None:
-    """Exercise dark-triggered activation with the supplied light inputs."""
+    """Exercise dark-triggered turn-ons with the supplied light inputs."""
     entry = make_light_entry(
         occupancy=OCC if occ else None,
         illuminance=ILLUM,
@@ -1354,7 +1354,7 @@ async def test_switching_gate_adopts_active_occupancy_at_window_end(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # The still-on light can be released and re-held, but after its on-period
-    # ends the inactive schedule continues to gate fresh activation.
+    # ends the inactive schedule continues to gate fresh turn-ons.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -1460,7 +1460,7 @@ async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # The activation gate itself is unchanged for an off light.
+    # The turn-on gate itself is unchanged for an off light.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
@@ -1482,7 +1482,7 @@ async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(OCC, "on")
     await setup_entries(hass, entry)
-    assert _state(hass).state == "off"  # the activation gate still holds
+    assert _state(hass).state == "off"  # the turn-on gate still holds
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
@@ -1608,7 +1608,7 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 async def test_gate_window_start_relights_at_auto_on_brightness(
     hass: HomeAssistant,
 ) -> None:
-    """A gate-mode window start re-activating standing occupancy is an
+    """A gate-mode window start re-evaluating standing occupancy is an
     automatic turn-on: the configured auto-on brightness applies."""
     entry = make_light_entry(
         occupancy=OCC,
@@ -1736,7 +1736,7 @@ async def test_manual_turn_on_not_gated_outside_schedule(
 async def _assert_manual_turn_on_runs_timeout(
     hass: HomeAssistant, freezer, entry
 ) -> None:
-    """Assert a manually activated light runs its normal timeout."""
+    """Assert a manually turned-on light runs its normal timeout."""
     await setup_entries(hass, entry)
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -2310,7 +2310,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
 ) -> None:
     """The real light confirming our own turn_on must not restart the timer.
 
-    Illuminance-dark re-activation grants only the remaining portion of the
+    Turning back on when dark again grants only the remaining portion of the
     original on-period. When the real light's state then echoes our own
     service call, that echo must be recognized as self-caused; treating it
     as an external turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
@@ -2347,7 +2347,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The real light confirms the re-activation service call (same context).
+    # The real light confirms that turn-on's service call (same context).
     assert contexts
     hass.states.async_set(REAL, "on", context=contexts[-1])
     await settle(hass)
