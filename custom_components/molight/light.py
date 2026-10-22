@@ -115,7 +115,7 @@ Turn-on attribution
 
 Color support
   The virtual light derives its color capabilities from the real lights: it
-  advertises HS when any member can show a color (hs/rgb/rgbw/rgbww/xy; HA
+  offers HS when any member can show a color (hs/rgb/rgbw/rgbww/xy; HA
   converts hs to each member's native mode) and COLOR_TEMP when any member
   supports it, falling back to brightness, or to plain on/off when no member
   dims at all. Capabilities are
@@ -129,7 +129,7 @@ Color support
 Transition support
   A transition supplied by the caller (a scene, a script, light.turn_on with a
   fade) is forwarded to the members. HA strips it before async_turn_on unless
-  we advertise LightEntityFeature.TRANSITION, so _update_capabilities derives
+  we offer LightEntityFeature.TRANSITION, so _update_capabilities derives
   it from the members and fails open: withheld only once every member is
   visible and none can fade.
 
@@ -496,7 +496,7 @@ def _wrapped_light_commanded(old_state: State | None, new_state: State) -> bool:
 
 
 # Member color modes an hs command can drive (HA converts hs to each member's
-# native mode); any of them lets the virtual light advertise HS itself. Shared
+# native mode); any of them lets the virtual light offer HS itself. Shared
 # with the config flow so an upstream addition can't split the two.
 _HS_CAPABLE_MODES = COLOR_MODES_COLOR
 
@@ -951,7 +951,7 @@ _MACHINE_STATES = frozenset(
         STATE_WARN,
     }
 )
-# What a virtual light can advertise, as a restored state names it.
+# What a virtual light can offer, as a restored state names it.
 _RESTORABLE_COLOR_MODES = (
     {ColorMode.HS, ColorMode.COLOR_TEMP},
     {ColorMode.HS},
@@ -1652,7 +1652,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._restored_inside_schedule:
             self._inside_schedule = True
             self._apply_light_settings(self._inside_schedule_settings)
-        # An on light must advertise the color mode it reports; the seed
+        # An on light must offer the color mode it reports; the seed
         # derives the real capabilities from the members.
         with contextlib.suppress(ValueError, TypeError):
             modes = {
@@ -2319,7 +2319,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._last_on_virtual = now
         self._occupancy_lit_lights = False  # the user owns this on-period now
         brightness = kwargs.get(ATTR_BRIGHTNESS)
-        # HA has already narrowed any color request to our advertised modes,
+        # HA has already narrowed any color request to the modes we offer,
         # so only the canonical hs/color-temp attributes can arrive here.
         color: dict | None = {
             k: kwargs[k] for k in (ATTR_HS_COLOR, ATTR_COLOR_TEMP_KELVIN) if k in kwargs
@@ -3159,7 +3159,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _update_capabilities(self) -> None:
         """Derive this light's color capabilities from the real lights.
 
-        Advertises the canonical HS/COLOR_TEMP pair instead of the union of
+        Offers the canonical HS/COLOR_TEMP pair instead of the union of
         member modes: HS when any member can show a color (HA converts hs to
         each member's native rgb/rgbw/rgbww/xy on the way out) and COLOR_TEMP
         when any member supports it, so two modes cover every member while
@@ -3186,7 +3186,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if ColorMode.COLOR_TEMP in member_modes:
             supported.add(ColorMode.COLOR_TEMP)
         if not supported:
-            # A group of plugs can only do on/off, and advertising a slider
+            # A group of plugs can only do on/off, and offering a slider
             # none of them can move would be a lie. Fail open as ever.
             supported = (
                 {ColorMode.ONOFF}
@@ -3197,7 +3197,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         changed = supported != self._attr_supported_color_modes
         # Most permissive envelope; each member clamps to its own range. Track
         # and reset it (to HA's defaults) so a member re-appearing with a
-        # different range doesn't leave the virtual light advertising kelvins
+        # different range doesn't leave the virtual light offering kelvins
         # no member can hit.
         envelope = (
             min(min_kelvins) if min_kelvins else DEFAULT_MIN_KELVIN,
@@ -3245,7 +3245,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _set_color_state(self, mode: ColorMode, value: float | tuple) -> None:
         """Adopt a commanded or mirrored color as this light's reported color.
 
-        A no-op for modes we don't advertise, notably everything on a
+        A no-op for modes we don't offer, notably everything on a
         brightness-only virtual light.
         """
         if mode not in (self._attr_supported_color_modes or ()):

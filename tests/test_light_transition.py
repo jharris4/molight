@@ -6,7 +6,7 @@ warning stages. Manual turn-ons/offs through the virtual entity never carry a
 *configured* transition.
 
 A caller-supplied transition is separate: it is forwarded to the members, which
-requires advertising LightEntityFeature.TRANSITION. That feature fails open:
+requires offering LightEntityFeature.TRANSITION. That feature fails open:
 withheld only once every member is visible and none can fade.
 """
 
@@ -227,7 +227,7 @@ async def test_no_transition_attribute_when_unconfigured(
 
 # ---------------------------------------------------------------------------
 # Caller-supplied transitions: arrive on the service call itself, and only
-# reach async_turn_on when the entity advertises LightEntityFeature.TRANSITION.
+# reach async_turn_on when the entity offers LightEntityFeature.TRANSITION.
 # ---------------------------------------------------------------------------
 
 
@@ -319,7 +319,7 @@ async def test_caller_transition_carries_the_pre_warning_restore(
 
 
 @pytest.mark.asyncio
-async def test_transition_advertised_while_a_member_is_unaccounted_for(
+async def test_transition_offered_while_a_member_is_unaccounted_for(
     hass: HomeAssistant,
 ) -> None:
     """Fail open: a member with no state yet must not cost the caller a fade."""
@@ -331,10 +331,10 @@ async def test_transition_advertised_while_a_member_is_unaccounted_for(
 
 
 @pytest.mark.asyncio
-async def test_transition_advertised_when_a_member_can_fade(
+async def test_transition_offered_when_a_member_can_fade(
     hass: HomeAssistant,
 ) -> None:
-    """A member advertising TRANSITION makes the virtual light advertise it."""
+    """A member offering TRANSITION makes the virtual light offer it."""
     hass.states.async_set(
         REAL, "off", {"supported_features": LightEntityFeature.TRANSITION}
     )
@@ -367,7 +367,7 @@ async def test_transition_withheld_when_every_member_cannot_fade(
 
 
 @pytest.mark.asyncio
-async def test_transition_stays_advertised_until_the_last_member_is_judged(
+async def test_transition_stays_offered_until_the_last_member_is_judged(
     hass: HomeAssistant,
 ) -> None:
     """One visible non-fading member is not proof: the feature is withheld only
@@ -377,7 +377,7 @@ async def test_transition_stays_advertised_until_the_last_member_is_judged(
     entry = make_light_entry(lights=[REAL, other])
     await setup_entries(hass, entry)
 
-    # real_2 has no state yet: still unknown, so still advertised.
+    # real_2 has no state yet: still unknown, so still offered.
     assert _features(hass) & LightEntityFeature.TRANSITION
 
     hass.states.async_set(other, "off", {"supported_features": 0})
@@ -393,7 +393,7 @@ async def test_transition_stays_advertised_until_the_last_member_is_judged(
 
 
 @pytest.mark.asyncio
-async def test_transition_advertised_during_the_startup_window(
+async def test_transition_offered_during_the_startup_window(
     hass: HomeAssistant,
 ) -> None:
     """Before the deferred first capability pass, the feature must fail open.
@@ -409,7 +409,7 @@ async def test_transition_advertised_during_the_startup_window(
     assert _features(hass) & LightEntityFeature.TRANSITION
 
     # Startup completes: the capability pass judges the sole member and
-    # withdraws the advertisement.
+    # stops offering it.
     hass.set_state(CoreState.running)
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
     await settle(hass)

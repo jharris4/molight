@@ -2243,7 +2243,7 @@ async def test_light_flow_rejects_selection_target_as_source(
 async def test_light_flow_rejects_source_without_matching_options(
     hass: HomeAssistant,
 ) -> None:
-    """A source whose advertised options can never reach the target is rejected."""
+    """A source whose options can never reach the target is rejected."""
     hass.states.async_set(
         "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
     )
@@ -6556,10 +6556,10 @@ async def test_light_options_reject_color_no_light_can_show(
 
 
 @pytest.mark.asyncio
-async def test_light_flow_allows_color_when_a_light_advertises_no_modes(
+async def test_light_flow_allows_color_when_a_light_offers_no_modes(
     hass: HomeAssistant,
 ) -> None:
-    """A light present in the state machine but advertising no color modes at
+    """A light present in the state machine but offering no color modes at
     all is unjudgeable too, not incapable."""
     hass.states.async_set(WHITE, "off")
     result = await _submit_light_create_colors(

@@ -118,7 +118,7 @@ def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> 
 
 
 def match_option(value: str, options: Sequence[Any]) -> str | None:
-    """Return the advertised select option a value names, or None.
+    """Return the offered select option a value names, or None.
 
     An exact match wins, so an option's own padding is kept; padding typed
     around an option is ignored when that leaves a single option.
@@ -261,7 +261,7 @@ def _judge_lights(
 
 
 def _color_modes(state: State) -> set[str] | None:
-    """Return a light's advertised color modes, or None if it hasn't said yet.
+    """Return the color modes a light offers, or None if it hasn't said yet.
 
     A light that reports nothing but "unknown" is explicitly undecided, which
     is not the same as being incapable.
@@ -307,7 +307,7 @@ def lights_support_color(hass: HomeAssistant, entity_ids: Sequence[str]) -> bool
     """Whether any of these real lights can show a color.
 
     Uses Home Assistant's own color-capable mode set, which is also what the
-    virtual light checks before advertising HS.
+    virtual light checks before offering HS.
     """
 
     def _capable(state: State) -> bool | None:

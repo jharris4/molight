@@ -79,7 +79,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         return {**DEFAULT_BEHAVIOR, **self.record.get("behavior", {})}
 
     def _color_modes(self) -> set[ColorMode]:
-        """Return the advertised color modes, swapping RGB for XY on request."""
+        """Return the offered color modes, swapping RGB for XY on request."""
         modes = set(self._testbed_color_modes)
         if self.behavior["xy_color"] and ColorMode.RGB in modes:
             modes = (modes - {ColorMode.RGB}) | {ColorMode.XY}
@@ -148,14 +148,14 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @property
     def rgb_color(self) -> tuple[int, int, int] | None:
-        """Return the reported RGB color when that is the advertised mode."""
+        """Return the reported RGB color when that is the offered mode."""
         if self.color_mode is not ColorMode.RGB:
             return None
         return self._reported_rgb()
 
     @property
     def xy_color(self) -> tuple[float, float] | None:
-        """Return the reported XY color when that is the advertised mode."""
+        """Return the reported XY color when that is the offered mode."""
         if self.color_mode is not ColorMode.XY:
             return None
         if xy := self._reported["attributes"].get(ATTR_XY_COLOR):
@@ -164,7 +164,7 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @property
     def color_temp_kelvin(self) -> int | None:
-        """Return the reported color temperature when that is the advertised mode."""
+        """Return the reported color temperature when that is the offered mode."""
         if self.color_mode is not ColorMode.COLOR_TEMP:
             return None
         return int(self._reported["attributes"].get(ATTR_COLOR_TEMP_KELVIN, 3000))
@@ -318,7 +318,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         self._set_reported_capabilities(available)
 
     def set_test_behavior(self, behavior: dict[str, Any]) -> None:
-        """Merge and persist reporting behavior, re-advertising capabilities."""
+        """Merge and persist reporting behavior, updating the offered capabilities."""
         unknown = set(behavior) - set(DEFAULT_BEHAVIOR)
         if unknown:
             raise ValueError(f"Unknown light behavior keys: {sorted(unknown)}")

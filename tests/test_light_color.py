@@ -136,7 +136,7 @@ async def test_capabilities_appear_when_member_does(hass: HomeAssistant) -> None
 
 @pytest.mark.asyncio
 async def test_mixed_members_get_one_call_with_color(hass: HomeAssistant) -> None:
-    """A color + brightness-only mix advertises color and sends ONE call
+    """A color + brightness-only mix offers color and sends ONE call
     carrying the color to every member (HA filters it per real light)."""
     hass.states.async_set(REAL, "off", HS_CAPS)
     hass.states.async_set(REAL_2, "off", {"supported_color_modes": ["brightness"]})
@@ -703,7 +703,7 @@ async def test_capability_shift_to_color_temp_only_member(
 async def test_inconsistent_member_color_ignored_when_brightness_only(
     hass: HomeAssistant,
 ) -> None:
-    """A member reporting a color it doesn't advertise support for is not
+    """A member reporting a color it doesn't offer is not
     mirrored: the brightness-only virtual light reports no color."""
     hass.states.async_set(
         REAL,
@@ -725,8 +725,8 @@ async def test_inconsistent_member_color_ignored_when_brightness_only(
 # On/off-only members
 #
 # Brightness is derived like every other capability rather than assumed, so a
-# light wrapping only plugs or non-dimmable bulbs advertises on/off and no
-# longer offers a slider none of its members can move.
+# light wrapping only plugs or non-dimmable bulbs offers on/off and no
+# longer a slider none of its members can move.
 # ---------------------------------------------------------------------------
 
 ONOFF_CAPS = {"supported_color_modes": ["onoff"]}
@@ -734,7 +734,7 @@ BRIGHTNESS_CAPS = {"supported_color_modes": ["brightness"]}
 
 
 @pytest.mark.asyncio
-async def test_onoff_only_members_advertise_onoff(hass: HomeAssistant) -> None:
+async def test_onoff_only_members_offer_onoff(hass: HomeAssistant) -> None:
     """Every member positively reports on/off, so the virtual light does too."""
     hass.states.async_set(REAL, "off", ONOFF_CAPS)
     await setup_entries(hass, make_light_entry())
@@ -836,7 +836,7 @@ KELVINS = [(2000, 2700), (6500, 6000), (3000, 3000)]
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
 @pytest.mark.parametrize("source", ["auto_on", "effect", "warn", "caller"])
-async def test_reported_color_temp_stays_in_the_advertised_range(
+async def test_reported_color_temp_stays_in_the_offered_range(
     hass: HomeAssistant, freezer, source: str, kelvin: int, reported: int
 ) -> None:
     """The real lights are sent the kelvin as configured and come on at the
@@ -882,7 +882,7 @@ async def test_reported_color_temp_stays_in_the_advertised_range(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
-async def test_reported_standby_color_temp_stays_in_the_advertised_range(
+async def test_reported_standby_color_temp_stays_in_the_offered_range(
     hass: HomeAssistant, kelvin: int, reported: int
 ) -> None:
     """Standby is one more level with a color temperature of its own."""
