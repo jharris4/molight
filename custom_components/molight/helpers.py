@@ -278,7 +278,7 @@ def lights_support_transition(
 ) -> bool | None:
     """Whether any of these real lights can fade; None when it can't be judged.
 
-    A light always publishes supported_features, even as 0 and even while
+    A light always reports supported_features, even as 0 and even while
     unavailable, so an absent one is genuinely unknown rather than incapable.
     """
 

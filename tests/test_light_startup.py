@@ -168,7 +168,7 @@ def _attrs(hass: HomeAssistant) -> dict:
 
 
 def _virtual_states(hass: HomeAssistant) -> list[str]:
-    """Record every on/off the virtual light publishes from now on."""
+    """Record every on/off the virtual light reports from now on."""
     states: list[str] = []
 
     @callback

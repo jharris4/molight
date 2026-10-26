@@ -62,7 +62,7 @@ class TestbedEntity(Entity):
         self.record["attributes"].update(attributes)
 
     def set_test_available(self, available: bool) -> None:
-        """Store availability before the controller publishes a new state."""
+        """Store availability before the controller reports a new state."""
         self.record["available"] = available
 
 

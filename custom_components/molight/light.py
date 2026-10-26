@@ -4597,7 +4597,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         # turning on let occupancy hold this turn-on outside the schedule window.
         self._attr_is_on = True
         if self._machine_state in (STATE_OCCUPIED, STATE_SCHEDULED):
-            # Already managed by occupancy / schedule window; publish the
+            # Already managed by occupancy / schedule window; report the
             # rejoined standby, which a restart would otherwise lose.
             self.async_write_ha_state()
             return

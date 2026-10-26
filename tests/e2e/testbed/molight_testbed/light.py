@@ -244,7 +244,7 @@ class TestbedLight(TestbedEntity, LightEntity):
     def _schedule_reports(
         self, start: dict[str, Any], transition: float | None
     ) -> None:
-        """Publish the record now, or as the delayed/piecewise reports behavior asks."""
+        """Report the record now, or as the delayed/piecewise reports behavior asks."""
         self._cancel_pending()
         behavior = self.behavior
         if behavior["silent"]:
@@ -283,7 +283,7 @@ class TestbedLight(TestbedEntity, LightEntity):
 
     @callback
     def _report(self, partial_report: dict[str, Any] | None, _now: Any) -> None:
-        """Publish one delayed report: a partial update or the full record."""
+        """Report one delayed part: a partial update or the full record."""
         if partial_report is None:
             self._sync_reported()
         else:
@@ -311,7 +311,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         self._sync_reported()
 
     def set_test_available(self, available: bool) -> None:
-        """Publish this light's real capabilities when it becomes available."""
+        """Offer this light's real capabilities when it becomes available."""
         super().set_test_available(available)
         self._cancel_pending()
         self._sync_reported()

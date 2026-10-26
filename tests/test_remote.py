@@ -427,7 +427,7 @@ async def test_first_sighting_and_unavailable_never_fire(
     await settle(hass)
     assert _vlight(hass).state == "off"
 
-    # Recovery from unavailable republishes it, and is equally suspect.
+    # Recovery from unavailable shows it again, and is equally suspect.
     stale = hass.states.get("event.pico_on")
     hass.states.async_set("event.pico_on", "unavailable")
     await settle(hass)
@@ -450,7 +450,7 @@ async def test_press_arriving_with_availability_recovery(
     """A button back from unavailable with an event fired since is a press.
 
     Its recovery may arrive in the same state write as the press, or in one
-    of its own first. A recovery that only republishes the last event, as
+    of its own first. A recovery that only shows the last event again, as
     after its integration reloads, is still no press.
     """
     from tests.real_entities import (  # noqa: PLC0415

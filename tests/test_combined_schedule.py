@@ -2067,7 +2067,7 @@ async def test_solar_boundary_timer_is_armed_at_the_boundary_across_clock_change
 @pytest.mark.parametrize("combined", [False, True], ids=["plain", "combined"])
 @pytest.mark.parametrize("seconds", [1, 2])
 @pytest.mark.asyncio
-async def test_a_window_of_a_second_is_published(
+async def test_a_window_of_a_second_is_reported(
     hass: HomeAssistant, freezer, combined: bool, seconds: int
 ) -> None:
     """A window turns the schedule on at its start and off at its end, to the

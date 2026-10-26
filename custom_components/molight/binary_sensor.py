@@ -663,8 +663,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
                 self._last_clear_false = bool(
                     last.attributes.get("last_clear_false_detection")
                 )
-        # An "on" still waiting to be carried when the state was saved (see
-        # _seed_state) was published as "off"; the save says so itself.
+        # An "on" still waiting to be carried (see _seed_state) was saved
+        # as "off"; the save's carry flag says so.
         restored_on = (last is not None and last.state == "on") or bool(
             saved.get("carry")
         )

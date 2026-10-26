@@ -113,7 +113,7 @@ class InstantLight(RealLight):
 class FadingLight(RealLight):
     """A registered real light that reports a fade as it runs.
 
-    A fade publishes where it has got to at each of steps (fractions of its
+    A fade reports where it has got to at each of steps (fractions of its
     length), then where it ends. With hs it shows a color and blends that
     too; with kelvin it shows a color temperature only, within KELVINS. Every
     report comes latency seconds late. With power_first, a fade in from off

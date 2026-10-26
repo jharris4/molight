@@ -1348,7 +1348,7 @@ async def test_schedule_briefly_unavailable_outside_window_keeps_manual_light(
 async def test_schedule_without_marker_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant, bad: str
 ) -> None:
-    """A schedule publishing no window marker: on → outage → on is no start."""
+    """A schedule without a window marker: on → outage → on is no start."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
     await setup_entries(

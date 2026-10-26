@@ -5,8 +5,8 @@ default) means normal behavior; OFF suspends all of the light's automatic
 turn-offs (exactly like a configured keep-on entity being on) until it is
 turned back on. Turn-ons and manual control are never affected.
 
-The switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies
-the light through the dispatcher, so the coupling doesn't depend on entity
+The switch mirrors its state into hass.data[DOMAIN][entry_id] and sends it
+to the light through the dispatcher, so the coupling doesn't depend on entity
 ids. Once Home Assistant runs, the entry sets this platform up before the
 light's, so a light that seeds as soon as it is added reads the restored state.
 """
@@ -74,36 +74,36 @@ class AutoOffSwitch(SwitchEntity, RenamableRestoreEntity):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         self._attr_is_on = last is None or last.state != STATE_OFF
-        self._publish()
+        self._send_to_light()
 
     async def async_will_remove_from_hass(self) -> None:
         """Release the hold when the switch is disabled; a reload keeps it."""
         await super().async_will_remove_from_hass()
         if self.registry_entry is not None and self.registry_entry.disabled:
             self._attr_is_on = True
-            self._publish()
+            self._send_to_light()
 
     async def async_removed_from_registry(self) -> None:
         """Release the hold when the switch is deleted: nothing else can."""
         self._attr_is_on = True
-        self._publish()
+        self._send_to_light()
         # The switch a reload adds back restores this, not the hold.
         self.async_write_ha_state()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Re-enable the light's automatic turn-offs."""
         self._attr_is_on = True
-        self._publish()
+        self._send_to_light()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Suspend the light's automatic turn-offs."""
         self._attr_is_on = False
-        self._publish()
+        self._send_to_light()
         self.async_write_ha_state()
 
-    def _publish(self) -> None:
-        """Mirror the state into hass.data and notify the virtual light."""
+    def _send_to_light(self) -> None:
+        """Mirror the state into hass.data and send it to the virtual light."""
         entry_data = self.hass.data.get(DOMAIN, {}).get(self._entry_id)
         if entry_data is not None:
             entry_data[DATA_AUTO_OFF_ENABLED] = self._attr_is_on

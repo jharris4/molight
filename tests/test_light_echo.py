@@ -1955,7 +1955,7 @@ INSTANT = "light.matrix_light"
 
 
 def _reports_of(hass: HomeAssistant, entity_id: str) -> list[tuple[str, int | None]]:
-    """Record each (state, brightness) the entity publishes from here on."""
+    """Record each (state, brightness) the entity reports from here on."""
     seen: list[tuple[str, int | None]] = []
 
     @callback
@@ -1987,7 +1987,7 @@ async def test_reply_inside_the_turn_on_call_never_reports_off(
     hass: HomeAssistant, member: str, trigger: str
 ) -> None:
     """The virtual light counts as on before its command is sent, so a reply
-    mirrored inside the call is published as on, never as off."""
+    mirrored inside the call is reported as on, never as off."""
     lights = ["light.real_1"]
     if member == "instant_group":
         lights = [await _light_group(hass, InstantLight("real_1", kelvin=3000))]
@@ -2065,7 +2065,7 @@ async def test_reply_inside_a_stage_call_reports_the_stage_level_only(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
     """A stage's level is adopted before its command is sent, so a color
-    mirrored from a reply inside the call is not published at the old level."""
+    mirrored from a reply inside the call is not reported at the old level."""
     member = InstantLight("real_1", kelvin=3000)
     await add_real(hass, member)
     await setup_entries(
