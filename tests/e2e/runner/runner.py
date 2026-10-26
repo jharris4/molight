@@ -1710,7 +1710,8 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
     wait_machine_state(client, "idle", HOLD_LIGHT)
     remove_entry_and_entity(client, entry_id, HOLD_LIGHT)
     print(
-        "PASS: keep-on entity holds auto-off, survives a blip, and release re-evaluates"
+        "PASS: keep-on entity holds auto-off, also while briefly unavailable, "
+        "and release re-evaluates"
     )
 
 
@@ -1915,7 +1916,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
             state["attributes"].get("last_on_door") == last_on_door
             and state["attributes"].get("molight_state") == machine_state
         ),
-        "unchanged: the door blip was not read as a fresh opening",
+        "unchanged: the door, briefly unavailable, was not read as a fresh opening",
     )
 
     client.set_available(RAW_ILLUMINANCE, False)
@@ -1939,7 +1940,8 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
             state["attributes"].get("last_on_illuminance") == last_on_illuminance
             and state["attributes"].get("molight_state") == machine_state
         ),
-        "unchanged: the lux blip was not read as a fresh dark edge",
+        "unchanged: the lux source, briefly unavailable, was not read as a "
+        "fresh dark edge",
     )
 
     client.set_state(RAW_DOOR, "off")
@@ -1947,7 +1949,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_profile(client, PROFILE_OUTSIDE)
-    checkpoint("door and lux blips to unavailable and back are not read as changes")
+    checkpoint("door and lux sources briefly unavailable are not read as changes")
 
 
 def wait_timer_stage(
