@@ -275,8 +275,8 @@ longer needs a custom repository.
 - **Virtual Remote**: binds remote-control buttons to light actions with no
   hand-written automations. Single and double clicks of any remote whose buttons
   appear as `event` entities map to on/off/toggle/brightness-step/preset actions,
-  with the single-vs-double vocabulary resolved per button from its advertised
-  event types.
+  with the single-vs-double vocabulary resolved per button from the event types
+  it has.
 - A diagnostic **Last Action** sensor per Virtual Remote, recording the last
   action executed with its source button, resolved click, raw event type and
   time.
