@@ -309,7 +309,8 @@ async def test_no_off_delay_when_maintain_clear_genuine(
 @pytest.mark.asyncio
 async def test_off_delay_when_both_clears_false(hass: HomeAssistant, freezer) -> None:
     """Both sensors flagging their clears false → the whole episode was a
-    false detection; the occupancy-lit light turns off quickly."""
+    false detection; the occupancy-lit light turns off after the false-detection
+    off delay."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, entry)

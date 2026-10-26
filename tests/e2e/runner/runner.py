@@ -4452,7 +4452,7 @@ def run_false_detection_prepare() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off after the false-detection delay, well before the timeout",
+        "off after the false-detection off delay, well before the turn-off timeout",
         timeout=4,
     )
     wait_machine_state(client, "idle", GRACE_LIGHT)
@@ -4491,7 +4491,7 @@ def run_false_detection_prepare() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the false-detection delay: a genuine clear gets the countdown",
+        "on past the false-detection off delay: a genuine clear gets the countdown",
         duration=4,
     )
     client.call_service("light", "turn_off", {"entity_id": GRACE_LIGHT})
@@ -4506,7 +4506,7 @@ def run_false_detection_prepare() -> None:
             {"sensor_entry_id": sensor_entry_id, "light_entry_id": light_entry_id}
         )
     )
-    print("PASS: false-detection quick-off, genuine countdown, occupied for restart")
+    print("PASS: false-detection off delay, genuine countdown, occupied for restart")
 
 
 def run_false_detection_verify() -> None:
@@ -4545,7 +4545,7 @@ def run_false_detection_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the false-detection delay after the post-restart clear",
+        "on past the false-detection off delay after the post-restart clear",
         duration=4,
     )
     client.wait_state(
@@ -4671,7 +4671,7 @@ def run_late_source_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the false-detection delay after a late-source clear",
+        "on past the false-detection off delay after a late-source clear",
         duration=4,
     )
     client.call_service("light", "turn_off", {"entity_id": LATE_LIGHT})
@@ -7057,7 +7057,8 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "quick-off: both sensors flagged their clears false",
+        "off after the false-detection off delay: both sensors flagged their "
+        "clears as false",
         timeout=4,
     )
     wait_machine_state(client, "idle", GRACE_BOTH_LIGHT)
@@ -7085,7 +7086,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the quick-off delay: one genuine clear earns the countdown",
+        "on past the false-detection off delay: one genuine clear earns the countdown",
         duration=4,
     )
     client.call_service("light", "turn_off", {"entity_id": GRACE_BOTH_LIGHT})
@@ -7096,7 +7097,10 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         (maintain_entry_id, GRACE_MAINTAIN),
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
-    print("PASS: maintain holds a manual light; only a both-false clear quick-offs")
+    print(
+        "PASS: maintain holds a manual light; only both-false clears get the "
+        "false-detection off delay"
+    )
 
 
 def run_maintain_restart_prepare() -> None:

@@ -211,7 +211,8 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
     during its hold time, so it was almost certainly a fly/heat blip, or a
     brief pass-through. Such cycles don't advance latest_occupied_time, are
     counted in false_detection_count, and flag the clear via
-    last_clear_false_detection so lights can turn off quickly.
+    last_clear_false_detection so lights can turn off after their
+    false-detection off delay.
 
     Clear-on-unavailable (when clear_on_unavailable_timeout > 0): a source
     that stays unavailable/unknown while occupancy is active would otherwise

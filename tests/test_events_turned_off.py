@@ -126,7 +126,7 @@ async def test_timer_turn_off(hass, freezer) -> None:
 
 @pytest.mark.asyncio
 async def test_false_detection_off_delay(hass, freezer) -> None:
-    """A light a blip lit goes off quickly, and says so."""
+    """A light a blip lit goes off after the false-detection off delay, and says so."""
     sensor = MockConfigEntry(
         domain=DOMAIN,
         data={

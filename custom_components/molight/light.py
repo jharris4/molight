@@ -4042,7 +4042,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._resume_lights()
             elif not self._attr_is_on or was_standby:
                 # Lit from standby counts as lit by occupancy: a false
-                # detection drops back to standby quickly.
+                # detection drops back to standby after the false-detection
+                # off delay.
                 self._occupancy_lit_lights = True
                 self.hass.async_create_task(
                     self._auto_lights_on(reason=REASON_OCCUPANCY)
@@ -4054,7 +4055,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._machine_state = STATE_COUNTDOWN
             if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                 # The whole cycle was a false detection and nobody else
-                # asked for these lights, so turn them off quickly.
+                # asked for these lights, so turn them off after the
+                # false-detection off delay.
                 self._start_timer(
                     self._false_off_countdown(), reason=REASON_FALSE_DETECTION
                 )

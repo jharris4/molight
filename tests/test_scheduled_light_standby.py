@@ -548,7 +548,7 @@ async def test_warning_leads_into_an_rgb_standby_on_mixed_members(
 
 
 @pytest.mark.asyncio
-async def test_false_detection_drops_back_to_standby_quickly(
+async def test_false_detection_drops_back_to_standby_after_the_off_delay(
     hass: HomeAssistant, freezer
 ) -> None:
     """A boost from standby counts as lit by occupancy for the off delay."""
@@ -562,7 +562,7 @@ async def test_false_detection_drops_back_to_standby_quickly(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["gate_lifts", "restart"])
-async def test_false_detection_after_a_late_raise_drops_back_quickly(
+async def test_false_detection_after_a_late_raise_drops_back_after_the_off_delay(
     hass: HomeAssistant, freezer, route: str
 ) -> None:
     """Occupancy that raises standby late still owns the raise it caused."""
@@ -959,7 +959,8 @@ async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
     """Dimming or recoloring a light that occupancy raised from standby makes
-    the raise the user's: false motion no longer drops it back quickly."""
+    the raise the user's: a false detection no longer drops it back after the
+    false-detection off delay."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     await _setup_porch(hass, _porch())
     await _echo_standby(hass)
@@ -1544,8 +1545,9 @@ async def test_schedule_end_switch_from_standby_keeps_a_history_countdown(
 async def test_dark_edge_raise_from_standby_is_occupancy_lit_only_by_motion(
     hass: HomeAssistant, freezer, raiser: str
 ) -> None:
-    """Darkness raising standby over motion drops back quickly after a false
-    detection; over an open door it is a person's, and counts down in full."""
+    """Darkness raising standby over motion gets the false-detection off delay
+    after a false detection; over an open door it is a person's, and counts down
+    in full."""
     door = "binary_sensor.front_door"
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(door, "off")

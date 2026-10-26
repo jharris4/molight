@@ -2019,8 +2019,8 @@ async def test_false_clear_leaves_a_light_changed_at_the_wall_its_timeout(
 async def test_false_blip_after_a_genuine_visit_keeps_its_countdown(
     hass: HomeAssistant, freezer, lit_by: str, hold: str
 ) -> None:
-    """Only the cycle that lit the light can turn it off quickly: a blip after
-    a genuine visit cleared keeps that visit's countdown."""
+    """Only the cycle that lit the light gets the false-detection off delay: a
+    blip after a genuine visit cleared keeps that visit's countdown."""
     await _assert_false_blip_keeps_the_visits_countdown(hass, freezer, lit_by, hold)
 
 

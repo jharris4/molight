@@ -535,7 +535,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timeout(
 
 
 @pytest.mark.asyncio
-async def test_false_pulse_still_turns_off_quickly_a_light_it_lit(
+async def test_false_detection_still_gets_the_off_delay_on_a_light_it_lit(
     hass: HomeAssistant, freezer
 ) -> None:
     """A fresh timeout of an earlier on-period gives a later false detection
