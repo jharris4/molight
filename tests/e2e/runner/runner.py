@@ -2807,7 +2807,7 @@ def assert_fuzzy_member_reporting(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: "xy" in state["attributes"].get("supported_color_modes", []),
-        "advertising XY color",
+        "offering XY color",
     )
     before = client.state(VIRTUAL_MULTI_LIGHT)["attributes"]
     client.call_service(
@@ -2849,7 +2849,7 @@ def assert_fuzzy_member_reporting(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: "rgb" in state["attributes"].get("supported_color_modes", []),
-        "advertising RGB again",
+        "offering RGB again",
     )
 
 
@@ -2861,7 +2861,7 @@ def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
             set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "advertising the mixed group's color and transition capabilities",
+        "offering the mixed group's color and transition capabilities",
     )
     assert_multi_light_routing(client)
     assert_fuzzy_member_reporting(client)
@@ -2917,7 +2917,7 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
             and set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "advertising recovered color and transition capabilities",
+        "offering recovered color and transition capabilities",
     )
     assert_multi_light_routing(client)
 
@@ -3940,7 +3940,7 @@ def run_unavailable_light_recovery() -> None:
             state["state"] == "off"
             and "hs" not in state["attributes"].get("supported_color_modes", [])
         ),
-        "off without advertising color before its member reports",
+        "off without offering color before its member reports",
     )
 
     client.set_available(RAW_LIGHT, True)
@@ -3951,7 +3951,7 @@ def run_unavailable_light_recovery() -> None:
             "hs" in state["attributes"].get("supported_color_modes", [])
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "advertising recovered color and transition capabilities",
+        "offering recovered color and transition capabilities",
     )
     assert_state_stays(
         client,
@@ -8609,7 +8609,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
             {"color_temp", "hs"}
             <= set(state["attributes"].get("supported_color_modes", []))
         ),
-        "advertising both color temperature and color",
+        "offering both color temperature and color",
     )
     client.call_service(
         "light",

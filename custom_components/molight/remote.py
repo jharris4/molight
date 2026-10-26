@@ -125,7 +125,7 @@ def double_click_event_type(event_types: list[str]) -> str | None:
     return next((t for t in _DOUBLE_EVENT_TYPES if t in event_types), None)
 
 
-def _advertised_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | None:
+def _entity_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | None:
     """Return the event_types an event entity has, or None if unknown.
 
     An absent state, or one without the event_types capability, can't be
@@ -139,7 +139,7 @@ def _advertised_event_types(hass: HomeAssistant, entity_id: str) -> list[str] | 
 
 def entity_single_click_supported(hass: HomeAssistant, entity_id: str) -> bool | None:
     """Whether this event entity can fire a single click; None if unknown."""
-    event_types = _advertised_event_types(hass, entity_id)
+    event_types = _entity_event_types(hass, entity_id)
     if event_types is None:
         return None
     return single_click_event_type(event_types) is not None
@@ -153,7 +153,7 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
     will never fire one. An unknown capability can't be judged, so the
     binding is allowed and simply never fires until the entity proves itself.
     """
-    event_types = _advertised_event_types(hass, entity_id)
+    event_types = _entity_event_types(hass, entity_id)
     if event_types is None:
         return None
     return double_click_event_type(event_types) is not None
