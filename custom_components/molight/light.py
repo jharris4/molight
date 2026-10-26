@@ -406,7 +406,6 @@ from .helpers import (
     MEMBER_LIGHT_TYPES,
     GoneJudge,
     RenamableRestoreEntity,
-    announce_event,
     entity_gone,
     group_leaves,
     light_descendants,
@@ -417,6 +416,7 @@ from .helpers import (
     molight_config,
     molight_light_entries,
     same_entity,
+    send_event,
     shared_lights,
     suggested_entity_id,
 )
@@ -2264,7 +2264,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._schedule_window_applied = None
             self._machine_state = STATE_IDLE
             if self._attr_is_on:
-                self._announce(
+                self._send_event(
                     EVENT_TURNED_OFF, reason=REASON_SCHEDULE_END, standby=False
                 )
                 self.hass.async_create_task(self._auto_lights_off())
@@ -2353,7 +2353,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # Same for the color: a colored stage must leave no trace either.
             color = self._pre_warn_color
         if was_off:
-            self._announce(
+            self._send_event(
                 EVENT_TURNED_ON,
                 reason=REASON_MANUAL,
                 standby=False,
@@ -2362,7 +2362,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 selection=self._selection_to_apply(),
             )
         elif asked_brightness is not None or asked_color is not None:
-            self._announce(
+            self._send_event(
                 EVENT_ADJUSTED,
                 reason=REASON_MANUAL,
                 brightness=asked_brightness,
@@ -2572,7 +2572,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 manual=human and not member_recovered,
                 claim=claim and human,
                 touched=entity_id,
-                announce=claim,
+                send_turned_on=claim,
                 human=human,
             )
             return
@@ -2876,15 +2876,16 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         manual: bool = True,
         claim: bool = True,
         touched: str | None = None,
-        announce: bool = True,
+        send_turned_on: bool = True,
         human: bool = True,
     ) -> None:
         """Handle a real light being turned on/off externally.
 
         claim is False for a turn-on our own select call caused. touched is
-        the real light that changed. announce is False when our own select
-        call, not a person or another automation, changed it. human is False
-        for a wrapped virtual light acting by itself, which the event says.
+        the real light that changed. send_turned_on is False when no person
+        or other automation is known to have turned it on: our own select
+        call, or a member left on after a failed command. human is False for
+        a wrapped virtual light acting by itself, which the event says.
         """
         reason = REASON_PHYSICAL if human else REASON_WRAPPED
         if state == "on" and brightness == 0:
@@ -2900,10 +2901,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             # later dims (which _on_light_attrs_change handles).
             if brightness:
                 self._attr_brightness = brightness
-            if announce and (
+            if send_turned_on and (
                 not self._attr_is_on or self._machine_state == STATE_STANDBY
             ):
-                self._announce(
+                self._send_event(
                     EVENT_TURNED_ON,
                     reason=reason,
                     standby=False,
@@ -2986,7 +2987,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 # color-only change on a light we consider off is just
                 # mirrored.
                 self._on_light_state_change(
-                    "on", claim=claim and human, announce=claim, human=human
+                    "on", claim=claim and human, send_turned_on=claim, human=human
                 )
             self.async_write_ha_state()
             return
@@ -2997,7 +2998,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if claim:
             self._claim_on_period()
             if self._machine_state == STATE_STANDBY:
-                self._announce(
+                self._send_event(
                     EVENT_TURNED_ON,
                     reason=REASON_PHYSICAL,
                     standby=False,
@@ -3006,7 +3007,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     selection=None,
                 )
             elif brightness_changed or color_changed:
-                self._announce(
+                self._send_event(
                     EVENT_ADJUSTED,
                     reason=REASON_PHYSICAL,
                     brightness=new_b if brightness_changed else None,
@@ -4023,12 +4024,12 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             if self._bright_gates_presence():
                 # Bright enough: suppress lights; when illuminance turns off we
                 # re-evaluate occupancy from the sensor's current state.
-                self._announce_blocked(REASON_OCCUPANCY, REASON_BRIGHT)
+                self._send_blocked(REASON_OCCUPANCY, REASON_BRIGHT)
                 return
             if self._gate_schedule_inactive():
                 # Outside the schedule window: occupancy may not turn lights
                 # on; window start re-evaluates occupancy.
-                self._announce_blocked(REASON_OCCUPANCY, REASON_SCHEDULE)
+                self._send_blocked(REASON_OCCUPANCY, REASON_SCHEDULE)
                 return
             was_warning = self._in_warning()
             was_standby = self._machine_state == STATE_STANDBY
@@ -4344,10 +4345,10 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             return  # follow-mode window owns the lights
         if is_open:
             if self._bright_gates_presence():
-                self._announce_blocked(REASON_DOOR, REASON_BRIGHT)
+                self._send_blocked(REASON_DOOR, REASON_BRIGHT)
                 return  # dark-gated, like occupancy
             if self._gate_schedule_inactive():
-                self._announce_blocked(REASON_DOOR, REASON_SCHEDULE)
+                self._send_blocked(REASON_DOOR, REASON_SCHEDULE)
                 return  # outside a gate-mode schedule window
             was_warning = self._in_warning()
             was_standby = self._machine_state == STATE_STANDBY
@@ -4494,7 +4495,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     self._auto_on_transition, selection=True, reason=REASON_ILLUMINANCE
                 )
             elif occ_active or door_holds:
-                self._announce_blocked(
+                self._send_blocked(
                     REASON_OCCUPANCY if occ_active else REASON_DOOR, REASON_SCHEDULE
                 )
 
@@ -4681,7 +4682,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         self._forget_warning()
         self._forget_ended_follow_window()
         if ended and reason is not None:
-            self._announce(EVENT_TURNED_OFF, reason=reason, standby=False)
+            self._send_event(EVENT_TURNED_OFF, reason=reason, standby=False)
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
@@ -4749,7 +4750,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     def _cancel_warning(self, brightness: int | None, color: dict | None) -> None:
         """End a warning sequence early, the lights staying on at this look."""
         if self._warning_active:
-            self._announce(
+            self._send_event(
                 EVENT_OFF_WARNING,
                 stage=STAGE_CANCELLED,
                 off_in=None,
@@ -4763,14 +4764,14 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
     # Events
     # ------------------------------------------------------------------
 
-    def _announce(self, event_type: str, **attributes: Any) -> None:
-        """Record what the light did on its Events entity."""
-        announce_event(self.hass, self._entry_id, event_type, **attributes)
+    def _send_event(self, event_type: str, **attributes: Any) -> None:
+        """Send what the light did to its Events entity."""
+        send_event(self.hass, self._entry_id, event_type, **attributes)
 
-    def _announce_blocked(self, trigger: str, reason: str) -> None:
-        """Record a trigger a gate refused, when it would have lit the room."""
+    def _send_blocked(self, trigger: str, reason: str) -> None:
+        """Send a trigger a gate blocked, when it would have lit the room."""
         if not self._is_lit():
-            self._announce(EVENT_TURN_ON_BLOCKED, trigger=trigger, reason=reason)
+            self._send_event(EVENT_TURN_ON_BLOCKED, trigger=trigger, reason=reason)
 
     def _selection_to_apply(self) -> str | None:
         """Return the selection option an off-to-on command is about to apply."""
@@ -4858,7 +4859,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         reason = self._timer_reason
         if self._effect_timeout > 0:
             self._machine_state = STATE_EFFECT
-            self._announce(
+            self._send_event(
                 EVENT_OFF_WARNING,
                 stage=STAGE_EFFECT,
                 off_in=self._effect_timeout + self._warn_timeout,
@@ -4907,7 +4908,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                     own_color=effect_recolored,
                 ).items()
             }
-            self._announce(
+            self._send_event(
                 EVENT_OFF_WARNING,
                 stage=STAGE_WARN,
                 off_in=self._warn_timeout,
@@ -4963,9 +4964,9 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         says why, and is None for a re-send of the level the light is at.
         """
         if reason is not None and self._attr_is_on:
-            self._announce(EVENT_TURNED_OFF, reason=reason, standby=True)
+            self._send_event(EVENT_TURNED_OFF, reason=reason, standby=True)
         elif reason is not None:
-            self._announce(
+            self._send_event(
                 EVENT_TURNED_ON,
                 reason=reason,
                 standby=True,
@@ -5104,7 +5105,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         reason says what lit the room, and is None for a re-send.
         """
         if reason is not None and not self._turn_on_waiting(manual=True):
-            self._announce(
+            self._send_event(
                 EVENT_TURNED_ON,
                 reason=reason,
                 standby=False,
@@ -5359,7 +5360,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
                 self._physical_brightness(),
                 manual=False,
                 claim=False,
-                announce=False,
+                send_turned_on=False,
             )
         self.async_write_ha_state()
 

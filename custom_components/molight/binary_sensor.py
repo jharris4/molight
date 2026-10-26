@@ -100,11 +100,11 @@ from .const import (
 from .helpers import (
     GoneJudge,
     RenamableRestoreEntity,
-    announce_event,
     entity_gone,
     molight_config,
     renamed_to,
     same_entity,
+    send_event,
     sensor_dependencies,
     suggested_entity_id,
 )
@@ -482,7 +482,7 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
         self._last_clear_unavailable = False
         if self._last_clear_false:
             self._false_count += 1
-            announce_event(
+            send_event(
                 self.hass,
                 self._entry_id,
                 EVENT_FALSE_DETECTION,
@@ -937,7 +937,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._last_clear_false = not self._cycle_genuine
             if self._last_clear_false:
                 self._false_count += 1
-                announce_event(
+                send_event(
                     self.hass,
                     self._entry_id,
                     EVENT_FALSE_DETECTION,

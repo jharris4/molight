@@ -87,10 +87,10 @@ def suggested_entity_id(
     return async_generate_entity_id(entity_id_format, f"{obj}{suffix}", hass=hass)
 
 
-def announce_event(
+def send_event(
     hass: HomeAssistant, entry_id: str, event_type: str, **attributes: Any
 ) -> None:
-    """Record on an entry's Events entity what its light or sensor did.
+    """Send what an entry's light or sensor did to its Events entity.
 
     Nobody listens while the entity is disabled or not yet added, and the
     event is simply dropped.
