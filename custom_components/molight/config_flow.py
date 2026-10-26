@@ -3329,7 +3329,8 @@ class MoLightConfigFlow(
         lights get the reference (overwriting any prior one under the same
         key), and pre-selected lights that were deselected have it removed.
         Occupancy targets whose turn-off timeout is shorter than the sensor's
-        timeout are skipped and reported rather than silently misconfigured.
+        occupancy timeout are skipped and reported rather than silently
+        misconfigured.
 
         Only regular Virtual Lights can be assigned this way: a Virtual
         Scheduled Light has its own sensors in each set of settings, so there is no
@@ -4330,7 +4331,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors.update(role_errors)
             elif not errors:
                 # The new constituent set must not outgrow any dependent light:
-                # the combined sensor's effective timeout is its max constituent.
+                # the combined sensor's effective occupancy timeout is the max
+                # across its constituents.
                 constituents = user_input.get(
                     CONF_TRIGGER_SENSORS, []
                 ) + user_input.get(CONF_MAINTAIN_SENSORS, [])

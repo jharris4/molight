@@ -2,7 +2,7 @@
 
 Provides five sensor types, all created via the config flow:
 
-  VirtualOccupancySensor:          wraps one real sensor with a timeout;
+  VirtualOccupancySensor:          wraps one real sensor with an occupancy timeout;
                                    exposes latest_occupied_time = last_off - timeout
   VirtualCombinedOccupancySensor:  combines VirtualOccupancySensors using
                                    trigger/maintain logic; latest_occupied_time

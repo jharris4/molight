@@ -19,7 +19,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 
 **Highlights** (everything below is covered by the automated test suite):
 
-- Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's own hold time, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
+- Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's occupancy timeout, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 - Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified: a light that only a blip lit goes off after a short false-detection off delay, and a light the user turned on is never cut short (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).
 - A light's own [maintain sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on, however the light was lit, even by hand.
 - Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); getting bright can force lights off (or not, for lux sensors that can see the lights they control).

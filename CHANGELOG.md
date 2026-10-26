@@ -363,7 +363,7 @@ Initial release.
 ### Added
 
 - **Virtual Occupancy Sensor**: wraps one real motion/presence sensor and
-  estimates when the person actually left, with a configurable source hold
+  estimates when the person actually left, with a configurable occupancy
   timeout, false-detection classification, and a clear-after-unavailable
   timeout.
 - **Virtual Combined Occupancy Sensor**: merges several occupancy sensors with

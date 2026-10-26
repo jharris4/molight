@@ -468,7 +468,7 @@ Turn-off timeout:  180                         # must be >= 120, the largest con
 Occupancy sensor:  binary_sensor.kitchen_occupancy
 ```
 
-Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's own hold time is respected.
+Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
 
 Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on by hand: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a hand-lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
 

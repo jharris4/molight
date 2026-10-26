@@ -3081,8 +3081,8 @@ async def test_light_options_error_keeps_submitted_values(
 async def test_light_flow_rejects_timeout_below_occupancy_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """light_timeout < the referenced occupancy sensor's timeout is rejected."""
-    # Occupancy sensor with a 30s timeout (fixture) must be set up so its
+    """light_timeout < the referenced sensor's occupancy_timeout is rejected."""
+    # Occupancy sensor with a 30s occupancy timeout (fixture) must be set up so its
     # entity exists in the registry.
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
@@ -3230,7 +3230,7 @@ async def test_occupancy_source_pickers_narrow_to_occupancy_device_classes(
 async def test_light_flow_validates_combined_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A combined sensor's effective timeout is its largest constituent's."""
+    """A combined sensor's effective occupancy timeout is its largest constituent's."""
     occupancy2 = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -4349,7 +4349,8 @@ async def test_assign_occupancy_adds_and_removes(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """Bulk-assign pre-selects current users; the submitted set is authoritative."""
-    # Occupancy sensor (30s timeout fixture) registers binary_sensor.test_occupancy.
+    # Occupancy sensor (30s occupancy timeout fixture) registers
+    # binary_sensor.test_occupancy.
     already_light = _light_entry(
         "Hall", "hall", occupancy_entity="binary_sensor.test_occupancy"
     )
@@ -4467,8 +4468,9 @@ async def test_assign_occupancy_maintain_uses_maintain_key(
 async def test_assign_occupancy_skips_short_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A light whose turn-off timeout is below the sensor's is skipped and reported."""
-    short = _light_entry("Closet", "closet", timeout=20)  # < 30s sensor timeout
+    """A light whose turn-off timeout is below the sensor's occupancy timeout is
+    skipped and reported."""
+    short = _light_entry("Closet", "closet", timeout=20)  # < 30s occupancy timeout
     await setup_entries(hass, occupancy_entry, short)
 
     result = await _reach_assign_kind(hass, "assign_occupancy")
@@ -9046,7 +9048,7 @@ _TOO_SHORT = {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
 async def test_light_selection_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """An occupancy sensor's timeout raised behind the create flow's selection page
+    """A sensor's occupancy timeout raised behind the create flow's selection page
     sends the user back to the light form with the timeout error."""
     await setup_entries(hass, occupancy_entry)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -9089,7 +9091,7 @@ async def test_light_selection_page_rejects_timeout_raised_meanwhile(
 async def test_scheduled_light_inside_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """An occupancy sensor's timeout raised while the inside form is open sends the user
+    """A sensor's occupancy timeout raised while the inside form is open sends the user
     back to the outside form that references the sensor."""
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry)
@@ -9135,7 +9137,7 @@ async def test_scheduled_light_inside_page_rejects_timeout_raised_meanwhile(
 async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """An occupancy sensor's timeout raised while the entity-id collision menu is open
+    """A sensor's occupancy timeout raised while the entity-id collision menu is open
     sends the user back to the light form."""
     await setup_entries(hass, occupancy_entry)
     hass.states.async_set("light.hall", "off")  # the name-derived id collides
@@ -9170,7 +9172,7 @@ async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
 async def test_discovery_selection_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """An occupancy sensor's timeout raised behind the discovery selection page sends
+    """A sensor's occupancy timeout raised behind the discovery selection page sends
     the user back to the shared defaults form."""
     await setup_entries(hass, occupancy_entry)
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
@@ -9211,7 +9213,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, scheduled: bool
 ) -> None:
     """A light newly referencing a sensor is not yet its dependent, so the
-    occupancy sensor's timeout can be raised behind the light's last page: the save is
+    sensor's occupancy timeout can be raised behind the light's last page: the save is
     refused with the timeout error on the referencing form."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -10859,7 +10861,8 @@ async def test_occupancy_options_check_lights_using_it_in_either_role(
     scheduled: bool,
     key: str,
 ) -> None:
-    """Raising an occupancy sensor's timeout above a dependent light's is refused."""
+    """Raising a sensor's occupancy timeout above a dependent light's turn-off timeout
+    is refused."""
     await _setup_night_schedule(hass)
     await setup_entries(
         hass,

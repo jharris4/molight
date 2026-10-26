@@ -359,7 +359,7 @@
       },
       "combined_occupancy": {
         "title": "Virtual Combined Occupancy Sensor",
-        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's own timeout.",
+        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",
@@ -1423,7 +1423,7 @@
       },
       "combined_occupancy": {
         "title": "Virtual Combined Occupancy Sensor",
-        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's own timeout.",
+        "description": "Merges several virtual occupancy sensors into one signal, respecting each constituent's occupancy timeout.",
         "data": {
           "name": "Name",
           "trigger_sensors": "Trigger sensors",

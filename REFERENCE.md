@@ -16,7 +16,7 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 > [!IMPORTANT]
 > **Set the occupancy timeout to match the real sensor's actual hold time.** MoLight can't read this from the source. It's a value you supply, and everything downstream is anchored to it: when MoLight decides the person *actually left*, the turn-off countdown, and false-detection classification. Set it too high and genuine occupancy can be misread as a false detection (`on_duration <= timeout + grace`), sending the lights off early after the false-detection off delay; set it wrong in either direction and turn-off timing drifts from reality.
 >
-> This value **has no effect on the source sensor**. It doesn't change the real sensor's hold time; it only tells MoLight what that hold time is. The two are not linked, so if you ever change the source sensor's own timeout, update this to match by hand.
+> This value **has no effect on the source sensor**. It doesn't change the real sensor's hold time; it only tells MoLight what that hold time is. The two are not linked, so if you ever change the source sensor's hold time, update this to match by hand.
 
 Details:
 
@@ -37,7 +37,7 @@ Combines multiple MoLight occupancy sensors into one. Constituents are usually s
 | **Trigger sensors** | Any one going `on` starts occupancy |
 | **Maintain sensors** *(optional)* | Keep occupancy alive once started, but cannot start it alone |
 
-`latest_occupied_time` is the max across all constituents, so each sub-sensor's individual timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor.
+`latest_occupied_time` is the max across all constituents, so each constituent's occupancy timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor.
 
 If the last constituent still `on` drops out of the state machine (it goes `unavailable`, or the entity is removed), occupancy clears immediately rather than holding forever. This is the combined-sensor counterpart of the simple sensor's *clear after unavailable* timeout. As there, the person is assumed present up to the dropout: `latest_occupied_time` advances to that moment so dependent lights run their normal gentle countdown, and the clear is never classified as a false detection.
 
@@ -263,7 +263,7 @@ Manual control is never gated: the user can always turn the virtual light on, ev
 Details:
 
 - **Adopting a light that is on** is not blocked by the schedule modes **Gate and switch state** and **Gate and keep state**, which only gate turning an off light on, nor by bright in illuminance **Gate only** mode: the lux sensor may be reading the light itself.
-- **Countdown timing:** the lights go off at `latest_occupied_time + turn-off timeout`, so each sensor's hold time is respected. The wall-clock wait after the sensor clears is therefore `turn-off timeout - occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it).
+- **Countdown timing:** the lights go off at `latest_occupied_time + turn-off timeout`, so each sensor's occupancy timeout is respected. The wall-clock wait after the sensor clears is therefore `turn-off timeout - occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it).
 - **Countdown after a false detection:** a false detection leaves `latest_occupied_time` at an earlier visit, so a light turned on manually, at the wall, or by the door since then keeps the full turn-off timeout from that turn-on instead. So does one dimmed or recolored at the wall, also while occupancy had it on, and a fresh timeout started since (a hold released, the door closed) is not cut short either.
 - **Follow-mode boundaries** are edge-triggered, so manual changes mid-window stand, including turning the light back on, which rejoins the window instead of starting a timer. An all-day (00:00 → 00:00) schedule starts a new window every midnight without turning `off` in between, so a light turned off manually comes back on at midnight.
 
@@ -660,7 +660,7 @@ Deleting a virtual light strips it from every remote's target list, like any oth
   - **Colors partway through a fade:** a color is a step of that fade when it lies on the way from the previous color to the requested one, whether the light blends round the hue wheel or straight through RGB or CIE xy, which passes through paler colors between far-apart hues. A color that backs away from the request, or lies beside the way there, is a recolor.
 - Each virtual entity is its own config entry, so they can be created, edited, and removed independently. A Virtual Remote is mostly wiring between button event entities and target lights; its only entity is the diagnostic Last Action sensor.
 - Removing an entry strips references to its entities from the entries that survive it, so a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open. References are stored as entity IDs, so an entity ID changed in Home Assistant is rewritten in every entry that uses it, for the same reason. A form left open meanwhile does not undo either: it refuses to save an entity deleted since it opened, and saves a renamed one under its new ID.
-- The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy and maintain occupancy entities (including through a combined sensor), and raising an occupancy sensor's timeout checks every light that depends on it.
+- The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy and maintain occupancy entities (including through a combined sensor), and raising a sensor's occupancy timeout checks every light that depends on it.
 - Settings no chosen light could apply are rejected at the form rather than stored and silently ignored: a fade when none of the lights can fade, a color temperature or a color when none can show one, a brightness when none of them dim (an effect brightness of `0` is exempt, since a blink fully off is sent as a plain turn-off, which every light can do). One capable light is enough (mixed groups are the point), and a light that hasn't reported its capabilities yet is never taken as proof, so the check can't refuse a setting on incomplete information.
 - Reference graphs stay sane by construction:
   - an occupancy sensor can't wrap another MoLight occupancy entity;
