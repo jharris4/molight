@@ -770,7 +770,8 @@ async def test_renamed_motion_source_continues_the_same_visit(
 async def test_deleted_motion_source_still_drops_out(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Only a rename is spared: a source that is deleted clears after its timeout."""
+    """Only a rename is spared: a source that is deleted clears after the
+    clear-after-unavailable timeout."""
     motion = RealBinary("motion")
     await add_real(hass, motion)
     await setup_entries(hass, occupancy_entry())

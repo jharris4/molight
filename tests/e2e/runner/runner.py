@@ -4037,7 +4037,7 @@ def run_unavailable_sensors_motion_first() -> None:
             state["state"] == "on"
             and state["attributes"].get("last_clear_unavailable") is False
         ),
-        "on: a quick source recovery cancelled the pending unavailable clear",
+        "on: a recovery inside the clear-after-unavailable timeout cancelled the clear",
         duration=2,
     )
     # A source that stays unavailable clears after the timeout, flagged as such,
@@ -4051,7 +4051,7 @@ def run_unavailable_sensors_motion_first() -> None:
             and state["attributes"].get("last_clear_false_detection") is False
             and state["attributes"].get("latest_occupied_time") is not None
         ),
-        "cleared by the unavailable timeout",
+        "cleared by the clear-after-unavailable timeout",
     )
     client.set_available(RAW_SCHEDULE, False)
     client.set_state(RAW_MOTION, "off")
