@@ -126,7 +126,7 @@ async def test_occupancy_turn_on_names_the_auto_on_look(hass) -> None:
 
 @pytest.mark.asyncio
 async def test_turn_on_selection_is_named(hass) -> None:
-    """The selection an off-to-on command applies is in the event."""
+    """The selection a turn-on applies is in the event."""
     await add_real(hass, RealSelect("theme"))
     records = await _setup(
         hass,

@@ -79,7 +79,7 @@ def _selection_entry(
 async def test_manual_turn_on_applies_selection_first_with_same_context(
     hass: HomeAssistant,
 ) -> None:
-    """An off-to-on command selects the option before driving the light."""
+    """A manual turn-on selects the option before driving the light."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -596,8 +596,8 @@ async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     hass: HomeAssistant, freezer
 ) -> None:
     """An effect stage blinking fully off leaves the virtual light logically on
-    while the real lights are dark, so a turn-on there is still an off-to-on
-    command for them and must re-apply the selection."""
+    while the real lights are dark, so a turn-on there must still re-apply
+    the selection."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:

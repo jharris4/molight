@@ -3977,7 +3977,7 @@ def run_unavailable_light_recovery() -> None:
         lambda state: state["state"] == "unavailable",
         "unavailable",
     )
-    print("PASS: late light capabilities recovered without false activation")
+    print("PASS: late light capabilities recovered and the light stayed off")
 
 
 def run_unavailable_sensors_motion_first() -> None:

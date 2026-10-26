@@ -615,9 +615,9 @@ async def test_inner_lit_by_itself_starts_an_off_outer_light(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("activation", ["by_itself", "person", "none"])
+@pytest.mark.parametrize("turn_on", ["by_itself", "person", "none"])
 async def test_inner_lit_during_the_outer_blink(
-    hass: HomeAssistant, freezer, activation: str
+    hass: HomeAssistant, freezer, turn_on: str
 ) -> None:
     """Only a person's turn-on cancels the outer light's warning."""
     hass.states.async_set(INNER_OCC, "off")
@@ -648,19 +648,19 @@ async def test_inner_lit_during_the_outer_blink(
     assert _attrs(hass, OUTER)["molight_state"] == STATE_EFFECT
     await _tick(hass, freezer, 1)
 
-    if activation == "by_itself":
+    if turn_on == "by_itself":
         hass.states.async_set(INNER_OCC, "on")
-    elif activation == "person":
+    elif turn_on == "person":
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": INNER, "brightness": 180}, blocking=True
         )
     await settle(hass)
-    assert _attrs(hass, OUTER)["warning_active"] is (activation != "person")
+    assert _attrs(hass, OUTER)["warning_active"] is (turn_on != "person")
 
     # The stages run on to the automatic off unless a person cancelled them.
     await _tick(hass, freezer, 4)
     await _tick(hass, freezer, 6)
-    assert (hass.states.get(OUTER).state == "on") is (activation == "person")
+    assert (hass.states.get(OUTER).state == "on") is (turn_on == "person")
     assert _attrs(hass, OUTER)["last_off_manual"] is None
 
 

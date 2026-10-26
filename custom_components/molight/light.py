@@ -4776,7 +4776,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
             self._send_event(EVENT_TURN_ON_BLOCKED, trigger=trigger, reason=reason)
 
     def _selection_to_apply(self) -> str | None:
-        """Return the selection option an off-to-on command is about to apply."""
+        """Return the selection option a turn-on is about to apply."""
         if not self._turn_on_select_entity or (
             self._attr_is_on and not self._all_lights_off()
         ):
@@ -5172,7 +5172,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         if self._removed:
             return False
         # A blink-fully-off leaves the light logically on while the members
-        # are dark, so this is still off-to-on for them.
+        # are dark, so this is still a turn-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
         if on:
             self._clear_bright_forced_off()
@@ -5402,7 +5402,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         )
 
     async def _apply_turn_on_selection(self, context: Context) -> None:
-        """Apply the configured select option before an off-to-on command."""
+        """Apply the configured select option before a turn-on or a re-send."""
         # The settings may name another select entity by the time it answers.
         select_entity = self._turn_on_select_entity
         if not select_entity:
