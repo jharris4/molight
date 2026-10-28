@@ -3483,7 +3483,7 @@ def assert_subset(actual: dict[str, Any], expected: dict[str, Any], what: str) -
 def assert_converted_to_regular(
     entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
 ) -> None:
-    """Assert a demoted entry stores the inside settings as a gated light."""
+    """Assert a demoted entry stores the inside settings as a schedule-gated light."""
     effective = wait_stored_entry(
         entry_id, lambda cfg: cfg.get("entity_type") == "light", "a regular light"
     )

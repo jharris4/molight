@@ -5309,10 +5309,10 @@ async def test_conversion_picker_labels_and_sorts_lights(hass: HomeAssistant) ->
 
 
 @pytest.mark.asyncio
-async def test_convert_gated_light_to_scheduled_in_place(
+async def test_convert_schedule_gated_light_to_scheduled_in_place(
     hass: HomeAssistant,
 ) -> None:
-    """Conversion retains identity and maps gate settings into two sets of settings."""
+    """Conversion keeps identity and maps one light's settings into two sets."""
     source = _light_entry(
         "Kitchen",
         "kitchen",
@@ -5414,7 +5414,7 @@ async def test_convert_gated_light_to_scheduled_in_place(
         (SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_MODE_GATE),
     ],
 )
-async def test_convert_scheduled_light_back_to_gate(
+async def test_convert_scheduled_light_back_to_schedule_gated(
     hass: HomeAssistant, end_action: str, expected_mode: str
 ) -> None:
     """Reverse conversion keeps the inside settings and maps the end action."""
@@ -5481,7 +5481,7 @@ async def _convert(hass: HomeAssistant, direction: str, light: str) -> None:
 async def test_conversion_round_trip_restores_flat_config(
     hass: HomeAssistant, mode: str
 ) -> None:
-    """Gated → scheduled → gated is lossless and leaks no top-level keys."""
+    """Converting to scheduled and back is lossless and leaks no top-level keys."""
     source = _light_entry(
         "Kitchen",
         "kitchen",
@@ -5632,7 +5632,7 @@ async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> No
     )
     result = await _reach_conversion(hass, "convert_to_scheduled")
     assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "no_gated_lights"
+    assert result["reason"] == "no_schedule_gated_lights"
 
 
 @pytest.mark.asyncio
@@ -7079,7 +7079,7 @@ async def test_convert_to_scheduled_requires_a_schedule(
 
     result = await _reach_conversion(hass, "convert_to_scheduled")
     assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "no_gated_lights"
+    assert result["reason"] == "no_schedule_gated_lights"
 
 
 @pytest.mark.asyncio
@@ -9462,8 +9462,8 @@ async def test_scheduled_light_options_prefill_and_clear_standby(
 
 
 @pytest.mark.asyncio
-async def test_conversion_to_gated_drops_standby(hass: HomeAssistant) -> None:
-    """A gated light has no standby, so conversion leaves none behind."""
+async def test_conversion_to_schedule_gated_drops_standby(hass: HomeAssistant) -> None:
+    """A schedule-gated light has no standby, so conversion leaves none behind."""
     await _setup_night_schedule(hass)
     entry = MockConfigEntry(
         domain=DOMAIN,

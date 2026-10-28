@@ -1983,8 +1983,8 @@ def _validate_hold_entities(
 def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     """Return True when a light config may be converted in the given direction.
 
-    Gated → scheduled needs a regular light with a schedule in any gate
-    mode; scheduled → gated needs a scheduled light with a schedule.
+    Schedule-gated → scheduled needs a regular light with a schedule in any gate
+    mode; scheduled → schedule-gated needs a scheduled light with a schedule.
     """
     if not cfg.get(CONF_SCHEDULE_ENTITY):
         return False
@@ -3012,7 +3012,11 @@ class MoLightConfigFlow(
         candidates = self._conversion_candidates(to_scheduled=to_scheduled)
         if not candidates:
             return self.async_abort(
-                reason=("no_gated_lights" if to_scheduled else "no_scheduled_lights")
+                reason=(
+                    "no_schedule_gated_lights"
+                    if to_scheduled
+                    else "no_scheduled_lights"
+                )
             )
 
         labels = {entity_id: self._entity_label(entity_id) for entity_id in candidates}
@@ -3056,7 +3060,7 @@ class MoLightConfigFlow(
     async def async_step_convert_to_scheduled(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Select gated Virtual Lights to promote to scheduled lights."""
+        """Select schedule-gated Virtual Lights to promote to scheduled lights."""
         return await self._async_conversion_select(
             to_scheduled=True, user_input=user_input
         )
@@ -3064,14 +3068,14 @@ class MoLightConfigFlow(
     async def async_step_convert_to_regular(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Select Virtual Scheduled Lights to return to regular gated lights."""
+        """Select Virtual Scheduled Lights to return to schedule-gated lights."""
         return await self._async_conversion_select(
             to_scheduled=False, user_input=user_input
         )
 
     @staticmethod
     def _converted_scheduled_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map one gated Virtual Light into outside and inside settings."""
+        """Map one schedule-gated Virtual Light into outside and inside settings."""
         inside = {
             key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
@@ -3104,9 +3108,9 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_regular_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map a scheduled light's inside settings back to a gated light.
+        """Map a scheduled light's inside settings back to a schedule-gated light.
 
-        A gated light has no standby, so the inside settings' standby is dropped.
+        A schedule-gated light has no standby, so the inside standby is dropped.
         """
         inside = {
             key: value
@@ -3129,13 +3133,13 @@ class MoLightConfigFlow(
     async def async_step_confirm_convert_to_scheduled(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Review gated → scheduled conversions."""
+        """Review schedule-gated → scheduled conversions."""
         return await self._async_confirm_conversion(user_input=user_input)
 
     async def async_step_confirm_convert_to_regular(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Review scheduled → gated conversions."""
+        """Review scheduled → schedule-gated conversions."""
         return await self._async_confirm_conversion(user_input=user_input)
 
     async def _async_confirm_conversion(

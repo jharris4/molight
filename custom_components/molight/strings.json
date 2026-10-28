@@ -15,30 +15,30 @@
       },
       "convert_lights": {
         "title": "Convert virtual lights",
-        "description": "Change existing virtual lights in place without changing their entity IDs, history, dashboard cards, or references.",
+        "description": "Change existing virtual lights in place without changing their entity IDs, history, dashboard cards, or references. Only Virtual Lights whose Schedule mode is a Gate mode can become Virtual Scheduled Lights.",
         "menu_options": {
-          "convert_to_scheduled": "Convert gated lights to scheduled lights",
-          "convert_to_regular": "Convert scheduled lights to gated lights"
+          "convert_to_scheduled": "Convert Virtual Lights to Virtual Scheduled Lights",
+          "convert_to_regular": "Convert Virtual Scheduled Lights to Virtual Lights"
         }
       },
       "convert_to_scheduled": {
-        "title": "Convert gated lights",
-        "description": "Select one or more gated Virtual Lights. Each light keeps its own schedule. Its current settings become the inside-schedule settings; its outside-schedule settings keep manual behavior but start without automatic sensor inputs.",
+        "title": "Convert Virtual Lights",
+        "description": "Select one or more Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain, illuminance or door sensors.",
         "data": {
-          "convert_lights": "Gated lights"
+          "convert_lights": "Virtual Lights"
         },
         "data_description": {
           "convert_lights": "Each choice shows the light followed by the schedule that will select its settings."
         }
       },
       "convert_to_regular": {
-        "title": "Convert scheduled lights",
-        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the regular light settings, and the shared schedule becomes its gate. Outside-schedule settings and any standby level will be discarded.",
+        "title": "Convert Virtual Scheduled Lights",
+        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the Virtual Light's settings. The schedule stays, with Schedule mode set to the Gate mode that matches At schedule end. Outside-schedule settings and any standby brightness will be discarded.",
         "data": {
           "convert_lights": "Scheduled lights"
         },
         "data_description": {
-          "convert_lights": "Each choice shows the light followed by the schedule that will be retained as its gate."
+          "convert_lights": "Each choice shows the light followed by the schedule it keeps."
         }
       },
       "confirm_convert_to_scheduled": {
@@ -50,7 +50,7 @@
       },
       "confirm_convert_to_regular": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to gated Virtual Lights: {lights}. Their entity IDs and references will not change. The inside-schedule settings become the regular light settings, without any standby level; the outside-schedule settings are permanently discarded.",
+        "description": "The following lights will be converted in place to Virtual Lights: {lights}. Their entity IDs and references will not change. The inside-schedule settings become the Virtual Light's settings, without any standby brightness; the outside-schedule settings are permanently discarded.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
@@ -1077,7 +1077,7 @@
       "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
-      "no_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
+      "no_schedule_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
       "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
       "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
       "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved.",

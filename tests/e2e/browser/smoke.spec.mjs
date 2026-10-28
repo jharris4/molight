@@ -202,12 +202,12 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
 
   await convert(
     page,
-    "Convert scheduled lights to gated lights",
+    "Convert Virtual Scheduled Lights to Virtual Lights",
     EDITED_LIGHT_NAME,
   );
   await convert(
     page,
-    "Convert gated lights to scheduled lights",
+    "Convert Virtual Lights to Virtual Scheduled Lights",
     EDITED_LIGHT_NAME,
   );
 
@@ -218,7 +218,7 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
   const state = await entityState(page, LIGHT_ENTITY_ID);
   expect(state.entity_id).toBe(LIGHT_ENTITY_ID);
   expect(state.attributes.friendly_name).toBe(EDITED_LIGHT_NAME);
-  // Converting to a gated light keeps the inside profile, and converting back
+  // Converting to a schedule-gated light keeps the inside profile, and converting back
   // copies it into both.
   await expectStoredTimeouts(page, EDITED_LIGHT_NAME, 63, 63);
 });

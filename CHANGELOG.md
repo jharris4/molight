@@ -218,8 +218,8 @@ longer needs a custom repository.
 - **Virtual Scheduled Light**: a new entity type holding two complete Virtual
   Light settings sets, switched by a Virtual Schedule Sensor; **At schedule
   end** decides what the window's end does to a light that is still on.
-- **Convert virtual lights**: promote a gated Virtual Light to a scheduled
-  one, or back, in place, keeping entity IDs and history.
+- **Convert virtual lights**: turn a schedule-gated Virtual Light into a
+  Virtual Scheduled Light, or back, in place, keeping entity IDs and history.
 - **Turn-on selection**: drive a `select` entity (a preset, theme, or mode)
   whenever the light turns on, with an optional source entity supplying the
   option.

@@ -1284,11 +1284,11 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     """Gate mode: occupancy is ignored outside the window, honored at window start."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")  # before the 21:00 window
-    gate_light = MockConfigEntry(
+    schedule_gated_light = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
-            CONF_NAME: "Gate Light",
+            CONF_NAME: "Schedule-gated Light",
             CONF_LIGHTS: ["light.hall_real"],
             CONF_LIGHT_TIMEOUT: 60,
             CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
@@ -1296,11 +1296,13 @@ async def test_gate_mode_blocks_occupancy_outside_window(
             CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
         },
     )
-    await _setup_entries(hass, occupancy_entry, _night_schedule_entry(), gate_light)
+    await _setup_entries(
+        hass, occupancy_entry, _night_schedule_entry(), schedule_gated_light
+    )
 
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
-    assert hass.states.get("light.gate_light").state == "off"
+    assert hass.states.get("light.schedule_gated_light").state == "off"
 
     # Window starts: occupancy is still active, so lights come on now.
     t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
@@ -1308,7 +1310,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     async_fire_time_changed(hass, t)
     await _settle(hass)
 
-    state = hass.states.get("light.gate_light")
+    state = hass.states.get("light.schedule_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
@@ -1318,7 +1320,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     async_fire_time_changed(hass, t)
     await _settle(hass)
 
-    state = hass.states.get("light.gate_light")
+    state = hass.states.get("light.schedule_gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 

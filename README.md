@@ -56,7 +56,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 - **Create a single entity**: pick a type and fill in its form.
 - **Discover**: scan existing entities and bulk-create virtual ones, with one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
 - **Assign a sensor to several lights**: wire one sensor into many lights at once (see [Bulk assignment](#bulk-assignment)).
-- **Convert virtual lights**: promote existing [gated](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) lights to separate inside- and outside-schedule settings, or return scheduled lights to one gated set of settings (see [Light conversion](#light-conversion)).
+- **Convert virtual lights**: turn Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode into Virtual Scheduled Lights with separate inside- and outside-schedule settings, or turn Virtual Scheduled Lights back into Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
 
 The usual order:
 
@@ -123,7 +123,7 @@ An optional **prefix**/**suffix** distinguishes the virtual entities from the re
 A final form then lets you adjust the default settings applied to every pick; for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
 
 - A pick that stopped being a candidate while the forms were open (wrapped from another tab, including by a Discover flow submitted at the same moment, disabled or removed) is skipped, and the summary says how many.
-- Discovery creates regular Virtual Lights; eligible gated lights can then be promoted through **Convert virtual lights**.
+- Discovery creates regular Virtual Lights; those whose Schedule mode is a Gate mode can then be converted through **Convert virtual lights**.
 
 ### Bulk assignment
 
@@ -143,8 +143,8 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 
 **Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
-- **Gated → scheduled**: available for Virtual Lights with a schedule sensor in any of the three Gate schedule modes. Each light retains its own schedule. Its current settings become the inside-schedule settings; the outside-schedule settings keep its timing, appearance, warnings, turn-on selection, and keep-on entities but starts without occupancy, maintain, illuminance, or door inputs. The **Gate and turn off**, **Gate and switch state** and **Gate and keep state** modes map to the **Turn off**, **Switch state** and **Keep state** [schedule-end actions](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light). This creates a useful starting point rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
-- **Scheduled → gated**: every Virtual Scheduled Light that still has a schedule remains eligible. The inside-schedule settings become the regular Virtual Light settings, the shared schedule is retained as its gate, and the corresponding **Gate and turn off**, **Gate and switch state** or **Gate and keep state** mode is selected. The outside-schedule settings and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
+- **Virtual Light → Virtual Scheduled Light**: available for Virtual Lights whose Schedule mode is one of the three Gate modes. Each light retains its own schedule. Its current settings become the inside-schedule settings; the outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection, and keep-on entities but start without occupancy, maintain, illuminance, or door inputs. The **Gate and turn off**, **Gate and switch state** and **Gate and keep state** modes map to the **Turn off**, **Switch state** and **Keep state** [schedule-end actions](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light). This creates a useful starting point rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
+- **Virtual Scheduled Light → Virtual Light**: every Virtual Scheduled Light that still has a schedule can be converted. The inside-schedule settings become the Virtual Light's settings, the schedule stays, and Schedule mode is set to the matching **Gate and turn off**, **Gate and switch state** or **Gate and keep state**. The outside-schedule settings and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
 
 Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting which settings are active.
 

@@ -1548,10 +1548,11 @@ async def test_follow_light_is_not_lit_all_day_by_a_sunset_past_the_fixed_end(
 
 
 @pytest.mark.asyncio
-async def test_gate_light_stays_gated_by_a_sunset_past_the_fixed_end(
+async def test_schedule_gated_light_stays_gated_by_a_sunset_past_the_fixed_end(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A gate light on sunset -> 21:00 ignores occupancy on a day with no window."""
+    """A schedule-gated light on sunset -> 21:00 ignores occupancy on a day
+    with no window."""
     tz = await set_home(hass, *TORONTO)
     freezer.move_to(_local(tz, "2026-06-22 12:00"))
     hass.states.async_set("light.real_1", "off")
@@ -2197,7 +2198,7 @@ async def test_follow_light_follows_a_window_a_time_zone_change_ends_or_starts(
 
 
 @pytest.mark.asyncio
-async def test_gate_light_follows_a_time_zone_change(
+async def test_schedule_gated_light_follows_a_time_zone_change(
     hass: HomeAssistant, freezer
 ) -> None:
     """A gate that the corrected clock closes stops occupancy lighting the
