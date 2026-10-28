@@ -1881,7 +1881,7 @@ async def test_follow_light_manual_off_stands_through_a_time_zone_change(
     hass: HomeAssistant, freezer
 ) -> None:
     """The combination stays on through the change, so the light turned off
-    by hand is not lit again as if a new window had started."""
+    manually is not lit again as if a new window had started."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("light.real_1", "off")
@@ -2104,7 +2104,7 @@ async def test_a_window_of_a_second_is_reported(
 
 
 async def _follow_light(hass: HomeAssistant, schedule: str) -> RealLight:
-    """Set up a follow-mode light on the schedule and turn it off by hand."""
+    """Set up a follow-mode light on the schedule and turn it off manually."""
     lamp = RealLight("lamp")
     await add_real(hass, lamp)
     await _setup(
@@ -2147,7 +2147,7 @@ async def test_source_window_that_ends_and_restarts_at_once_is_a_new_window(
 ) -> None:
     """A source going off and on again ends one window and starts another,
     also when both changes reach the combination before it refreshes: the
-    marker moves and a follow-mode light turned off by hand is lit again."""
+    marker moves and a follow-mode light turned off manually is lit again."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     # The source value under which the combination is on.

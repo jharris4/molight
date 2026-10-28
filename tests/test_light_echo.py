@@ -216,7 +216,7 @@ async def test_wall_switch_off_while_our_on_settles_is_physical(
 async def test_dim_away_from_target_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A brightness moving away from the commanded target is a human dim."""
+    """A brightness moving away from the commanded target is a physical dim."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -280,7 +280,7 @@ async def test_dim_after_echo_is_physical(
 async def test_dim_during_warning_under_our_context_cancels_it(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A human dim right after the warn command still cancels the warning."""
+    """A physical dim right after the warn command still cancels the warning."""
     entry = make_light_entry(
         name="Test Light",
         lights=[MEMBER],
@@ -299,7 +299,7 @@ async def test_dim_during_warning_under_our_context_cancels_it(
     assert _attrs(hass)["molight_state"] == STATE_WARN
     await _write(hass, "on", contexts[-1], brightness=51)  # the warn echo
 
-    await _write(hass, "on", contexts[-1], brightness=120)  # a human dim
+    await _write(hass, "on", contexts[-1], brightness=120)  # a physical dim
 
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
     assert _attrs(hass)["warning_active"] is False
@@ -438,7 +438,7 @@ async def test_kelvin_fade_step_toward_target_is_not_physical(
 async def test_kelvin_step_away_from_target_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A kelvin moving away from the command is a human recolor."""
+    """A kelvin moving away from the command is a physical recolor."""
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=4000)
@@ -624,7 +624,7 @@ async def test_effect_kelvin_fade_reply_keeps_the_sequence(
 async def test_recolor_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A color far from both the command and the old color is a human recolor."""
+    """A color far from both the command and the old color is a physical recolor."""
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, hs_color=[100, 80])
@@ -810,7 +810,7 @@ async def test_late_partial_reply_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Past the settle window only a full match counts: a brightness still short
-    of the target, even toward it and under our context, is a human dim."""
+    of the target, even toward it and under our context, is a physical dim."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1173,7 +1173,7 @@ async def test_turn_off_echo_mirrors_nothing(
 async def test_automatic_off_echo_at_brightness_zero_is_no_manual_off(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The timer's off echoed as on at brightness 0 is no turn-off by hand,
+    """The timer's off echoed as on at brightness 0 is no manual off,
     which would keep the light off over presence after a restart."""
     await _setup(hass, make_light_entry(name="Test Light", lights=[MEMBER], timeout=60))
     contexts = _member_contexts(hass)
@@ -1308,7 +1308,7 @@ async def test_in_order_stage_replies_keep_the_sequence(
 async def test_late_reply_to_restore_after_warn_is_not_physical(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The warn reply trailing the restore command is not a human dim."""
+    """The warn reply trailing the restore command is not a physical dim."""
     entry = make_light_entry(
         name="Test Light",
         lights=[MEMBER],
@@ -1338,7 +1338,7 @@ async def test_late_reply_to_restore_after_warn_is_not_physical(
 async def test_reply_to_newest_command_settles_the_older_ones(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Once the newest command is answered, an older level is a human dim."""
+    """Once the newest command is answered, an older level is a physical dim."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=100)
@@ -1355,7 +1355,7 @@ async def test_reply_to_newest_command_settles_the_older_ones(
 async def test_change_contradicting_every_command_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A level matching none of the unanswered commands is a human dim, and
+    """A level matching none of the unanswered commands is a physical dim, and
     it settles them all."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
@@ -1982,7 +1982,7 @@ async def _light_group(hass: HomeAssistant, member: Entity) -> str:
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("member", ["instant", "instant_group", "after_the_call"])
-@pytest.mark.parametrize("trigger", ["manual", "manual_level", "occupancy", "level"])
+@pytest.mark.parametrize("trigger", ["virtual", "virtual_level", "occupancy", "level"])
 async def test_reply_inside_the_turn_on_call_never_reports_off(
     hass: HomeAssistant, member: str, trigger: str
 ) -> None:
@@ -2006,8 +2006,8 @@ async def test_reply_inside_the_turn_on_call_never_reports_off(
     )
     seen = _reports_of(hass, INSTANT)
 
-    if trigger in ("manual", "manual_level"):
-        data = {"brightness": 200} if trigger == "manual_level" else {}
+    if trigger in ("virtual", "virtual_level"):
+        data = {"brightness": 200} if trigger == "virtual_level" else {}
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": INSTANT, **data}, blocking=True
         )
@@ -2557,7 +2557,7 @@ async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("remembered", REMEMBERED)
-async def test_manual_fade_power_first_at_remembered_level_is_not_a_dim(
+async def test_virtual_fade_power_first_at_remembered_level_is_not_a_dim(
     hass: HomeAssistant, freezer, remembered: int
 ) -> None:
     """A caller's fade to a level, answered power first at the old one."""

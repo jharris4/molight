@@ -346,7 +346,7 @@ async def test_renamed_occupancy_sensor_keeps_driving_the_light(
     "renamed",
     ["occupancy", "source", "member"],
 )
-async def test_rename_is_not_a_new_visit_for_a_light_turned_off_by_hand(
+async def test_rename_is_not_a_new_visit_for_a_light_turned_off_manually(
     hass: HomeAssistant, virtual_light_behavior_variant, renamed: str
 ) -> None:
     """A light turned off in an occupied room stays off through a rename.
@@ -592,7 +592,7 @@ async def test_renamed_select_entities_still_apply_the_turn_on_selection(
 async def test_renamed_follow_schedule_is_not_a_new_window(
     hass: HomeAssistant, virtual_light_behavior_variant, definition: str
 ) -> None:
-    """A light turned off by hand mid-window stays off when its schedule is renamed.
+    """A light turned off manually mid-window stays off when its schedule is renamed.
 
     The window marker belongs to the schedule that set it, and a renamed
     schedule is still that schedule.
@@ -809,7 +809,7 @@ async def test_renamed_constituent_does_not_clear_the_combined_sensor(
     """The combined sensor stays on through a constituent's rename.
 
     A clear and a fresh start would be a new visit to the lights that use
-    it: one turned off by hand in the occupied room would come back on.
+    it: one turned off manually in the occupied room would come back on.
     """
     motion = RealBinary("motion")
     desk = RealBinary("desk_motion")
@@ -1354,7 +1354,7 @@ async def test_renamed_follow_light_keeps_a_manual_off(
 async def test_renamed_scheduled_light_does_not_replay_an_end_it_already_applied(
     hass: HomeAssistant,
 ) -> None:
-    """A light lit by hand after its window ended is not turned off by its rename.
+    """A light lit manually after its window ended is not turned off by its rename.
 
     The same object is added again, and what it restored at startup (inside
     the schedule) is long out of date.

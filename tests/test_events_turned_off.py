@@ -32,12 +32,12 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_CONTROL,
     REASON_BRIGHT,
     REASON_FALSE_DETECTION,
-    REASON_MANUAL,
     REASON_OCCUPANCY,
     REASON_PHYSICAL,
     REASON_SCHEDULE_END,
     REASON_STARTUP,
     REASON_TIMER,
+    REASON_VIRTUAL,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
 )
@@ -78,7 +78,7 @@ async def _setup(hass, entry, **states) -> list[dict]:
     return record_events(hass, EVENTS)
 
 
-async def _lit_by_hand(hass) -> None:
+async def _lit_virtually(hass) -> None:
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
@@ -91,22 +91,22 @@ def _offs(records: list[dict]) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_off(hass) -> None:
+async def test_virtual_turn_off(hass) -> None:
     records = await _setup(hass, make_light_entry(name="Hall"))
-    await _lit_by_hand(hass)
+    await _lit_virtually(hass)
 
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
     )
     await settle(hass)
 
-    assert _offs(records) == [_turned_off(REASON_MANUAL)]
+    assert _offs(records) == [_turned_off(REASON_VIRTUAL)]
 
 
 @pytest.mark.asyncio
 async def test_physical_turn_off(hass) -> None:
     records = await _setup(hass, make_light_entry(name="Hall"))
-    await _lit_by_hand(hass)
+    await _lit_virtually(hass)
 
     hass.states.async_set(REAL, "off")
     await settle(hass)
@@ -117,7 +117,7 @@ async def test_physical_turn_off(hass) -> None:
 @pytest.mark.asyncio
 async def test_timer_turn_off(hass, freezer) -> None:
     records = await _setup(hass, make_light_entry(name="Hall", timeout=10))
-    await _lit_by_hand(hass)
+    await _lit_virtually(hass)
 
     await tick(hass, freezer, 11)
 
@@ -164,7 +164,7 @@ async def test_bright_turn_off(hass) -> None:
         ),
         binary_sensor__illum="off",
     )
-    await _lit_by_hand(hass)
+    await _lit_virtually(hass)
 
     hass.states.async_set(ILLUM, "on")
     await settle(hass)

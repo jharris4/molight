@@ -1809,10 +1809,10 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
         SCHEDULE_END_ACTION_KEEP,
     ],
 )
-async def test_schedule_end_takes_over_a_manual_turn_on_waiting_for_its_selection(
+async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selection(
     hass: HomeAssistant, freezer, end_action: str
 ) -> None:
-    """A manual turn-on not sent yet is judged as an on light too."""
+    """A virtual turn-on not sent yet is judged as an on light too."""
     select = _SlowSelect(hass)
     outside_occupancy = "binary_sensor.outside_occupancy"
     visit = (datetime.now(UTC) - timedelta(hours=4)).isoformat()
@@ -1862,10 +1862,10 @@ async def test_schedule_end_takes_over_a_manual_turn_on_waiting_for_its_selectio
 
 
 @pytest.mark.asyncio
-async def test_held_schedule_end_off_waits_for_a_manual_turn_on_still_waiting(
+async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
     hass: HomeAssistant,
 ) -> None:
-    """A held Turn off end is kept for a manual turn-on not sent yet, and
+    """A held Turn off end is kept for a virtual turn-on not sent yet, and
     applies when the hold releases."""
     select = _SlowSelect(hass)
     hold = "input_boolean.keep_on"
@@ -2539,7 +2539,7 @@ async def test_restart_with_held_pending_off_reports_maintained_hold(
 async def test_restart_clears_pending_off_when_physical_light_is_already_off(
     hass: HomeAssistant,
 ) -> None:
-    """A completed pending off cannot cut a later manual on after a hold cycle."""
+    """A completed pending off cannot cut a later virtual on after a hold cycle."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -3184,7 +3184,7 @@ async def test_settings_switch_preserves_illuminance_cache_through_outage(
     entry = make_scheduled_light_entry(outside=dict(profile), inside=dict(profile))
     await setup_entries(hass, entry)
 
-    # Bright never blocks a manual on.
+    # Bright never blocks a virtual on.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
@@ -3246,7 +3246,7 @@ _OCCUPANCY = "binary_sensor.shared_occupancy"
 async def _manual_off_then_boundary(
     hass: HomeAssistant, freezer, boundary: str, *, standby: bool = False
 ) -> MockConfigEntry:
-    """Turn the light off by hand, then cross a boundary with presence unreadable."""
+    """Turn the light off manually, then cross a boundary with presence unreadable."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(
         SCHEDULE,

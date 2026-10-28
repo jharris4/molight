@@ -342,7 +342,7 @@ async def test_scheduled_light_reports_its_restored_settings_until_it_seeds(
 async def test_manual_off_in_window_survives_a_crash_after_restart(
     hass: HomeAssistant,
 ) -> None:
-    """Standby turned off by hand stays off for its window, also after a power
+    """Standby turned off manually stays off for its window, also after a power
     cut that leaves only what Home Assistant saved as it started."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -1030,7 +1030,7 @@ async def test_warning_restart_restores_each_members_own_look(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
-async def test_manual_turn_on_while_a_member_loads_sets_what_it_is_sent(
+async def test_virtual_turn_on_while_a_member_loads_sets_what_it_is_sent(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, color: bool
 ) -> None:
     """The late member gets the new on-period's brightness, not the warn's."""

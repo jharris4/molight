@@ -304,7 +304,7 @@ async def test_full_day_window_is_one_window_per_day(
 async def test_follow_light_takes_each_day_of_a_full_day_window(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light turned off by hand comes back on when the next day's window starts."""
+    """A light turned off manually comes back on when the next day's window starts."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     light = make_light_entry(
@@ -899,7 +899,7 @@ async def test_source_schedule_saved_off_starts_a_window_after_the_outage(
 async def test_follow_light_manual_off_survives_schedule_outage_and_restart(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
-    """A light turned off by hand mid-window stays off when the source returns."""
+    """A light turned off manually mid-window stays off when the source returns."""
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "on")
     hass.states.async_set("light.real_1", "off")
@@ -1933,7 +1933,7 @@ async def test_inverted_sun_schedule_keeps_its_marker_across_a_polar_restart(
 async def test_follow_light_manual_off_stands_through_the_midnight_sun(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light turned off by hand in a daytime window stays off: three days
+    """A light turned off manually in a daytime window stays off: three days
     on, the daily re-check must not read as a new window."""
     tz = await set_home(hass, *TROMSO)
     freezer.move_to(_local(tz, "2026-05-18 12:00"))
@@ -2145,7 +2145,7 @@ async def test_unrelated_core_config_change_leaves_the_schedule_alone(
 async def test_follow_light_manual_off_stands_through_a_time_zone_change(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light turned off by hand stays off when the time zone is corrected
+    """A light turned off manually stays off when the time zone is corrected
     inside the window, at the old boundary and across a restart of both."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
@@ -2334,7 +2334,7 @@ async def test_schedule_back_from_an_unload_knows_the_window_its_source_started(
     new_window: bool,
 ) -> None:
     """A schedule disabled or unloaded while its source goes off and on comes
-    back with the new window, and a follow-mode light turned off by hand in
+    back with the new window, and a follow-mode light turned off manually in
     the old one is lit. A source that only dropped out kept its window."""
     freezer.move_to("2026-07-02 12:00:00+00:00")
     source = RealBinary("house_mode", on=not invert)

@@ -2,7 +2,7 @@
 
 The four optional transition settings shape the service calls the light makes
 itself: auto_on/auto_off fade automatic turn-ons/offs, effect/warn fade the
-warning stages. Manual turn-ons/offs through the virtual entity never carry a
+warning stages. Virtual turn-ons and offs never carry a
 *configured* transition.
 
 A caller-supplied transition is separate: it is forwarded to the members, which
@@ -77,9 +77,9 @@ async def test_occupancy_turn_on_carries_auto_on_transition(
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_on_has_no_transition(hass: HomeAssistant) -> None:
-    """Turning the virtual light on by hand never fades, even when the
-    automatic transition is configured."""
+async def test_virtual_turn_on_has_no_transition(hass: HomeAssistant) -> None:
+    """A virtual turn-on never fades, even when the automatic transition is
+    configured."""
     entry = make_light_entry(occupancy=OCC, auto_on_transition=2.5)
     await setup_entries(hass, entry)
     calls = _record_service_calls(hass)
@@ -275,7 +275,7 @@ async def test_caller_transition_forwarded_on_turn_off(hass: HomeAssistant) -> N
 async def test_caller_transition_used_instead_of_configured_auto_fade(
     hass: HomeAssistant,
 ) -> None:
-    """The manual path still ignores auto_on_transition; the caller's own fade
+    """The virtual path still ignores auto_on_transition; the caller's own fade
     is what gets sent."""
     entry = make_light_entry(auto_on_transition=2.5)
     await setup_entries(hass, entry)

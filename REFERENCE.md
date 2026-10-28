@@ -185,14 +185,14 @@ At the top level:
 | Config | Description |
 |---|---|
 | **False-detection off delay** | Seconds. Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that cycle lit it |
-| **Auto-on brightness** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Manual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 % |
+| **Auto-on brightness** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Virtual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 % |
 | **Auto-on color mode** *(optional)* | Whether automatic turn-ons apply the color temperature below, the color below, or (**None**) neither. Only the selected field is used, and choosing **None** is how a previously set color is cleared, since the color fields themselves can't be blanked once set. Left blank (as it starts while no color is set), both fields are kept as entered, so the form rejects setting both |
-| **Auto-on color temperature** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Manual and physical turn-ons keep their own color. Range 2000 to 6500 K |
-| **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Manual and physical turn-ons keep their own color |
+| **Auto-on color temperature** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Virtual and physical turn-ons keep their own color. Range 2000 to 6500 K |
+| **Auto-on color** *(optional)* | RGB color applied on automatic turn-ons, for members that can show it. Virtual and physical turn-ons keep their own color |
 | **Turn-on selection entity** *(optional)* | The target `select` entity to set immediately before MoLight turns the lights on, for example the preset select exposed by WLED. Choosing it opens a second step where the fixed option is selected from the target's currently offered options |
 | **Option source entity** *(optional)* | An `input_select` or a different `select` whose current state supplies the target option at each turn-on. The target itself is excluded. This lets Home Assistant automations, calendars, seasons, or any other logic decide the selection without duplicating that logic in MoLight |
 | **Fixed/fallback option** *(required when a target is selected)* | The option to apply when no source is configured, or when the source is missing, unavailable, unknown, or does not match an option offered by the target. It can represent a preset, theme, mood, mode, or any integration-specific choice |
-| **Auto-on fade** *(optional)* | Seconds. Fade time for automatic turn-ons. Blank or `0` sends no transition. Manual and physical turn-ons don't use it; a `transition` passed on the service call is forwarded instead. Range 0 to 300, in 0.1 s steps |
+| **Auto-on fade** *(optional)* | Seconds. Fade time for automatic turn-ons. Blank or `0` sends no transition. Virtual and physical turn-ons don't use it; a `transition` passed on the service call is forwarded instead. Range 0 to 300, in 0.1 s steps |
 | **Auto-off fade** *(optional)* | Seconds. Fade time for automatic turn-offs (timer expiry, bright forcing off, a schedule window ending). A manual off doesn't use it: it is immediate unless the service call passes a `transition` of its own, which is forwarded. Range 0 to 300, in 0.1 s steps |
 
 ***Off warning sequence*** (collapsed):
@@ -221,7 +221,7 @@ At the top level:
 | `last_on_physical` / `last_on_virtual` | Timestamp of the last turn-on at the wall vs. via the virtual light |
 | `last_on_occupancy` / `last_on_illuminance` | Timestamp of the last turn-on caused by occupancy vs. going dark |
 | `last_on_door` | Timestamp of the last turn-on caused by the door opening |
-| `last_off_manual` | Timestamp of the last turn-off by hand, through the virtual light or at the wall; a restart uses it to keep a manual off over presence the light already had |
+| `last_off_manual` | Timestamp of the last manual off; a restart uses it to keep a manual off over presence the light already had |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
 | `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied turn-on selection and where the value came from: the option source entity's ID, or `fixed`. Both start empty after a restart (see [Turn-on selection](#turn-on-selection)) |
@@ -241,7 +241,7 @@ At the top level:
 
 ```
 IDLE       lights off, no timer
-ACTIVE     lights on, timer running (manual/external turn-on, no occupancy)
+ACTIVE     lights on, timer running (virtual/physical turn-on, no occupancy)
 OCCUPIED   lights on, occupancy active, timer suspended
 COUNTDOWN  occupancy cleared, timer ticking toward lights-off
 SCHEDULED  lights on inside a follow-mode window, no timer
@@ -250,12 +250,12 @@ EFFECT     auto-off imminent, showing the brief effect/blink warning stage
 WARN       auto-off imminent, grace period before the lights go off
 ```
 
-- `IDLE` + manual/external turn-on → `ACTIVE` (timer starts)
+- `IDLE` + virtual/physical turn-on → `ACTIVE` (timer starts)
 - `IDLE`/`ACTIVE`/`COUNTDOWN` + occupancy becomes active → `OCCUPIED`, when it's dark and, with a gate-mode schedule, inside its window (in illuminance **Gate only** mode only an `IDLE` light needs the dark)
-- light on + occupancy already active → `OCCUPIED` (adoption), so a timer never expires despite presence: turning the light on (manually or at the wall) while the occupancy sensor is on, or illuminance turning dark or a gate-mode schedule window opening while the light is on
+- light on + occupancy already active → `OCCUPIED` (adoption), so a timer never expires despite presence: a manual turn-on while the occupancy sensor is on, or illuminance turning dark or a gate-mode schedule window opening while the light is on
 - `OCCUPIED` + occupancy clears → `COUNTDOWN`, anchored to the sensor's `latest_occupied_time`
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)
-- any state + all real lights turned off externally → `IDLE`
+- any state + all real lights turned off physically → `IDLE`
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window.
@@ -264,12 +264,12 @@ Details:
 
 - **Adopting a light that is on** is not blocked by the schedule modes **Gate and switch state** and **Gate and keep state**, which only gate turning an off light on, nor by bright in illuminance **Gate only** mode: the lux sensor may be reading the light itself.
 - **Countdown timing:** the lights go off at `latest_occupied_time + turn-off timeout`, so each sensor's occupancy timeout is respected. The wall-clock wait after the sensor clears is therefore `turn-off timeout - occupancy timeout`, which is why the former must be the larger of the two (the flows enforce it).
-- **Countdown after a false detection:** a false detection leaves `latest_occupied_time` at an earlier visit, so a light turned on manually, at the wall, or by the door since then keeps the full turn-off timeout from that turn-on instead. So does one dimmed or recolored at the wall, also while occupancy had it on, and a fresh timeout started since (a hold released, the door closed) is not cut short either.
+- **Countdown after a false detection:** a false detection leaves `latest_occupied_time` at an earlier visit, so a manual or door turn-on since then keeps its full turn-off timeout instead. So does one dimmed or recolored at the wall, also while occupancy had it on, and a fresh timeout started since (a hold released, the door closed) is not cut short either.
 - **Follow-mode boundaries** are edge-triggered, so manual changes mid-window stand, including turning the light back on, which rejoins the window instead of starting a timer. An all-day (00:00 → 00:00) schedule starts a new window every midnight without turning `off` in between, so a light turned off manually comes back on at midnight.
 
 **Precedence when sources conflict.** With several sources configured on one light, control resolves top-down:
 
-1. **Manual / physical control**: always wins and is never gated; a manual off turns the light off from any state. A manual off in the middle of a follow-mode schedule window drops to `IDLE` and hands control back to the sensors until the next window boundary.
+1. **Manual control**: always wins and is never gated; a manual off turns the light off from any state. A manual off in the middle of a follow-mode schedule window drops to `IDLE` and hands control back to the sensors until the next window boundary.
 2. **[Holding auto-off](#holding-auto-off)**: while the Auto-off switch is off or a keep-on entity is on, every *automatic* turn-off below (timers, forced offs, schedule window ends) is suspended; only a manual off still turns the light off.
 3. **Follow-mode schedule window**: while `SCHEDULED`, the window owns the light, and occupancy, maintain, illuminance, and door changes are ignored entirely (window start forces on, window end forces off).
 4. **Forced offs**: bright in illuminance **Control** mode and a **Gate and turn off** schedule window ending both turn the light off even while occupancy or a held-open door is active.
@@ -301,15 +301,15 @@ Each stage can also show an optional **color**: a white color temperature *or* a
 
 Each stage can fade into its brightness over its optional *fade* time; a fade must fit inside its stage (a fade, brightness, or color on a disabled stage is rejected rather than silently ignored).
 
-Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running**: occupancy or maintain becoming active, a manual or physical turn-on, or an external dim cancels the warning.
+Throughout both stages the virtual light stays on. **Any re-trigger during the sequence behaves exactly as if the pre-off timer were still running**: occupancy or maintain becoming active, a virtual or physical turn-on, or a physical dim cancels the warning.
 
-- **What the lights go back to:** a re-trigger that carries no brightness or color of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness and color, so the interruption leaves no trace. A physical turn-on or an external dim/recolor brings its own values, which are honored instead. With several real lights, the one changed at the wall keeps those values and the others go back to their pre-warning brightness and color. The restore is deliberately immediate (no fade).
+- **What the lights go back to:** a re-trigger that carries no brightness or color of its own (occupancy, a turn-on without an explicit brightness) restores the pre-warning brightness and color, so the interruption leaves no trace. A physical turn-on, dim or recolor brings its own values, which are honored instead. With several real lights, the one changed at the wall keeps those values and the others go back to their pre-warning brightness and color. The restore is deliberately immediate (no fade).
 - **Relative steps:** a `brightness_step` or `brightness_step_pct`, as a voice assistant's "brighter" sends, starts from the warning level the light reports, so it can land dimmer than before the warning or turn the light off. A Virtual Remote's brightness buttons step from the pre-warning brightness instead.
 - **Holds and forced offs:** holding auto-off mid-sequence aborts it the same way, and the forced-off rules (bright in illuminance **Control** mode, a **Gate and turn off** or follow schedule window ending) still turn the lights off during the sequence, just as they would mid-countdown.
 
 ### Maintain occupancy sensor
 
-The maintain occupancy sensor holds an already-on light on while it shows presence, but never turns the light on. Unlike a combined sensor's *maintain sensors* (which only extend occupancy started by a trigger sensor), it holds the light regardless of how it was lit: manual, wall switch, or occupancy. Typical use: an over-sensitive presence sensor (mmWave) that would false-trigger as an occupancy source but is perfect for keeping a room lit while someone sits still.
+The maintain occupancy sensor holds an already-on light on while it shows presence, but never turns the light on. Unlike a combined sensor's *maintain sensors* (which only extend occupancy started by a trigger sensor), it holds the light regardless of how it was lit: a virtual or physical turn-on, or occupancy. Typical use: an over-sensitive presence sensor (mmWave) that would false-trigger as an occupancy source but is perfect for keeping a room lit while someone sits still.
 
 - The light being on with the maintain sensor on means `OCCUPIED`, whether the sensor turns on later, was already on at turn-on time, or both were already on at startup. Illuminance/schedule gating doesn't apply, since this is not a turn-on.
 - The countdown starts only when the regular occupancy sensor *and* the maintain sensor are both clear, anchored to the latest `latest_occupied_time` of the two.
@@ -330,7 +330,7 @@ A schedule window has two edges: the **start**, when the schedule sensor goes `o
 
 Take a hallway light gated 22:00 to 06:00 with a 5-minute timeout, and someone walking in at 05:58: under **Gate and turn off** the light goes out at 06:00; under **Gate and keep state** its timer finishes normally at 06:03; under **Gate and switch state** the deadline is recomputed at 06:00 from when occupancy last saw them.
 
-The modes also differ for a light that is on outside the window. **Gate and switch state** and **Gate and keep state** only gate turning an off light on, so occupancy and an **Open & close** door can still hold or re-hold it. Under **Gate and turn off**, a light that is on outside the window (turned on by hand, or kept on past the window end while auto-off was held) ignores them.
+The modes also differ for a light that is on outside the window. **Gate and switch state** and **Gate and keep state** only gate turning an off light on, so occupancy and an **Open & close** door can still hold or re-hold it. Under **Gate and turn off**, a light that is on outside the window (turned on manually, or kept on past the window end while auto-off was held) ignores them.
 
 The three Gate modes are the same three choices as a Virtual Scheduled Light's **At schedule end** action (**Turn off**, **Switch state** and **Keep state**); see [Virtual Scheduled Light](#virtual-scheduled-light).
 
@@ -344,7 +344,7 @@ A door sensor drives the light straight from a real door/contact `binary_sensor`
   - *A door that is already open:* at startup an already-on light with the door open is adopted as `OCCUPIED`, and an off one is turned on, gated like a door opening. A standing-open door is re-evaluated when a gate lifts: the room going dark or a gate-mode window starting lights the room and holds it while the door stays open.
   - *Outside a **Gate and turn off** window*, a light that is on ignores the door, whether it was open already or opens later, so the door neither holds it nor restarts its timer by closing.
   - *Forced offs* (bright in illuminance **Control** mode, a **Gate and turn off** window ending, a manual off) still win over a held-open door, just as they do over occupancy.
-  - *An unavailable door sensor:* the door's last known state is cached, so a sensor that is briefly `unavailable` keeps holding. One that stays `unavailable` for 60 seconds, like a dead battery sensor, counts as closed, as it would at startup: the countdown starts, and an open door it reports later lights the room like one first seen at startup, unless the light was turned off by hand since. A door sensor that is deleted or disabled is not treated as briefly `unavailable`: it counts as closed, and one that comes back is read as when first seen.
+  - *An unavailable door sensor:* the door's last known state is cached, so a sensor that is briefly `unavailable` keeps holding. One that stays `unavailable` for 60 seconds, like a dead battery sensor, counts as closed, as it would at startup: the countdown starts, and an open door it reports later lights the room like one first seen at startup, unless the light was turned off manually since. A door sensor that is deleted or disabled is not treated as briefly `unavailable`: it counts as closed, and one that comes back is read as when first seen.
 
 The door sensor is a plain real sensor, so its picker is narrowed to door-ish device classes (door, garage door, opening and window binary sensors; door, garage and gate covers) rather than to MoLight virtual sensors.
 
@@ -358,7 +358,7 @@ Each virtual light also creates a companion **`<name> Auto-off` switch**. Auto-o
   - A follow or **Gate and turn off** schedule window that ended while held turns it off now, as does being bright in illuminance **Control** mode.
   - Active occupancy keeps it on, when it's dark / in-window like any adoption; once the light is on, neither bright in illuminance **Gate only** mode nor being outside a **Gate and switch state** or **Gate and keep state** schedule window stops it.
   - An active follow window keeps it `SCHEDULED`.
-  - Otherwise a **fresh full timer** starts, also for a light turned on by hand outside a window, when no window ended while it was held.
+  - Otherwise a **fresh full timer** starts, also for a light turned on manually outside a window, when no window ended while it was held.
 
 Share one keep-on entity (e.g. `input_boolean.guest_mode`) across all your virtual lights for a global "don't touch the lights" toggle, or give a single room its own.
 
@@ -375,11 +375,11 @@ Each virtual light and each occupancy sensor creates a companion **`<name> Event
 
 | Event type | When | Attributes |
 |---|---|---|
-| `turned_on` | An on-period started, or a light resting at standby was raised | `reason`: `manual` (through the virtual light), `physical` (a real light changed by something other than MoLight: a wall switch, another automation, the HA UI), `wrapped` (a wrapped virtual light lit itself: its own sensor, schedule or standby), `occupancy`, `door`, `illuminance` (going dark with presence), `resume` (going dark resumed an on-period brightness cut short), `schedule_start` (a follow window, or a Virtual Scheduled Light's inside settings taking over), `startup` (a restart found the light off where it rests at standby). `standby`: whether the lights came on at the standby level. `brightness` (0 to 255), `color` (`color_temp_kelvin` or `hs_color`) and `selection` (the turn-on selection option): what MoLight commanded, null when it sent none; for `physical` and `wrapped`, what the real light reported with its on, which for a wrapped virtual light is often no level yet |
-| `turned_off` | An on-period ended | `reason`: `manual`, `physical`, `wrapped` (a wrapped virtual light turned itself off: its timer, a stage blinking it off, its schedule), `timer`, `false_detection` (the false-detection off delay ran out), `bright`, `schedule_end` (a follow window, a **Gate and turn off** window or a Virtual Scheduled Light's turn-off boundary, including one applied after a restart or a hold). `standby`: whether the lights rested at standby instead of going dark |
+| `turned_on` | An on-period started, or a light resting at standby was raised | `reason`: `virtual` (through the virtual light), `physical` (a real light changed by something other than MoLight: a wall switch, another automation, the HA UI), `wrapped` (a wrapped virtual light lit itself: its own sensor, schedule or standby), `occupancy`, `door`, `illuminance` (going dark with presence), `resume` (going dark resumed an on-period brightness cut short), `schedule_start` (a follow window, or a Virtual Scheduled Light's inside settings taking over), `startup` (a restart found the light off where it rests at standby). `standby`: whether the lights came on at the standby level. `brightness` (0 to 255), `color` (`color_temp_kelvin` or `hs_color`) and `selection` (the turn-on selection option): what MoLight commanded, null when it sent none; for `physical` and `wrapped`, what the real light reported with its on, which for a wrapped virtual light is often no level yet |
+| `turned_off` | An on-period ended | `reason`: `virtual`, `physical`, `wrapped` (a wrapped virtual light turned itself off: its timer, a stage blinking it off, its schedule), `timer`, `false_detection` (the false-detection off delay ran out), `bright`, `schedule_end` (a follow window, a **Gate and turn off** window or a Virtual Scheduled Light's turn-off boundary, including one applied after a restart or a hold). `standby`: whether the lights rested at standby instead of going dark |
 | `off_warning` | The effect/warn sequence advanced | `stage`: `effect`, `warn` or `cancelled` (a re-trigger ended the sequence with the lights on, or a restart undid the stage it landed in). `off_in`: seconds until the lights go off from this moment, null at `cancelled`. `standby`: whether the sequence ends at standby. `brightness`, `color`: the stage's look; at `cancelled`, the look the lights show after it |
 | `turn_on_blocked` | A trigger that would have lit the room was blocked by a gate: the room was too bright, or it was outside a gate-mode schedule window. Also fires when MoLight checks again, such as at startup, finds someone already in the room, and a gate stops that turn-on. Never fires for a light at standby, which is already on | `trigger`: `occupancy` or `door`. `reason`: `bright`, or `schedule` (outside a gate-mode window) |
-| `adjusted` | A person changed the brightness or color of a light that is on | `reason`: `manual` or `physical`. `brightness`, `color`: what changed, null for the one that did not |
+| `adjusted` | A person changed the brightness or color of a light that is on | `reason`: `virtual` or `physical`. `brightness`, `color`: what changed, null for the one that did not |
 
 A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor has one event type, its own judgment of a cycle (see the **False-detection grace** option under [Virtual Occupancy Sensor](#virtual-occupancy-sensor)):
 
@@ -417,22 +417,22 @@ actions:
 
 A virtual light can control another MoLight virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a page that points this out before the light is saved.
 
-- **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a change at the wall for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes dark after 60 s without recording a manual off. Turn off the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
+- **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a physical change for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes dark after 60 s without recording a manual off. Turn off the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
 - **A person's change counts for both:** a change at the wall on the wrapped light's bulbs, or a command through its entity, also a turn-on of a wrapped light that is already on.
 - **Light groups:** a light group that contains a virtual light is refused, since through the group what that light does by itself would look like a person's change; add the group's lights directly instead. A light group changed afterwards to contain a virtual light is still controlled, and what that light does by itself is told apart from a person's change there too.
 
 ### Brightness, color, and fades
 
-The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs offers on/off only, rather than a slider none of them can move. External brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last turned on (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
+The virtual light supports brightness when its real lights do. Like color and fades, that is derived from the members, so a virtual light wrapping only smart plugs or non-dimmable bulbs offers on/off only, rather than a slider none of them can move. Physical brightness changes on the real lights count as human activity and restart a running timer; brightness `0` is treated as off (and `0 → non-zero` as a turn-on). Physical and virtual changes are tracked separately (`last_brightness_change_physical` / `_virtual`), as are the reasons the light last turned on (`last_on_physical` / `_virtual` / `_occupancy` / `_illuminance` / `_door`).
 
 Color works the same way, and its capabilities come from the real lights:
 
 - The virtual light offers a color wheel when any member can show a color and a color-temperature slider when any member supports one, and falls back to brightness, or to plain on/off when no member dims at all.
 - Mixed setups need no configuration: a color command goes to *all* members in one call and Home Assistant filters/converts it per light, so the bulbs that can go red go red and the rest just dim.
-- The virtual light mirrors the first lit member's color, and an external recolor restarts a running timer exactly like an external dim (`last_color_change_physical` / `_virtual`).
-- The virtual light offers no flash, effects or white mode: a `flash`, `effect` or `white` passed to `light.turn_on` is dropped, and the lights simply turn on as a manual turn-on.
+- The virtual light mirrors the first lit member's color, and a physical recolor restarts a running timer exactly like a physical dim (`last_color_change_physical` / `_virtual`).
+- The virtual light offers no flash, effects or white mode: a `flash`, `effect` or `white` passed to `light.turn_on` is dropped, and the lights simply turn on as a virtual turn-on.
 
-**Auto-on brightness and color.** An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; manual and physical turn-ons are left alone, so you can dim the room by hand without it snapping back. An **auto-on color temperature** *or* **auto-on color** does the same for color, such as warm white for the night-time hallway. A color temperature outside the range the real lights span is still sent as configured; they come on at the nearest one they have, and that is the one the virtual light reports.
+**Auto-on brightness and color.** An optional **auto-on brightness** forces a level whenever the light comes on *automatically*; virtual and physical turn-ons are left alone, so you can dim the room manually without it snapping back. An **auto-on color temperature** *or* **auto-on color** does the same for color, such as warm white for the night-time hallway. A color temperature outside the range the real lights span is still sent as configured; they come on at the nearest one they have, and that is the one the virtual light reports.
 
 **Fades.** Likewise, the **auto-on** and **auto-off fades** apply only to automatic actions; flipping the switch always responds immediately. A blank fade sends no `transition` attribute at all, so lights keep their integration's default behavior.
 
@@ -440,7 +440,7 @@ Those configured fades are separate from a `transition` you pass on the service 
 
 ### Turn-on selection
 
-An optional **turn-on selection entity** lets MoLight choose a preset, theme, mood, mode, or other integration-specific setting through a `select` entity before turning on. For example, WLED exposes its presets this way. MoLight selects the resolved option first, waits for that service call to finish, and then turns on the member lights. This happens for both manual and automatic Virtual Light commands. A physical member-light turn-on is left alone because applying a selection afterward could overwrite an intentional external choice.
+An optional **turn-on selection entity** lets MoLight choose a preset, theme, mood, mode, or other integration-specific setting through a `select` entity before turning on. For example, WLED exposes its presets this way. MoLight selects the resolved option first, waits for that service call to finish, and then turns on the member lights. This happens for both virtual and automatic turn-ons. A physical member-light turn-on is left alone because applying a selection afterward could overwrite that physical change.
 
 **Fixed/fallback option.** After choosing the target, the next form shows a **fixed/fallback option** picker populated from that target instead of requiring an exact value to be typed.
 
@@ -464,7 +464,7 @@ An optional **turn-on selection entity** lets MoLight choose a preset, theme, mo
 - **A real light that the select call itself turns on** (a preset or a scene script that lights it) is not taken for a change at the wall. That holds when the change is reported under the select call, and, while the call is in progress, for any real light on the same device as the select entity (a WLED preset that includes "on" reports the light by a push of its own), also when a Virtual Scheduled Light switches to its other settings before the call has finished. A change made at that device itself during those moments cannot be told apart, and the waiting turn-on is sent over it; a command to that light from a user or an automation in Home Assistant can, and it stands like a change at the wall.
 - **A newer command that replaces the waiting turn-on**, such as a brightness change on a light that is already on, a drop to standby or a warning stage, is sent at once, and sent again when the call finishes: the preset may land on top of it, and the real lights end at the command sent last, not at the preset's own brightness.
 - **A real light that loads, or comes back from `unavailable`, as off** is not taken for a turn-off: the turn-on is still sent, and no manual off is recorded.
-- **Schedule ends and holds:** the turn-on already counts as an on light. A schedule end or a gate window end that would turn an on light off cancels it, manual or automatic, instead of letting it light the room afterwards, and releasing a keep-on hold then applies whatever the hold was keeping from it, an end's off or the normal timeout.
+- **Schedule ends and holds:** the turn-on already counts as an on light. A schedule end or a gate window end that would turn an on light off cancels it, virtual or automatic, instead of letting it light the room afterwards, and releasing a keep-on hold then applies whatever the hold was keeping from it, an end's off or the normal timeout.
 
 ### Restarts and unavailability
 
@@ -509,7 +509,7 @@ A real light that loads late, or comes back from `unavailable` (a reboot, a powe
 Entities dropping to `unavailable`/`unknown` are never read as state changes, at any layer. Meanwhile the entity keeps doing what it last did: a presence sensor that was holding a light on keeps holding it, and a bright illuminance sensor that is reloading keeps the room dark.
 
 - **Recovery:** a recovery to a different value is processed as a real event (except a real light, covered above). A recovery to the value the entity had before the outage is not an event: an occupancy sensor that comes back still occupied does not re-light a room that was turned off manually, and a schedule that comes back still `off` does not turn off a light that was turned on manually. That is also what happens when a MoLight sensor or schedule reloads after its options are edited.
-- **Changes during the outage:** a light turned on during the outage is still picked up by the occupancy or window that returns, and a start the outage stopped (occupancy arriving while the gate was unreadable, or a gate lifting while the occupancy sensor was) is applied when it returns, unless the light was turned off by hand after that.
+- **Changes during the outage:** a light turned on during the outage is still picked up by the occupancy or window that returns, and a start the outage stopped (occupancy arriving while the gate was unreadable, or a gate lifting while the occupancy sensor was) is applied when it returns, unless the light was turned off manually after that.
 - **A source sensor that stays unavailable** is handled by the occupancy sensor's *clear after unavailable* timeout, so a dead motion sensor can't hold lights on forever.
 - **The one exception** is a Virtual Illuminance Sensor going from bright to `unavailable`: it holds through outages and so has no reading left (see below).
 
@@ -526,7 +526,7 @@ An entity that is deleted or disabled while Home Assistant runs, in its entity s
 
 Changing an entity ID in Home Assistant's entity settings is followed. Every entry that references the entity (as a real light, sensor, schedule, door, keep-on entity, select, button or target light) is rewritten to the new ID as soon as the entity reports under it, or after 10 seconds if it does not, and reloads like after an options edit.
 
-- The change is not taken for something happening in the room: a light turned off by hand stays off, presence that was already there is not a new visit, an occupancy sensor whose source was renamed keeps its running cycle, and a follow-mode window marker or a Virtual Scheduled Light's active settings stay with the renamed schedule.
+- The change is not taken for something happening in the room: a light turned off manually stays off, presence that was already there is not a new visit, an occupancy sensor whose source was renamed keeps its running cycle, and a follow-mode window marker or a Virtual Scheduled Light's active settings stay with the renamed schedule.
 - A MoLight entity whose own ID is changed keeps its state as well: an Auto-off switch that is off stays off, and a light, sensor or schedule carries on from what it knew, as it does through a reload.
 - The IDs are followed while Home Assistant runs with at least one MoLight entry loaded.
 
@@ -596,7 +596,7 @@ To turn standby off again, clear the standby brightness and set the standby colo
   - A false detection drops back to standby after the short false-detection off delay.
 - **Manual control:** the configured standby level is the only level the light rests at.
   - A manual off turns standby off until the next schedule boundary, so occupancy then ends its visits in off. A window that starts as the last one ends is a boundary too, as is midnight for an all-day (00:00 → 00:00) schedule, though the schedule stays `on`, and so is a window that started while the schedule was `unavailable`; a Virtual Combined Schedule joins touching windows into one, so its join is not.
-  - Turning the light back on, by hand or at the wall, rejoins standby, also while someone's presence has it raised, as does dimming or recoloring the raised light at the wall, and a restart keeps that.
+  - A manual turn-on rejoins standby, also while someone's presence has it raised, as does a physical dim or recolor of the raised light, and a restart keeps that.
   - Dimming or recoloring a light at standby runs the normal timeout back to standby.
   - Turning a light at standby on without a brightness, as a voice assistant, a Virtual Remote's **Turn on** or a script often does, raises it to the auto-on brightness and color as presence would (keeping a color the turn-on names), and the normal timeout then drops it back to standby.
 - **Illuminance:** in **Gate only** mode, brightness only blocks the rise above standby. In **Control** mode, it also keeps standby off: bright turns the light off, and going dark inside the schedule window brings standby back (or the auto-on level, if someone is present). A raised on-period that brightness cut short resumes at the auto-on level for the time it had left, as it does without standby, and a maintain sensor that is still on holds it there.

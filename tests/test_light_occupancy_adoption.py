@@ -1,7 +1,7 @@
 """Tests for adopting already-active occupancy into an on light.
 
 Occupancy normally takes the light over on its own rising edge. When it is
-already on while the light turns on (manual/physical after a manual off, or
+already on while the light turns on (virtual/physical after a manual off, or
 suppressed earlier by bright/window), or when the gate suppressing it lifts
 (illuminance turning dark, a gate-mode window opening) while the light is
 already on, the light must adopt it as OCCUPIED; otherwise a timer expires
@@ -60,7 +60,7 @@ async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) -> None:
+async def test_virtual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) -> None:
     """Turning the virtual light on while occupancy is already on → OCCUPIED."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
     hass.states.async_set(OCC, "on")

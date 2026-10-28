@@ -650,7 +650,7 @@ def _windows_schedule(name: str, *windows: tuple[str, str]) -> MockConfigEntry:
 
 
 async def _manual_off_at_standby(hass: HomeAssistant, *schedules) -> str:
-    """Rest the porch at standby under real schedules, turn it off by hand,
+    """Rest the porch at standby under real schedules, turn it off manually,
     and return the settings schedule's window marker."""
     await setup_entries(hass, *schedules)
     hass.states.async_set(REAL, "off")
@@ -789,7 +789,7 @@ async def test_turning_the_light_back_on_rejoins_standby(
 async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
     hass: HomeAssistant, freezer, presence: str, restart: bool, how: str
 ) -> None:
-    """A manual on while presence holds the raised light rejoins standby too,
+    """A virtual on while presence holds the raised light rejoins standby too,
     as does a dim or recolor at the wall, and says so at once, so a restart
     before they leave keeps it."""
     door = "binary_sensor.porch_door"
@@ -856,7 +856,7 @@ async def test_bright_sensor_that_is_also_a_hold_keeps_standby(
 
 
 @pytest.mark.asyncio
-async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
+async def test_physical_dim_at_standby_runs_a_timer_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
     """Brightening at the wall is activity, not a new resting level."""
@@ -875,7 +875,7 @@ async def test_external_dim_at_standby_runs_a_timer_back_to_standby(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("presence", ["maintain", "door", "occupancy"])
 @pytest.mark.parametrize("source", ["physical", "virtual"])
-async def test_raising_standby_by_hand_is_held_by_presence_already_there(
+async def test_raising_standby_manually_is_held_by_presence_already_there(
     hass: HomeAssistant, freezer, presence: str, source: str
 ) -> None:
     """Maintain, an open door or occupancy that left standby alone holds a
@@ -923,7 +923,7 @@ async def test_raising_standby_by_hand_is_held_by_presence_already_there(
 async def test_false_detection_does_not_cut_a_manual_raise_short(
     hass: HomeAssistant, freezer, source: str
 ) -> None:
-    """False motion against an old visit leaves a raise by hand its timeout."""
+    """False motion against an old visit leaves a manual raise its timeout."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     await _setup_porch(hass, _porch())
     await _echo_standby(hass)
@@ -1868,7 +1868,7 @@ async def test_options_edit_applies_a_new_standby_level(hass: HomeAssistant) -> 
 async def test_restart_keeps_a_manual_off_within_the_same_window(
     hass: HomeAssistant,
 ) -> None:
-    """A light turned off by hand stays off across a restart."""
+    """A light turned off manually stays off across a restart."""
     entry = _porch()
     await _setup_porch(hass, entry)
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
@@ -1882,7 +1882,7 @@ async def test_restart_keeps_a_manual_off_within_the_same_window(
 
 
 async def _manual_off_while_occupied(hass: HomeAssistant, entry) -> datetime:
-    """Raise standby with occupancy, turn it off by hand, return when."""
+    """Raise standby with occupancy, turn it off manually, return when."""
     await _setup_porch(hass, entry)
     await _echo_standby(hass)
     await _set(hass, OCCUPANCY, "on")
@@ -1908,7 +1908,7 @@ async def _manual_off_while_occupied(hass: HomeAssistant, entry) -> datetime:
 async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
-    """Occupancy still on at a restart only raises a light turned off by hand
+    """Occupancy still on at a restart only raises a light turned off manually
     when its cycle started after that off; when the sensor can't tell, the
     light stays off."""
     entry = _porch()
@@ -1945,7 +1945,7 @@ async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
     hass: HomeAssistant, late: str
 ) -> None:
     """An occupancy sensor that reports only after startup, or reports a cycle
-    whose start it did not see, does not raise a light turned off by hand."""
+    whose start it did not see, does not raise a light turned off manually."""
     entry = _porch()
     await _manual_off_while_occupied(hass, entry)
     if late == "placeholder":
@@ -2652,10 +2652,10 @@ async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
 
 
 @pytest.mark.asyncio
-async def test_wall_turn_on_during_a_waiting_manual_on_keeps_its_level(
+async def test_wall_turn_on_during_a_waiting_virtual_on_keeps_its_level(
     hass: HomeAssistant, freezer
 ) -> None:
-    """After a manual off, a turn-on at the wall overtakes a manual turn-on
+    """After a manual off, a turn-on at the wall overtakes a virtual turn-on
     still waiting for its selection: the wall level stands, standby is
     rejoined, and the timeout ends back at it."""
     select = _ParkedSelect(hass, park=2)
@@ -2746,7 +2746,7 @@ async def test_member_reporting_in_off_during_a_waiting_turn_on_gets_it(
     hass: HomeAssistant, placeholder: dict, waiting: str
 ) -> None:
     """A real light that loads, or comes back, as off while standby or a raise
-    waits for its selection was not turned off by hand: standby stays on and
+    waits for its selection was not turned off manually: standby stays on and
     the level waited for is sent."""
     select = _ParkedSelect(hass, park=1 if waiting == "standby" else 2)
     hass.states.async_set(REAL, "unavailable", placeholder)

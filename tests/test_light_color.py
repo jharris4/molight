@@ -208,7 +208,7 @@ async def test_seed_adopts_member_color(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_member_turn_on_adopts_color(hass: HomeAssistant) -> None:
-    """An external off→on on a member mirrors its color, like brightness."""
+    """A physical off→on on a member mirrors its color, like brightness."""
     hass.states.async_set(REAL, "off", HS_CAPS)
     await setup_entries(hass, make_light_entry())
 
@@ -227,7 +227,7 @@ async def test_member_turn_on_adopts_color(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_external_recolor_mirrors_and_restarts_timer(
+async def test_physical_recolor_mirrors_and_restarts_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """Recoloring a real light is human activity: the color is mirrored,
@@ -274,7 +274,7 @@ async def test_external_recolor_mirrors_and_restarts_timer(
 async def test_auto_on_color_temp_applied_to_automatic_turn_ons_only(
     hass: HomeAssistant,
 ) -> None:
-    """auto_on_color_temp colors occupancy turn-ons; manual turn-ons are
+    """auto_on_color_temp colors occupancy turn-ons; virtual turn-ons are
     untouched, mirroring auto_on_brightness."""
     hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
     await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_color_temp=3000))
@@ -290,7 +290,7 @@ async def test_auto_on_color_temp_applied_to_automatic_turn_ons_only(
     assert attrs["color_temp_kelvin"] == 3000
     assert attrs["color_mode"] == "color_temp"
 
-    # Manual turn-on: no auto-on color.
+    # Virtual turn-on: no auto-on color.
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
     )
@@ -615,7 +615,7 @@ async def test_restart_mid_warning_restores_pre_warn_color(
 @pytest.mark.asyncio
 async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
     """A member in color_temp mode hands the virtual light its kelvin (at
-    startup and on an external recolor) even though it also carries a
+    startup and on a physical recolor) even though it also carries a
     derived hs_color."""
     member = {
         **HS_TEMP_CAPS,

@@ -3,7 +3,7 @@
 test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and
 WARN states: attribute invariance while the warning drives the real lights,
-forced offs (manual, external, bright, gate window end), the maintain
+forced offs (manual, physical, bright, gate window end), the maintain
 entity, follow-mode schedule windows taking over mid-warning, and the
 pre-warn brightness restore on every kind of re-trigger.
 """
@@ -96,7 +96,7 @@ async def _turn_on_virtual(hass: HomeAssistant, brightness: int | None = None) -
 
 # ---------------------------------------------------------------------------
 # Attribute invariance: the warning stages drive the real lights themselves
-# and must never register as external activity
+# and must never register as physical activity
 # ---------------------------------------------------------------------------
 
 
@@ -244,7 +244,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 
 
 # ---------------------------------------------------------------------------
-# Offs during the warning: manual, external, bright, gate window end
+# Offs during the warning: manual, physical, bright, gate window end
 # ---------------------------------------------------------------------------
 
 
@@ -276,8 +276,8 @@ async def test_manual_off_during_effect_goes_idle(hass: HomeAssistant, freezer) 
 
 
 @pytest.mark.asyncio
-async def test_external_off_during_warn_goes_idle(hass: HomeAssistant, freezer) -> None:
-    """The real light being switched off externally mid-warn ends everything."""
+async def test_physical_off_during_warn_goes_idle(hass: HomeAssistant, freezer) -> None:
+    """The real light being switched off physically mid-warn ends everything."""
     entry = make_light_entry(warn_timeout=30, warn_brightness=100)
     await setup_entries(hass, entry)
     hass.states.async_set(REAL, "on", {"brightness": 200})
@@ -395,7 +395,7 @@ async def test_occupancy_retrigger_during_effect_restores_brightness(
 
 
 @pytest.mark.asyncio
-async def test_manual_on_during_warn_restores_pre_warn_brightness(
+async def test_virtual_on_during_warn_restores_pre_warn_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A virtual turn-on with no explicit brightness mid-warning restores the
@@ -571,10 +571,10 @@ async def test_schedule_recovery_same_marker_during_warn_restores_lights(
 
 
 @pytest.mark.asyncio
-async def test_external_dim_during_warning_honors_new_brightness(
+async def test_physical_dim_during_warning_honors_new_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An external dim mid-warning cancels the sequence and restarts the full
+    """A physical dim mid-warning cancels the sequence and restarts the full
     timer, but keeps the dim's own brightness; the pre-warn snapshot is not
     restored over the user's explicit choice."""
     entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
@@ -615,7 +615,7 @@ async def test_external_dim_during_warning_honors_new_brightness(
 
 
 @pytest.mark.asyncio
-async def test_external_dim_mid_effect_restores_pre_warning_color(
+async def test_physical_dim_mid_effect_restores_pre_warning_color(
     hass: HomeAssistant, freezer
 ) -> None:
     """A brightness-only re-trigger mid-warning undoes the stage recolor."""
@@ -789,7 +789,7 @@ def _member_turn_ons(calls: list[dict]) -> list[dict]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", [STATE_EFFECT, STATE_WARN])
-async def test_external_recolor_during_warning_restores_pre_warning_brightness(
+async def test_physical_recolor_during_warning_restores_pre_warning_brightness(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
     """A color-only re-trigger mid-warning undoes the stage dimming."""
@@ -810,7 +810,7 @@ async def test_external_recolor_during_warning_restores_pre_warning_brightness(
 
 
 @pytest.mark.asyncio
-async def test_external_dim_and_recolor_during_warning_restores_nothing(
+async def test_physical_dim_and_recolor_during_warning_restores_nothing(
     hass: HomeAssistant, freezer
 ) -> None:
     """A re-trigger bringing both brightness and color keeps both."""
@@ -829,7 +829,7 @@ async def test_external_dim_and_recolor_during_warning_restores_nothing(
 
 
 @pytest.mark.asyncio
-async def test_external_recolor_during_warning_without_a_brightness_to_restore(
+async def test_physical_recolor_during_warning_without_a_brightness_to_restore(
     hass: HomeAssistant, freezer
 ) -> None:
     """With no pre-warning brightness known, a recolor sends no command."""

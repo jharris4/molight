@@ -30,7 +30,7 @@ from custom_components.molight.const import (
     EVENT_FALSE_DETECTION,
     LIGHT_EVENT_TYPES,
     OCCUPANCY_EVENT_TYPES,
-    REASON_MANUAL,
+    REASON_VIRTUAL,
 )
 from tests.conftest import (
     make_light_entry,
@@ -148,14 +148,14 @@ async def test_last_event_survives_a_restart(hass, freezer) -> None:
     await settle(hass)
     before = hass.states.get("event.hall_events")
     assert before.attributes["event_type"] == "turned_on"
-    assert before.attributes["reason"] == REASON_MANUAL
+    assert before.attributes["reason"] == REASON_VIRTUAL
 
     await restart_entries(hass, entry)
 
     after = hass.states.get("event.hall_events")
     assert after.state == before.state
     assert after.attributes["event_type"] == "turned_on"
-    assert after.attributes["reason"] == REASON_MANUAL
+    assert after.attributes["reason"] == REASON_VIRTUAL
 
 
 @pytest.mark.asyncio

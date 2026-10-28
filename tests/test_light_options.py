@@ -122,7 +122,7 @@ async def test_options_reload_while_occupied_stays_occupied(
     hass.states.async_set(OCC, "on")
     await settle(hass)
     assert _mstate(hass) == STATE_OCCUPIED
-    # The real light responds (external event; already OCCUPIED, no change).
+    # The real light responds (physical change; already OCCUPIED, no change).
     hass.states.async_set(REAL, "on")
     await settle(hass)
 
@@ -282,7 +282,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
     await settle(hass)
     assert _mstate(hass) == STATE_EFFECT
 
-    # The real light confirms the blink-off (same context → not an external
+    # The real light confirms the blink-off (same context → not a physical
     # off, the virtual light stays logically on in EFFECT).
     assert contexts
     hass.states.async_set(REAL, "off", context=contexts[-1])

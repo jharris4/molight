@@ -2499,7 +2499,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     cleared = time.monotonic()
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
-    # Six seconds into the 12 s countdown a manual turn-on restarts the timer,
+    # Six seconds into the 12 s countdown a virtual turn-on restarts the timer,
     # so the old occupancy history and the live timer now disagree.
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=6
@@ -2533,7 +2533,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
     else:
         # gate_switch recomputes the deadline from when occupancy last saw
-        # someone, which is already nearly due, not from the manual restart.
+        # someone, which is already nearly due, not from the virtual turn-on.
         assert_state_stays(
             client,
             RAW_MULTI_RGB,
@@ -3769,7 +3769,7 @@ def run_primary() -> None:
             and state["attributes"].get("last_brightness_change_physical")
             == before.get("last_brightness_change_physical")
         ),
-        "occupied without reading its own stepwise fade as a human dim",
+        "occupied without reading its own stepwise fade as a physical dim",
         duration=2.5,
     )
     client.set_behavior(RAW_LIGHT, latency=0, report_steps=False, transition_steps=0)
@@ -4821,7 +4821,7 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
-    """An automatic turn-on applies the auto-on color; a manual one does not."""
+    """An automatic turn-on applies the auto-on color; a virtual one does not."""
     entry_id = create_entry(
         client,
         "light",
@@ -4852,7 +4852,7 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
         lambda state: state["attributes"].get("last_color_change_virtual") is None,
         "attributing the auto-on color to automation, not a virtual change",
     )
-    # Leave the member blue and off, then turn on by hand: no auto-on values.
+    # Leave the member blue and off, then a virtual turn-on: no auto-on values.
     client.call_service(
         "light", "turn_on", {"entity_id": AUTO_COLOR_LIGHT, "hs_color": [240, 100]}
     )
@@ -4873,7 +4873,7 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
             and not has_color_command(command_data(state))
             and command_data(state).get("brightness") is None
         ),
-        "on by hand with no auto-on color or brightness applied",
+        "on after a virtual turn-on with no auto-on color or brightness applied",
     )
     client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
@@ -5041,7 +5041,11 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     if client.state(DUSK_LIGHT)["attributes"].get("last_on_illuminance") is not None:
         raise AssertionError("A never-lit room was stamped with an illuminance turn-on")
     client.call_service("light", "turn_on", {"entity_id": DUSK_LIGHT})
-    client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on by hand")
+    client.wait_state(
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "on",
+        "on after a virtual turn-on",
+    )
     wait_machine_state(client, "active", DUSK_LIGHT)
     expect_dark_edge_relight(client)
     remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
@@ -6085,7 +6089,7 @@ def run_entity_rename_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", RENAME_LIGHT)
 
-    # A light turned off by hand in an occupied room stays off while its real
+    # A light turned off manually in an occupied room stays off while its real
     # light, the motion source and the occupancy sensor all change ID.
     client.set_state(RAW_MOTION, "on")
     wait_machine_state(client, "occupied", RENAME_LIGHT)
@@ -6440,7 +6444,7 @@ def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
         "idle: a member dimmed to 0 at the wall counts as off",
     )
 
-    # 0 -> non-zero on an idle light is a turn-on in disguise.
+    # 0 -> non-zero on an idle light is a physical turn-on.
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 120})
     client.wait_state(
         WALL_LIGHT,
@@ -7352,7 +7356,9 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     )
     client.call_service("light", "turn_on", {"entity_id": REF_SCHEDULED_LIGHT})
     client.wait_state(
-        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on by hand"
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on after a virtual turn-on",
     )
     client.call_service("light", "turn_off", {"entity_id": REF_SCHEDULED_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
@@ -7395,7 +7401,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     )
     for entry_id in (schedule_entry_id, illuminance_entry_id, light_entry_id):
         assert_entry_loaded(client, entry_id)
-    # Manual turn-ons are never gated, so show the sensor's effect with the
+    # Virtual turn-ons are never gated, so show the sensor's effect with the
     # dark -> bright edge, which forces an on light off in control mode.
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(REF_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
@@ -7485,7 +7491,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
     for entry_id in (schedule_entry_id, illuminance_entry_id, light_entry_id):
         assert_entry_loaded(client, entry_id)
 
-    # Outside the window and bright: occupancy is gated, a manual turn-on is not,
+    # Outside the window and bright: occupancy is gated, a virtual turn-on is not,
     # and the gated occupancy is not adopted either (active, not occupied).
     set_end_schedule(client, False)
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -7501,7 +7507,9 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
     )
     client.call_service("light", "turn_on", {"entity_id": MANUAL_LIGHT})
     client.wait_state(
-        RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on by hand"
+        RAW_TIMER_LIGHT,
+        lambda state: state["state"] == "on",
+        "on after a virtual turn-on",
     )
     assert_state_stays(
         client,
@@ -7510,14 +7518,14 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "active"
         ),
-        "active: a manual turn-on is never gated, and gated occupancy is not adopted",
+        "active: a virtual turn-on is never gated, and gated occupancy is not adopted",
     )
     client.call_service("light", "turn_off", {"entity_id": MANUAL_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     set_timer_motion(client, False)
 
-    # Inside the window and dark: a manual off wins over occupancy, and a manual
-    # on while occupancy is still active goes straight to occupied.
+    # Inside the window and dark: a manual off wins over occupancy, and a virtual
+    # turn-on while occupancy is still active goes straight to occupied.
     set_end_schedule(client, True)
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(MANUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
@@ -7540,7 +7548,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "occupied"
         ),
-        "occupied: a manual turn-on while occupancy is active is adopted",
+        "occupied: a virtual turn-on while occupancy is active is adopted",
     )
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", MANUAL_LIGHT)
@@ -8529,7 +8537,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
     set_timer_motion(client, False)
     client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
     client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
-    # A physical turn-on at another temperature is mirrored; a manual turn-on
+    # A physical turn-on at another temperature is mirrored; a virtual turn-on
     # applies no auto-on color temperature.
     client.set_state(RAW_CT, "on", {"brightness": 100, "color_temp_kelvin": 5000})
     client.wait_state(
@@ -8551,7 +8559,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
             and "color_temp_kelvin" not in command_data(state)
             and state["attributes"].get("color_temp_kelvin") == 5000
         ),
-        "on by hand with no auto-on color temperature applied",
+        "on after a virtual turn-on with no auto-on color temperature applied",
     )
     client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
     client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
@@ -9137,7 +9145,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         raise AssertionError("A turn-on cancelled by an off was sent after its select")
     checkpoint("an off during the select call kept the waiting turn-on from the lights")
 
-    # A newer manual turn-on during the call: only that one is sent.
+    # A newer virtual turn-on during the call: only that one is sent.
     client.park_select(TARGET_SELECT, True)
     first = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
@@ -9161,7 +9169,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             f"{commands} -> {member_commands(client, *members)}"
         )
     park_light_off(client, PARK_LIGHT, *members)
-    checkpoint("a newer manual turn-on during the select call was the only one sent")
+    checkpoint("a newer virtual turn-on during the select call was the only one sent")
 
     # The select and one real light share a device, like a WLED strip and its
     # presets. The preset lighting that light is no change at the wall; the

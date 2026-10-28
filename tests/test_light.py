@@ -312,8 +312,10 @@ async def test_auto_on_brightness_applied_on_occupancy(
 
 
 @pytest.mark.asyncio
-async def test_auto_on_brightness_not_applied_on_manual_on(hass: HomeAssistant) -> None:
-    """A manual turn-on must not be overridden by the auto-on brightness."""
+async def test_auto_on_brightness_not_applied_on_virtual_on(
+    hass: HomeAssistant,
+) -> None:
+    """A virtual turn-on must not be overridden by the auto-on brightness."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -393,7 +395,7 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
     )
     await _setup_entries(hass, illuminance_entry, light)
 
-    # Manual turn-on at T0 (dark): no brightness requested, so none is forced.
+    # Virtual turn-on at T0 (dark): no brightness requested, so none is forced.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.kitchen_light"}
     )
@@ -444,10 +446,10 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
 
 
 @pytest.mark.asyncio
-async def test_external_light_adoption(
+async def test_physical_light_adoption(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
-    """An externally switched real light is adopted and released."""
+    """A physically switched real light is adopted and released."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
@@ -486,7 +488,7 @@ async def test_illuminance_dark_resumes_remaining_time(
     )
     await _setup_entries(hass, illuminance_entry, light)
 
-    # Manual turn-on at T0 (dark by default): ACTIVE with a 60s timer.
+    # Virtual turn-on at T0 (dark by default): ACTIVE with a 60s timer.
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.kitchen_light"}
     )
@@ -528,7 +530,7 @@ async def test_illuminance_dark_resumes_remaining_time(
 async def test_brightness_change_resets_countdown(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
-    """An external brightness change is activity: timestamp + timer restart."""
+    """A physical brightness change is activity: timestamp + timer restart."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
@@ -565,7 +567,7 @@ async def test_brightness_change_resets_countdown(
 async def test_brightness_change_while_occupied_records_without_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An external dim while OCCUPIED is recorded and mirrored, but occupancy
+    """A physical dim while OCCUPIED is recorded and mirrored, but occupancy
     still owns the light; the dim must not arm a timer."""
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -625,10 +627,10 @@ async def test_brightness_zero_treated_as_off(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_brightness_change_physical"] == dimmed
-    # A dim to 0 at the wall is a turn-off by hand.
+    # A dim to 0 at the wall is a manual off.
     assert state.attributes["last_off_manual"] == dimmed
 
-    # 0 → non-zero is a turn-on in disguise: back to ACTIVE with physical
+    # 0 → non-zero is a physical turn-on: back to ACTIVE with physical
     # attribution.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("light.living_room", "on", {"brightness": 150})
@@ -726,7 +728,7 @@ async def test_virtual_brightness_propagates_to_real_light(
 async def test_real_brightness_reflects_in_virtual_light(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An external brightness change on a real light is mirrored by the virtual one."""
+    """A physical brightness change on a real light is mirrored by the virtual one."""
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
@@ -739,7 +741,7 @@ async def test_real_brightness_reflects_in_virtual_light(
     assert state.state == "on"
     assert state.attributes["brightness"] == 180
 
-    # A further external change is reflected too.
+    # A further physical change is reflected too.
     hass.states.async_set("light.living_room", "on", {"brightness": 60})
     await _settle(hass)
     assert hass.states.get("light.test_light").attributes["brightness"] == 60
@@ -1543,12 +1545,12 @@ async def test_warn_only_keeps_prior_brightness(hass: HomeAssistant, freezer) ->
 
 @pytest.mark.asyncio
 async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> None:
-    """An external dim during the warn stage is a re-trigger: back to ACTIVE
+    """A physical dim during the warn stage is a re-trigger: back to ACTIVE
     with a fresh full timer, exactly as a dim mid-countdown would be."""
     entry = _warn_light_entry(warn_timeout=30, warn_brightness=100)
     entry.add_to_hass(hass)
     # Real light already on so later brightness changes are on→on dims (the
-    # external-dim path) rather than off→on adoptions. The virtual light adopts
+    # physical-dim path) rather than off→on adoptions. The virtual light adopts
     # it as ACTIVE with a running timer.
     hass.states.async_set("light.living_room", "on", {"brightness": 200})
     await hass.config_entries.async_setup(entry.entry_id)
@@ -1580,8 +1582,8 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
 
 
 @pytest.mark.asyncio
-async def test_manual_on_during_effect_resumes(hass: HomeAssistant, freezer) -> None:
-    """A manual turn-on during the effect blink cancels the warning and returns
+async def test_virtual_on_during_effect_resumes(hass: HomeAssistant, freezer) -> None:
+    """A virtual turn-on during the effect blink cancels the warning and returns
     the light to ACTIVE."""
     entry = _warn_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=10)
     entry.add_to_hass(hass)

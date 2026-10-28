@@ -22,8 +22,8 @@ from custom_components.molight.const import (
     EVENT_OFF_WARNING,
     EVENT_TURNED_OFF,
     EVENT_TURNED_ON,
-    REASON_MANUAL,
     REASON_TIMER,
+    REASON_VIRTUAL,
     STAGE_CANCELLED,
     STAGE_EFFECT,
     STAGE_WARN,
@@ -143,7 +143,7 @@ async def test_a_retrigger_cancels_the_warning(hass, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_on_by_hand_cancels_the_warning_with_its_own_look(
+async def test_a_virtual_turn_on_cancels_the_warning_with_its_own_look(
     hass, freezer
 ) -> None:
     """A turn-on with a brightness mid-warning is an adjustment that cancels it."""
@@ -161,7 +161,7 @@ async def test_a_turn_on_by_hand_cancels_the_warning_with_its_own_look(
     assert records[1:] == [
         {
             "event_type": EVENT_ADJUSTED,
-            "reason": REASON_MANUAL,
+            "reason": REASON_VIRTUAL,
             "brightness": 90,
             "color": None,
         },

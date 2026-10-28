@@ -983,7 +983,7 @@ async def test_illuminance_source_that_goes_missing_resumes_a_bright_off(
 async def test_illuminance_sensor_losing_a_dark_reading_changes_nothing(
     hass: HomeAssistant, virtual_light_behavior_variant
 ) -> None:
-    """Dark already: a light turned off by hand stays off."""
+    """Dark already: a light turned off manually stays off."""
     source = await provide_lux(hass, "deleted", 0)
     hass.states.async_set(OCC, "on")
     hass.states.async_set(MEMBER, "off")

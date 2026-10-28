@@ -303,12 +303,12 @@ async def test_manual_off_works_while_held(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_external_off_works_while_held(hass: HomeAssistant, freezer) -> None:
+async def test_physical_off_works_while_held(hass: HomeAssistant, freezer) -> None:
     """A wall-switch off is respected while held; releasing while off is a no-op."""
     await setup_entries(hass, make_light_entry())
     await _switch(hass, on=False)
 
-    # External turn-on while held: adopted as ACTIVE but no timer arms.
+    # Physical turn-on while held: adopted as ACTIVE but no timer arms.
     hass.states.async_set("light.real_1", "on")
     await settle(hass)
     assert _state(hass).state == "on"
@@ -562,7 +562,7 @@ async def _assert_on_period_survives_a_hold_cycle(hass: HomeAssistant) -> None:
 async def test_manual_off_after_held_window_end_drops_the_window(
     hass: HomeAssistant, off_via: str
 ) -> None:
-    """Turned off by hand after a held window end, the light owes it nothing."""
+    """Turned off manually after a held window end, the light owes it nothing."""
     await _hold_through_window_end(hass)
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -583,10 +583,10 @@ async def test_manual_off_after_held_window_end_drops_the_window(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_manual_on_again_before_release_runs_a_timer(
+async def test_virtual_on_again_before_release_runs_a_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Off and on again by hand while still held: release starts a timer."""
+    """Off and on again manually while still held: release starts a timer."""
     await _hold_through_window_end(hass)
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True
@@ -718,7 +718,7 @@ async def _hold(hass: HomeAssistant, hold: str, *, on: bool) -> None:
 
 
 async def _hold_through_gate_end(hass: HomeAssistant, hold: str):
-    """A light turned on by hand in a Gate and turn off window that ended
+    """A light turned on manually in a Gate and turn off window that ended
     while held."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(HOLD, "off")
@@ -757,7 +757,7 @@ async def _assert_fresh_timer_on_release(hass: HomeAssistant, freezer, hold: str
 async def test_release_outside_a_gate_window_runs_a_fresh_timer(
     hass: HomeAssistant, freezer, mode: str, hold: str
 ) -> None:
-    """Turned on by hand outside a gate-mode window: no window ended while
+    """Turned on manually outside a gate-mode window: no window ended while
     held, so the release starts a fresh full timer."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(HOLD, "off")
@@ -779,7 +779,7 @@ async def test_release_outside_a_gate_window_runs_a_fresh_timer(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 async def test_release_applies_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
-    """A Gate and turn off end a hold kept from a light turned on by hand is
+    """A Gate and turn off end a hold kept from a light turned on manually is
     applied when the hold releases."""
     await _hold_through_gate_end(hass, hold)
     calls = record_service_calls(hass)
@@ -794,7 +794,7 @@ async def test_release_applies_a_held_gate_end(hass: HomeAssistant, hold: str) -
 async def test_manual_off_and_on_after_a_held_gate_end_runs_a_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Off and on again by hand while still held: the end is spent."""
+    """Off and on again manually while still held: the end is spent."""
     await _hold_through_gate_end(hass, "switch")
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": VIRTUAL}, blocking=True

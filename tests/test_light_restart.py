@@ -293,7 +293,7 @@ async def test_restart_mid_countdown_adopts_active_with_full_timer(
 
 
 async def _manual_off_while_present(hass: HomeAssistant, freezer, entry) -> datetime:
-    """Light the room from its sensor, turn it off by hand, return when."""
+    """Light the room from its sensor, turn it off manually, return when."""
     await setup_entries(hass, entry)
     await settle(hass)
     assert _state(hass).state == "on"
@@ -317,7 +317,7 @@ async def _manual_off_while_present(hass: HomeAssistant, freezer, entry) -> date
 async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
-    """Occupancy still on at a restart only lights a light turned off by hand
+    """Occupancy still on at a restart only lights a light turned off manually
     when the sensor dates its visit after that off. A plain sensor, or a
     Combined Occupancy Sensor (no last_on_time), can't tell, so it stays off."""
     hass.states.async_set(OCC, "on")
@@ -355,7 +355,7 @@ async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
     hass: HomeAssistant, freezer, late: str
 ) -> None:
     """An occupancy sensor that reports only after startup, or reports a visit
-    whose start it did not see, does not light a light turned off by hand."""
+    whose start it did not see, does not light a light turned off manually."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
     entry = make_light_entry(occupancy=OCC)
@@ -751,7 +751,7 @@ async def test_swapping_the_follow_schedule_leaves_the_old_marker_behind(
 async def test_follow_marker_does_not_survive_a_spell_in_gate_mode(
     hass: HomeAssistant,
 ) -> None:
-    """A light lit by hand after its window ended in gate mode is not turned
+    """A light lit manually after its window ended in gate mode is not turned
     off when it is switched back to follow mode."""
     entry = await _lit_in_follow_window(hass)
     await _edit_options(hass, entry, **{CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE})

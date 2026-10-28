@@ -80,7 +80,7 @@ Remote buttons.
   The light form now explains this when another MoLight light is added.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on, and a light turned
-  off by hand no longer comes back on after a restart.
+  off manually no longer comes back on after a restart.
 - **Renamed, deleted or disabled entities**: changing an entity ID in Home
   Assistant is now followed; every entry that used it kept the old ID and
   quietly stopped working. A deleted or disabled sensor, door or keep-on
@@ -152,16 +152,16 @@ replying late.
   spring-forward clock change.
 - False detections: a combined sensor keeps its cycle's genuine detection
   across a reload and inherits its constituents' `latest_occupied_time`, and a
-  light turned on by hand or by a door keeps its full timeout.
+  light turned on manually or by a door keeps its full timeout.
 - A maintain sensor clearing or a door closing while brightness or a gate-mode
   schedule window blocks occupancy starts the countdown instead of leaving the
   light on with no timer.
 - Slow and chatty bulbs: late replies, mid-fade colors and clamped color
-  temperatures are no longer read as manual changes, so a warning no longer
+  temperatures are no longer read as physical changes, so a warning no longer
   restarts the timer. A dim right after a command that changed nothing is
   read as one.
 - A follow-mode real light returning from `unavailable` is made to match its
-  schedule instead of being read as a manual change.
+  schedule instead of being read as a physical change.
 - Turn-on selection: a missing target select is skipped with a warning, a
   turn-on with no brightness or color reports what the light came on at, and a
   turn-on waiting on a slow select is dropped when the light is turned off,
@@ -259,7 +259,7 @@ longer needs a custom repository.
   no longer registers as a real change.
 - A long-empty or never-lit room stays dark at dusk instead of turning on with
   nothing to resume.
-- An external dim during the pre-off warning restores the color the warning
+- A physical dim during the pre-off warning restores the color the warning
   replaced.
 - Schedules switch in the right order on the night the clocks change.
 - Options flows: clearing a combined sensor's maintain list now sticks, a

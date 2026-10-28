@@ -212,7 +212,7 @@ async def test_illuminance_dark_is_noop_while_running(
     hass.states.async_set(ILLUM, "on")  # bright
     await setup_entries(hass, entry)
 
-    # Manual turn-on is never gated by illuminance.
+    # Virtual turn-on is never gated by illuminance.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -1121,7 +1121,7 @@ async def test_occupancy_can_relight_after_manual_off_mid_window(
     """After a manual off mid-window the state is IDLE, so occupancy applies again.
 
     Pins current behavior: only the SCHEDULED state shields the follow window
-    from occupancy: a manual override hands control back to the sensors.
+    from occupancy: a manual off hands control back to the sensors.
     """
     entry = make_light_entry(
         occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW
@@ -1258,7 +1258,7 @@ async def test_gate_marker_change_keeps_manual_off(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-@pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
+@pytest.mark.parametrize("origin", ["virtual", "occupied", "countdown"])
 async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> None:
     """Window end turns the lights off from every running state."""
     entry = make_light_entry(
@@ -1267,7 +1267,7 @@ async def test_gate_window_end_forces_off(hass: HomeAssistant, origin: str) -> N
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
 
-    if origin == "manual":
+    if origin == "virtual":
         await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
         await hass.async_block_till_done()
         assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -1370,7 +1370,7 @@ async def test_switching_gate_adopts_active_occupancy_at_window_end(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-@pytest.mark.parametrize("origin", ["manual", "occupied", "countdown"])
+@pytest.mark.parametrize("origin", ["virtual", "occupied", "countdown"])
 async def test_state_preserving_gate_keeps_on_period_at_window_end(
     hass: HomeAssistant, freezer, origin: str
 ) -> None:
@@ -1381,7 +1381,7 @@ async def test_state_preserving_gate_keeps_on_period_at_window_end(
     hass.states.async_set(SCHED, "on")
     await setup_entries(hass, entry)
 
-    if origin == "manual":
+    if origin == "virtual":
         await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
         await settle(hass)
         expected_state = STATE_ACTIVE
@@ -1472,7 +1472,7 @@ async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
+async def test_state_preserving_gate_adopts_occupancy_on_virtual_turn_on_outside(
     hass: HomeAssistant, freezer
 ) -> None:
     """A gate_keep light turned on while occupied outside is held, not timed."""
@@ -1501,7 +1501,7 @@ async def test_state_preserving_gate_adopts_occupancy_on_manual_turn_on_outside(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE_KEEP, SCHEDULE_MODE_GATE_SWITCH])
-async def test_state_preserving_gate_adopts_open_door_after_manual_turn_on(
+async def test_state_preserving_gate_adopts_open_door_after_virtual_turn_on(
     hass: HomeAssistant, freezer, mode: str
 ) -> None:
     """gate_keep and gate_switch gate an off light but let an open door hold
@@ -1642,7 +1642,7 @@ async def test_gate_window_start_keeps_running_state(
     hass.states.async_set(SCHED, "off")
     await setup_entries(hass, entry)
 
-    # Manual turn-on works outside the window (gating only applies to sensors).
+    # Virtual turn-on works outside the window (gating only applies to sensors).
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -1713,27 +1713,27 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_on_not_gated_by_bright_illuminance(
+async def test_virtual_turn_on_not_gated_by_bright_illuminance(
     hass: HomeAssistant, freezer
 ) -> None:
     """The user can turn the light on while its illuminance sensor is bright."""
     entry = make_light_entry(illuminance=ILLUM)
     hass.states.async_set(ILLUM, "on")
-    await _assert_manual_turn_on_runs_timeout(hass, freezer, entry)
+    await _assert_virtual_turn_on_runs_timeout(hass, freezer, entry)
 
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_manual_turn_on_not_gated_outside_schedule(
+async def test_virtual_turn_on_not_gated_outside_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
     """The user can turn a regular light on outside its gate schedule."""
     entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
     hass.states.async_set(SCHED, "off")
-    await _assert_manual_turn_on_runs_timeout(hass, freezer, entry)
+    await _assert_virtual_turn_on_runs_timeout(hass, freezer, entry)
 
 
-async def _assert_manual_turn_on_runs_timeout(
+async def _assert_virtual_turn_on_runs_timeout(
     hass: HomeAssistant, freezer, entry
 ) -> None:
     """Assert a manually turned-on light runs its normal timeout."""
@@ -2222,7 +2222,7 @@ async def test_occupancy_clear_is_noop_when_not_occupied(
 
 
 @pytest.mark.asyncio
-async def test_external_off_during_occupied_goes_idle(hass: HomeAssistant) -> None:
+async def test_physical_off_during_occupied_goes_idle(hass: HomeAssistant) -> None:
     """Turning the real light off wins over active occupancy and stays off."""
     entry = make_light_entry(occupancy=OCC)
     await setup_entries(hass, entry)
@@ -2281,7 +2281,7 @@ async def test_stays_on_until_all_real_lights_off(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_on_while_occupied_stays_occupied(
+async def test_virtual_turn_on_while_occupied_stays_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
     """Turning the virtual light on during occupancy keeps OCCUPIED, no timer."""
@@ -2313,7 +2313,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
     Turning back on when dark again grants only the remaining portion of the
     original on-period. When the real light's state then echoes our own
     service call, that echo must be recognized as self-caused; treating it
-    as an external turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
+    as a physical turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
     full timer.
     """
     contexts = []
@@ -2444,8 +2444,8 @@ async def test_brightness_zero_on_one_light_keeps_running(hass: HomeAssistant) -
 
 
 @pytest.mark.asyncio
-async def test_external_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> None:
-    """An external off→on at brightness 0 is an off in disguise.
+async def test_physical_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> None:
+    """A physical off→on at brightness 0 is an off in disguise.
 
     The virtual light must stay off without attributing a turn-on or starting
     a timer, matching how a dim to 0, _all_lights_off and the startup seed
@@ -2462,7 +2462,7 @@ async def test_external_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> 
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_on_physical"] is None
 
-    # Brightness rising from 0 is the turn-on in disguise.
+    # Brightness rising from 0 is the physical turn-on.
     hass.states.async_set(REAL, "on", {"brightness": 120})
     await settle(hass)
 

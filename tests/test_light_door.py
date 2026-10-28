@@ -1020,7 +1020,7 @@ async def test_open_close_close_mid_warning_lets_it_finish(
     hass.states.async_set(ILLUM, "on")  # bright
     await setup_entries(hass, entry)
 
-    # Manual on is never gated: ACTIVE with the 60s timer.
+    # Virtual on is never gated: ACTIVE with the 60s timer.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE

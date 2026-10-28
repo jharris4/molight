@@ -25,13 +25,13 @@ from custom_components.molight.const import (
     REASON_BRIGHT,
     REASON_DOOR,
     REASON_ILLUMINANCE,
-    REASON_MANUAL,
     REASON_OCCUPANCY,
     REASON_PHYSICAL,
     REASON_RESUME,
     REASON_SCHEDULE,
     REASON_SCHEDULE_START,
     REASON_STARTUP,
+    REASON_VIRTUAL,
     SCHEDULE_MODE_FOLLOW,
 )
 from tests.conftest import (
@@ -85,13 +85,13 @@ async def _turn_on(hass, **data) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_on(hass) -> None:
+async def test_virtual_turn_on(hass) -> None:
     """A turn-on through the entity names the caller's look."""
     records = await _setup(hass, make_light_entry(name="Hall"))
 
     await _turn_on(hass, brightness=200)
 
-    assert records == [_turned_on(REASON_MANUAL, brightness=200)]
+    assert records == [_turned_on(REASON_VIRTUAL, brightness=200)]
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ async def test_going_dark_resumes_an_on_period_cut_short(hass, freezer) -> None:
         EVENT_TURNED_OFF,
         EVENT_TURNED_ON,
     ]
-    assert records[0]["reason"] == REASON_MANUAL
+    assert records[0]["reason"] == REASON_VIRTUAL
     assert records[1]["reason"] == REASON_BRIGHT
     assert records[2] == _turned_on(REASON_RESUME)
 
@@ -334,7 +334,7 @@ async def test_a_member_back_from_unavailable_fires_nothing(hass) -> None:
     hass.states.async_set(REAL, "on", {"brightness": 255})
     await settle(hass)
 
-    assert records == [_turned_on(REASON_MANUAL)]
+    assert records == [_turned_on(REASON_VIRTUAL)]
 
 
 @pytest.mark.asyncio
@@ -349,7 +349,7 @@ async def test_a_second_turn_on_of_a_lit_light_fires_nothing(hass) -> None:
     hass.states.async_set(REAL, "on", {"brightness": 255})
     await settle(hass)
 
-    assert records == [_turned_on(REASON_MANUAL)]
+    assert records == [_turned_on(REASON_VIRTUAL)]
 
 
 @pytest.mark.asyncio
@@ -367,7 +367,7 @@ async def test_a_restart_with_the_lights_on_fires_nothing(hass) -> None:
     after = hass.states.get(EVENTS)
     assert after.state == before.state
     assert after.attributes["event_type"] == EVENT_TURNED_ON
-    assert after.attributes["reason"] == REASON_MANUAL
+    assert after.attributes["reason"] == REASON_VIRTUAL
 
 
 @pytest.mark.asyncio

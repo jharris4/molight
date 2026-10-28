@@ -3,7 +3,7 @@
 The maintain entity holds an already-on light on while it is on; it never
 turns the light on. Unlike the combined sensor's maintain_sensors (which only
 extend occupancy started by a trigger sensor), it holds the light regardless
-of how it was lit: manual, physical, or occupancy. The watched sensors are
+of how it was lit: virtual, physical, or occupancy. The watched sensors are
 plain states set via hass.states.async_set, as in test_light_matrix.py.
 """
 
@@ -222,7 +222,7 @@ async def test_maintain_clear_countdown_anchors_to_latest_occupied_time(
     hass.states.async_set(MAINT, "on")
     await settle(hass)
 
-    # Well past the manual turn-on's own timeout, so only the history counts.
+    # Well past the virtual turn-on's own timeout, so only the history counts.
     freezer.tick(timedelta(seconds=90))
     lot = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
     hass.states.async_set(MAINT, "off", {"latest_occupied_time": lot})

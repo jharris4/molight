@@ -177,13 +177,13 @@ CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* (by occupancy, a door opening, illuminance going dark, or
-# a schedule window). Manual and physical turn-ons are never affected (they
+# a schedule window). Virtual and physical turn-ons are never affected (they
 # keep whatever brightness the user/last state set). Absent = don't set a
 # brightness on automatic turn-ons either (the real lights use their own
 # last/default).
 CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # Optional color applied when the light is turned on *automatically*, exactly
-# like auto_on_brightness (manual and physical turn-ons are never affected).
+# like auto_on_brightness (virtual and physical turn-ons are never affected).
 # At most one may be set (the config/options flows enforce it):
 #   auto_on_color_temp: white color temperature in Kelvin
 #   auto_on_rgb_color:  an [r, g, b] color
@@ -236,7 +236,7 @@ DEFAULT_FALSE_OFF_DELAY = 5
 #           absent = keep whatever brightness was in effect before the warning.
 # Each stage is skipped when its timeout is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
-# either stage (occupancy, manual/physical on, a dim, ...) cancels it and
+# either stage (occupancy, virtual/physical on, a dim, ...) cancels it and
 # behaves as if the pre-off timer were still running, restoring the brightness.
 CONF_EFFECT_TIMEOUT = "effect_timeout"
 DEFAULT_EFFECT_TIMEOUT = 0
@@ -262,7 +262,7 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # the virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
 #   auto_on_transition:   automatic turn-ons only (occupancy, a door opening,
-#                         illuminance going dark, a window start); manual and
+#                         illuminance going dark, a window start); virtual and
 #                         physical turn-ons are untouched.
 #   auto_off_transition:  automatic turn-offs (timer expiry, false-detection
 #                         off delay, bright-forces-off, window end); a manual
@@ -281,7 +281,7 @@ CONF_OCCUPANCY_ENTITY = "occupancy_entity"
 # Maintain occupancy entity: keeps an already-on light on while it is on, but
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
-# light regardless of how it was lit: manual, physical, or occupancy.
+# light regardless of how it was lit: virtual, physical, or occupancy.
 CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
@@ -338,7 +338,7 @@ EVENT_FALSE_DETECTION = "false_detection"
 OCCUPANCY_EVENT_TYPES = [EVENT_FALSE_DETECTION]
 
 # The `reason` of a turned_on, turned_off or turn_on_blocked event.
-REASON_MANUAL = "manual"  # through the virtual light entity
+REASON_VIRTUAL = "virtual"  # through the virtual light entity
 REASON_PHYSICAL = "physical"  # a real light changed by something other than MoLight
 REASON_WRAPPED = "wrapped"  # a wrapped virtual light acting by itself
 REASON_OCCUPANCY = "occupancy"

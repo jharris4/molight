@@ -12,8 +12,8 @@ import pytest
 from custom_components.molight.const import (
     EVENT_ADJUSTED,
     EVENT_TURNED_ON,
-    REASON_MANUAL,
     REASON_PHYSICAL,
+    REASON_VIRTUAL,
 )
 from tests.conftest import make_light_entry, settle, setup_entries
 from tests.events import record_events
@@ -67,7 +67,7 @@ async def test_a_dim_through_the_entity(hass) -> None:
     )
     await settle(hass)
 
-    assert records == [_adjusted(REASON_MANUAL, brightness=100)]
+    assert records == [_adjusted(REASON_VIRTUAL, brightness=100)]
 
 
 @pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_a_recolor_through_the_entity(hass) -> None:
     )
     await settle(hass)
 
-    assert records == [_adjusted(REASON_MANUAL, color={"color_temp_kelvin": 3000})]
+    assert records == [_adjusted(REASON_VIRTUAL, color={"color_temp_kelvin": 3000})]
 
 
 @pytest.mark.asyncio

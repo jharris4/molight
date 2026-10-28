@@ -133,7 +133,7 @@ async def test_real_light_briefly_unavailable_and_back(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
-    # Recovery to on is treated like an external turn-on (still ACTIVE).
+    # Recovery to on is treated like a physical turn-on (still ACTIVE).
     hass.states.async_set(REAL, "on")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -150,7 +150,7 @@ async def test_real_light_recovery_keeps_running_countdown(
 ) -> None:
     """A member briefly unavailable mid-countdown must not win a fresh full timer.
 
-    Regression: unavailable → on used to be handled as an external turn-on,
+    Regression: unavailable → on used to be handled as a physical turn-on,
     replacing an occupancy-anchored countdown with a full ACTIVE timer: a
     bulb that briefly drops off the mesh every few minutes never turned off.
     """
@@ -231,7 +231,7 @@ async def test_real_light_recovery_mirrors_color(hass: HomeAssistant) -> None:
 
 
 _NOT_LOADED = [None, "unavailable", "unknown", "restored"]
-_LEVEL = {"occupancy": 102, "manual": 200, "door": 102}
+_LEVEL = {"occupancy": 102, "virtual": 200, "door": 102}
 
 
 async def _light_up(
@@ -250,7 +250,7 @@ async def _light_up(
     )
     await settle(hass)
     calls = _record_calls(hass)
-    if trigger == "manual":
+    if trigger == "virtual":
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
         )
@@ -262,7 +262,7 @@ async def _light_up(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["occupancy", "manual", "door"])
+@pytest.mark.parametrize("trigger", ["occupancy", "virtual", "door"])
 @pytest.mark.parametrize("member", _NOT_LOADED)
 @pytest.mark.parametrize("report", [{}, {"brightness": 0}], ids=["off", "on_at_0"])
 async def test_real_light_reporting_in_off_while_on_is_sent_its_settings(
@@ -354,7 +354,7 @@ async def test_real_light_reporting_in_off_mid_warning_gets_the_stage(
     on; a stage that blinks the lights off has nothing to send."""
     calls = await _light_up(
         hass,
-        "manual",
+        "virtual",
         "off",
         effect_timeout=20,
         effect_brightness=effect_brightness,
@@ -426,7 +426,7 @@ _OFFLINE = HomeAssistantError("device offline")
 
 
 async def _trigger(hass: HomeAssistant, trigger: str) -> None:
-    if trigger == "manual":
+    if trigger == "virtual":
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
         )
@@ -436,7 +436,7 @@ async def _trigger(hass: HomeAssistant, trigger: str) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["occupancy", "manual", "door"])
+@pytest.mark.parametrize("trigger", ["occupancy", "virtual", "door"])
 @pytest.mark.allow_warning_log
 async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     hass: HomeAssistant, caplog, trigger: str
@@ -464,7 +464,7 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     assert f"Unable to turn on {REAL}" in caplog.text
 
     member.error = None
-    if trigger != "manual":
+    if trigger != "virtual":
         hass.states.async_set(OCC if trigger == "occupancy" else DOOR, "off")
         await settle(hass)
     await _trigger(hass, trigger)
@@ -502,7 +502,7 @@ async def test_failed_turn_on_that_lit_one_member_leaves_the_light_on(
     assert state.attributes["brightness"] == 102
     assert f"Unable to turn on {REAL}, {REAL2}" in caplog.text
 
-    # The lit member turned off by hand leaves nothing lit: an off.
+    # The lit member turned off physically leaves nothing lit: an off.
     hass.states.async_set(REAL2, "off")
     await settle(hass)
     assert _state(hass).state == "off"
@@ -748,7 +748,7 @@ async def test_occupancy_outage_spanning_a_clear_is_a_new_occupancy(
 async def test_occupancy_recovery_adopts_light_turned_on_during_outage(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light lit by hand during the outage is held once occupancy is back."""
+    """A light lit manually during the outage is held once occupancy is back."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
@@ -920,7 +920,7 @@ async def _turn_off_by(hass: HomeAssistant, off_via: str) -> None:
 async def test_occupancy_recovery_respects_a_manual_off_after_the_gate_lifted(
     hass: HomeAssistant, freezer, off_via: str
 ) -> None:
-    """A light turned off by hand after the gate lifted stays off on recovery."""
+    """A light turned off manually after the gate lifted stays off on recovery."""
     hass.states.async_set(ILLUM, "on")
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
@@ -1335,7 +1335,7 @@ async def test_schedule_briefly_unavailable_outside_window_keeps_manual_light(
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # The timer of the manual turn-on was not restarted either.
+    # The timer of the virtual turn-on was not restarted either.
     freezer.tick(timedelta(seconds=21))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1518,7 +1518,7 @@ async def test_gate_recovery_applies_a_start_the_outage_blocked(
 async def test_gate_recovery_respects_a_manual_off_after_the_blocked_start(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
-    """A light turned off by hand after the blocked start stays off."""
+    """A light turned off manually after the blocked start stays off."""
     door = "binary_sensor.door"
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(OCC, "off")
@@ -1598,7 +1598,7 @@ async def test_gate_briefly_unavailable_with_door_standing_open_respects_manual_
 async def test_gate_recovery_adopts_light_turned_on_during_outage(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light lit by hand during the outage is held by occupancy after it."""
+    """A light lit manually during the outage is held by occupancy after it."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
@@ -1660,7 +1660,7 @@ async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
     hass: HomeAssistant,
 ) -> None:
     """A held window that ended is forgotten once the light is off, even when
-    the off came while the schedule was unavailable: a later manual on is not
+    the off came while the schedule was unavailable: a later virtual on is not
     turned off when the hold releases."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(HOLD, "on")
@@ -1877,7 +1877,7 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
 
     A deleted entity loses both its state and its registry entry, and can
     never report again; treating it as "maybe still on" would keep the
-    virtual light from ever reaching IDLE on external offs.
+    virtual light from ever reaching IDLE on physical offs.
     """
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
 
@@ -1900,7 +1900,7 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_schedule_recovery_readopts_externally_relit_light(
+async def test_schedule_recovery_readopts_physically_relit_light(
     hass: HomeAssistant, freezer
 ) -> None:
     """Recovering mid-window re-adopts a light that was cycled during the outage.
@@ -1922,7 +1922,7 @@ async def test_schedule_recovery_readopts_externally_relit_light(
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
 
-    # The light is cycled externally during the outage: off, then on again.
+    # The light is cycled physically during the outage: off, then on again.
     hass.states.async_set(REAL, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
@@ -1947,7 +1947,7 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
 ) -> None:
     """A bright sensor briefly unavailable must not replay the bright edge.
 
-    A manual turn-on while steadily bright stands (control mode only forces
+    A virtual turn-on while steadily bright stands (control mode only forces
     off on the bright edge); the sensor recovering to the same value is not
     that edge. The sensor holds through its source's outages, so it is only
     briefly unavailable here as a placeholder while its entry reloads.
@@ -2074,13 +2074,13 @@ async def test_follow_member_recovers_dark_outside_window_sends_nothing(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_manual_on_outside_window_is_lost_on_reboot(
+async def test_follow_virtual_on_outside_window_is_lost_on_reboot(
     hass: HomeAssistant,
 ) -> None:
-    """A manual turn-on outside the window does not survive a member reboot.
+    """A virtual turn-on outside the window does not survive a member reboot.
 
     The reboot edge cannot be told apart from a boot-lit strip, so the
-    schedule wins; a manual turn-on while the member stays connected is an
+    schedule wins; a virtual turn-on while the member stays connected is an
     ordinary off → on edge and is untouched.
     """
     hass.states.async_set(SCHED, "off")
@@ -2807,7 +2807,7 @@ async def test_gate_recovery_tells_a_reloaded_visit_from_a_new_one(
 ) -> None:
     """A sensor reloading during a gate outage is not a visit starting.
 
-    The light was turned off by hand during the outage: the visit from before
+    The light was turned off manually during the outage: the visit from before
     it leaves the room dark when the gate returns, however the sensor's
     reload dated its state. A visit that did start meanwhile lights it.
     """
@@ -3102,14 +3102,14 @@ async def test_follow_schedule_without_a_marker_first_read_after_a_seed_is_no_ed
     hass.states.async_set(REAL, "off")
     light = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
     await setup_entries(hass, light)
-    by_hand = "turn_off" if window == "on" else "turn_on"
+    service = "turn_off" if window == "on" else "turn_on"
     if window == "on":
         hass.states.async_set(SCHED, "on")
         await settle(hass)
         hass.states.async_set(REAL, "on")
         await settle(hass)
         assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
-    await hass.services.async_call("light", by_hand, {"entity_id": VIRTUAL})
+    await hass.services.async_call("light", service, {"entity_id": VIRTUAL})
     hass.states.async_set(REAL, "off" if window == "on" else "on")
     await settle(hass)
     hass.states.async_set(SCHED, "unavailable")

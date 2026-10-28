@@ -285,10 +285,10 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
@@ -577,10 +577,10 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
@@ -704,7 +704,7 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
@@ -794,7 +794,7 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
@@ -1233,7 +1233,7 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
@@ -1323,7 +1323,7 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons. Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
@@ -1583,10 +1583,10 @@
             },
             "data_description": {
               "false_detection_off_delay": "When the occupancy sensor flags a false detection, any light it turned on turns off after this short delay instead of the full timeout (never later than the timeout). Manually turned-on lights are never cut short.",
-              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual and wall-switch turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
+              "auto_on_brightness": "Optional. Brightness for automatic turn-ons (occupancy, darkness, schedule). Manual turn-ons keep their own brightness; blank leaves automatic turn-ons at the lights' default too.",
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
-              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual and wall-switch turn-ons keep their own color.",
-              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual and wall-switch turn-ons keep their own color.",
+              "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
+              "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."

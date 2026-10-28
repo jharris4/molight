@@ -47,7 +47,7 @@ def _outer_off(reason: str) -> dict:
     return {"event_type": EVENT_TURNED_OFF, "reason": reason, "standby": False}
 
 
-async def _lit_by_hand(hass, brightness: int) -> list[dict]:
+async def _lit_virtually(hass, brightness: int) -> list[dict]:
     """Light the room through the outer light; record what follows."""
     records = record_events(hass, OUTER_EVENTS)
     await hass.services.async_call(
@@ -110,7 +110,7 @@ async def test_the_inner_warn_dim_fires_nothing_at_the_outer(hass, freezer) -> N
         name="Inner", lights=[REAL], timeout=100, warn_timeout=50, warn_brightness=20
     )
     await _nested(hass, "regular", inner=inner)
-    records = await _lit_by_hand(hass, 200)
+    records = await _lit_virtually(hass, 200)
 
     await tick(hass, freezer, 101)
 

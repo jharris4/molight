@@ -70,7 +70,7 @@ Turn-off timeout:  60         # 60s after you actually left
 Occupancy sensor:  binary_sensor.hallway_occupancy
 ```
 
-Walk in → lights on. Room empties → 60s countdown anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on by hand and it still turns off after the room empties, but a false blip never cuts short a manual on.
+Walk in → lights on. Room empties → 60s countdown anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on manually and it still turns off after the room empties, but a false blip never cuts short a manual on.
 
 > Note the guard: **Turn-off timeout (60) must be at least the occupancy timeout (30)**. MoLight enforces this both ways.
 
@@ -425,7 +425,7 @@ Standby:                                         # collapsed section; expand it
 With no occupancy sensor on the outside side, motion does nothing in the daytime. Things worth knowing:
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
-- Switching the porch off by hand turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
+- Switching the porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - To remove standby, clear **Standby brightness** and set **Standby color mode** to *None*. The form refuses a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
@@ -470,7 +470,7 @@ Occupancy sensor:  binary_sensor.kitchen_occupancy
 
 Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
 
-Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on by hand: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a hand-lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
+Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on manually: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a manually lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
 
 ---
 

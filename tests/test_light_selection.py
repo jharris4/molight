@@ -76,10 +76,10 @@ def _selection_entry(
 
 
 @pytest.mark.asyncio
-async def test_manual_turn_on_applies_selection_first_with_same_context(
+async def test_virtual_turn_on_applies_selection_first_with_same_context(
     hass: HomeAssistant,
 ) -> None:
-    """A manual turn-on selects the option before driving the light."""
+    """A virtual turn-on selects the option before driving the light."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -142,7 +142,7 @@ async def test_selection_is_not_reapplied_while_already_on(
 
 @pytest.mark.asyncio
 async def test_automatic_turn_on_applies_selection(hass: HomeAssistant) -> None:
-    """Occupancy-driven turn-ons use the same selection path as manual ones."""
+    """Occupancy-driven turn-ons use the same selection path as virtual ones."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -274,7 +274,7 @@ async def test_source_without_fallback_can_skip_selection(
 
 @pytest.mark.asyncio
 async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) -> None:
-    """An underlying member turned on externally retains its chosen state."""
+    """An underlying member turned on physically retains its chosen state."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -455,7 +455,7 @@ async def test_skipped_selection_warns_once_until_one_applies(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door", "resend"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door", "resend"])
 async def test_selection_applied_when_target_has_no_current_option(
     hass: HomeAssistant, caplog, trigger: str
 ) -> None:
@@ -476,7 +476,7 @@ async def test_selection_applied_when_target_has_no_current_option(
         _selection_entry(occupancy="binary_sensor.occ", door="binary_sensor.door"),
     )
 
-    if trigger in ("manual", "resend"):
+    if trigger in ("virtual", "resend"):
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": "light.selection_light"}, blocking=True
         )
@@ -729,10 +729,10 @@ async def test_unloading_during_slow_selection_drops_the_waiting_turn_on(
 
 
 @pytest.mark.asyncio
-async def test_manual_on_then_off_during_slow_selection_stays_off(
+async def test_virtual_on_then_off_during_slow_selection_stays_off(
     hass: HomeAssistant,
 ) -> None:
-    """An overtaken manual turn-on neither lights the room nor starts a timer."""
+    """An overtaken virtual turn-on neither lights the room nor starts a timer."""
     select = _SlowSelect(hass)
     hass.states.async_set("light.ambient", "off")
     await setup_entries(hass, _selection_entry())
@@ -785,7 +785,7 @@ async def test_newer_turn_on_during_slow_selection_replaces_the_waiting_one(
 
 
 @pytest.mark.asyncio
-async def test_manual_on_during_blink_off_survives_the_stage_ending(
+async def test_virtual_on_during_blink_off_survives_the_stage_ending(
     hass: HomeAssistant, freezer
 ) -> None:
     """The effect timer reaching the warn stage while a turn-on waits for its
@@ -855,10 +855,10 @@ async def test_manual_on_during_blink_off_survives_the_stage_ending(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_on_during_a_waiting_manual_on_defers_to_it(
+async def test_occupancy_on_during_a_waiting_virtual_on_defers_to_it(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An automatic turn-on arriving while a manual one waits is dropped: the
+    """An automatic turn-on arriving while a virtual one waits is dropped: the
     user's brightness is kept and the on-period is not counted as lit by
     occupancy."""
     select = _SlowSelect(hass)
@@ -994,7 +994,7 @@ async def test_wall_turn_on_during_a_waiting_follow_window_start_stands(
     assert state.attributes["brightness"] == 200
 
 
-async def _begin_manual_turn_on(hass: HomeAssistant, select: _SlowSelect):
+async def _begin_virtual_turn_on(hass: HomeAssistant, select: _SlowSelect):
     """Turn the virtual light on at 200; return once the select call waits."""
     turn_on = hass.async_create_task(
         hass.services.async_call(
@@ -1010,17 +1010,17 @@ async def _begin_manual_turn_on(hass: HomeAssistant, select: _SlowSelect):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wall", ["turn_on", "dim_from_0"])
-async def test_wall_change_during_a_waiting_manual_on_keeps_its_level(
+async def test_wall_change_during_a_waiting_virtual_on_keeps_its_level(
     hass: HomeAssistant, freezer, wall: str
 ) -> None:
-    """A turn-on or dim at the wall is the later action: it overtakes a manual
+    """A turn-on or dim at the wall is the later action: it overtakes a virtual
     turn-on still waiting for its selection, as it does an automatic one."""
     select = _SlowSelect(hass)
     dark = ("on", {"brightness": 0}) if wall == "dim_from_0" else ("off", {})
     hass.states.async_set("light.ambient", *dark)
     await setup_entries(hass, _selection_entry())
     calls = _light_calls(hass)
-    turn_on = await _begin_manual_turn_on(hass, select)
+    turn_on = await _begin_virtual_turn_on(hass, select)
 
     hass.states.async_set("light.ambient", "on", {"brightness": 100})
     await _drain(hass)
@@ -1045,10 +1045,10 @@ async def test_wall_change_during_a_waiting_manual_on_keeps_its_level(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_wall_turn_on_during_a_waiting_manual_on_rejoins_the_window(
+async def test_wall_turn_on_during_a_waiting_virtual_on_rejoins_the_window(
     hass: HomeAssistant,
 ) -> None:
-    """Inside a follow window the wall turn-on that overtook the manual one
+    """Inside a follow window the wall turn-on that overtook the virtual one
     rejoins the window, at the level set at the wall."""
     select = _SlowSelect(hass)
     select.release.set()  # the window's own start goes straight through
@@ -1067,7 +1067,7 @@ async def test_wall_turn_on_during_a_waiting_manual_on_rejoins_the_window(
     select.started.clear()
     select.release.clear()
     calls = _light_calls(hass)
-    turn_on = await _begin_manual_turn_on(hass, select)
+    turn_on = await _begin_virtual_turn_on(hass, select)
 
     hass.states.async_set("light.ambient", "on", {"brightness": 100})
     await _drain(hass)
@@ -1083,14 +1083,14 @@ async def test_wall_turn_on_during_a_waiting_manual_on_rejoins_the_window(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("member", ["unavailable", "restored"])
-async def test_member_reporting_in_lit_during_a_waiting_manual_on_is_no_wall_change(
+async def test_member_reporting_in_lit_during_a_waiting_virtual_on_is_no_wall_change(
     hass: HomeAssistant, member: str
 ) -> None:
-    """A real light that loads already lit while a manual turn-on waits was
+    """A real light that loads already lit while a virtual turn-on waits was
     not turned on at the wall: the user's turn-on is still sent."""
     select = _SlowSelect(hass)
     calls = _light_calls(hass)
-    turn_on = await _begin_turn_on(hass, select, "manual", member=member)
+    turn_on = await _begin_turn_on(hass, select, "virtual", member=member)
 
     hass.states.async_set("light.ambient", "on", {"brightness": 77})
     await _drain(hass)
@@ -1193,10 +1193,10 @@ async def test_switch_window_end_recalculates_a_waiting_turn_on(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("mode", [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH])
-async def test_window_end_takes_over_a_waiting_manual_turn_on(
+async def test_window_end_takes_over_a_waiting_virtual_turn_on(
     hass: HomeAssistant, mode: str
 ) -> None:
-    """A gate window ending judges a manual turn-on not sent yet as an on
+    """A gate window ending judges a virtual turn-on not sent yet as an on
     light: turn-off turns it off, switch-state finds the room long empty."""
     select = _SlowSelect(hass)
     visit = (datetime.now(UTC) - timedelta(hours=4)).isoformat()
@@ -1233,10 +1233,10 @@ async def test_window_end_takes_over_a_waiting_manual_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_held_follow_window_end_keeps_a_waiting_manual_turn_on(
+async def test_held_follow_window_end_keeps_a_waiting_virtual_turn_on(
     hass: HomeAssistant,
 ) -> None:
-    """A hold keeps a follow window's end for a manual turn-on not sent yet,
+    """A hold keeps a follow window's end for a virtual turn-on not sent yet,
     as it does for an on light: the off applies when the hold releases."""
     select = _SlowSelect(hass)
     select.release.set()  # the window's own turn-on at startup goes through
@@ -1283,10 +1283,10 @@ async def test_held_follow_window_end_keeps_a_waiting_manual_turn_on(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_after_an_overtaken_manual_on_still_lights_the_room(
+async def test_occupancy_after_an_overtaken_virtual_on_still_lights_the_room(
     hass: HomeAssistant,
 ) -> None:
-    """An automatic turn-on only defers to a manual one that still stands:
+    """An automatic turn-on only defers to a virtual one that still stands:
     one turned off again while it waited no longer lights the room."""
     select = _SlowSelect(hass)
     hass.states.async_set("binary_sensor.occ", "off")
@@ -1373,7 +1373,7 @@ async def test_uninterrupted_slow_selection_still_turns_on(
     assert hass.states.get("light.selection_light").state == "on"
 
 
-_LEVEL = {"manual": 200, "occupancy": 102, "door": 102}
+_LEVEL = {"virtual": 200, "occupancy": 102, "door": 102}
 
 
 class _FailingSelect(_SlowSelect):
@@ -1433,7 +1433,7 @@ async def _begin_turn_on(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 async def test_waiting_turn_on_reports_on_at_its_level(
     hass: HomeAssistant, trigger: str
 ) -> None:
@@ -1459,7 +1459,7 @@ async def test_waiting_turn_on_reports_on_at_its_level(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 @pytest.mark.parametrize(
     "error",
     [HomeAssistantError("device offline"), RuntimeError("boom")],
@@ -1511,7 +1511,7 @@ async def _pass(hass: HomeAssistant, freezer, seconds: float) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door"])
 @pytest.mark.allow_warning_log
 async def test_select_call_that_never_answers_still_lights_the_room(
     hass: HomeAssistant, freezer, caplog, trigger: str
@@ -1552,7 +1552,7 @@ async def test_select_call_answering_within_the_limit_is_applied(
     """Nine seconds is slow, not stuck: the selection counts as applied."""
     select = _HangingSelect(hass)
     calls = _light_calls(hass)
-    turn_on = await _begin_turn_on(hass, select, "manual")
+    turn_on = await _begin_turn_on(hass, select, "virtual")
 
     await _pass(hass, freezer, 9)
     select.release.set()
@@ -1576,7 +1576,7 @@ async def test_select_call_given_up_on_after_an_off_lights_nothing(
     """Giving up on the select call does not revive a turn-on that an off or
     a change at the wall overtook while it waited."""
     select = _HangingSelect(hass)
-    turn_on = await _begin_turn_on(hass, select, "manual")
+    turn_on = await _begin_turn_on(hass, select, "virtual")
     if overtaker == "off":
         await hass.services.async_call(
             "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
@@ -1710,7 +1710,7 @@ async def test_standby_whose_select_call_never_answers_still_comes_on(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 async def test_waiting_turn_on_cancelled_by_an_off_reports_off(
     hass: HomeAssistant, trigger: str
 ) -> None:
@@ -1982,7 +1982,7 @@ async def test_toggle_during_the_wait_turns_the_light_off(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 async def test_member_reporting_off_after_a_waited_turn_on_turns_the_light_off(
     hass: HomeAssistant, trigger: str
 ) -> None:
@@ -2008,7 +2008,7 @@ _NOT_LOADED = [None, "unavailable", "unknown", "restored"]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door"])
 @pytest.mark.parametrize("member", _NOT_LOADED)
 @pytest.mark.parametrize("report", [{}, {"brightness": 0}], ids=["off", "on_at_0"])
 async def test_member_reporting_in_off_during_the_wait_gets_the_turn_on(
@@ -2040,7 +2040,7 @@ async def test_member_reporting_in_off_during_the_wait_gets_the_turn_on(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 async def test_members_reporting_in_off_after_the_turn_on_get_it_again(
     hass: HomeAssistant, trigger: str
 ) -> None:
@@ -2074,7 +2074,7 @@ async def test_members_reporting_in_off_after_the_turn_on_get_it_again(
             turn_on_select_option="Cozy",
         ),
     )
-    if trigger == "manual":
+    if trigger == "virtual":
         await hass.services.async_call(
             "light",
             "turn_on",
@@ -2176,7 +2176,7 @@ def _one_device(hass: HomeAssistant, *entity_ids: str) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy", "door"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door"])
 async def test_device_push_from_the_selection_is_not_a_wall_turn_on(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
@@ -2227,7 +2227,7 @@ async def test_device_push_after_the_turn_on_was_cancelled_is_adopted(
     leaves a lit room: the light reports it and turns it off on its timeout."""
     _one_device(hass, "select.ambient_theme", "light.ambient")
     select = _SlowSelect(hass)
-    turn_on = await _begin_turn_on(hass, select, "manual")
+    turn_on = await _begin_turn_on(hass, select, "virtual")
     await hass.services.async_call(
         "light", "turn_off", {"entity_id": "light.selection_light"}, blocking=True
     )
@@ -2472,7 +2472,7 @@ async def _begin_scheduled_turn_on(
     active: dict,
     other: dict,
 ) -> asyncio.Task:
-    """Start a manual turn-on of a Virtual Scheduled Light under its active
+    """Start a virtual turn-on of a Virtual Scheduled Light under its active
     settings, and return once it waits for the select call."""
     hass.states.async_set("select.other_theme", "Normal")
     hass.states.async_set("light.ambient", "off")
@@ -3156,7 +3156,7 @@ async def _standby_coming_on(
 
 
 async def _off_then_preset(hass: HomeAssistant, reported: str) -> FadingLight:
-    """Turn the light off by hand during the select call, whose preset then
+    """Turn the light off manually during the select call, whose preset then
     lights the strip all the same."""
     light, select = await _standby_coming_on(hass, reported)
     await hass.services.async_call(
@@ -3708,7 +3708,7 @@ async def test_torn_down_light_drops_both_of_two_waiting_turn_ons(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("trigger", ["manual", "occupancy"])
+@pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
 async def test_preset_landing_as_the_select_call_returns_is_no_wall_turn_on(
     hass: HomeAssistant, trigger: str
 ) -> None:
@@ -3721,7 +3721,7 @@ async def test_preset_landing_as_the_select_call_returns_is_no_wall_turn_on(
         hass, _selection_entry(occupancy="binary_sensor.occ", auto_on_brightness=40)
     )
 
-    if trigger == "manual":
+    if trigger == "virtual":
         await hass.services.async_call(
             "light",
             "turn_on",

@@ -25,13 +25,13 @@ records what should be built next, and what was asked for and answered another w
 
 One release with item 2.
 
-- **Problem.** Some lights should only turn off by hand or at the end of a schedule window:
+- **Problem.** Some lights should only turn off manually or at the end of a schedule window:
   decorative lights on from before sunset to 23:00, a child's wake-up light. The turn-off timeout is
-  required (1 to 14400 s), so a light turned on by hand always gets a timer, and the only way around
+  required (1 to 14400 s), so a light turned on manually always gets a timer, and the only way around
   it is holding the Auto-off switch.
 - **Design.** Clearing the field saves no timeout, and the light runs no timer. It applies to both
   light types, to each settings set of a Virtual Scheduled Light on its own, and to turning the light
-  on by hand. It is allowed with an occupancy or door sensor (the sensor turns the light on, you turn
+  on manually. It is allowed with an occupancy or door sensor (the sensor turns the light on, you turn
   it off), and the "at least the occupancy timeout" check is skipped. The effect and warn stages
   don't run, since they only warn of a timer off. A false detection still turns the light off after
   the false-detection off delay. A new light's field still starts at 300.
@@ -58,16 +58,16 @@ One release with item 1.
 
 Ships alone.
 
-- **Problem.** Turn the light off by hand while you are in the room, to watch a film or go to
+- **Problem.** Turn the light off manually while you are in the room, to watch a film or go to
   sleep, and the motion sensor clears after its hold time, sees you again, and the light comes back
   on. Today a manual off stands only over the visit it ended, and the sensor's next on-cycle is a new
   visit. The only way to stop it is a gate through a helper you flip, not the light. This is the most
   common complaint about motion lighting anywhere.
-- **Design.** One option on the light, off by default. When on, after an off by hand (through the
-  virtual light or at the wall) occupancy and the door do not turn the light on until the room has
-  been empty for the turn-off timeout, by the same rule the countdown uses, so there is no new
-  number to set. A turn-on by hand or at the wall ends it, as does a schedule boundary, as they end a
-  manual off today. A blocked turn-on fires a `turn_on_blocked` event on the Events entity.
+- **Design.** One option on the light, off by default. When on, after a manual off, occupancy and
+  the door do not turn the light on until the room has been empty for the turn-off timeout, by the
+  same rule the countdown uses, so there is no new number to set. A virtual or physical turn-on
+  ends it, as does a schedule boundary, as they end a manual off today. A blocked turn-on fires a
+  `turn_on_blocked` event on the Events entity.
 - **Why now.** It is the one gap a remote or a voice assistant cannot paper over: a Turn off then
   means "turn off and stay off", which is what the services idea under Not planned was for.
 - **Cost.** It is an input to precedence rule 5, so matrix tests, an e2e run and a REFERENCE.md
@@ -95,14 +95,14 @@ One release, none touching the precedence rules.
 Ships alone.
 
 - **Problem.** Adaptive Lighting adjusts every light it controls every minute or two while it is
-  on. MoLight reads an external brightness or color change as a dim at the wall and restarts the
+  on. MoLight reads each such brightness or color change as a physical dim and restarts the
   timer, so a light both control never turns off. Adaptive Lighting is among the most installed
   HACS integrations, and it is the answer this file gives to time-of-day brightness.
 - **Design.** A per-light option, off by default: an adjustment to a light that is on does not
   restart the timer; a turn-on or off at the wall still counts. The docs say to leave the auto-on
   brightness and color blank, since Adaptive Lighting takes MoLight's values for manual control and
   stops adapting. Verify the failure with a test before designing.
-- **Cost.** It changes what a change at the wall does, so it ships alone with its own tests.
+- **Cost.** It changes what a physical change does, so it ships alone with its own tests.
 
 ### 6. Occupancy timeout check
 
