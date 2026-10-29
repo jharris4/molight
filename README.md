@@ -65,7 +65,7 @@ The usual order:
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
-Order matters only in that a virtual entity must exist before another can reference it. Sensors are reusable: one occupancy or illuminance sensor can serve many lights. Every entry can be edited later via its **Configure** button, or removed independently.
+Order matters only in that a virtual entity must exist before another can reference it. Sensors are reusable: one occupancy or illuminance sensor can serve many lights. Every entry can be edited later via its **Configure** button, or deleted independently.
 
 ### A typical first setup
 
@@ -122,7 +122,7 @@ An optional **prefix**/**suffix** distinguishes the virtual entities from the re
 
 A final form then lets you adjust the default settings applied to every pick; for discovered lights that includes the occupancy/illuminance/schedule references. Each created entity can still be edited individually afterwards via **Configure**.
 
-- A pick that stopped being a candidate while the forms were open (wrapped from another tab, including by a Discover flow submitted at the same moment, disabled or removed) is skipped, and the summary says how many.
+- A pick that stopped being a candidate while the forms were open (wrapped from another tab, including by a Discover flow submitted at the same moment, disabled or deleted) is skipped, and the summary says how many.
 - Discovery creates regular Virtual Lights; those whose Schedule mode is a Gate mode can then be converted through **Convert virtual lights**.
 
 ### Bulk assignment
@@ -165,7 +165,7 @@ MoLight writes no debug logs. A setting it cannot act on is raised as a **Repair
 - two virtual lights, saved before the form refused it, that both control the same light (they fight over it);
 - a keep-on entity saved before the form refused it (it stays as it was).
 
-The issue clears when the entry is edited or removed, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the Virtual Light then reports what its real lights show), and an error when discovery fails to create an entry.
+The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the Virtual Light then reports what its real lights show), and an error when discovery fails to create an entry.
 
 Every entry offers **Download diagnostics** in its menu on the MoLight page. The file holds the entry's settings, the state and attributes of every entity it created and of every entity it references (real lights, sensors, schedule, door, keep-on entities, select and buttons), which other MoLight entries use its entities, and MoLight's open Repairs issues. Attach it to a bug report.
 

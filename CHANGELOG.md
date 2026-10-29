@@ -360,7 +360,7 @@ longer needs a custom repository.
 
 ### Fixed
 
-- Removing a virtual light config entry no longer errors.
+- Deleting a virtual light config entry no longer errors.
 
 ## [1.0.0] - 2026-07-03
 
