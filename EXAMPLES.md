@@ -19,11 +19,11 @@ The examples build on each other:
 5. [Home-only lighting](#example-5-home-only-lighting-source-backed-inverted-schedule): an inverted schedule derived from an away-mode binary sensor
 6. [Stairs night light](#example-6-stairs-night-light-gate-and-keep-state): a schedule that gates motion without cutting a timer short
 7. [Storage room light](#example-7-storage-room-light-door-sensor): a door/contact sensor
-8. [Hallway night light](#example-8-hallway-night-light-virtual-scheduled-light): different settings inside and outside a schedule
+8. [Upstairs hallway night light](#example-8-upstairs-hallway-night-light-virtual-scheduled-light): different settings inside and outside a schedule
 9. [Pico remote](#example-9-pico-remote-for-the-closet-light-virtual-remote): remote buttons instead of automations
 10. [Bilresa remote](#example-10-bilresa-two-button-remote-single-vs-double-click): single vs. double clicks
 11. [Bedside lamp](#example-11-bedside-lamp-morning-and-evening-virtual-combined-schedule-sensor): two windows combined into one schedule
-12. [Porch light with standby](#example-12-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
+12. [Back porch light with standby](#example-12-back-porch-light-with-standby-virtual-scheduled-light): a dim glow all night that brightens on motion
 13. [Open-plan kitchen](#example-13-open-plan-kitchen-virtual-combined-occupancy-sensor): two motion sensors and an mmWave sensor merged into one occupancy signal
 14. [TV hold](#example-14-tv-hold-template-helper-as-a-keep-on-entity): a media player keeps the lights on through a Home Assistant Template helper
 
@@ -254,9 +254,9 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 ---
 
-### Example 8: Hallway night light (Virtual Scheduled Light)
+### Example 8: Upstairs hallway night light (Virtual Scheduled Light)
 
-Motion lights the hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both sets of settings; the schedule sensor decides which set is active. This *replaces* Example 2's Hallway light, so delete that entry first (its occupancy sensor stays and is reused below): a real light belongs to one virtual light, and the form refuses `light.hallway_real` while the Hallway light still controls it. It's a schedule sensor, then the light's three forms in a row:
+Motion lights the upstairs hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both sets of settings; the schedule sensor decides which set is active. It also needs a Virtual Occupancy Sensor wrapping the upstairs motion sensor, set up like Example 2's. Then it's a schedule sensor and the light's three forms in a row:
 
 **1. Virtual Schedule Sensor** (the "night" window)
 
@@ -272,8 +272,8 @@ Window end:
 **2. Virtual Scheduled Light** (shared form)
 
 ```text
-Name:              Hallway                       # → light.hallway
-Lights to control: light.hallway_real
+Name:              Upstairs Hallway              # → light.upstairs_hallway
+Lights to control: light.upstairs_hallway_real
 Schedule sensor:   binary_sensor.night           # required; off = outside, on = inside
 At schedule end:   Keep state: apply the outside settings and keep the running timer
 ```
@@ -282,7 +282,7 @@ At schedule end:   Keep state: apply the outside settings and keep the running t
 
 ```text
 Turn-off timeout:  300
-Occupancy sensor:  binary_sensor.hallway_occupancy   # from Example 2
+Occupancy sensor:  binary_sensor.upstairs_hallway_occupancy
 Auto-on brightness: 100
 ```
 
@@ -290,7 +290,7 @@ Auto-on brightness: 100
 
 ```text
 Turn-off timeout:  60
-Occupancy sensor:  binary_sensor.hallway_occupancy
+Occupancy sensor:  binary_sensor.upstairs_hallway_occupancy
 Auto-on brightness: 15
 Auto-on color temperature: 2200                  # warm night light
 ```
@@ -390,15 +390,15 @@ Each schedule window is a separate follow window: turn the lamp off at 07:00 and
 
 ---
 
-### Example 12: Porch light with standby (Virtual Scheduled Light)
+### Example 12: Back porch light with standby (Virtual Scheduled Light)
 
-Through Example 4's schedule window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that regular Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
+Through Example 4's schedule window the back porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. It reuses Example 4's schedule sensor, since one sensor can feed many lights. It also needs a Virtual Occupancy Sensor wrapping the back porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
 
 **1. Virtual Scheduled Light** (shared form)
 
 ```text
-Name:              Porch                         # → light.porch
-Lights to control: light.porch_real
+Name:              Back Porch                    # → light.back_porch
+Lights to control: light.back_porch_real
 Schedule sensor:   binary_sensor.porch_schedule  # from Example 4
 At schedule end:   Turn off: turn off with the inside settings, then apply the outside settings
 ```
@@ -413,7 +413,7 @@ Turn-off timeout:  300        # a daytime manual on goes off after 5 minutes
 
 ```text
 Turn-off timeout:   30
-Occupancy sensor:   binary_sensor.porch_occupancy
+Occupancy sensor:   binary_sensor.back_porch_occupancy
 Auto-on brightness: 100
 
 Standby:                                         # collapsed section; expand it
@@ -425,7 +425,7 @@ Standby:                                         # collapsed section; expand it
 With no occupancy sensor on the outside side, motion does nothing in the daytime. Things worth knowing:
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
-- Switching the porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
+- Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - To remove standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form refuses a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
