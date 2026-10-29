@@ -31,7 +31,7 @@ Transitions
 
 Effect/warn warning
   When the auto-off timer expires the light can flag the impending off before
-  going dark, controlled by these options (all default to the feature being
+  going dark, controlled by these settings (all default to the feature being
   off, so the light turns straight off exactly as before):
     EFFECT: a brief cue (blink/dip to effect_brightness, 0 = fully off) shown
             for effect_timeout seconds. Skipped when effect_timeout is 0.
@@ -91,7 +91,7 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
 
 Turn-on attribution
   Five timestamps record the last time the virtual light was turned on and why:
-    last_on_physical:    an underlying real light entity changed to ON through a
+    last_on_physical:    a member light changed to ON through a
                          physical change (a wall switch, another automation, the HA
                          UI acting on the real entity), whether this virtual
                          light was off or already on.
@@ -172,8 +172,9 @@ illuminance_mode:
   - Illuminance OFF→ON (dark→bright):
       control:  go IDLE, turn lights off.
       gate:     no effect; bright never turns lights off. Use when the lux
-                sensor can see the controlled lights, which would otherwise
-                oscillate (lights on → reads bright → forced off → dark → ...).
+                sensor can see the virtual light's member lights, which would
+                otherwise oscillate (lights on → reads bright → forced off →
+                dark → ...).
 
 Holding auto-off
   Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
@@ -504,7 +505,7 @@ def _wrapped_light_commanded(old_state: State | None, new_state: State) -> bool:
 
 # Member color modes an hs command can drive (HA converts hs to each member's
 # native mode); any of them lets the virtual light offer HS itself. Shared
-# with the config flow so an upstream addition can't split the two.
+# with the config and options flows so an upstream addition can't split the two.
 _HS_CAPABLE_MODES = COLOR_MODES_COLOR
 
 
@@ -633,14 +634,14 @@ _Look = tuple[int | None, dict | None]
 
 
 def _look_groups(
-    targets: list[str],
+    lights: list[str],
     brightness: int | None,
     color: dict | None,
     looks: dict[str, _Look | None] | None,
 ) -> list[tuple[list[str], int | None, dict | None]]:
-    """Split targets into one group per look; unmapped members get the given one."""
+    """Split member lights into one group per look; unmapped ones get the given one."""
     groups: dict[tuple, tuple[list[str], int | None, dict | None]] = {}
-    for entity_id in targets:
+    for entity_id in lights:
         look = (
             (brightness, color)
             if looks is None
@@ -3167,8 +3168,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # Registered but stateless: an integration that hasn't loaded
                 # (yet); the bulb may still be burning, so don't assume off.
                 # A deleted or disabled member can never report again;
-                # counting such a ghost as "maybe on" would pin the virtual
-                # light on forever.
+                # counting it as "maybe on" would pin the virtual light on
+                # forever.
                 if not entity_gone(self.hass, entity_id):
                     return False
                 continue
@@ -5315,7 +5316,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 return False
         if self._drop_member_cycles() and members is not None:
             members = [m for m in members if m in self._lights]
-        targets = self._lights if members is None else members
+        lights = self._lights if members is None else members
         # Mirror the commanded brightness and color so the virtual light
         # reports them (the echo is only mirrored for a command that named
         # none).
@@ -5323,7 +5324,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._attr_brightness = brightness
         if on and color and adopt:
             self._adopt_color_data(color)
-        groups = _look_groups(targets, brightness, color, looks if on else None)
+        groups = _look_groups(lights, brightness, color, looks if on else None)
         for group, group_brightness, group_color in groups:
             self._commanded_power.update(dict.fromkeys(group, on))
             self._expect_echo(

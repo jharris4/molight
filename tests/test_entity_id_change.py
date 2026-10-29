@@ -1256,8 +1256,8 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
 async def test_timeout_guard_and_removal_follow_a_sensor_whose_entity_id_changed(
     hass: HomeAssistant,
 ) -> None:
-    """The light still constrains its sensor's occupancy timeout, and removal still
-    strips it."""
+    """The light still constrains its sensor's occupancy timeout, and removing the
+    sensor still removes its reference."""
     motion = RealBinary("motion")
     member = RealLight("real_1")
     await add_real(hass, motion, member)

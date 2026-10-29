@@ -419,7 +419,7 @@ async def test_creating_a_schedule_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
     """A group can name an entity that does not exist yet, including the
-    suffixed ID a taken name leads to."""
+    suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     own_id = SCHEDULE
     if named == "taken_name":
@@ -441,7 +441,7 @@ async def test_creating_a_schedule_rejects_a_group_that_names_its_id(
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_SCHEDULE_SOURCE: "schedule_source_cycle"}
 
-    # Under another ID the same group is a valid source.
+    # Under another entity ID the same group is a valid source.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**values, CONF_NAME: "Unrelated", SECTION_ADVANCED: {}}
     )
@@ -493,8 +493,9 @@ async def test_a_combined_schedule_rejects_a_schedule_whose_source_includes_it(
 async def test_creating_a_combined_schedule_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined schedule can take an ID its input's source group names,
-    including the suffixed ID a taken name leads to."""
+    """A new combined schedule can take an entity ID its input's source group
+    names,
+    including the suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _schedule(GROUP, invert=True))
     if taken:

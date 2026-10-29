@@ -125,7 +125,7 @@ async def test_suggested_entity_id_formats_object_id(hass: HomeAssistant) -> Non
 
 @pytest.mark.asyncio
 async def test_suggested_entity_id_uniquifies_on_clash(hass: HomeAssistant) -> None:
-    """A taken id gets HA's _2 suffix instead of colliding."""
+    """A taken entity ID gets HA's _2 suffix instead of colliding."""
     hass.states.async_set("light.kitchen", "off")
     entry = _entry(
         {

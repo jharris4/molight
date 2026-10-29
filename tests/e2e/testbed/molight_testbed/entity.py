@@ -45,7 +45,7 @@ class TestbedEntity(Entity):
         return bool(self.record["available"])
 
     async def async_added_to_hass(self) -> None:
-        """Register the final entity id with the controller."""
+        """Register the final entity ID with the controller."""
         await super().async_added_to_hass()
         self.controller.register(self)
 

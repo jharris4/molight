@@ -285,7 +285,7 @@ test("create an occupancy sensor, then hit the entity-id conflict step", async (
   const state = await entityState(page, "binary_sensor.browser_occupancy");
   expect(state.attributes.friendly_name).toBe("Browser Occupancy");
 
-  // The same name with a blank entity id: the flow warns and offers to proceed.
+  // The same name with a blank entity ID: the flow warns and offers to proceed.
   await startCreate(page, "Virtual Occupancy Sensor");
   await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Occupancy");
   await pickEntity(page, page, "Source sensor", "E2E Raw Occupancy");

@@ -2102,7 +2102,7 @@ class _ScheduleTree:
         cfg = entry_settings(entry)
         entity_type = cfg[CONF_ENTITY_TYPE]
         if entry.entry_id in path:
-            # The config flow rejects loops; this guards hand-edited or
+            # The config and options flows reject loops; this guards hand-edited or
             # concurrently saved entry settings against infinite expansion. Not an
             # input to track: the root's own updates already reload it.
             _LOGGER.warning(

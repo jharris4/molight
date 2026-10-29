@@ -174,7 +174,7 @@ def _remote_entry() -> MockConfigEntry:
 
 
 def _entities_for(hass: HomeAssistant, entry: MockConfigEntry) -> list[str]:
-    """Entity ids this entry currently owns, via the entity registry."""
+    """Entity IDs this entry currently owns, via the entity registry."""
     registry = er.async_get(hass)
     return [
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)
@@ -334,7 +334,7 @@ async def test_remove_entry_added_before_startup_is_clean(
 
 @pytest.mark.asyncio
 @ENTITIES_FIRST
-async def test_remove_entry_strips_references_from_surviving_entries(
+async def test_remove_entry_removes_references_from_surviving_entries(
     hass: HomeAssistant, entities_first: bool
 ) -> None:
     """Removing a sensor entry cleans its references out of surviving entries.
@@ -389,7 +389,7 @@ async def test_remove_entry_strips_references_from_surviving_entries(
 
 @pytest.mark.asyncio
 @ENTITIES_FIRST
-async def test_remove_schedule_strips_it_from_combined_schedules(
+async def test_remove_schedule_removes_it_from_combined_schedules(
     hass: HomeAssistant, entities_first: bool
 ) -> None:
     """A removed input leaves a combined schedule; with none left it is off."""
@@ -409,7 +409,7 @@ async def test_remove_schedule_strips_it_from_combined_schedules(
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_remove_entry_strips_scheduled_light_references(
+async def test_remove_entry_removes_scheduled_light_references(
     hass: HomeAssistant,
 ) -> None:
     """Shared and per-side references are cleaned from a scheduled light."""
@@ -486,7 +486,7 @@ async def test_remove_entry_strips_scheduled_light_references(
 
 @pytest.mark.asyncio
 @ENTITIES_FIRST
-async def test_remove_wrapped_virtual_light_strips_member_reference(
+async def test_remove_wrapped_virtual_light_removes_member_reference(
     hass: HomeAssistant, entities_first: bool
 ) -> None:
     """A virtual light wrapping another virtual light loses the member when
@@ -494,7 +494,7 @@ async def test_remove_wrapped_virtual_light_strips_member_reference(
 
     Regression: CONF_LIGHTS was missing from the reference cleanup, and
     _all_lights_off treats an unresolvable member as "maybe still on"; the
-    dangling id would have pinned the outer light on forever.
+    dangling entity ID would have pinned the outer light on forever.
     """
     inner = make_light_entry(name="Rm Inner", lights=["light.inner_real"])
     outer = make_light_entry(

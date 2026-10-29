@@ -5,7 +5,7 @@ DOMAIN = "molight"
 # Union of every platform below; the fallback for an unrecognized entity type.
 PLATFORMS = ["binary_sensor", "event", "light", "sensor", "switch"]
 
-# Entity type discriminator stored in config entry data
+# Entity type stored in config entry data
 ENTITY_TYPE_OCCUPANCY = "occupancy"
 ENTITY_TYPE_COMBINED_OCCUPANCY = "combined_occupancy"
 ENTITY_TYPE_ILLUMINANCE = "illuminance"
@@ -51,9 +51,9 @@ CONF_ENTITY_ID = "entity_id"
 
 # Discovery filter step, shown before the entity checklist: optional area and
 # label multiselects narrow the candidates (an entity matches through its own
-# registry assignment or its device's), and a preselect toggle decides whether
-# the checklist starts with everything checked (bulk-add) or nothing (pick a
-# few). None of these are stored on created entries.
+# registry assignment or its device's), and the Pre-select all matches field
+# decides whether the checklist starts with everything checked (bulk-add) or
+# nothing (pick a few). None of these are stored on created entries.
 CONF_FILTER_AREAS = "filter_areas"
 CONF_FILTER_LABELS = "filter_labels"
 CONF_PRESELECT_ALL = "preselect_all"
@@ -79,7 +79,7 @@ AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 # deselecting a pre-selected light removes the reference.
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
 CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
-CONF_ASSIGN_LIGHTS = "assign_lights"  # target regular Virtual Light entity_ids
+CONF_ASSIGN_LIGHTS = "assign_lights"  # regular Virtual Light entity_ids to assign
 CONF_CONVERT_LIGHTS = "convert_lights"  # virtual light entity_ids to convert
 CONF_CONFIRM_CONVERSION = "confirm_conversion"
 ASSIGN_ROLE_REGULAR = "regular"
@@ -163,7 +163,7 @@ DEFAULT_SCHEDULE_OPERATOR = SCHEDULE_OPERATOR_ANY
 
 # --- regular Virtual Light and Virtual Scheduled Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
-# A Virtual Scheduled Light keeps its shared identity/targets/schedule at the
+# A Virtual Scheduled Light keeps its shared identity/member lights/schedule at the
 # entry's top level and stores two complete Virtual Light settings mappings.
 # The schedule's binary state selects outside (off) vs inside (on).
 CONF_OUTSIDE_SCHEDULE_SETTINGS = "outside_schedule_settings"
@@ -303,15 +303,15 @@ DATA_AUTO_OFF_KEPT = DOMAIN + "_auto_off_kept"
 # hass.data key of the entity ID changes followed this run, former entity ID
 # to current one: a state saved under the former one describes the same entity.
 DATA_ENTITY_ID_CHANGED = DOMAIN + "_entity_id_changed"
-# hass.data key of the IDs of entities removed with their entry this run, until
-# another entity takes the ID: a form left open may still offer one.
+# hass.data key of the entity IDs of entities removed with their entry this
+# run, until another entity takes the entity ID: a form left open may still offer one.
 DATA_REMOVED = DOMAIN + "_removed"
 # What each unloaded schedule entry still learns from its sources, by entry ID.
 DATA_SCHEDULE_WATCH = DOMAIN + "_schedule_watch"
 # hass.data key of the sources a Discover flow is wrapping right now.
 DATA_DISCOVERY_RESERVED = DOMAIN + "_discovery_reserved"
 # The platforms actually forwarded, so unload matches setup even if the
-# entry type changed in between (a light/scheduled-light conversion).
+# entity type changed in between (a light/scheduled-light conversion).
 DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
@@ -362,9 +362,9 @@ STAGE_CANCELLED = "cancelled"
 # How a referenced illuminance entity affects the light:
 #   control:  dark gates turn-ons AND turning bright forces the lights off
 #   gate:     dark gates turn-ons only; bright never turns the lights off.
-#             Use when the lux sensor can see the controlled lights, which
-#             would otherwise oscillate (lights on → bright → forced off →
-#             dark → on ...).
+#             Use when the lux sensor can see the virtual light's member
+#             lights, which would otherwise oscillate (lights on → bright →
+#             forced off → dark → on ...).
 CONF_ILLUMINANCE_MODE = "illuminance_mode"
 ILLUMINANCE_MODE_CONTROL = "control"
 ILLUMINANCE_MODE_GATE = "gate"
@@ -514,7 +514,7 @@ REMOTE_ACTION_PRESET_1 = "preset_1"
 REMOTE_ACTION_PRESET_2 = "preset_2"
 
 # (single-click key, double-click key, action) per bindable action slot:
-# the one table the config flow, the runtime, and the cleanup all iterate.
+# the one table the config and options flows, the runtime, and the cleanup all iterate.
 REMOTE_ACTION_FIELDS = (
     (CONF_ON_BUTTONS_SINGLE, CONF_ON_BUTTONS_DOUBLE, REMOTE_ACTION_ON),
     (CONF_OFF_BUTTONS_SINGLE, CONF_OFF_BUTTONS_DOUBLE, REMOTE_ACTION_OFF),

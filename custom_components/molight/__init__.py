@@ -373,7 +373,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Strip references to a removed entry's entities from surviving entries.
+    """Remove references to a removed entry's entities from surviving entries.
 
     Runs before HA clears the entity registry, so the removed entry's entity
     ids can still be resolved. Every surviving entry that referenced one of
@@ -388,7 +388,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     removed = {
         e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    # Entities deleted from the registry earlier, unless another took the ID since.
+    # Entities deleted from the registry earlier, unless another took the entity
+    # ID since.
     removed.update(
         deleted.entity_id
         for deleted in registry.deleted_entities.values()

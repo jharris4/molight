@@ -150,7 +150,7 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
     """Whether this event entity can fire a double click; None if unknown.
 
     Resolved from the event_types of the entity's current state,
-    so the config flow can reject a double-click binding on a button that
+    so the config and options flows can reject a double-click binding on a button that
     will never fire one. An unknown capability can't be judged, so the
     binding is allowed and simply never fires until the entity proves itself.
     """
@@ -168,7 +168,7 @@ def _action_call(
     Turn on and the presets carry their optional brightness and color. A
     Turn on with none is a plain turn-on; a preset with none stays inert
     (such a binding would be a turn-on pretending to be a preset, and the
-    config flow rejects the combination anyway).
+    config and options flows reject the combination anyway).
     """
     if action == REMOTE_ACTION_OFF:
         return ("turn_off", {})

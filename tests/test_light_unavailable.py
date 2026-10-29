@@ -708,7 +708,7 @@ async def test_occupancy_briefly_unavailable_respects_manual_off(
 async def test_occupancy_seen_on_at_startup_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant,
 ) -> None:
-    """The value read at startup counts as known, not only observed edges."""
+    """The value seeded at startup counts as known, not only observed edges."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
@@ -2276,7 +2276,7 @@ async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> 
 async def test_follow_one_of_two_members_recovering_dark_relights_all(
     hass: HomeAssistant,
 ) -> None:
-    """One member of a group rebooting dark mid-window gets re-lit.
+    """One of two member lights rebooting dark mid-window gets re-lit.
 
     Previously nothing happened: the sibling still on meant the virtual light
     never saw an off, and the dark member stayed dark until the next window.

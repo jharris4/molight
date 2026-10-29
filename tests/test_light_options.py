@@ -4,7 +4,7 @@ Editing a virtual light's options reloads its config entry, which tears the
 entity down and re-creates it mid-flight. These tests pin what happens when
 that reload lands while the light is in each running state: the re-created
 entity re-seeds from the real lights and sensors exactly like a restart, and
-the new option values take effect immediately.
+the new settings take effect immediately.
 """
 
 from __future__ import annotations

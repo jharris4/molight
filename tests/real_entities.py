@@ -353,7 +353,7 @@ async def add_real(hass: HomeAssistant, *entities: Entity) -> None:
 
 
 class _RealFlow(ConfigFlow, domain="real"):
-    """The flow an integration's entry needs to be set up."""
+    """The flow an integration's config entry needs to be set up."""
 
 
 async def add_real_with_entry(

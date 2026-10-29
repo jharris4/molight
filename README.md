@@ -24,7 +24,7 @@ Each of these is a *virtual entity*: it stands in front of real devices (sensors
 - Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's occupancy timeout, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 - Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified: a light that only a blip lit goes off after a short false-detection off delay, and a light the user turned on is never cut short (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).
 - A light's own [maintain sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on, however the light was lit, even manually.
-- Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); getting bright can force lights off (or not, for lux sensors that can see the lights they control).
+- Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); getting bright can force lights off (or not, for lux sensors that can see the virtual light's member lights).
 - A schedule can own a light or gate it (see [Schedule modes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes)). **Follow** gives porch-light behavior (on at schedule window start, off at window end) while respecting manual changes mid-window; the three **Gate** modes let motion and the door turn the light on only inside the window, and differ in what the window's end does to a light that is still on.
 - A [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) swaps a whole set of settings inside and outside a schedule, optionally resting at a dim [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) level instead of turning off.
 - A [door sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#door-sensor) lights a pantry, closet or garage when the door opens, or holds it while the door stands open. A garage door opener or gate works as the door too.
@@ -49,7 +49,7 @@ MoLight is available in the HACS default repository list.
 
 ### Manual
 
-Copy `custom_components/molight/` into your HA config `custom_components/` directory and restart.
+Copy `custom_components/molight/` into your Home Assistant config `custom_components/` directory and restart.
 
 ## Getting started
 
@@ -63,7 +63,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 The usual order:
 
 1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. It's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
-2. Create a **Virtual Light** per room or light group, pointing it at the real `light` entities and referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
+2. Create a **Virtual Light** per room or light group, with the real `light` entities as its member lights, referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
 
@@ -83,7 +83,7 @@ False-detection grace: 5      # a single instantaneous blip = fly/heat, ignored
 Clear after unavailable: 60   # if the sensor dies, don't hold lights forever
 ```
 
-**2. Virtual Light**: points at the real light, references the sensor above
+**2. Virtual Light**: controls the real light, references the sensor above
 
 ```text
 Name:              Hallway                     # → light.hallway  (pin the Entity ID
@@ -98,12 +98,12 @@ For more worked examples with the exact field values to enter, see [EXAMPLES.md]
 
 ### Choosing the entity ID
 
-Every entity except a Virtual Remote can be given an **Entity ID** when it is created. The field is optional and is the last one on the form that asks for the name (on a Virtual Scheduled Light, the first of its three forms). It is handy when you name virtual entities after the real ones they wrap and don't want HA's `_2` suffix behavior. (A remote entry's only entity is its diagnostic sensor, whose ID derives from the name.) On every form it sits in a collapsed **Advanced** section, which on the occupancy sensor form also holds less-common options like the false-detection grace:
+Every entity except a Virtual Remote can be given an **Entity ID** when it is created. The field is optional and is the last one on the form that asks for the name (on a Virtual Scheduled Light, the first of its three forms). It is handy when you name virtual entities after the real ones they wrap and don't want Home Assistant's `_2` suffix behavior. (A remote entry's only entity is its diagnostic sensor, whose entity ID derives from the name.) On every form it sits in a collapsed **Advanced** section, which on the occupancy sensor form also holds less-common settings like the false-detection grace:
 
-- **Leave it blank** to derive the ID from the name. If that ID is already taken, the flow warns you and offers to proceed (HA appends `_2`) or go back, prefilled, and set one yourself.
-- **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting ID re-shows the form with an error. A virtual light's pinned ID also shapes its companions: `light.kitchen` → `switch.kitchen_auto_off` and `event.kitchen_events`.
+- **Leave it blank** to derive the entity ID from the name. If that entity ID is already taken, the flow warns you and offers to proceed (Home Assistant appends `_2`) or go back, prefilled, and set one yourself.
+- **Type one** to pin it. A domain prefix is tolerated and stripped (`light.kitchen` → `kitchen`), the rest is slugified. A conflicting entity ID re-shows the form with an error. A virtual light's pinned entity ID also shapes its companions: `light.kitchen` → `switch.kitchen_auto_off` and `event.kitchen_events`.
 
-The field only appears when creating. Renaming later works through each entry's **Configure** button (every edit form has a **Name** field, and the entry title follows it), while the entity ID stays put (change that via HA's own entity settings). MoLight follows an entity ID changed there, of a virtual entity or of a real one it uses: see [Restarts and unavailability](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability).
+The field only appears when creating. Renaming later works through each entry's **Configure** button (every edit form has a **Name** field, and the entry title follows it), while the entity ID stays put (change that via Home Assistant's own entity settings). MoLight follows an entity ID changed there, of a virtual entity or of a real one it uses: see [Restarts and unavailability](https://github.com/jharris4/molight/blob/main/REFERENCE.md#restarts-and-unavailability).
 
 ### Bulk discovery
 
@@ -113,11 +113,11 @@ The three **Discover** actions scan your existing entities and create a virtual 
 - **Discover illuminance sensors**: every `sensor` with device class `illuminance`.
 - **Discover lights**: every `light` entity.
 
-Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
+Each starts with an optional discovery filter: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
 
 The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. Each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are rejected; a light group whose lights are already ticked starts unticked.
 
-An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), with a target of your choice:
+An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), and **Apply prefix/suffix to** chooses what gets it:
 
 - **Entity ID** (default): only the entity ID gets the affix, as the slug of the composed name (`v_` on a sensor named "Hallway Motion" → `binary_sensor.v_hallway_motion`); the friendly name stays identical to the source.
 - **Name**: the friendly name gets the affix, and the entity ID derives from the composed name.

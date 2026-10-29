@@ -1133,7 +1133,7 @@ async def test_unload_stops_listening(
 
 
 @pytest.mark.asyncio
-async def test_removing_light_strips_remote_target(
+async def test_removing_light_removes_remote_target(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Deleting a virtual light removes it from a remote's target list."""
@@ -1241,7 +1241,7 @@ async def test_remote_without_targets_is_inert(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Buttons with no target lights never call a service (e.g. after the
-    last target light was deleted and stripped from the entry)."""
+    last target light was deleted and removed from the entry)."""
     remote = _remote_entry(
         **{CONF_TARGET_LIGHTS: [], CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]}
     )

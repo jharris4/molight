@@ -7,7 +7,7 @@ turned back on. Turn-ons and manual control are never affected.
 
 The switch mirrors its state into hass.data[DOMAIN][entry_id] and sends it
 to the light through the dispatcher, so the coupling doesn't depend on entity
-ids. Once Home Assistant runs, the entry sets this platform up before the
+IDs. Once Home Assistant runs, the entry sets this platform up before the
 light's, so a light that seeds as soon as it is added reads the restored state.
 """
 
@@ -47,7 +47,8 @@ async def async_setup_entry(
         ENTITY_TYPE_SCHEDULED_LIGHT,
     ):
         entity = AutoOffSwitch(hass, entry)
-        # Parallel the light's explicit id: light.kitchen -> switch.kitchen_auto_off.
+        # Parallel the light's explicit entity ID:
+        # light.kitchen -> switch.kitchen_auto_off.
         if entity_id := suggested_entity_id(
             hass, entry, ENTITY_ID_FORMAT, suffix="_auto_off"
         ):

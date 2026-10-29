@@ -84,8 +84,8 @@ def suggested_entity_id(
     """Suggested entity_id from an entry's stored object_id, or None to derive.
 
     Honored only at first registration: HA uniquifies with _2 on a clash and
-    the registry pins the id thereafter. The object_id is read straight from
-    entry.data (the entity id is immutable and absent from entry_settings once
+    the registry pins the entity ID thereafter. The object_id is read straight from
+    entry.data (the entity ID is immutable and absent from entry_settings once
     options exist). `suffix` lets the companion switch parallel its light, e.g.
     light.kitchen -> switch.kitchen_auto_off.
     """
@@ -159,7 +159,7 @@ def entity_gone(hass: HomeAssistant, entity_id: str) -> bool:
 
 
 def _just_deleted(hass: HomeAssistant, entity_id: str) -> bool:
-    """Return True when the registry deleted this ID moments ago."""
+    """Return True when the registry deleted this entity ID moments ago."""
     since = dt_util.utcnow() - timedelta(seconds=RELOAD_GRACE)
     return any(
         entry.entity_id == entity_id and entry.modified_at >= since
@@ -168,7 +168,7 @@ def _just_deleted(hass: HomeAssistant, entity_id: str) -> bool:
 
 
 class GoneJudge:
-    """Judge whether entities whose state was removed are gone, one per ID."""
+    """Judge whether entities whose state was removed are gone, one per entity ID."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Start with nothing pending."""
@@ -256,7 +256,7 @@ def _judge_lights(
 
     True once any member is capable, False only once every member is judged and
     none is, None while any can't be judged. Shared so the runtime and the
-    config flow can't drift apart.
+    config and options flows can't drift apart.
     """
     all_judged = True
     for entity_id in entity_ids:
@@ -504,7 +504,7 @@ def group_leaves(
 ) -> set[str]:
     """Return the lights a light group ends at, through any nested groups.
 
-    A virtual light is one of them: it answers for the lights under it.
+    A virtual light is one of them: it answers for its member lights.
     """
     return {
         entity_id
@@ -516,10 +516,10 @@ def group_leaves(
 def light_owners(
     hass: HomeAssistant, *, own_entry_id: str | None = None
 ) -> tuple[dict[str, ConfigEntry], dict[str, str]]:
-    """Return the virtual light entries and the owner of each light they command.
+    """Return the virtual light entries and the owner of each of their member lights.
 
-    An owner is named by its light's entity id, or its entry's title while it
-    has no light entity; the first owner by name wins a light two command.
+    An owner is named by its light's entity ID, or its entry's title while it
+    has no light entity; the first owner by name wins a member light two share.
     """
     lights = virtual_light_entries(hass, VIRTUAL_LIGHT_TYPES)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}

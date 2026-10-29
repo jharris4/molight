@@ -1014,7 +1014,7 @@
       },
       "confirm_entity_id": {
         "title": "Entity ID already exists",
-        "description": "An entity with the ID `{entity_id}` already exists, so Home Assistant will create `{entity_id}_2` instead. Set an Entity ID on the previous step to avoid this.",
+        "description": "The entity ID `{entity_id}` is already taken, so Home Assistant will create `{entity_id}_2` instead. Set an Entity ID on the previous step to avoid this.",
         "menu_options": {
           "entity_id_proceed": "Create it anyway",
           "entity_id_change": "Go back and set an Entity ID"

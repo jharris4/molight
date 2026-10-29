@@ -7,7 +7,7 @@ MoLight is configured entirely from the UI, so these examples show the actual fi
 - Each example is a list of entries to create, in the order shown: a light can only reference a sensor that already exists.
 - For each entry, go to **Settings → Devices & Services → MoLight → Add entry → Create a single entity**, pick the type named in the entry's bold heading, and fill in the fields listed. The `# comments` explain the choices.
 - Fields that aren't listed keep their defaults. Some sit in collapsed sections of the form (**Advanced** on the sensor forms; **Turn-on & turn-off behavior**, **Off warning sequence** and **Advanced** on the light forms); expand a section to find its fields.
-- Every create form starts with a **Name**, which the entity ID derives from. All but the Virtual Remote's also offer an optional **Entity ID** field, the last one on the form that asks for the name, to pin the ID yourself.
+- Every create form starts with a **Name**, which the entity ID derives from. All but the Virtual Remote's also offer an optional **Entity ID** field, the last one on the form that asks for the name, to pin the entity ID yourself.
 - Entity IDs such as `light.hallway_real` stand for your own entities.
 
 The examples build on each other:
@@ -61,7 +61,7 @@ False-detection grace: 5      # a single instantaneous blip = fly/heat, ignored
 Clear after unavailable: 60   # if the sensor dies, don't hold lights forever
 ```
 
-**2. Virtual Light**: points at the real light, references the sensor above
+**2. Virtual Light**: controls the real light, references the sensor above
 
 ```text
 Name:              Hallway                     # → light.hallway  (pin the Entity ID
@@ -132,7 +132,7 @@ Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps th
 
 Each time MoLight turns the light on, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
-Set **Illuminance mode** to **Gate only** instead if your lux sensor can *see* the lights it controls (otherwise they'd oscillate).
+Set **Illuminance mode** to **Gate only** instead if your lux sensor can *see* the light's member lights (otherwise they'd oscillate).
 
 ---
 

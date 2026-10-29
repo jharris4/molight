@@ -56,7 +56,7 @@ async def async_setup_entry(
     if event_types is None:
         return
     entity = MoLightEvents(entry, event_types)
-    # Parallel the owner's explicit id: light.kitchen -> event.kitchen_events.
+    # Parallel the owner's explicit entity ID: light.kitchen -> event.kitchen_events.
     if entity_id := suggested_entity_id(
         hass, entry, ENTITY_ID_FORMAT, suffix="_events"
     ):

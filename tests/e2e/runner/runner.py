@@ -1284,7 +1284,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         expect_rejection(client, result, code)
     checkpoint(
         "forms reject unusable color/brightness/fade, wide hysteresis, short "
-        "timeouts, id clashes, non-schedule pickers, and bad remote bindings"
+        "timeouts, entity ID clashes, non-schedule pickers, and bad remote bindings"
     )
 
 
@@ -1370,7 +1370,7 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         "binary_sensor.v_e2e_removal_motion",
         lambda state: state["attributes"].get("friendly_name") == "E2E Removal Motion",
-        "created with the prefixed entity id and the source's name",
+        "created with the prefixed entity ID and the source's name",
     )
     # Every candidate is now wrapped, so a second discovery has nothing to offer.
     expect_abort(start_menu(client, "discover_occupancy"), "no_candidates")
@@ -1423,7 +1423,7 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         "light.e2e_multi_dimmer_v",
         lambda state: state["attributes"].get("friendly_name") == "E2E Multi Dimmer V",
-        "created with the suffixed name and the derived entity id",
+        "created with the suffixed name and the derived entity ID",
     )
     remove_entry_and_entity(
         client,
@@ -3709,9 +3709,9 @@ def run_primary() -> None:
         lambda state: (
             state["attributes"].get("friendly_name") == "E2E Scheduled Edited"
         ),
-        "renamed without changing entity id",
+        "renamed without changing entity ID",
     )
-    checkpoint("options edit renamed the light without changing its entity id")
+    checkpoint("options edit renamed the light without changing its entity ID")
 
     convert_light(client, "convert_to_regular", "confirm_convert_to_regular")
     assert_entry_loaded(client, light_entry_id)
@@ -5957,7 +5957,7 @@ def run_illuminance_discovery_scenario(client: HomeAssistantClient) -> None:
     client.wait_state(
         DISCOVERED_ILLUMINANCE,
         lambda state: state["attributes"].get("friendly_name") == "E2E Illuminance",
-        "created with the prefixed entity id and the source's name",
+        "created with the prefixed entity ID and the source's name",
     )
     # Bright from 25 lx and dark below 15 lx: 18 and 22 hold the current state.
     for lux, expected, holds in (
@@ -6025,7 +6025,7 @@ def run_entity_id_taken_scenario(client: HomeAssistantClient) -> None:
     client.wait_state(
         "binary_sensor.e2e_renamed",
         lambda state: state["attributes"].get("friendly_name") == "E2E Rename",
-        "created under the new entity id",
+        "created under the new entity ID",
     )
     wait_entity_absent(client, "binary_sensor.e2e_rename_2")
     remove_entry_and_entity(client, first, "binary_sensor.e2e_rename")
@@ -6163,7 +6163,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
         ENTITY_ID_CHANGE_BULB, lambda state: state["state"] == "off", "off", timeout=15
     )
 
-    # Back to the IDs the other scenarios use.
+    # Back to the entity IDs the other scenarios use.
     change_entity_id_and_wait(ENTITY_ID_CHANGE_BULB, RAW_TIMER_LIGHT, "off")
     change_entity_id_and_wait(ENTITY_ID_CHANGE_MOTION, RAW_MOTION, "off")
     wait_stored_entry(
@@ -7596,16 +7596,16 @@ def finish_options(result: dict[str, Any], description: str) -> None:
 def wait_renamed(
     client: HomeAssistantClient, entity_id: str, name: str
 ) -> dict[str, Any]:
-    """Wait for an entity to carry its edited name under its original id."""
+    """Wait for an entity to carry its edited name under its original entity ID."""
     return client.wait_state(
         entity_id,
         lambda state: state["attributes"].get("friendly_name") == name,
-        f"renamed to {name!r} without changing its entity id",
+        f"renamed to {name!r} without changing its entity ID",
     )
 
 
 def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
-    """Configure flows rename and re-settle every sensor type in place."""
+    """Configure flows rename and edit every sensor type in place."""
     occupancy_id = create_virtual_occupancy(
         client, "E2E Opt Occupancy", RAW_REMOVAL_MOTION, "e2e_opt_occupancy"
     )
@@ -7716,7 +7716,7 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
         (schedule_id, OPT_SCHEDULE),
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
-    print("PASS: sensor options flows rename in place and re-settle their settings")
+    print("PASS: sensor options flows rename in place and edit their settings")
 
 
 def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
@@ -8317,7 +8317,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     )
     checkpoint("editing a time-window input rebuilds the combination")
 
-    # Deleting an input strips it from the combinations that referenced it.
+    # Deleting an input removes it from the combinations that referenced it.
     client.set_state(RAW_REMOVAL_MOTION, "on")
     remove_entry_and_entity(client, b_id, COMBO_B)
     wait_stored_entry(

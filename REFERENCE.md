@@ -8,7 +8,7 @@ Each MoLight entity is a *virtual entity*: it stands in front of real devices an
 
 Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors the source directly; the value the rest of the system runs on is the `latest_occupied_time` attribute, the best estimate of when the person actually left.
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded; wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-sensor) |
 | **Occupancy timeout** | Seconds. Default `120`, range 1 to 3600. The source's own hold time; **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time - timeout` |
@@ -22,7 +22,7 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 
 Details:
 
-- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while HA was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the visit in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
+- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while Home Assistant was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the visit in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
 - **Changing the source sensor** leaves the old source's presence behind: the sensor follows the new source from its first valid reading, and a new source that is `unavailable` at the time does not keep it `on`.
 - **A source computed from the sensor itself**, such as a group that contains it (directly, or through another group or a combined occupancy sensor), is rejected: it would hold the sensor `on` by its own state. If a group is edited to include the sensor later, the sensor stops following it and clears as for an `unavailable` source (at once when *Clear after unavailable* is disabled) until the group is corrected.
 
@@ -34,7 +34,7 @@ A companion **`<name> Events` entity** fires `false_detection`, with `on_duratio
 
 Combines multiple MoLight occupancy sensors into one. Constituents are usually simple Virtual Occupancy Sensors, but other combined sensors can be nested too; the flows reject self-references and cycles, and a sensor can't hold both roles at once.
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Trigger sensors** | Any one going `on` starts occupancy |
 | **Maintain sensors** *(optional)* | Keep occupancy alive once started, but cannot start it alone |
@@ -47,7 +47,7 @@ Restarts, reloads and edits:
 
 - **Existing history:** history the constituents already carry when the combined sensor is created, or when a reload picks up a newly added constituent, is what the next visit is measured against.
 - **A visit running through a restart or reload** keeps the detection it already contained, and a clear keeps its false-detection flag until the next one, unless the trigger or maintain sensors were edited.
-- **A restored `on` with a maintain sensor:** after a restart, if the sensor's restored state was `on` and a *maintain* sensor still shows presence, occupancy is seeded `on`. This is the one exception to "maintain sensors never start occupancy", because the restored state is direct evidence it was already triggered before HA went down. A restored `on` that is still waiting for a maintain sensor to load is saved as waiting, so it is carried across even when HA restarts again before that sensor reports.
+- **A restored `on` with a maintain sensor:** after a restart, if the sensor's restored state was `on` and a *maintain* sensor still shows presence, occupancy is seeded `on`. This is the one exception to "maintain sensors never start occupancy", because the restored state is direct evidence it was already triggered before Home Assistant went down. A restored `on` that is still waiting for a maintain sensor to load is saved as waiting, so it is carried across even when Home Assistant restarts again before that sensor reports.
 - **A constituent reloading:** editing a constituent's options unloads its entry and brings it back a moment later, so a constituent that was `on` when its entry unloaded keeps counting as `on` for up to 10 seconds, and occupancy clears only if it has not reported by then.
 
 Attributes: `latest_occupied_time` (max across all constituents), `last_on_time` (when the visit started, by its trigger sensors; null when they did not see it start), `last_clear_false_detection`, `false_detection_count`.
@@ -59,7 +59,7 @@ A companion **`<name> Events` entity** fires `false_detection`, with `on_duratio
 `on` = at or above the threshold (bright enough, no artificial lighting needed)
 `off` = below the threshold (dark enough to warrant lighting)
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Source sensor** | Any real `sensor` with `device_class: illuminance` |
 | **Threshold** | Lux. Default `10`, at most 100000. The lux level at which the sensor reports `on`. Must be above `0`, since dark means a reading below it |
@@ -68,10 +68,10 @@ A companion **`<name> Events` entity** fires `false_detection`, with `on_duratio
 An unavailable or unparsable source (including `nan` and `inf`) holds the last known value, since a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
 
 - **No reading yet:** until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness. Lights treat that as "not bright", and a light the sensor had kept dark reacts to it as to the room going dark. The first-ever reading is judged against the bare threshold rather than the hysteresis band, since there is no held state yet for the band to preserve.
-- **Source deleted or disabled**, on its own or along with its integration: it can never report again, so its reading is dropped and the sensor is `unavailable`. That is judged once Home Assistant has started, so a source still loading at startup keeps the restored reading.
+- **Source deleted or disabled**, on its own or along with its config entry: it can never report again, so its reading is dropped and the sensor is `unavailable`. That is judged once Home Assistant has started, so a source still loading at startup keeps the restored reading.
 - **Source changed:** a held value belongs to the source it was read from. Choosing another **Source sensor** drops it, so the sensor is `unavailable` until the new source reports, and that reading is judged against the bare threshold too. Editing the threshold or hysteresis does not drop it, and nor does changing the source's entity ID.
 
-Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity carries `device_class: light`, so HA's UI shows it as "Light detected" / "No light".
+Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity carries `device_class: light`, so Home Assistant's UI shows it as "Light detected" / "No light".
 
 ## Virtual Schedule Sensor
 
@@ -136,7 +136,7 @@ Any other window starts and ends on the same day, and is empty on a day its end 
 
 Combines MoLight schedules into one schedule that any light can use. Inputs can be Virtual Schedule Sensors of either definition or other Virtual Combined Schedule Sensors, so mixed logic nests, e.g. *(Morning **any** Evening) **all** Workday*. The flows reject a combined schedule that would include itself, directly or through another.
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Schedules** | The schedules to combine (at least one). To use another binary sensor, such as a workday sensor, wrap it in a source-backed Virtual Schedule Sensor first |
 | **Combine with** | **Any** (the default): `on` while at least one schedule is `on`. **All**: `on` only while every schedule is `on` |
@@ -163,19 +163,19 @@ The form keeps the name, the lights, and the timeout at the top level and groups
 
 At the top level:
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Lights to control** | The `light` entities to control: usually real lights, but another virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A `switch`, such as a smart plug or a wall switch, isn't offered: wrap it as a light with Home Assistant's *Switch as X* helper first. A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
 | **Turn-off timeout** | Seconds, range 1 to 14400 (4 h); a new light starts at `300`. Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors. Clear it for no timer (see [No turn-off timeout](#no-turn-off-timeout)) |
 
 ***Sensors & triggers*** (expanded):
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Sensor |
-| **Illuminance mode** | Default **Control** (`control`): dark gates turn-ons AND turning bright forces the lights off. **Gate only** (`gate`): dark gates only turning an off light on; bright never turns lights off, and occupancy and the door hold and re-trigger an on light whatever the reading. Use **Gate only** when the lux sensor can see the controlled lights, which would otherwise oscillate |
+| **Illuminance mode** | Default **Control** (`control`): dark gates turn-ons AND turning bright forces the lights off. **Gate only** (`gate`): dark gates only turning an off light on; bright never turns lights off, and occupancy and the door hold and re-trigger an on light whatever the reading. Use **Gate only** when the lux sensor can see the light's member lights, which would otherwise oscillate |
 | **Schedule sensor** *(optional)* | A MoLight schedule: a Virtual Schedule Sensor or a Virtual Combined Schedule Sensor. The picker offers only MoLight schedules; a legacy non-schedule reference from before this narrowing stays selectable until changed |
 | **Schedule mode** | Default **Follow** (`follow`): the window turns the lights on at its start and off at its end (porch lights). The three **Gate** modes let occupancy and the door turn the lights on inside the window only, and differ in what the window's end does to a light that is still on (see [Schedule modes](#schedule-modes)) |
 | **Match the schedule after a restart** | Default **No** (`as_found`): a restart or reload leaves the light as found. **Inside its window** (`inside`) turns on a light found off inside its schedule window, **Outside its window** (`outside`) turns off one found on outside the window, and **Inside and outside its window** (`inside_and_outside`) does both (see [Schedule modes](#schedule-modes)). Follow mode only: the form rejects any other choice without a schedule in **Follow** mode, and a value left on a schedule-gated light by the bulk schedule assignment does nothing; that light's form rejects the save until the choice is set back to **No** |
@@ -185,7 +185,7 @@ At the top level:
 
 ***Turn-on & turn-off behavior*** (collapsed):
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **False-detection off delay** | Seconds. Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that visit* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that visit lit it |
 | **Auto-on brightness** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Virtual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 % |
@@ -200,7 +200,7 @@ At the top level:
 
 ***Off warning sequence*** (collapsed):
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Effect warning duration** | Seconds. Default `0` (disabled), range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
 | **Effect brightness** | Brightness during the effect stage. Default `0`, range 0 to 100 %. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
@@ -227,7 +227,7 @@ At the top level:
 | `last_off_manual` | Timestamp of the last manual off; a restart uses it to keep a manual off over presence the light already had |
 | `last_brightness_change_physical` / `last_brightness_change_virtual` | Timestamp of the last brightness change from each source |
 | `last_color_change_physical` / `last_color_change_virtual` | Timestamp of the last color change from each source |
-| `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied turn-on selection and where the value came from: the option source entity's ID, or `fixed`. Both start empty after a restart (see [Turn-on selection](#turn-on-selection)) |
+| `last_turn_on_selection_option` / `last_turn_on_selection_source` | The last successfully applied turn-on selection and where the value came from: the option source entity's entity ID, or `fixed`. Both start empty after a restart (see [Turn-on selection](#turn-on-selection)) |
 | `warning_active` | Whether an effect/warn warning sequence is currently running; a restart mid-warning uses it to undo the interrupted warning and restore the pre-warning brightness and color |
 | `pre_warn_brightness` / `pre_warn_color` | Brightness and color saved before an effect/warn stage, so a restart mid-warning can restore them; null except mid-sequence |
 | `schedule_window_start` | Follow-mode window marker used for restart catch-up |
@@ -371,7 +371,7 @@ Details:
 
 - **A keep-on entity that also has another role** holds before that role acts, so a sensor that is both the illuminance input and a keep-on entity holds the light as it gets bright instead of turning it off.
 - **Unavailable keep-on entities:** one dropping to `unavailable`/`unknown` keeps its last known value (an unavailable keep-on entity never reads as releasing its hold, or as starting one). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding.
-- **Restarts:** the switch state survives restarts, and a held light adopted at startup won't start a timer.
+- **Restarts:** the Auto-off switch's state survives restarts, and a held light adopted at startup won't start a timer.
 - **Deleted or disabled:** disabling or deleting the Auto-off switch entity releases its hold straight away, since such a switch can't be turned back on; re-enabling a disabled one brings back the state it had. A keep-on entity that is deleted or disabled stops holding in the same way.
 
 ### No turn-off timeout
@@ -390,13 +390,13 @@ Each virtual light and each occupancy sensor creates a companion **`<name> Event
 
 | Event type | When | Attributes |
 |---|---|---|
-| `turned_on` | An on-period started, or a light resting at standby was raised | `reason`: `virtual` (through the virtual light), `physical` (a real light changed by something other than MoLight: a wall switch, another automation, the HA UI), `wrapped` (a wrapped virtual light lit itself: its own sensor, schedule or standby), `occupancy`, `door`, `illuminance` (going dark with presence), `resume` (going dark resumed an on-period brightness cut short), `schedule_start` (a follow window, or a Virtual Scheduled Light's inside settings taking over), `startup` (a restart found the light off where it rests at standby, or a follow-mode light off inside its schedule window under **Match the schedule after a restart**). `standby`: whether the lights came on at the standby level. `brightness` (0 to 255), `color` (`color_temp_kelvin` or `hs_color`) and `selection` (the turn-on selection option): what MoLight commanded, null when it sent none; for `physical` and `wrapped`, what the real light reported with its on, which for a wrapped virtual light is often no level yet |
+| `turned_on` | An on-period started, or a light resting at standby was raised | `reason`: `virtual` (through the virtual light), `physical` (a real light changed by something other than MoLight: a wall switch, another automation, the Home Assistant UI), `wrapped` (a wrapped virtual light lit itself: its own sensor, schedule or standby), `occupancy`, `door`, `illuminance` (going dark with presence), `resume` (going dark resumed an on-period brightness cut short), `schedule_start` (a follow window, or a Virtual Scheduled Light's inside settings taking over), `startup` (a restart found the light off where it rests at standby, or a follow-mode light off inside its schedule window under **Match the schedule after a restart**). `standby`: whether the lights came on at the standby level. `brightness` (0 to 255), `color` (`color_temp_kelvin` or `hs_color`) and `selection` (the turn-on selection option): what MoLight commanded, null when it sent none; for `physical` and `wrapped`, what the real light reported with its on, which for a wrapped virtual light is often no level yet |
 | `turned_off` | An on-period ended | `reason`: `virtual`, `physical`, `wrapped` (a wrapped virtual light turned itself off: its timer, a stage blinking it off, its schedule), `timer`, `false_detection` (the false-detection off delay ran out), `bright`, `schedule_end` (a follow window, a **Gate and turn off** window or a Virtual Scheduled Light's turn-off boundary, including one applied after a restart or a hold), `startup` (a restart found a follow-mode light on outside its schedule window under **Match the schedule after a restart**). `standby`: whether the lights rested at standby instead of going dark |
 | `off_warning` | The effect/warn sequence advanced | `stage`: `effect`, `warn` or `cancelled` (a re-trigger ended the sequence with the lights on, or a restart undid the stage it landed in). `off_in`: seconds until the lights go off from this moment, null at `cancelled`. `standby`: whether the sequence ends at standby. `brightness`, `color`: the stage's look; at `cancelled`, the look the lights show after it |
 | `turn_on_blocked` | A trigger that would have lit the room was blocked by a gate: the room was too bright, or it was outside a gate-mode schedule window. Also fires when MoLight checks again, such as at startup, finds someone already in the room, and a gate stops that turn-on. Never fires for a light at standby, which is already on | `trigger`: `occupancy` or `door`. `reason`: `bright`, or `schedule` (outside a gate-mode window) |
 | `adjusted` | A person changed the brightness or color of a light that is on | `reason`: `virtual` or `physical`. `brightness`, `color`: what changed, null for the one that did not |
 
-A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor has one event type, its own judgment of a visit (see the **False-detection grace** option under [Virtual Occupancy Sensor](#virtual-occupancy-sensor)):
+A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor has one event type, its own judgment of a visit (see the **False-detection grace** setting under [Virtual Occupancy Sensor](#virtual-occupancy-sensor)):
 
 | Event type | When | Attributes |
 |---|---|---|
@@ -470,7 +470,7 @@ An optional **turn-on selection entity** lets MoLight choose a preset, theme, mo
 
 **When no selection can be applied.** The turn-on selection entity's option list can change after configuration. If at turn-on time neither the option source entity's value nor the fixed/fallback option is offered anymore, the turn-on selection entity is missing or unavailable, the call fails, or the call has not finished after 10 seconds, MoLight logs a warning and turns the lights on without applying any selection (the same problem warns once, then only in the debug log until a selection applies again): a renamed preset or a select that never answers must never leave the room dark. A call given up on is cancelled. A turn-on selection entity that is available but has no option chosen (`unknown`, as a WLED preset select reports after a change in the WLED app) still gets the option.
 
-**Attributes.** The last successfully applied value and where it came from are exposed as `last_turn_on_selection_option` and `last_turn_on_selection_source`. `last_turn_on_selection_source` holds the option source entity's ID, or `fixed` when the fixed/fallback option was applied. Both keep the last *successful* selection when a later one cannot be applied. Neither attribute is restored, so both are empty after a restart or an options edit until the next selection is applied.
+**Attributes.** The last successfully applied value and where it came from are exposed as `last_turn_on_selection_option` and `last_turn_on_selection_source`. `last_turn_on_selection_source` holds the option source entity's entity ID, or `fixed` when the fixed/fallback option was applied. Both keep the last *successful* selection when a later one cannot be applied. Neither attribute is restored, so both are empty after a restart or an options edit until the next selection is applied.
 
 **While the select call is in progress.** The virtual light itself reports `on`, at the brightness and color asked for, as soon as it accepts the turn-on, so a toggle or a brightness step made while the select call runs acts on a light that is on: two quick brightness-up clicks on a remote add up, and a second toggle turns the light off again. If something cancels the turn-on before it is sent, the virtual light reports `off` again and the member lights are never lit. During the wait:
 
@@ -495,12 +495,12 @@ An optional **turn-on selection entity** lets MoLight choose a preset, theme, mo
 A light whose last change was a manual off stays off over presence it already had, as it would without the restart.
 
 - Occupancy still on lights it only when its sensor dates the visit after the off, as a Virtual Occupancy Sensor or a combined one does with `last_on_time`. With another kind of sensor, or a visit whose start the sensor did not see, it stays off until the next visit, and a door first seen open at or after startup does not light it either.
-- Any turn-on since the off ends this, and so does a Virtual Scheduled Light's settings boundary, also one missed while HA was down, and it stays ended across later restarts (`manual_off_cleared`). With standby, the manual off holds for its window as described under [Standby](#standby).
+- Any turn-on since the off ends this, and so does a Virtual Scheduled Light's settings boundary, also one missed while Home Assistant was down, and it stays ended across later restarts (`manual_off_cleared`). With standby, the manual off holds for its window as described under [Standby](#standby).
 
 **Schedule windows across a restart**
 
-- **Follow mode** uses `schedule_window_start` as a marker: a boundary missed while HA was down is applied exactly once at startup, while a manual off mid-window is respected. A **Match the schedule after a restart** choice (see [Schedule modes](#schedule-modes)) turns on a light found off inside the window over that manual off, or turns off one found on outside the window. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. The marker belongs to the schedule that set it (`schedule_window_schedule`): an options edit that picks another schedule, or another schedule mode, drops it, and the light is adopted as it is instead of being turned off for a window end that never happened.
-- **Gate modes** keep no window marker, so a gate-mode window that ended while HA was down is not applied at startup, even under **Gate and turn off**: a light still on is adopted like any other, with a fresh timer, and an on-period that brightness cut short is not ended, so the room going dark can still resume it.
+- **Follow mode** uses `schedule_window_start` as a marker: a boundary missed while Home Assistant was down is applied exactly once at startup, while a manual off mid-window is respected. A **Match the schedule after a restart** choice (see [Schedule modes](#schedule-modes)) turns on a light found off inside the window over that manual off, or turns off one found on outside the window. A schedule that is `unavailable` or missing when startup finishes is not a window end: the marker is kept until the schedule reads again. The marker belongs to the schedule that set it (`schedule_window_schedule`): an options edit that picks another schedule, or another schedule mode, drops it, and the light is adopted as it is instead of being turned off for a window end that never happened.
+- **Gate modes** keep no window marker, so a gate-mode window that ended while Home Assistant was down is not applied at startup, even under **Gate and turn off**: a light still on is adopted like any other, with a fresh timer, and an on-period that brightness cut short is not ended, so the room going dark can still resume it.
 
 **A real light that can't be read when startup finishes**
 
@@ -530,7 +530,7 @@ Entities dropping to `unavailable`/`unknown` are never read as state changes, at
 
 **Deleted or disabled entities**
 
-An entity that is deleted or disabled while Home Assistant runs, in its entity settings or along with its integration entry, can never report again, so it is treated as startup treats a missing one and not as an outage. An entity with no registry entry, such as a YAML template without a `unique_id`, gets 10 seconds to come back first, so reloading its integration changes nothing.
+An entity that is deleted or disabled while Home Assistant runs, in its entity settings or along with its config entry, can never report again, so it is treated as startup treats a missing one and not as an outage. An entity with no registry entry, such as a YAML template without a `unique_id`, gets 10 seconds to come back first, so reloading its integration changes nothing.
 
 - **Keep-on entities, doors and occupancy:** a keep-on entity stops holding, an **Open & close** door counts as closed, and an occupancy or maintain sensor counts as clear. A light it was holding gets a fresh full timeout, unless other presence still holds it; a sensor that comes back is read again as when first seen.
 - **Real lights:** one that is deleted or disabled no longer counts as possibly on: turning the remaining real lights off turns the virtual light off, and when the only lit real light is deleted or disabled, the virtual light reports off without recording a manual off or commanding the others. A disabled real light is owed nothing after a restart either.
@@ -553,7 +553,7 @@ Creation uses three main forms:
 
 1. Choose the name, lights, required schedule sensor, what happens when that schedule ends, and optional Entity ID:
 
-   | Config | Description |
+   | Field | Description |
    |---|---|
    | **Lights to control** | As for a regular Virtual Light |
    | **Schedule sensor** | A Virtual Schedule Sensor or a Virtual Combined Schedule Sensor; `off` selects the outside-schedule settings, `on` the inside-schedule settings |
@@ -595,7 +595,7 @@ The inside-schedule settings have one extra, collapsed section: **Standby**. Set
 
 Take a porch with a dusk-to-dawn schedule, standby at 1%, auto-on at 100%, a 30 s timeout, and **At schedule end** set to *Turn off*: it glows at 1% all night, comes up to 100% when someone walks up, drops back to 1% 30 s after they leave, and turns off at dawn.
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Standby brightness** *(optional)* | Setting it turns standby on. Range 1 to 100 % |
 | **Standby color mode** *(optional)* | Like the **Auto-on color mode** field: picks the standby color temperature, the standby color, or **None** (which also clears a previously set standby color) |
@@ -633,7 +633,7 @@ Each press calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound
 
 Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is the last action the remote executed: `turn_on`, `turn_off`, `toggle`, `brightness_up`, `brightness_down`, `preset_1` or `preset_2`. Its attributes are `button` (the event entity that fired), `click` (the resolved `single` or `double`), `event_type` (the raw event type) and `time` (when the action ran). It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts `unknown` after a restart, since a pre-restart action shown as current would be misleading.
 
-| Config | Description |
+| Field | Description |
 |---|---|
 | **Lights to control** | The `light` entities every bound button drives (at least one is required) |
 | **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a virtual light in its effect/warn warning, which stops at 1% |
@@ -664,18 +664,18 @@ Two things worth knowing:
 - On a multi-press-capable button, the device only confirms a *single* click after its multi-press window (~half a second) closes, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico presses are instant.
 - A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press. A press made since the button dropped out still counts, even when it arrives together with the recovery. The guards you'd otherwise write as `trigger.from_state` template conditions are built in.
 
-Deleting a virtual light strips it from every remote's target list, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
+Deleting a virtual light removes it from every remote's target list, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
 
 ## Design notes
 
-- MoLight tells its own commands' echoes from physical changes by comparing each real light's report with what it asked for, not by Home Assistant's context alone. HA reuses a command's context on the target light for five seconds, so a wall switch or dimmer used in that window would otherwise look like MoLight's own echo. A report that contradicts the command is treated as human activity, while two-part, stepwise, quantized, or color-converted replies are still recognized as echoes while the command settles.
+- MoLight tells its own commands' echoes from physical changes by comparing each real light's report with what it asked for, not by Home Assistant's context alone. Home Assistant reuses a command's context on the virtual light's member light for five seconds, so a wall switch or dimmer used in that window would otherwise look like MoLight's own echo. A report that contradicts the command is treated as human activity, while two-part, stepwise, quantized, or color-converted replies are still recognized as echoes while the command settles.
   - **Slow bulbs:** a full reply is recognized up to 30 s later unless it names a user or an automation (a command of theirs to the real light), also when MoLight has sent a newer command in the meantime, unless that command switched the light the other way: then only a report within a few seconds of the earlier command still counts.
   - **Long fades:** a fade longer than those five seconds reports its later steps under contexts of the real light's own, which still count while they move something MoLight asked for toward its target, and a fade to off may report dimmer levels on its way. A dim toward the target partway through a fade can't be told from one of its steps.
   - **Bulbs that report power first** may show the level and color they remembered rather than where their fade is. So when a turn-on carried a fade, a real light's first report after off neither answers the command nor serves as the anchor for the step after it, for the fade's length from that report, and a turn-on that named no level ends where such a bulb says it came on. Once the fade has run its length, or after a turn-on that carried no fade, a lower level is a dim at the wall.
   - **Answers in the light's own terms:** a color temperature outside a real light's range comes back as the nearest one it has, and a light with a color temperature but no color answers a color with the color temperature Home Assistant picks for it.
   - **Colors partway through a fade:** a color is a step of that fade when it lies on the way from the previous color to the requested one, whether the light blends round the hue wheel or straight through RGB or CIE xy, which passes through paler colors between far-apart hues. A color that backs away from the request, or lies beside the way there, is a recolor.
 - Each virtual entity is its own config entry, so they can be created, edited, and deleted independently. A Virtual Remote mostly references button event entities and target lights; its only entity is the diagnostic Last Action sensor.
-- Deleting an entry strips references to its entities from the entries that survive it, so a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open. References are stored as entity IDs, so an entity ID changed in Home Assistant is rewritten in every entry that uses it, for the same reason. A form left open meanwhile does not undo either: it rejects an entity deleted since it opened, and saves one whose entity ID changed under the new one.
+- Deleting an entry removes references to its entities from the entries that survive it, so a light whose schedule sensor is deleted loses the reference instead of keeping a gate that can never open. References are stored as entity IDs, so an entity ID changed in Home Assistant is rewritten in every entry that uses it, for the same reason. A form left open meanwhile does not undo either: it rejects an entity deleted since it opened, and saves one whose entity ID changed under the new one.
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its referenced occupancy and maintain occupancy entities (including through a combined sensor), and raising a sensor's occupancy timeout checks every light that depends on it.
 - Settings no chosen light could apply are rejected at the form rather than stored and silently ignored: a fade when none of the lights can fade, a color temperature or a color when none can show one, a brightness when none of them dim (an effect brightness of `0` is exempt, since a blink fully off is sent as a plain turn-off, which every light can do). One capable light is enough (mixed groups are the point), and a light that hasn't reported its capabilities yet is never taken as proof, so the check can't reject a setting on incomplete information.
 - Reference graphs stay sane by construction:

@@ -239,7 +239,7 @@ async def _reach_discovery_select(hass: HomeAssistant, step: str) -> dict:
 
 
 def _offered_candidates(result: dict) -> set[str]:
-    """Entity ids the discovery form pre-selects (by default all candidates)."""
+    """Entity IDs the discovery form pre-selects (by default all candidates)."""
     return set(_suggested_values(result["data_schema"])[CONF_SELECTED_ENTITIES])
 
 
@@ -1794,7 +1794,8 @@ async def test_scheduled_light_requires_lights(hass: HomeAssistant) -> None:
 async def test_scheduled_light_explicit_entity_id_conflict(
     hass: HomeAssistant,
 ) -> None:
-    """A taken explicit id is rejected on the first form; a late one returns to it."""
+    """A taken explicit entity ID is rejected on the first form; a late one
+    returns to it."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.taken", "off")
     result = await _start_create(hass)
@@ -1814,7 +1815,7 @@ async def test_scheduled_light_explicit_entity_id_conflict(
     # Base error: the entity_id field sits inside a collapsed section.
     assert result["errors"] == {"base": "entity_id_conflict"}
 
-    # A free id passes the first form ...
+    # A free entity ID passes the first form ...
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -1841,7 +1842,7 @@ async def test_scheduled_light_explicit_entity_id_conflict(
     assert suggested[CONF_NAME] == "Hallway"
     assert suggested[SECTION_ADVANCED][CONF_ENTITY_ID] == "racy"
 
-    # Picking another id keeps both completed settings forms.
+    # Picking another entity ID keeps both completed settings forms.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -2082,7 +2083,8 @@ async def test_selection_source_matching_a_padded_option_is_accepted(
 async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
     hass: HomeAssistant,
 ) -> None:
-    """An id taken while the selection step is open sends the user back to fix it."""
+    """An entity ID taken while the selection step is open sends the user back
+    to fix it."""
     hass.states.async_set(
         "select.wled_preset", "Christmas", {"options": ["Christmas", "Warm White"]}
     )
@@ -3860,7 +3862,8 @@ async def test_discover_affix_targets_name(
 async def test_discover_affix_targets_entity_id(
     hass: HomeAssistant,
 ) -> None:
-    """Target=entity_id leaves the name, pins the affixed id, and it registers."""
+    """Target=entity_id leaves the name, pins the affixed entity ID, and it
+    registers."""
     hass.states.async_set(
         "binary_sensor.hall_motion",
         "off",
@@ -4308,7 +4311,8 @@ async def test_discover_filter_no_matches_reshows(hass: HomeAssistant) -> None:
 async def test_discover_preselect_none_and_empty_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Preselect off starts the checklist empty; submitting nothing errors."""
+    """Pre-select all matches off starts the checklist empty; submitting
+    nothing errors."""
     hass.states.async_set(
         "binary_sensor.hall_motion", "off", {"device_class": "motion"}
     )
@@ -4356,7 +4360,7 @@ async def _reach_occupancy_form(hass: HomeAssistant) -> dict:
 
 @pytest.mark.asyncio
 async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
-    """An explicit entity_id is stored and used as the registered id."""
+    """An explicit entity_id is stored and used as the registered entity ID."""
     result = await _reach_occupancy_form(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -4454,7 +4458,7 @@ async def test_manual_explicit_entity_id_conflict_errors(
 async def test_manual_explicit_entity_id_no_usable_characters_errors(
     hass: HomeAssistant,
 ) -> None:
-    """Garbage explicit ids error instead of being silently dropped or munged.
+    """Garbage explicit entity IDs error instead of being silently dropped or munged.
 
     "light." slugifies to nothing (previously fell back to the name-derived
     id without a word) and "!!!" is munged to "unknown" by HA's slugify
@@ -4492,7 +4496,8 @@ async def test_manual_explicit_entity_id_no_usable_characters_errors(
 async def test_manual_blank_entity_id_conflict_confirm_proceed(
     hass: HomeAssistant,
 ) -> None:
-    """Blank id whose name-derived id collides prompts, then proceeds to _2."""
+    """Blank entity ID whose name-derived entity ID collides prompts, then
+    proceeds to _2."""
     hass.states.async_set("binary_sensor.hall", "off")
 
     result = await _reach_occupancy_form(hass)
@@ -4556,7 +4561,7 @@ async def test_manual_blank_entity_id_conflict_confirm_change(
     }
     assert suggested.get(CONF_NAME) == "Hall"
 
-    # Now setting a distinct id creates the entry cleanly.
+    # Now setting a distinct entity ID creates the entry cleanly.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -4572,7 +4577,8 @@ async def test_manual_blank_entity_id_conflict_confirm_change(
 
 @pytest.mark.asyncio
 async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
-    """A light's explicit id gives the companion switch a matching _auto_off id."""
+    """A light's explicit entity ID gives the companion switch a matching
+    _auto_off entity ID."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -4621,7 +4627,7 @@ async def _reach_assign_kind(hass: HomeAssistant, kind_step: str) -> dict:
 def _light_entry(
     name: str, obj_id: str, *, timeout: int | None = 60, **refs
 ) -> MockConfigEntry:
-    """A virtual-light entry with a pinned entity_id for predictable ids."""
+    """A virtual-light entry with a pinned entity_id for predictable entity IDs."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -5994,7 +6000,7 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
     )
     assert result["step_id"] == "confirm_convert_to_scheduled"
 
-    # Simulate an options/config edit after selection but before confirmation.
+    # Simulate an options edit after selection but before confirmation.
     hass.config_entries.async_update_entry(
         pantry,
         data={**pantry.data, CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW},
@@ -6988,7 +6994,7 @@ def _scheduled_light_entry(name: str, obj_id: str) -> MockConfigEntry:
 async def test_assign_lights_picker_excludes_scheduled_lights(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A scheduled light is never offered as a bulk-assign target."""
+    """A scheduled light is never offered as a light to assign."""
     await _setup_night_schedule(hass)
     regular = _light_entry("Hall", "hall")
     scheduled = _scheduled_light_entry("Hallway Night", "hallway_night")
@@ -7274,7 +7280,7 @@ async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
 async def test_schedule_source_explicit_entity_id_conflict_errors(
     hass: HomeAssistant,
 ) -> None:
-    """A taken explicit id re-renders the source-schedule form with the error."""
+    """A taken explicit entity ID re-renders the source-schedule form with the error."""
     hass.states.async_set("binary_sensor.taken", "off")
     hass.states.async_set("binary_sensor.house_mode", "off")
     result = await _start_create(hass)
@@ -8069,7 +8075,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, last_page: str, taken: str
 ) -> None:
     """A new light's last page rejects a light another light took behind it,
-    or a member group that came to name the ID the new light will get."""
+    or a member group that came to name the entity ID the new light will get."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.group", "off", {"entity_id": ["light.spare"]})
@@ -8179,8 +8185,8 @@ _HOLD_FINAL_PAGES = [
 async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     hass: HomeAssistant, last_page: str, edited: str | None
 ) -> None:
-    """A keep-on group that gains the light's member, or the ID the light has
-    or will get, behind a later page would hold it on for good, so the final
+    """A keep-on group that gains the light's member, or the entity ID the light
+    has or will get, behind a later page would hold it on for good, so the final
     save is rejected."""
     await _setup_night_schedule(hass)
     member = "light.subject_real"
@@ -8267,7 +8273,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     )
 
     if edited:
-        # A new light whose ID is taken gets the next free one.
+        # A new light whose entity ID is taken gets the next free one.
         if last_page.endswith("collision"):
             own_id = "light.subject_2"
         elif last_page.startswith("discovery"):
@@ -9434,7 +9440,7 @@ async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
     """A sensor's occupancy timeout raised while the entity-id collision menu is open
     sends the user back to the light form."""
     await setup_entries(hass, occupancy_entry)
-    hass.states.async_set("light.hall", "off")  # the name-derived id collides
+    hass.states.async_set("light.hall", "off")  # the name-derived entity ID collides
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -9952,7 +9958,8 @@ async def _open_name_form(
 async def test_every_form_rejects_a_blank_name(
     hass: HomeAssistant, flow: str, form: str, name: str
 ) -> None:
-    """A blank Name would make an empty title and an ID like light.unknown."""
+    """A blank Name would make an empty title and an entity ID like
+    light.unknown."""
     result, manager, values, entry = await _open_name_form(hass, form, flow)
 
     result = await manager.async_configure(
@@ -10648,7 +10655,7 @@ async def test_entity_id_menu_does_not_save_a_sensor_deleted_meanwhile(
 async def test_an_id_taken_again_after_its_removal_is_accepted(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Only an ID no entity holds counts as removed."""
+    """Only an entity ID no entity holds counts as removed."""
     await setup_entries(hass, occupancy_entry)
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
@@ -10796,8 +10803,8 @@ async def test_light_options_accept_a_light_group_without_the_light(
 async def test_new_light_rejects_a_member_group_that_already_names_it(
     hass: HomeAssistant, scheduled: bool, taken: bool
 ) -> None:
-    """A group set up first, naming the ID the new light will get, is a cycle,
-    including the suffixed ID a taken name leads to."""
+    """A group set up first, naming the entity ID the new light will get, is a
+    cycle, including the suffixed entity ID a taken name leads to."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.bulb", "off")
     own_id = "light.hall"
@@ -10826,7 +10833,7 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_LIGHTS: "light_member_cycle"}
 
-    # Under another ID the group no longer names it.
+    # Under another entity ID the group no longer names it.
     submitted[SECTION_ADVANCED] = {CONF_ENTITY_ID: "hall_lamps"}
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], submitted
@@ -10913,13 +10920,14 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
 async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
     hass: HomeAssistant, form: str, taken: bool
 ) -> None:
-    """A group set up first, naming the ID the new light will get, is on
-    whenever the light is, including the suffixed ID a taken one leads to."""
+    """A group set up first, naming the entity ID the new light will get, is on
+    whenever the light is, including the suffixed entity ID a taken one leads
+    to."""
     hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
     await _setup_night_schedule(hass)
     if taken:
         hass.states.async_set("light.subject", "off")
-    # Discovery names the light after its member, whose own ID is taken.
+    # Discovery names the light after its member, whose own entity ID is taken.
     own_id = (
         f"{SUBJECT_MEMBER}_2"
         if form == "discovery"
@@ -10934,7 +10942,7 @@ async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
     ]
 
     if "group.around" in excluded:
-        # Named on the first page, the scheduled light's ID is known by now.
+        # Named on the first page, the scheduled light's entity ID is known by now.
         assert form == "scheduled_create"
     else:
         result = await _submit_subject_settings(

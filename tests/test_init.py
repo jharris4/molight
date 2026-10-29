@@ -52,7 +52,7 @@ from tests.conftest import (
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-# Each entry type registers exactly these entity domains, which must also be
+# Each entity type registers exactly these entity domains, which must also be
 # the platforms PLATFORMS_BY_ENTITY_TYPE forwards for it.
 TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
     ENTITY_TYPE_OCCUPANCY: (

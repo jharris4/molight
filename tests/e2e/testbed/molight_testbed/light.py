@@ -338,7 +338,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add representative lights with deterministic entity ids."""
+    """Add representative lights with deterministic entity IDs."""
     controller = controller_for_entry(hass, entry)
     async_add_with_startup_delays(
         controller,

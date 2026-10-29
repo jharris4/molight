@@ -256,7 +256,7 @@ async def test_creating_an_occupancy_sensor_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
     """A group can name an entity that does not exist yet, including the
-    suffixed ID a taken name leads to."""
+    suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     own_id = SEEN
     if named == "taken_name":
@@ -274,7 +274,7 @@ async def test_creating_an_occupancy_sensor_rejects_a_group_that_names_its_id(
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
 
-    # Under another ID the same group is a valid source.
+    # Under another entity ID the same group is a valid source.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**values, CONF_NAME: "Unrelated", SECTION_ADVANCED: {}}
     )
@@ -323,8 +323,9 @@ async def test_a_combined_sensor_rejects_a_sensor_whose_source_includes_it(
 async def test_creating_a_combined_sensor_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
-    """A new combined sensor can take an ID its constituent's source names,
-    including the suffixed ID a taken name leads to."""
+    """A new combined sensor can take an entity ID its constituent's source
+    names,
+    including the suffixed entity ID a taken name leads to."""
     groups, _real = await _groups(hass)
     await setup_entries(hass, _occupancy(GROUP))
     if taken:

@@ -1386,7 +1386,7 @@ async def test_combined_trigger_maintain_and_lot(
 
 
 def _raw_combined_entry() -> MockConfigEntry:
-    """Combined sensor over raw entity ids (no virtual constituents needed)."""
+    """Combined sensor over raw entity IDs (no virtual constituents needed)."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -2403,7 +2403,7 @@ async def test_combined_clears_at_once_when_holding_constituent_is_removed(
 ) -> None:
     """Removing the constituent's entry is a dropout, not a reload to wait for.
 
-    The removal also strips the constituent from the combined entry, which
+    The removal also removes the constituent from the combined entry, which
     reloads it before any grace could end, so the clear must land first.
     """
     hass.states.async_set("binary_sensor.motion_1", "off")

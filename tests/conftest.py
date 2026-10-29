@@ -177,7 +177,7 @@ def make_light_entry(
     turn_on_select_option: str | None = None,
     turn_on_select_source_entity: str | None = None,
 ) -> MockConfigEntry:
-    """Build a virtual-light entry referencing arbitrary entity ids.
+    """Build a virtual-light entry referencing arbitrary entity IDs.
 
     The light only reads states/attributes of the entities it watches, so
     tests can drive it with plain states set via hass.states.async_set
@@ -486,7 +486,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 @pytest.fixture
 def virtual_light_behavior_variant(request, hass: HomeAssistant):
-    """Run common virtual light behavior against all applicable entry types."""
+    """Run common virtual light behavior against all applicable entity types."""
     variant = request.param
     token = _VIRTUAL_LIGHT_BEHAVIOR_VARIANT.set(variant)
     if variant != "regular":

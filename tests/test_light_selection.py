@@ -277,7 +277,7 @@ async def test_source_without_fallback_can_skip_selection(
 
 @pytest.mark.asyncio
 async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) -> None:
-    """An underlying member turned on physically retains its chosen state."""
+    """A member light turned on physically retains its chosen state."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -2166,7 +2166,7 @@ def _one_device(hass: HomeAssistant, *entity_ids: str) -> None:
     )
     for entity_id in entity_ids:
         domain, object_id = entity_id.split(".")
-        # A state already there would make the registry pick another id.
+        # A state already there would make the registry pick another entity ID.
         state = hass.states.get(entity_id)
         hass.states.async_remove(entity_id)
         registered = er.async_get(hass).async_get_or_create(

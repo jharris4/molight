@@ -1120,7 +1120,8 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
 async def test_loop_is_unknown_instead_of_hanging(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A loop the config flow would reject (e.g. a hand edit) is contained."""
+    """A loop the config and options flows would reject (e.g. a hand edit) is
+    contained."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     loop_a = _combined("Loop A", ["binary_sensor.loop_b"])
