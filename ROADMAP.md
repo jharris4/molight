@@ -81,7 +81,7 @@ One release, none touching the precedence rules.
   windows a day, takes a workday sensor plus a combined All schedule, or several schedule entries,
   while the Schedule helper edits all of that on the Helpers page. The source picker of the Virtual
   Schedule Sensor takes `binary_sensor` only. Offer the `schedule` domain too: its state is on/off
-  like a binary sensor, and its `next_event` gives `next_transition`. The window logic is untouched.
+  like a binary sensor, and its `next_event` gives `next_change`. The window logic is untouched.
 - **A `timer_ends` attribute on the virtual light.** "When will it turn off" has no answer on the
   entity; the deadline is held in memory only. One timestamp attribute, null when no timer runs,
   gives a template sensor everything a dashboard card needs.

@@ -1503,7 +1503,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     day than its start runs overnight (see _end_days_after).
 
     Rather than polling, the sensor resolves concrete boundary datetimes and
-    schedules a single callback for the next transition, so state flips at the
+    schedules a single callback for the next change, so state flips at the
     exact boundary. current_window_start identifies the active window; virtual
     lights in follow mode use it as a marker for restart catch-up.
     """
@@ -1528,8 +1528,8 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         # What the windows date the on-period from. The marker stays behind
         # it when a time zone or location change moves them under it.
         self._period_start: datetime | str | None = None
-        self._next_transition: datetime | None = None
-        self._unsub_transition = None
+        self._next_change: datetime | None = None
+        self._unsub_next_change = None
         self._source_cycle = False
         self._cycle_issue: str | None = None
         # What the source is computed from, watched for coming to include it.
@@ -1537,9 +1537,9 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         self._inputs_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
-        """Evaluate the schedule and arm the transition timer."""
+        """Evaluate the schedule and arm the next-change timer."""
         await super().async_added_to_hass()
-        self.async_on_remove(self._cancel_transition_timer)
+        self.async_on_remove(self._cancel_next_change_timer)
         watch: _MirrorWatch | None = self.hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(
             self._entry_id, None
         )
@@ -1619,10 +1619,10 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         return bool(saved.get("invert", self._invert)) == self._invert
 
     @callback
-    def _cancel_transition_timer(self) -> None:
-        if self._unsub_transition is not None:
-            self._unsub_transition()
-            self._unsub_transition = None
+    def _cancel_next_change_timer(self) -> None:
+        if self._unsub_next_change is not None:
+            self._unsub_next_change()
+            self._unsub_next_change = None
 
     @callback
     def _handle_core_config_update(self, _event: Event) -> None:
@@ -1630,7 +1630,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
 
     @callback
     def _refresh(self, _now: datetime | None = None, *, moved: bool = False) -> None:
-        """Evaluate the current window state and schedule the next transition.
+        """Evaluate the current window state and schedule the next change.
 
         moved is set when the time zone or home location changed. That moves
         the windows, which is no new window to a schedule that stays on.
@@ -1639,7 +1639,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         was_on = self._attr_is_on
         if moved:
             self._period_start = None
-        active_start, next_transition = self._evaluate(now)
+        active_start, next_change = self._evaluate(now)
         raw_is_on = active_start is not None
         self._attr_is_on = raw_is_on != self._invert
         period_start = (
@@ -1656,18 +1656,18 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         ):
             self._current_window_start = period_start
         self._period_start = period_start
-        self._next_transition = next_transition
+        self._next_change = next_change
         self._attr_available = True
 
-        self._cancel_transition_timer()
-        if next_transition is None:
+        self._cancel_next_change_timer()
+        if next_change is None:
             # No boundaries in sight (no valid windows): re-check tomorrow in
             # case sun events become resolvable again (polar day/night).
-            next_transition = dt_util.start_of_local_day() + timedelta(days=1)
+            next_change = dt_util.start_of_local_day() + timedelta(days=1)
         # Armed at the boundary itself, as an instant: wall-clock arithmetic on
         # a local time in the repeated autumn hour lands an hour early.
-        self._unsub_transition = async_track_point_in_time(
-            self.hass, self._refresh, dt_util.as_utc(next_transition)
+        self._unsub_next_change = async_track_point_in_time(
+            self.hass, self._refresh, dt_util.as_utc(next_change)
         )
         self.async_write_ha_state()
 
@@ -1705,7 +1705,7 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     @callback
     def _refresh_source(self, source: State | None) -> None:
         """Apply a source state, preserving the last value while unavailable."""
-        self._next_transition = None
+        self._next_change = None
         if (
             source is None
             or source.state not in ("on", "off")
@@ -1855,9 +1855,12 @@ class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         """Return the schedule window attributes."""
+        next_change = _marker_text(self._next_change)
         return {
             "current_window_start": _marker_text(self._current_window_start),
-            "next_transition": _marker_text(self._next_transition),
+            "next_change": next_change,
+            # Deprecated name of next_change, kept for one release.
+            "next_transition": next_change,
             "source_entity": self._source,
             "inverted": self._invert,
         }
@@ -2151,10 +2154,10 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
         # As in VirtualScheduleSensor: where the inputs date the on-period from.
         self._period_start: str | None = None
         self._windows_moved = False
-        self._next_transition: datetime | None = None
+        self._next_change: datetime | None = None
         self._restored = False
         self._startup_done = True
-        self._unsub_transition: CALLBACK_TYPE | None = None
+        self._unsub_next_change: CALLBACK_TYPE | None = None
         self._unsub_started: CALLBACK_TYPE | None = None
         self._refresh_handle: asyncio.Handle | None = None
         self._seen = _SourceChanges()
@@ -2315,9 +2318,9 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
 
     @callback
     def _cancel_timers(self) -> None:
-        if self._unsub_transition is not None:
-            self._unsub_transition()
-            self._unsub_transition = None
+        if self._unsub_next_change is not None:
+            self._unsub_next_change()
+            self._unsub_next_change = None
         if self._refresh_handle is not None:
             self._refresh_handle.cancel()
             self._refresh_handle = None
@@ -2397,7 +2400,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
 
     @callback
     def _refresh(self, _now: datetime | None = None) -> None:
-        """Evaluate the expanded schedules and arm the next transition timer."""
+        """Evaluate the expanded schedules and arm the next-change timer."""
         now = dt_util.utcnow()
         ts = now.timestamp()
         today = dt_util.as_local(now).date()
@@ -2434,19 +2437,17 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
             self._attr_is_on = value
 
         change = timeline.next_change(ts)
-        self._next_transition = (
+        self._next_change = (
             dt_util.as_local(datetime.fromtimestamp(change, UTC))
             if change is not None and change < known_until
             else None
         )
 
-        if self._unsub_transition is not None:
-            self._unsub_transition()
+        if self._unsub_next_change is not None:
+            self._unsub_next_change()
         # With no change in sight, re-check tomorrow as sun times drift.
-        wake = self._next_transition or (
-            dt_util.start_of_local_day() + timedelta(days=1)
-        )
-        self._unsub_transition = async_track_point_in_time(
+        wake = self._next_change or (dt_util.start_of_local_day() + timedelta(days=1))
+        self._unsub_next_change = async_track_point_in_time(
             self.hass, self._refresh, dt_util.as_utc(wake)
         )
         self.async_write_ha_state()
@@ -2483,11 +2484,12 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
     @property
     def extra_state_attributes(self) -> dict:
         """Return the combined schedule attributes."""
+        next_change = self._next_change.isoformat() if self._next_change else None
         return {
             "current_window_start": self._current_window_start,
-            "next_transition": (
-                self._next_transition.isoformat() if self._next_transition else None
-            ),
+            "next_change": next_change,
+            # Deprecated name of next_change, kept for one release.
+            "next_transition": next_change,
             "operator": self._cfg.get(
                 CONF_SCHEDULE_OPERATOR, DEFAULT_SCHEDULE_OPERATOR
             ),

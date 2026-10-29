@@ -1201,7 +1201,7 @@ async def test_follow_marker_change_keeps_a_lit_light_scheduled(
     "attrs",
     [
         pytest.param(
-            {"current_window_start": MARKER, "next_transition": NEXT_MARKER},
+            {"current_window_start": MARKER, "next_change": NEXT_MARKER},
             id="other-attribute",
         ),
         pytest.param({}, id="marker-removed"),

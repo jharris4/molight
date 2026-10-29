@@ -239,7 +239,8 @@ async def test_any_follows_each_window(hass: HomeAssistant, freezer) -> None:
 
     state = hass.states.get("binary_sensor.bedside")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-07-02T06:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T06:00:00+00:00"
+    assert state.attributes["next_transition"] == state.attributes["next_change"]
     assert state.attributes["operator"] == SCHEDULE_OPERATOR_ANY
     assert state.attributes["resolved_schedules"] == [
         "binary_sensor.evening",
@@ -250,13 +251,13 @@ async def test_any_follows_each_window(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.bedside")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T06:00:00+00:00"
-    assert state.attributes["next_transition"] == "2026-07-02T08:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T08:00:00+00:00"
 
     await _move_to(hass, freezer, "2026-07-02 08:00:02+00:00")
     state = hass.states.get("binary_sensor.bedside")
     assert state.state == "off"
     assert state.attributes["current_window_start"] is None
-    assert state.attributes["next_transition"] == "2026-07-02T20:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T20:00:00+00:00"
 
     await _move_to(hass, freezer, "2026-07-02 20:00:02+00:00")
     state = hass.states.get("binary_sensor.bedside")
@@ -281,7 +282,7 @@ async def test_back_to_back_windows_are_one_period(
     state = hass.states.get("binary_sensor.bedside")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T06:00:00+00:00"
-    assert state.attributes["next_transition"] == "2026-07-02T10:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T10:00:00+00:00"
 
     seen = _record_states(hass, "binary_sensor.bedside")
     await _move_to(hass, freezer, "2026-07-02 08:00:02+00:00")
@@ -313,13 +314,13 @@ async def test_all_is_on_only_where_inputs_overlap(
     )
     state = hass.states.get("binary_sensor.overlap")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-07-02T21:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T21:00:00+00:00"
 
     await _move_to(hass, freezer, "2026-07-02 21:00:02+00:00")
     state = hass.states.get("binary_sensor.overlap")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-02T21:00:00+00:00"
-    assert state.attributes["next_transition"] == "2026-07-02T23:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T23:00:00+00:00"
 
     await _move_to(hass, freezer, "2026-07-02 23:00:02+00:00")
     assert hass.states.get("binary_sensor.overlap").state == "off"
@@ -338,7 +339,7 @@ async def test_inverted_combination(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.not_evening")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-07-01T23:00:00+00:00"
-    assert state.attributes["next_transition"] == "2026-07-02T20:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T20:00:00+00:00"
     assert state.attributes["inverted"] is True
 
     await _move_to(hass, freezer, "2026-07-02 20:00:02+00:00")
@@ -361,7 +362,7 @@ async def test_always_on_marker_is_stable_across_days(
     )
     state = hass.states.get("binary_sensor.always")
     assert state.state == "on"
-    assert state.attributes["next_transition"] is None
+    assert state.attributes["next_change"] is None
     marker = state.attributes["current_window_start"]
 
     for when in ("2026-07-03 00:00:02+00:00", "2026-07-04 00:00:02+00:00"):
@@ -579,7 +580,7 @@ async def test_no_inputs_is_off(hass: HomeAssistant, freezer) -> None:
     await _setup(hass, _combined("Empty", []))
     state = hass.states.get("binary_sensor.empty")
     assert state.state == "off"
-    assert state.attributes["next_transition"] is None
+    assert state.attributes["next_change"] is None
     assert state.attributes["resolved_schedules"] == []
 
 
@@ -604,7 +605,7 @@ async def test_nested_combined_expands_to_plain_schedules(
     )
     state = hass.states.get("binary_sensor.both")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-07-02T07:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T07:00:00+00:00"
     # The inner combined schedule is expanded, not listed.
     assert state.attributes["resolved_schedules"] == [
         "binary_sensor.daytime",
@@ -623,7 +624,7 @@ async def test_nested_combined_expands_to_plain_schedules(
     await _move_to(hass, freezer, "2026-07-02 20:00:02+00:00")
     state = hass.states.get("binary_sensor.both")
     assert state.state == "on"
-    assert state.attributes["next_transition"] == "2026-07-02T21:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T21:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -1057,7 +1058,7 @@ async def test_editing_an_input_rebuilds_the_combination(
     morning = _time_schedule("Morning", "06:00", "08:00")
     await _setup(hass, morning, _combined("Bedside", ["binary_sensor.morning"]))
     assert (
-        hass.states.get("binary_sensor.bedside").attributes["next_transition"]
+        hass.states.get("binary_sensor.bedside").attributes["next_change"]
         == "2026-07-02T06:00:00+00:00"
     )
 
@@ -1070,7 +1071,7 @@ async def test_editing_an_input_rebuilds_the_combination(
     )
     await settle(hass)
     assert (
-        hass.states.get("binary_sensor.bedside").attributes["next_transition"]
+        hass.states.get("binary_sensor.bedside").attributes["next_change"]
         == "2026-07-02T06:30:00+00:00"
     )
 
@@ -1080,7 +1081,7 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
     hass: HomeAssistant, freezer
 ) -> None:
     """An input change counted on the next loop pass is dropped when the
-    combination unloads first: no state is written and no boundary is armed."""
+    combination unloads first: no state is written and no next-change timer is armed."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "off")
@@ -1108,7 +1109,7 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
     await settle(hass)
     assert await unloads[0]
 
-    # A boundary armed after the unload would fail the lingering-timer check.
+    # A next-change timer armed after the unload would fail the lingering-timer check.
     assert writes == ["unavailable"]
 
 
@@ -1204,7 +1205,7 @@ async def test_inverted_empty_combination_is_off(hass: HomeAssistant, freezer) -
     state = hass.states.get("binary_sensor.nothing")
     assert state.state == "off"
     assert state.attributes["current_window_start"] is None
-    assert state.attributes["next_transition"] is None
+    assert state.attributes["next_change"] is None
 
     await _move_to(hass, freezer, "2026-07-03 00:00:02+00:00")
     assert hass.states.get("binary_sensor.nothing").state == "off"
@@ -1318,7 +1319,7 @@ async def test_deleting_every_input_leaves_the_combination_off(
     assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == []
     state = hass.states.get("binary_sensor.porch_hours")
     assert state.state == "off"
-    assert state.attributes["next_transition"] is None
+    assert state.attributes["next_change"] is None
     for when in ("2026-07-02 23:00:02+00:00", "2026-07-03 12:00:02+00:00"):
         await _move_to(hass, freezer, when)
         assert hass.states.get("binary_sensor.porch_hours").state == "off"
@@ -1411,7 +1412,7 @@ async def test_sun_anchored_input(hass: HomeAssistant, freezer) -> None:
     state = hass.states.get("binary_sensor.dusk")
     assert state.state == "on"
     assert datetime.fromisoformat(state.attributes["current_window_start"]) == sunset
-    end = datetime.fromisoformat(state.attributes["next_transition"])
+    end = datetime.fromisoformat(state.attributes["next_change"])
     assert end > sunset
     assert dt_util.as_local(end).strftime("%H:%M") == "23:30"
 
@@ -1433,13 +1434,13 @@ async def test_dst_gap_edges_order_by_instant_and_marker_is_local(
     state = hass.states.get("binary_sensor.either")
     assert state.state == "off"
     # 02:30 resolves into the gap as EST (07:30 UTC), after 03:05 EDT (07:05 UTC).
-    assert state.attributes["next_transition"] == "2026-03-08T03:05:00-04:00"
+    assert state.attributes["next_change"] == "2026-03-08T03:05:00-04:00"
 
     await _move_to(hass, freezer, "2026-03-08 07:06:00+00:00")
     state = hass.states.get("binary_sensor.either")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-03-08T03:05:00-04:00"
-    assert state.attributes["next_transition"] == "2026-03-08T06:00:00-04:00"
+    assert state.attributes["next_change"] == "2026-03-08T06:00:00-04:00"
 
 
 @pytest.mark.asyncio
@@ -1459,13 +1460,13 @@ async def test_dst_fold_edges_fire_once_at_their_first_occurrence(
     )
     state = hass.states.get("binary_sensor.either")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-10-31T22:00:00-04:00"
+    assert state.attributes["next_change"] == "2026-10-31T22:00:00-04:00"
 
     await _move_to(hass, freezer, "2026-11-01 02:00:02+00:00")
     state = hass.states.get("binary_sensor.either")
     assert state.state == "on"
     assert state.attributes["current_window_start"] == "2026-10-31T22:00:00-04:00"
-    assert state.attributes["next_transition"] == "2026-11-01T01:45:00-04:00"
+    assert state.attributes["next_change"] == "2026-11-01T01:45:00-04:00"
 
     await _move_to(hass, freezer, "2026-11-01 05:30:02+00:00")  # 01:30 EDT
     state = hass.states.get("binary_sensor.either")
@@ -1475,7 +1476,7 @@ async def test_dst_fold_edges_fire_once_at_their_first_occurrence(
     await _move_to(hass, freezer, "2026-11-01 05:45:02+00:00")  # 01:45 EDT
     state = hass.states.get("binary_sensor.either")
     assert state.state == "off"
-    assert state.attributes["next_transition"] == "2026-11-01T22:00:00-05:00"
+    assert state.attributes["next_change"] == "2026-11-01T22:00:00-05:00"
 
     # The same wall times again, now in standard time.
     for when in (
@@ -1486,7 +1487,7 @@ async def test_dst_fold_edges_fire_once_at_their_first_occurrence(
         await _move_to(hass, freezer, when)
         state = hass.states.get("binary_sensor.either")
         assert state.state == "off"
-        assert state.attributes["next_transition"] == "2026-11-01T22:00:00-05:00"
+        assert state.attributes["next_change"] == "2026-11-01T22:00:00-05:00"
 
 
 @pytest.mark.asyncio
@@ -1505,7 +1506,7 @@ async def test_editing_a_nested_input_rebuilds_the_outer_combination(
         _combined("Outer", ["binary_sensor.inner"]),
     )
     state = hass.states.get("binary_sensor.outer")
-    assert state.attributes["next_transition"] == "2026-07-02T06:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T06:00:00+00:00"
     assert state.attributes["resolved_schedules"] == ["binary_sensor.morning"]
 
     hass.config_entries.async_update_entry(
@@ -1519,7 +1520,7 @@ async def test_editing_a_nested_input_rebuilds_the_outer_combination(
     )
     await settle(hass)
     state = hass.states.get("binary_sensor.outer")
-    assert state.attributes["next_transition"] == "2026-07-02T20:00:00+00:00"
+    assert state.attributes["next_change"] == "2026-07-02T20:00:00+00:00"
     assert state.attributes["resolved_schedules"] == ["binary_sensor.evening"]
 
 
@@ -1716,7 +1717,7 @@ async def _update_config(hass: HomeAssistant, **changes) -> None:
 
 
 @pytest.mark.asyncio
-async def test_time_zone_change_ends_the_combined_window_and_arms_the_new_boundary(
+async def test_time_zone_change_ends_the_combined_window_and_rearms_next_change(
     hass: HomeAssistant, freezer
 ) -> None:
     """18:00 -> 23:00 at 20:00 UTC; in Toronto it is 16:00. The combination,
@@ -1737,11 +1738,11 @@ async def test_time_zone_change_ends_the_combined_window_and_arms_the_new_bounda
         "binary_sensor.not_evenings": "off",
     }
 
-    def _assert(inside: bool, next_transition: str) -> None:
+    def _assert(inside: bool, next_change: str) -> None:
         for entity_id, inside_state in entities.items():
             state = hass.states.get(entity_id)
             assert (state.state == inside_state) is inside, entity_id
-            assert state.attributes["next_transition"] == next_transition
+            assert state.attributes["next_change"] == next_change
 
     _assert(True, "2026-07-02T23:00:00+00:00")
     await _update_config(hass, time_zone="America/Toronto")
@@ -1788,7 +1789,7 @@ async def test_time_zone_change_inside_the_combined_window_keeps_its_marker(
     await _update_config(hass, time_zone="America/Toronto")
     _assert_same_window()
     state = hass.states.get("binary_sensor.lit")
-    assert state.attributes["next_transition"] == "2026-07-02T22:00:00-04:00"
+    assert state.attributes["next_change"] == "2026-07-02T22:00:00-04:00"
 
     for guests in ("on", "off"):
         freezer.tick(timedelta(minutes=5))
@@ -1872,7 +1873,7 @@ async def test_location_change_reevaluates_a_sun_input(
     later_sunset = get_astral_event_date(hass, "sunset", date(2026, 7, 2))
     state = hass.states.get("binary_sensor.evenings")
     assert state.state == "off"
-    assert datetime.fromisoformat(state.attributes["next_transition"]) == later_sunset
+    assert datetime.fromisoformat(state.attributes["next_change"]) == later_sunset
     assert hass.states.get("binary_sensor.not_evenings").state == "on"
 
 
@@ -2043,7 +2044,7 @@ async def test_solar_boundary_timer_is_armed_at_the_boundary_across_clock_change
     before = hass.states.get(entity_id)
     # A plain schedule reports a sun edge in UTC.
     boundary = dt_util.as_local(
-        datetime.fromisoformat(before.attributes["next_transition"])
+        datetime.fromisoformat(before.attributes["next_change"])
     )
     assert (boundary.hour, boundary.utcoffset()) == (
         local_hour,

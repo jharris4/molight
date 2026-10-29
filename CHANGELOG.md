@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning or a "why did it turn off" notification (see
   [Events](https://github.com/jharris4/molight/blob/main/REFERENCE.md#events)).
 
+### Deprecated
+
+- **Schedule sensors**: the `next_transition` attribute is now `next_change`.
+  The old name still works but will be removed in a later release; update any
+  template that reads it.
+
 ### Fixed
 
 - **Tuya scene switches**: their click and double click now bind; the long

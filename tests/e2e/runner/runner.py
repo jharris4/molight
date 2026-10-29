@@ -6309,7 +6309,7 @@ def run_sun_window_scenario(client: HomeAssistantClient) -> None:
     def night_agrees(state: dict[str, Any]) -> bool:
         down, rising, setting = sun()
         return state["state"] == ("on" if down else "off") and near(
-            state["attributes"].get("next_transition"),
+            state["attributes"].get("next_change"),
             rising if down else setting,
             60,
         )
@@ -6317,15 +6317,15 @@ def run_sun_window_scenario(client: HomeAssistantClient) -> None:
     def daylight_agrees(state: dict[str, Any]) -> bool:
         down, rising, setting = sun()
         now = datetime.now(UTC)
-        upcoming = parse_ts(state["attributes"].get("next_transition"))
-        if upcoming is None:
+        next_change = parse_ts(state["attributes"].get("next_change"))
+        if next_change is None:
             return False
         if state["state"] == "off":
-            return down and abs(upcoming - (rising - hour)) <= minute
+            return down and abs(next_change - (rising - hour)) <= minute
         if not down or now >= rising - hour - minute:
-            return abs(upcoming - (setting + hour)) <= minute
+            return abs(next_change - (setting + hour)) <= minute
         # Within an hour after sunset, the window ends at that sunset plus an hour.
-        return now < upcoming <= now + hour + minute
+        return now < next_change <= now + hour + minute
 
     client.wait_state(
         "binary_sensor.e2e_night",
@@ -6366,7 +6366,7 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
         TIME_WINDOW_SCHEDULE,
         lambda state: (
             state["state"] == "off"
-            and near(state["attributes"].get("next_transition"), start_at)
+            and near(state["attributes"].get("next_change"), start_at)
             and state["attributes"].get("current_window_start") is None
             and state["attributes"].get("inverted") is False
         ),
@@ -6377,7 +6377,7 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on"
             and near(state["attributes"].get("current_window_start"), start_at)
-            and near(state["attributes"].get("next_transition"), end_at)
+            and near(state["attributes"].get("next_change"), end_at)
         ),
         "on at the window start, pointing at its end",
         timeout=30,
@@ -6389,7 +6389,7 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "off"
             and near(
-                state["attributes"].get("next_transition"), start_at + timedelta(days=1)
+                state["attributes"].get("next_change"), start_at + timedelta(days=1)
             )
         ),
         "off at the window end, pointing at tomorrow's start",
@@ -7680,7 +7680,7 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
         OPT_SCHEDULE,
         lambda state: (
             state["state"] == "on"
-            and state["attributes"].get("next_transition") is not None
+            and state["attributes"].get("next_change") is not None
             and not state["attributes"].get("source_entity")
         ),
         "on inside its new all-day window with no source entity",
@@ -8265,9 +8265,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
         COMBO_WINDOW_ANY,
         lambda state: (
             state["state"] == "off"
-            and near(
-                state["attributes"].get("next_transition"), now + timedelta(hours=2)
-            )
+            and near(state["attributes"].get("next_change"), now + timedelta(hours=2))
         ),
         "off, pointing at its input's window start",
     )

@@ -105,7 +105,7 @@ Edge cases:
 - **Clock changes:** a fixed time in the spring-forward gap fires an hour later on the clock (02:30 fires at 03:30), and the schedule window is skipped that night if that puts its start after its end. A fixed time in the repeated autumn hour fires at its first occurrence.
 - **Changing Home Assistant's time zone or home location** re-evaluates the schedule at once on the new clock and sun times. A schedule that stays `on` through the change keeps its window, so a follow-mode light or a Virtual Scheduled Light sees no new window start. A schedule the change turns `off` or `on` is a window end or start like any other: follow-mode lights turn off or on with it, and a gate closes or opens.
 
-Attributes: `current_window_start` (identifies the effective `on` period, where overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_transition`, `source_entity`, `inverted`.
+Attributes: `current_window_start` (identifies the effective `on` period, where overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_change` (also under its deprecated old name `next_transition`, to be removed), `source_entity`, `inverted`.
 
 **Source outages.** Source-backed schedules preserve their effective state and window marker across a temporary source outage, and Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic turn-ons while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state.
 
@@ -151,7 +151,7 @@ Where one window ends as another begins, or windows overlap, the combination sta
 - **Every input deleted:** with no schedules left, the combination is `off`, inverted or not, and a combination it is an input of treats it as deleted, so *not Daylight* does not turn `on` for good when Daylight's schedules go.
 - **One input of an All combination deleted:** the combination widens instead. *Evening **all** Workday* without Workday is `on` every evening, weekends included.
 
-Attributes: `current_window_start` (the literal `always_on` for an on-period with no start), `next_transition`, `operator`, `inverted`, `resolved_schedules` (the plain schedules it was built from, for tracing why it's `on`).
+Attributes: `current_window_start` (the literal `always_on` for an on-period with no start), `next_change` (also under its deprecated old name `next_transition`, to be removed), `operator`, `inverted`, `resolved_schedules` (the plain schedules it was built from, for tracing why it's `on`).
 
 ## Virtual Light
 
