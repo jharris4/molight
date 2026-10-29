@@ -2171,7 +2171,7 @@ async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
     )
 
     # Losing the real source makes the wrapper unavailable but does not invent
-    # a schedule boundary in the consumer.
+    # a schedule boundary in the light that references it.
     hass.states.async_set(source, "unavailable")
     await settle(hass)
     assert hass.states.get(schedule_entity).state == "unavailable"

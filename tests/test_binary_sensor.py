@@ -863,7 +863,7 @@ async def test_recovery_to_on_preserves_false_detection_clock(
     Otherwise a long, genuine occupancy whose source is briefly unavailable
     just before the clear measures its duration from the recovery moment and gets
     misclassified as a false detection (skipping the latest_occupied_time
-    advance and giving dependent lights the off delay).
+    advance and giving the lights that reference it the off delay).
     """
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -2116,7 +2116,7 @@ async def test_combined_clears_when_last_constituent_drops_out(
     assert combined.attributes["last_clear_false_detection"] is False
     assert combined.attributes["false_detection_count"] == 0
     # The person is assumed present up to the dropout: the lot advances so
-    # dependent lights run their normal countdown, not the off delay.
+    # lights that reference it run their normal countdown, not the off delay.
     assert combined.attributes["latest_occupied_time"] == datetime.now(UTC).isoformat()
 
 
@@ -3378,7 +3378,7 @@ async def test_light_countdown_after_a_clear_missed_during_an_occupancy_reload(
 ) -> None:
     """A light gets the normal countdown after a genuine visit whose clear the
     reloading sensor missed, and the off delay after a false one, whether it
-    uses the sensor directly or through combined sensors."""
+    references the sensor directly or through combined sensors."""
     lamp, motion = RealLight("lamp"), RealBinary("motion")
     await add_real(hass, lamp, motion)
     occupancy = MockConfigEntry(

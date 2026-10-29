@@ -1,7 +1,7 @@
 """Diagnostics for a MoLight config entry.
 
 The download holds the entry's data and options, the state of every entity it created
-and of every entity it references, and which other MoLight entries use it.
+and of every entity it references, and which other MoLight entries reference it.
 Home Assistant adds the integration's Repairs issues itself.
 """
 

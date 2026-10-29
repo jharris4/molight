@@ -72,7 +72,7 @@ AFFIX_TARGET_ENTITY_ID = "entity_id"
 AFFIX_TARGET_NAME = "name"
 AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 
-# Bulk-assign config-flow steps: attach one virtual sensor to many regular
+# Bulk-assign config-flow steps: assign one virtual sensor to many regular
 # Virtual Lights at once. The chosen sensor and (for occupancy) its role are
 # picked first; the second step lists all regular Virtual Lights, pre-selecting
 # those that already reference the sensor. The submitted set is the source of truth:

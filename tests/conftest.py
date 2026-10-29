@@ -175,7 +175,7 @@ def make_light_entry(
     turn_on_select_option: str | None = None,
     turn_on_select_source_entity: str | None = None,
 ) -> MockConfigEntry:
-    """Build a virtual-light entry wired to arbitrary entity ids.
+    """Build a virtual-light entry referencing arbitrary entity ids.
 
     The light only reads states/attributes of the entities it watches, so
     tests can drive it with plain states set via hass.states.async_set

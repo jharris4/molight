@@ -2,7 +2,7 @@
 
 An occupancy sensor cannot be its own source, but a group can contain it,
 directly or through a nested group or a combined occupancy sensor. Following
-such a source holds the sensor on by its own state, and the lights that use
+such a source holds the sensor on by its own state, and the lights that reference
 it with it. The forms refuse one, and a group changed afterwards is a source
 the sensor stops following.
 """

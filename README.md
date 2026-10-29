@@ -1,6 +1,6 @@
 # MoLight: Smart virtual light control for Home Assistant
 
-A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation: wrap your real sensors and lights in virtual entities, wire them together from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
+A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation: wrap your real sensors and lights in virtual entities, pick what each one references from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
 
 Writing these automations by hand is tedious, and the complexity grows fast once you account for real-world behavior: sensors that stay on for different lengths of time after the last motion, sensors that are good at *triggering* occupancy but not *maintaining* it (or vice versa), schedules that mix fixed times with sun events, Home Assistant restarts, and sources that drop to `unavailable` at the worst moment. MoLight handles all of that in a small set of reusable entities.
 
@@ -57,7 +57,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 
 - **Create a single entity**: pick a type and fill in its form.
 - **Discover**: scan existing entities and bulk-create virtual ones, with one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
-- **Assign a sensor to several lights**: wire one sensor into many lights at once (see [Bulk assignment](#bulk-assignment)).
+- **Assign a sensor to several lights**: assign one sensor to many lights at once (see [Bulk assignment](#bulk-assignment)).
 - **Convert virtual lights**: turn regular Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode into Virtual Scheduled Lights with separate inside- and outside-schedule settings, or turn Virtual Scheduled Lights back into regular Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
 
 The usual order:
@@ -129,13 +129,13 @@ A final form then lets you adjust the default settings applied to every pick; fo
 
 ### Bulk assignment
 
-**Assign a sensor to several lights** wires one shared sensor into many regular Virtual Lights in a single pass. Pick the kind of sensor, the sensor, and how the lights should use it:
+**Assign a sensor to several lights** assigns one shared sensor to many regular Virtual Lights in a single pass. Pick the kind of sensor, the sensor, and how the lights should use it:
 
 - **Occupancy**, with a **role**: *regular* (turns lights on and off) or *maintain* (only holds an already-on light on).
 - **Illuminance**, with its **mode** (**Control** or **Gate only**).
 - **Schedule**, with its **mode** (**Follow**, **Gate and turn off**, **Gate and switch state**, or **Gate and keep state**).
 
-The final step lists your regular Virtual Lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
+The final step lists your regular Virtual Lights with those that already reference that sensor **pre-selected**, so the checklist doubles as an audit of its references. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly assigned and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
 Because occupancy feeds the turn-off countdown, a light's turn-off timeout must be at least the occupancy timeout of its occupancy sensor (for a combined sensor, the largest of its constituents'; see [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light)). Lights that break that rule are skipped and named in the summary, so you can raise their timeouts and re-run.
 

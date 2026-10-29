@@ -250,7 +250,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 - Pick **On open** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In **Open & close** mode, if the room turns dark while the door is still standing open, the light comes on then.
-- In **Open & close** mode, closing the door **defers to presence**: if you also wired an occupancy sensor and it still sees someone (or a keep-on entity is holding auto-off), the lights stay on instead of dropping on a person who just shut the door behind them. With an illuminance sensor in **Control** mode, occupancy only counts while it's dark, as for turning the light on; in **Gate only** mode it holds the lit room whatever the reading.
+- In **Open & close** mode, closing the door **defers to presence**: if the light also references an occupancy sensor and it still sees someone (or a keep-on entity is holding auto-off), the lights stay on instead of dropping on a person who just shut the door behind them. With an illuminance sensor in **Control** mode, occupancy only counts while it's dark, as for turning the light on; in **Gate only** mode it holds the lit room whatever the reading.
 
 ---
 
@@ -433,7 +433,7 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 
 ### Example 13: Open-plan kitchen (Virtual Combined Occupancy Sensor)
 
-One room, two PIRs that each cover half of it, and an mmWave sensor over the table. Instead of wiring three sensors into the light, merge them into one occupancy signal that any light can use. Four entries, plus the regular Virtual Light.
+One room, two PIRs that each cover half of it, and an mmWave sensor over the table. Instead of having the light reference three sensors, merge them into one occupancy signal that any light can use. Four entries, plus the regular Virtual Light.
 
 **1. to 3. Virtual Occupancy Sensor**: one per real sensor, as in Example 2
 

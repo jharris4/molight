@@ -1239,7 +1239,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._effect_transition = _opt_transition(cfg.get(CONF_EFFECT_TRANSITION))
         self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
 
-        # Sensor wiring. The schedule fields only ever come from a regular
+        # Sensor references. The schedule fields only ever come from a regular
         # Virtual Light's entry settings; a Virtual Scheduled Light's settings forms
         # omit them (its schedule selects settings rather than gating them).
         self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)

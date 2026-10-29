@@ -51,7 +51,7 @@ def _occupancy() -> MockConfigEntry:
 async def test_light_diagnostics_hold_its_settings_entities_and_references(
     hass: HomeAssistant, hass_client
 ) -> None:
-    """The entry, its own entities, and what it points at, owner included."""
+    """The entry, its own entities, and what it references, owner included."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(PIR, "off")
     occupancy = _occupancy()
@@ -90,7 +90,7 @@ async def test_light_diagnostics_hold_its_settings_entities_and_references(
 async def test_sensor_diagnostics_name_the_entries_that_use_it(
     hass: HomeAssistant, hass_client
 ) -> None:
-    """A sensor's download says which lights read it."""
+    """A sensor's download says which lights reference it."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(PIR, "on")
     occupancy = _occupancy()

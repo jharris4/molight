@@ -894,20 +894,20 @@ def _combined_cycle_candidates(
     return sorted(excluded)
 
 
-def _min_dependent_light_timeout(
+def _min_referencing_light_timeout(
     hass: HomeAssistant, occupancy_entry_id: str
 ) -> int | None:
-    """Smallest light_timeout among virtual lights depending on an occupancy entry.
+    """Smallest light_timeout among virtual lights referencing an occupancy entry.
 
-    A light depends on the entry when it references the entry's entity
-    directly, or references a combined sensor that includes it.
+    Such a light references the entry's entity directly, or a combined
+    sensor that includes it.
     """
     registry = er.async_get(hass)
-    dependent_ids = {
+    sensor_ids = {
         e.entity_id
         for e in er.async_entries_for_config_entry(registry, occupancy_entry_id)
     }
-    if not dependent_ids:
+    if not sensor_ids:
         return None
 
     # Combined sensors may nest other combined sensors, so expand to a
@@ -922,13 +922,13 @@ def _min_dependent_light_timeout(
             constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
                 CONF_MAINTAIN_SENSORS, []
             )
-            if dependent_ids.intersection(constituents):
+            if sensor_ids.intersection(constituents):
                 entry_ids = {
                     e.entity_id
                     for e in er.async_entries_for_config_entry(registry, entry.entry_id)
                 }
-                if not entry_ids <= dependent_ids:
-                    dependent_ids.update(entry_ids)
+                if not entry_ids <= sensor_ids:
+                    sensor_ids.update(entry_ids)
                     changed = True
 
     timeouts = []
@@ -947,8 +947,8 @@ def _min_dependent_light_timeout(
         timeouts.extend(
             int(settings.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
             for settings in settings_sets
-            if settings.get(CONF_OCCUPANCY_ENTITY) in dependent_ids
-            or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in dependent_ids
+            if settings.get(CONF_OCCUPANCY_ENTITY) in sensor_ids
+            or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in sensor_ids
         )
     return min(timeouts, default=None)
 
@@ -983,8 +983,8 @@ def _stale_light_settings(
     """Recheck a light's entry settings (timeouts, keep-on entities) as things are now.
 
     An occupancy timeout can be raised, or a keep-on group edited, while a later
-    page of the light's form is open, since the unsaved light is not yet its
-    dependent. Returns the failing scheduled-light side (None for a regular
+    page of the light's form is open, since the unsaved light does not reference
+    it yet. Returns the failing scheduled-light side (None for a regular
     Virtual Light) and the errors.
     """
     if members is None:
@@ -1428,7 +1428,7 @@ def _light_option_fields(
 
     Only the turn-off timeout stays top-level; everything else is grouped:
     turn-on/off behavior and the off-warning stages collapsed (defaults are
-    fine to start with), the sensor wiring expanded since it is the point of
+    fine to start with), the sensor references expanded since they are the point of
     a virtual light. Each mode dropdown sits next to its entity picker. The
     standby section is for a scheduled light's inside-schedule settings.
     """
@@ -3332,7 +3332,9 @@ class MoLightConfigFlow(
     async def async_step_assign_lights(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Pick the lights that reference the sensor, pre-selecting current users.
+        """Pick the lights that reference the sensor.
+
+        Those that already do are pre-selected.
 
         The submitted set is authoritative for this sensor+role: selected
         lights get the reference (overwriting any prior one under the same
@@ -4116,7 +4118,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Configure a Virtual Remote entry.
 
-        The entry is wiring between button event entities and target lights;
+        The entry mostly references button event entities and target lights;
         its only entity is the diagnostic Last Action sensor, whose id
         derives from the name, so there is no entity_id field to resolve.
         """
@@ -4284,8 +4286,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             errors.update(_validate_name(flat))
             if not errors:
                 # A raised occupancy timeout must not outgrow any virtual light
-                # that uses this sensor (directly or through a combined sensor).
-                min_light = _min_dependent_light_timeout(
+                # that references this sensor (directly or through a combined sensor).
+                min_light = _min_referencing_light_timeout(
                     self.hass, self._entry.entry_id
                 )
                 if (
@@ -4340,7 +4342,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             elif role_errors := _validate_combined_occupancy_roles(user_input):
                 errors.update(role_errors)
             elif not errors:
-                # The new constituent set must not outgrow any dependent light:
+                # The new constituent set must not outgrow any light that references it:
                 # the combined sensor's effective occupancy timeout is the max
                 # across its constituents.
                 constituents = user_input.get(
@@ -4354,7 +4356,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                         for e in constituents
                         if (t := _effective_occupancy_timeout(self.hass, e)) is not None
                     ]
-                    min_light = _min_dependent_light_timeout(
+                    min_light = _min_referencing_light_timeout(
                         self.hass, self._entry.entry_id
                     )
                     if timeouts and min_light is not None and max(timeouts) > min_light:

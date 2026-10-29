@@ -2902,7 +2902,7 @@ async def test_light_flow_stores_door_and_false_off_delay(
     assert data[CONF_DOOR_MODE] == DOOR_MODE_OPEN_CLOSE
     assert data[CONF_FALSE_OFF_DELAY] == 30
 
-    # The created entity honors the door wiring end-to-end.
+    # The created entity honors the door reference end-to-end.
     await settle(hass)
     hass.states.async_set("light.pantry_real", "off")
     hass.states.async_set("binary_sensor.pantry_door", "on")
@@ -3125,7 +3125,8 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
 async def test_occupancy_options_reject_timeout_above_light_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Raising an occupancy timeout past a dependent light's timeout is rejected."""
+    """Raising an occupancy timeout past the timeout of a light that references it
+    is rejected."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
@@ -4349,7 +4350,8 @@ def _light_entry(
 async def test_assign_occupancy_adds_and_removes(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Bulk-assign pre-selects current users; the submitted set is authoritative."""
+    """Bulk-assign pre-selects lights that reference the sensor; the submitted set
+    is authoritative."""
     # Occupancy sensor (30s occupancy timeout fixture) registers
     # binary_sensor.test_occupancy.
     already_light = _light_entry(
@@ -4371,7 +4373,7 @@ async def test_assign_occupancy_adds_and_removes(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "assign_lights"
-    # The light already wired to this sensor is pre-selected.
+    # The light already referencing this sensor is pre-selected.
     assert _suggested_values(result["data_schema"]) == {
         CONF_ASSIGN_LIGHTS: ["light.hall"]
     }
@@ -4886,7 +4888,8 @@ async def test_illuminance_forms_accept_small_threshold(
 async def test_combined_options_reject_constituent_above_light_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Adding a slow constituent that outgrows a dependent light is rejected."""
+    """Adding a slow constituent that outgrows a light that references it is
+    rejected."""
     big = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -5047,7 +5050,7 @@ async def test_combined_options_reject_indirect_cycle(
         "binary_sensor.outer"
     ]
 
-    # The form was rendered while Inner was safe. Make Inner point back to Outer
+    # The form was rendered while Inner was safe. Make Inner reference Outer
     # before submitting to prove the flow-level validation catches stale forms.
     hass.config_entries.async_update_entry(
         inner,
@@ -5151,7 +5154,7 @@ async def test_combined_options_reject_overlapping_roles(
 async def test_occupancy_options_validate_through_nested_combined(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Raising a timeout checks lights depending on it through nested combineds."""
+    """Raising a timeout checks lights referencing it through nested combineds."""
     inner = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -5831,7 +5834,7 @@ async def test_light_options_require_lights(
 async def test_occupancy_options_pass_without_registered_entities(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """No registered entities → no dependent lights → any timeout passes."""
+    """No registered entities → no lights that reference it → any timeout passes."""
     await setup_entries(hass, occupancy_entry)
     registry = er.async_get(hass)
     for ent in er.async_entries_for_config_entry(registry, occupancy_entry.entry_id):
@@ -7241,7 +7244,7 @@ async def test_combined_schedule_options_reject_cycles(
     assert "binary_sensor.outer" in excluded
     assert "binary_sensor.inner" not in excluded
 
-    # Inner is made to point back at Outer after the form was rendered.
+    # Inner is made to reference Outer after the form was rendered.
     hass.config_entries.async_update_entry(
         inner,
         options={
@@ -9028,7 +9031,7 @@ async def test_combined_schedule_options_validate_inputs(
 async def _raise_occupancy_timeout(
     hass: HomeAssistant, entry: MockConfigEntry, seconds: int
 ) -> None:
-    """Edit the occupancy fixture's timeout; no saved light depends on it yet."""
+    """Edit the occupancy fixture's timeout; no saved light references it yet."""
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -9214,7 +9217,7 @@ async def test_discovery_selection_page_rejects_timeout_raised_meanwhile(
 async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, scheduled: bool
 ) -> None:
-    """A light newly referencing a sensor is not yet its dependent, so the
+    """A light newly referencing a sensor does not reference it in storage yet, so the
     sensor's occupancy timeout can be raised behind the light's last page: the save is
     refused with the timeout error on the referencing form."""
     await _setup_night_schedule(hass)
@@ -10846,8 +10849,9 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
 # ---------------------------------------------------------------------------
 
 
-def _dependent_light(scheduled: bool, key: str, sensor: str) -> MockConfigEntry:
-    """A 60 s light, or a scheduled light's inside settings, that uses the sensor."""
+def _referencing_light(scheduled: bool, key: str, sensor: str) -> MockConfigEntry:
+    """A 60 s light, or a scheduled light's inside settings, that references the
+    sensor."""
     if not scheduled:
         return _light_entry("Hall", "hall", **{key: sensor})
     entry = _scheduled_light_entry("Hall", "hall")
@@ -10864,13 +10868,13 @@ async def test_occupancy_options_check_lights_using_it_in_either_role(
     scheduled: bool,
     key: str,
 ) -> None:
-    """Raising a sensor's occupancy timeout above a dependent light's turn-off timeout
-    is refused."""
+    """Raising a sensor's occupancy timeout above the turn-off timeout of a light
+    that references it is refused."""
     await _setup_night_schedule(hass)
     await setup_entries(
         hass,
         occupancy_entry,
-        _dependent_light(scheduled, key, "binary_sensor.test_occupancy"),
+        _referencing_light(scheduled, key, "binary_sensor.test_occupancy"),
     )
 
     for seconds, error in ((61, "occupancy_timeout_too_long"), (60, None)):
@@ -10898,7 +10902,7 @@ async def test_occupancy_options_check_lights_using_it_in_either_role(
 async def test_occupancy_options_check_lights_through_nested_combined_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, outer_first: bool
 ) -> None:
-    """A light on an outer combined sensor depends on the sensors two levels down."""
+    """A light on an outer combined sensor references the sensors two levels down."""
     outer = MockConfigEntry(
         domain=DOMAIN,
         data={

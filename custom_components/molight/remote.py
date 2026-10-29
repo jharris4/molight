@@ -244,7 +244,7 @@ def _fired_since(state: State, since: datetime) -> bool:
 
 @callback
 def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE:
-    """Wire up a Virtual Remote entry; returns its teardown callback.
+    """Set up a Virtual Remote entry; returns its teardown callback.
 
     Subscribing is deferred until Home Assistant has fully started, exactly
     like the virtual light's sensor subscriptions: at startup event entities

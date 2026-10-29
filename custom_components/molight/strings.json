@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Add MoLight entities",
-        "description": "Create a virtual entity, discover entities to wrap in bulk, wire one sensor into several lights, or convert existing virtual lights.",
+        "description": "Create a virtual entity, discover entities to wrap in bulk, assign one sensor to several lights, or convert existing virtual lights.",
         "menu_options": {
           "create": "Create a single entity",
           "discover_occupancy": "Discover occupancy sensors",
@@ -99,7 +99,7 @@
       },
       "assign_lights": {
         "title": "Choose the lights",
-        "description": "Lights already using this sensor are pre-selected. The final selection is the complete set that will use it: add lights to assign the sensor, deselect pre-selected ones to remove it.",
+        "description": "Lights that already reference this sensor are pre-selected. The final selection is the complete set that will reference it: add lights to assign the sensor, deselect pre-selected ones to remove it.",
         "data": {
           "assign_lights": "Lights"
         }
@@ -1773,7 +1773,7 @@
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
-      "occupancy_timeout_too_long": "This occupancy timeout exceeds the turn-off timeout of a virtual light that uses this sensor.",
+      "occupancy_timeout_too_long": "This occupancy timeout exceeds the turn-off timeout of a virtual light that references this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
@@ -1810,7 +1810,7 @@
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the Standby color mode field to choose which applies.",
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the Standby color mode field to None for no standby.",
       "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor.",
-      "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that uses this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter occupancy timeouts."
+      "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that references this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter occupancy timeouts."
     },
     "abort": {
       "light_member_cycle": "Another virtual light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",

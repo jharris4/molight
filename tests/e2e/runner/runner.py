@@ -1436,7 +1436,7 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_assign_scenarios(client: HomeAssistantClient) -> None:
-    """Bulk assignment wires, unwires, and skips lights per the timeout guard."""
+    """Bulk assignment assigns, removes, and skips lights per the timeout guard."""
     light_a = create_entry(
         client,
         "light",
@@ -1492,12 +1492,12 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_a,
         lambda cfg: cfg.get("occupancy_entity") == "binary_sensor.e2e_slow_occupancy",
-        "wired to the slow occupancy sensor",
+        "assigned the slow occupancy sensor",
     )
     wait_stored_entry(
         light_b,
         lambda cfg: not cfg.get("occupancy_entity"),
-        "left unwired (timeout guard)",
+        "skipped (timeout guard)",
     )
     summary = assign(
         "assign_occupancy",
@@ -1505,8 +1505,8 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         [],
     )
     if summary.get("removed") != "1" or summary.get("assigned") != "0":
-        raise AssertionError(f"Occupancy unassignment summary unexpected: {summary}")
-    wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "unwired")
+        raise AssertionError(f"Occupancy removal summary unexpected: {summary}")
+    wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "removed")
 
     # The maintain role fills its own key, under the same timeout guard.
     summary = assign(
@@ -1527,7 +1527,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
             cfg.get("maintain_occupancy_entity") == "binary_sensor.e2e_slow_occupancy"
             and not cfg.get("occupancy_entity")
         ),
-        "wired to the slow occupancy sensor as its maintain sensor only",
+        "assigned the slow occupancy sensor as its maintain sensor only",
     )
     wait_stored_entry(
         light_b,
@@ -1543,7 +1543,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         [],
     )
     if summary.get("removed") != "1" or summary.get("assigned") != "0":
-        raise AssertionError(f"Maintain unassignment summary unexpected: {summary}")
+        raise AssertionError(f"Maintain removal summary unexpected: {summary}")
     wait_stored_entry(
         light_a,
         lambda cfg: not cfg.get("maintain_occupancy_entity"),
@@ -1563,7 +1563,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
             cfg.get("illuminance_entity") == VIRTUAL_ILLUMINANCE
             and cfg.get("illuminance_mode") == "gate"
         ),
-        "wired to the illuminance sensor in gate mode",
+        "assigned the illuminance sensor in gate mode",
     )
     summary = assign(
         "assign_schedule",
@@ -1578,7 +1578,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
             cfg.get("schedule_entity") == VIRTUAL_SCHEDULE
             and cfg.get("schedule_mode") == "gate_keep"
         ),
-        "wired to the schedule in gate_keep mode",
+        "assigned the schedule in gate_keep mode",
     )
     for entry_id, entity_id in (
         (light_a, "light.e2e_assign_a"),
@@ -1587,7 +1587,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
     checkpoint(
-        "bulk assignment wires both occupancy roles, unwires, skips by the timeout "
+        "bulk assignment assigns both occupancy roles, removes, skips by the timeout "
         "guard, sets modes"
     )
 
@@ -3428,7 +3428,7 @@ def stored_config_entries() -> list[dict[str, Any]]:
 
 
 def assert_removal_storage_clean(snapshot: dict[str, str]) -> None:
-    """Assert the removed entry and dependent reference are absent on disk."""
+    """Assert the removed entry and the light's reference to it are absent on disk."""
     entries = stored_config_entries()
     if any(entry["entry_id"] == snapshot["sensor_entry_id"] for entry in entries):
         raise AssertionError("Removed sensor config entry remained in storage")
@@ -7339,7 +7339,7 @@ def run_door_restart_verify() -> None:
 
 
 def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
-    """Deleting a referenced schedule or illuminance sensor cleans its users."""
+    """Deleting a referenced schedule or illuminance sensor removes its references."""
     schedule_entry_id = create_virtual_schedule(
         client, "E2E Ref Schedule", "e2e_ref_schedule", source=RAW_REMOVAL_MOTION
     )
@@ -7467,7 +7467,8 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(RAW_MULTI_DIMMER, lambda state: state["state"] == "off", "off")
     remove_entry_and_entity(client, light_entry_id, REF_LIGHT)
     print(
-        "PASS: deleting a referenced schedule or illuminance sensor cleaned its users"
+        "PASS: deleting a referenced schedule or illuminance sensor removed its "
+        "references"
     )
 
 
@@ -8267,7 +8268,8 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     )
     checkpoint("unavailable inputs only decide the result when they could")
 
-    # Time-window inputs are read from entry settings, so editing one rebuilds users.
+    # Time-window inputs are read from entry settings, so editing one rebuilds
+    # the entries that reference it.
     now = datetime.now(UTC).replace(microsecond=0)
     window_id = create_time_schedule(
         client,
@@ -8312,7 +8314,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     )
     checkpoint("editing a time-window input rebuilds the combination")
 
-    # Deleting an input strips it from the combinations that used it.
+    # Deleting an input strips it from the combinations that referenced it.
     client.set_state(RAW_REMOVAL_MOTION, "on")
     remove_entry_and_entity(client, b_id, COMBO_B)
     wait_stored_entry(

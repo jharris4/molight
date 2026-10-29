@@ -259,7 +259,8 @@ def _with_new_entity_ids(cfg: Any) -> Any:
 
 
 def test_reference_fixtures_cover_every_entity_id_key() -> None:
-    """A key added to the entity ID change walk needs entry settings above using it."""
+    """A key added to the entity ID change walk needs entry settings above
+    referencing it."""
     used = set()
     for cfg in _REFERENCING_SETTINGS.values():
         used |= set(cfg)
@@ -813,7 +814,7 @@ async def test_constituent_with_changed_entity_id_does_not_clear_the_combined_se
 ) -> None:
     """The combined sensor stays on through a constituent's entity ID change.
 
-    A clear and a fresh start would be a new visit to the lights that use
+    A clear and a fresh start would be a new visit to the lights that reference
     it: one turned off manually in the occupied room would come back on.
     """
     motion = RealBinary("motion")
@@ -1048,7 +1049,7 @@ async def test_input_with_changed_entity_id_keeps_combined_schedules_on_the_same
 
 
 # ---------------------------------------------------------------------------
-# Virtual Remote, nested lights and the rest of the graph
+# Virtual Remote, nested lights and the rest of the references
 # ---------------------------------------------------------------------------
 
 

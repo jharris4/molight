@@ -221,7 +221,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     to that moment immediately, and if the source hasn't recovered after the
     timeout the occupancy is cleared, flagged via last_clear_unavailable.
     Such clears are never classified as false detections (the room may well
-    still be occupied), so dependent lights run their normal gentle countdown.
+    still be occupied), so lights that reference it run their normal gentle countdown.
     A recovery cancels the pending clear: straight to "off" is processed as a
     real clear, straight to "on" simply continues the visit.
     """
@@ -724,7 +724,7 @@ class VirtualCombinedOccupancySensor(
             # shows presence before startup finishes, or on its first sighting
             # after it, carry the restored visit instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
-            # dependent lights adopt with a full timer and re-evaluate.
+            # lights that reference it adopt with a full timer and re-evaluate.
             self._restored_carry = True
             self._startup_done = self.hass.state is CoreState.running
             self._unreported_maintain = {
@@ -997,7 +997,7 @@ class VirtualCombinedOccupancySensor(
         the simple sensor's clear-on-unavailable, never classified as a
         false detection (the room may still be occupied), and the person is
         assumed present right up to the dropout, so latest_occupied_time
-        advances to that moment: dependent lights run their normal gentle
+        advances to that moment: lights that reference it run their normal gentle
         countdown, and a nesting combined sensor sees an advanced lot rather
         than misreading the clear as a false detection.
         """

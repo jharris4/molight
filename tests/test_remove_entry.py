@@ -334,12 +334,12 @@ async def test_remove_entry_added_before_startup_is_clean(
 
 @pytest.mark.asyncio
 @ENTITIES_FIRST
-async def test_remove_entry_strips_references_from_dependents(
+async def test_remove_entry_strips_references_from_surviving_entries(
     hass: HomeAssistant, entities_first: bool
 ) -> None:
     """Removing a sensor entry cleans its references out of surviving entries.
 
-    A dangling reference silently degrades the dependents, worst of all a
+    A dangling reference silently degrades the entries that hold it, worst of all a
     gate-mode schedule reference, which would read as a gate that never opens
     and block every automatic turn-on.
     """

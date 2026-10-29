@@ -88,7 +88,7 @@ Virtual Remote buttons.
   has finished starting, instead of flicking off and on, and a light turned
   off manually no longer comes back on after a restart.
 - **Changed entity IDs, deleted or disabled entities**: changing an entity ID
-  in Home Assistant is now followed; every entry that used it kept the former
+  in Home Assistant is now followed; every entry that referenced it kept the former
   one and quietly stopped working. A deleted or disabled sensor, door or keep-on
   entity no longer keeps a light on.
 - **Long and colored fades** are no longer taken for a change at the wall.
@@ -354,7 +354,7 @@ longer needs a custom repository.
 
 - Bulk discovery: create many virtual lights in one pass, with an optional name
   prefix and suffix.
-- Bulk assignment: attach one sensor to several existing virtual lights at once.
+- Bulk assignment: assign one sensor to several existing virtual lights at once.
 - Entity ID overrides in the config flow's create steps.
 - Apache-2.0 license, required by HACS.
 
