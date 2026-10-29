@@ -4014,7 +4014,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _on_occupancy_change(self, occupied: bool) -> None:
         """Handle the virtual occupancy sensor changing."""
         if not occupied and not self._occupancy_clear_was_false():
-            # A genuine visit ended: a later false cycle did not light the light.
+            # A genuine visit ended: a later false detection did not light the light.
             self._occupancy_lit_lights = False
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
@@ -4052,7 +4052,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 return  # maintain entity / open door holds the light on
             self._machine_state = STATE_COUNTDOWN
             if self._occupancy_lit_lights and self._occupancy_clear_was_false():
-                # The whole cycle was a false detection and nobody else
+                # The whole visit was a false detection and nobody else
                 # asked for these lights, so turn them off after the
                 # false-detection off delay.
                 self._start_timer(

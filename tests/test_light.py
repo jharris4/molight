@@ -800,7 +800,7 @@ def _fd_light_entry() -> MockConfigEntry:
 
 @pytest.mark.asyncio
 async def test_false_detection_off_delay(hass: HomeAssistant, freezer) -> None:
-    """Lights lit by a false-detection cycle turn off after the off delay."""
+    """Lights lit by a false detection turn off after the off delay."""
     await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
 
     hass.states.async_set("binary_sensor.motion_1", "on")

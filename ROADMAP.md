@@ -60,9 +60,9 @@ Ships alone.
 
 - **Problem.** Turn the light off manually while you are in the room, to watch a film or go to
   sleep, and the motion sensor clears after its hold time, sees you again, and the light comes back
-  on. Today a manual off stands only over the visit it ended, and the sensor's next on-cycle is a new
-  visit. The only way to stop it is a gate through a helper you flip, not the light. This is the most
-  common complaint about motion lighting anywhere.
+  on. Today a manual off stands only for the visit in progress, and the sensor's next visit turns
+  the light back on. The only way to stop it is a gate through a helper you flip, not the light.
+  This is the most common complaint about motion lighting anywhere.
 - **Design.** One option on the light, off by default. When on, after a manual off, occupancy and
   the door do not turn the light on until the room has been empty for the turn-off timeout, by the
   same rule the countdown uses, so there is no new number to set. A virtual or physical turn-on
@@ -111,7 +111,7 @@ Ships alone.
   turned off after the false-detection off delay; set wrong either way, turn-off timing drifts.
   Nothing tells the user.
 - **Design.** The sensor keeps the shortest on-duration it has seen; a PIR's hold time is that floor.
-  Once there are enough cycles to judge and the configured timeout is far from the floor, a Repairs
+  Once there are enough visits to judge and the configured timeout is far from the floor, a Repairs
   issue names both. Diagnostic only.
 - **Cost.** No state-machine change; a sensor test and a README line.
 

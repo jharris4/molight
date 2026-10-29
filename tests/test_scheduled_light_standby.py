@@ -613,7 +613,7 @@ async def test_false_detection_after_a_late_raise_drops_back_after_the_off_delay
 async def test_manual_off_cancels_standby_until_the_next_boundary(
     hass: HomeAssistant, freezer
 ) -> None:
-    """After a manual off, occupancy cycles end in off until the window ends."""
+    """After a manual off, visits end in off until the window ends."""
     await _setup_porch(hass, _porch(end_action=SCHEDULE_END_ACTION_KEEP))
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
     await settle(hass)
@@ -1909,7 +1909,7 @@ async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
     """Occupancy still on at a restart only raises a light turned off manually
-    when its cycle started after that off; when the sensor can't tell, the
+    when its visit started after that off; when the sensor can't tell, the
     light stays off."""
     entry = _porch()
     off = await _manual_off_while_occupied(hass, entry)
@@ -1918,7 +1918,7 @@ async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
         times = {
             "unknown": None,
             "before": (off - timedelta(seconds=5)).isoformat(),
-            # A cycle the light did not see start, as its own reload missed it.
+            # A visit the light did not see start, as its own reload missed it.
             "after": datetime.now(UTC).isoformat(),
         }
         hass.states.async_set(OCCUPANCY, "on", {"last_on_time": times[started]})
@@ -1944,7 +1944,7 @@ async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
 async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
     hass: HomeAssistant, late: str
 ) -> None:
-    """An occupancy sensor that reports only after startup, or reports a cycle
+    """An occupancy sensor that reports only after startup, or reports a visit
     whose start it did not see, does not raise a light turned off manually."""
     entry = _porch()
     await _manual_off_while_occupied(hass, entry)

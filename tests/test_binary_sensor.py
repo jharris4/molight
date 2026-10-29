@@ -215,7 +215,7 @@ async def test_occupancy_clears_after_unavailable_timeout(
 async def test_occupancy_dropout_recovery_to_on_cancels_clear(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A source recovering to 'on' before the timeout continues the occupancy."""
+    """A source recovering to 'on' before the timeout continues the visit."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
@@ -406,7 +406,7 @@ async def test_late_loading_source_clear_is_not_false_detection(
     """A source first provided after boot has an unknown start: no false flag.
 
     Until a slow integration provides it, HA shows the source as a restored
-    placeholder; a detection arriving then may be a replay of one that began
+    placeholder; a visit arriving then may be a replay of one that began
     long before, so an early clear must take the normal countdown.
     """
     hass.states.async_set("binary_sensor.motion_1", "unavailable", {"restored": True})
@@ -442,7 +442,7 @@ async def test_detection_after_a_plain_outage_is_still_classified(
     hass: HomeAssistant, freezer
 ) -> None:
     """Only the restored placeholder marks a first sighting: a source back
-    from an ordinary outage starts a cycle that can still be flagged false."""
+    from an ordinary outage starts a visit that can still be flagged false."""
     hass.states.async_set("binary_sensor.motion_1", "off")
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -475,7 +475,7 @@ async def test_detection_after_a_plain_outage_is_still_classified(
 async def test_false_detection_classification_and_count(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A single-blip cycle is counted and doesn't advance latest_occupied_time."""
+    """A single-blip visit is counted and doesn't advance latest_occupied_time."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -495,7 +495,7 @@ async def test_false_detection_classification_and_count(
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # False cycle: one detection, cleared just after the 30s occupancy timeout (31s on).
+    # False detection: one detection, cleared 1s after the 30s occupancy timeout.
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
     freezer.tick(timedelta(seconds=31))
@@ -508,7 +508,7 @@ async def test_false_detection_classification_and_count(
     assert state.attributes["false_detection_count"] == 6
     assert state.attributes["latest_occupied_time"] is None  # not advanced
 
-    # Real cycle: re-triggered, on well past the occupancy timeout (45s).
+    # Genuine visit: re-triggered, on well past the occupancy timeout (45s).
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
     freezer.tick(timedelta(seconds=45))
@@ -528,10 +528,10 @@ async def _edit_options(hass: HomeAssistant, entry: MockConfigEntry, **changes) 
 
 
 @pytest.mark.asyncio
-async def test_occupancy_edit_mid_cycle_keeps_cycle_start_and_applies_new_timeout(
+async def test_occupancy_edit_mid_visit_keeps_visit_start_and_applies_new_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An edit while occupied keeps the cycle start; the clear uses the new timeout."""
+    """An edit while occupied keeps the visit start; the clear uses the new timeout."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -556,7 +556,7 @@ async def test_occupancy_edit_mid_cycle_keeps_cycle_start_and_applies_new_timeou
     assert state.attributes["occupancy_timeout"] == 40
     assert state.attributes["last_on_time"] == start.isoformat()
 
-    # 45 s on is a real cycle under the new 40 s timeout; 25 s from the edit is not.
+    # 45 s on is a genuine visit under the new 40 s timeout; 25 s from the edit is not.
     freezer.tick(timedelta(seconds=25))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await hass.async_block_till_done()
@@ -573,7 +573,7 @@ async def test_occupancy_edit_mid_cycle_keeps_cycle_start_and_applies_new_timeou
 async def test_false_detection_grace_edge(
     hass: HomeAssistant, freezer, on_for: int, false: bool
 ) -> None:
-    """A cycle exactly the grace past the timeout is still a false detection."""
+    """A visit exactly the grace past the timeout is still a false detection."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -858,7 +858,7 @@ async def test_light_outlives_an_occupancy_edit_during_dropout(
 async def test_recovery_to_on_preserves_false_detection_clock(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An unavailable→on recovery mid-cycle must not restart the on-duration clock.
+    """An unavailable→on recovery mid-visit must not restart the on-duration clock.
 
     Otherwise a long, genuine occupancy whose source is briefly unavailable
     just before the clear measures its duration from the recovery moment and gets
@@ -943,8 +943,8 @@ async def test_second_dropout_event_does_not_rearm_clear_timer(
 
 
 @pytest.mark.asyncio
-async def test_combined_counts_false_cycles(hass: HomeAssistant, freezer) -> None:
-    """A combined cycle made up only of false constituent cycles is flagged."""
+async def test_combined_counts_false_detections(hass: HomeAssistant, freezer) -> None:
+    """A combined visit made up only of constituents' false detections is flagged."""
     occupancy = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1758,7 +1758,7 @@ async def test_combined_visit_that_ended_cannot_be_carried_later(
 async def test_combined_late_maintain_reporting_off_does_not_carry(
     hass: HomeAssistant,
 ) -> None:
-    """A late constituent whose first report is off ends the restored occupancy."""
+    """A late constituent whose first report is off ends the restored visit."""
     mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
     hass.states.async_set("binary_sensor.m2", "unavailable", {"restored": True})
     entry = _raw_combined_entry()
@@ -1827,8 +1827,8 @@ def _combined_lot(hass: HomeAssistant) -> str | None:
     ]
 
 
-async def _false_cycle(hass: HomeAssistant, freezer, entity_id: str, attrs: dict):
-    """Run one single-blip cycle of a constituent, which leaves its attributes."""
+async def _false_detection(hass: HomeAssistant, freezer, entity_id: str, attrs: dict):
+    """Run one single-blip visit of a constituent, which leaves its attributes."""
     hass.states.async_set(entity_id, "on", attrs)
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
@@ -1839,7 +1839,7 @@ async def _false_cycle(hass: HomeAssistant, freezer, entity_id: str, attrs: dict
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("seeded_on", [False, True])
-async def test_new_combined_sensor_measures_its_first_cycle_against_history(
+async def test_new_combined_sensor_measures_its_first_visit_against_history(
     hass: HomeAssistant, freezer, seeded_on: bool
 ) -> None:
     """A visit a constituent saw before the sensor existed is not a detection."""
@@ -1855,7 +1855,7 @@ async def test_new_combined_sensor_measures_its_first_cycle_against_history(
         hass.states.async_set("binary_sensor.m1", "off", attrs)
         await settle(hass)
     else:
-        await _false_cycle(hass, freezer, "binary_sensor.m1", attrs)
+        await _false_detection(hass, freezer, "binary_sensor.m1", attrs)
     state = hass.states.get("binary_sensor.seed_combined")
     assert state.state == "off"
     assert state.attributes["last_clear_false_detection"] is True
@@ -1886,14 +1886,14 @@ async def test_combined_reload_takes_over_a_new_constituents_history(
     await settle(hass)
     assert _combined_lot(hass) == recent
 
-    await _false_cycle(hass, freezer, "binary_sensor.m3", attrs)
+    await _false_detection(hass, freezer, "binary_sensor.m3", attrs)
     state = hass.states.get("binary_sensor.seed_combined")
     assert state.attributes["last_clear_false_detection"] is True
     assert state.attributes["false_detection_count"] == 1
 
 
 async def _genuine_trigger_then_maintain_hold(hass: HomeAssistant, freezer) -> str:
-    """Start a combined cycle whose trigger clears genuinely; return its lot."""
+    """Start a combined visit whose trigger clears genuinely; return its lot."""
     hass.states.async_set("binary_sensor.m1", "on")
     hass.states.async_set("binary_sensor.m2", "on")
     await settle(hass)
@@ -1919,10 +1919,10 @@ async def _false_maintain_clear(hass: HomeAssistant, lot: str) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("via", ["reload", "restart"])
-async def test_genuine_combined_cycle_survives_a_reload(
+async def test_genuine_combined_visit_survives_a_reload(
     hass: HomeAssistant, freezer, via: str
 ) -> None:
-    """A reload mid-cycle keeps the genuine detection the cycle already had."""
+    """A reload mid-visit keeps the genuine detection the visit already had."""
     hass.states.async_set("binary_sensor.m1", "off")
     hass.states.async_set("binary_sensor.m2", "off")
     entry = _raw_combined_entry()
@@ -1939,10 +1939,10 @@ async def test_genuine_combined_cycle_survives_a_reload(
 
 
 @pytest.mark.asyncio
-async def test_genuine_combined_cycle_survives_a_reload_with_a_late_maintain(
+async def test_genuine_combined_visit_survives_a_reload_with_a_late_maintain(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A cycle a late maintain sensor carries across keeps its detection too."""
+    """A visit a late maintain sensor carries across keeps its detection too."""
     hass.states.async_set("binary_sensor.m1", "off")
     hass.states.async_set("binary_sensor.m2", "off")
     entry = _raw_combined_entry()
@@ -1959,6 +1959,41 @@ async def test_genuine_combined_cycle_survives_a_reload_with_a_late_maintain(
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
     await _false_maintain_clear(hass, lot)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key", ["visit_genuine", "cycle_genuine"])
+async def test_combined_restores_a_visit_with_no_genuine_detection(
+    hass: HomeAssistant, key: str
+) -> None:
+    """A visit saved without a genuine detection still clears false after a
+    restart, also from a save under the former key name."""
+    lot = "2026-01-01T00:00:00+00:00"
+    mock_restore_cache_with_extra_data(
+        hass,
+        [
+            (
+                State(
+                    "binary_sensor.seed_combined", "on", {"latest_occupied_time": lot}
+                ),
+                {
+                    key: False,
+                    "lots": {"binary_sensor.m1": lot, "binary_sensor.m2": lot},
+                },
+            )
+        ],
+    )
+    hass.states.async_set("binary_sensor.m1", "on")
+    hass.states.async_set("binary_sensor.m2", "off")
+    await setup_entries(hass, _raw_combined_entry())
+    assert hass.states.get("binary_sensor.seed_combined").state == "on"
+
+    hass.states.async_set("binary_sensor.m1", "off")
+    await settle(hass)
+    state = hass.states.get("binary_sensor.seed_combined")
+    assert state.state == "off"
+    assert state.attributes["last_clear_false_detection"] is True
+    assert state.attributes["false_detection_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -2032,7 +2067,7 @@ async def test_combined_false_clear_survives_a_reload(
     hass.states.async_set("binary_sensor.m3", "off")
     entry = _raw_combined_entry()
     await setup_entries(hass, entry)
-    await _false_cycle(hass, freezer, "binary_sensor.m1", {})
+    await _false_detection(hass, freezer, "binary_sensor.m1", {})
     state = hass.states.get("binary_sensor.seed_combined")
     assert state.attributes["last_clear_false_detection"] is True
 
@@ -2419,7 +2454,7 @@ async def test_combined_keeps_newest_lot_over_older_clear(
     hass: HomeAssistant, freezer
 ) -> None:
     """A constituent clearing with an older latest_occupied_time must not
-    regress the combined sensor's own, and a cycle that advanced nothing is
+    regress the combined sensor's own, and a visit that advanced nothing is
     flagged as a false detection."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
@@ -2437,7 +2472,7 @@ async def test_combined_keeps_newest_lot_over_older_clear(
     assert combined.attributes["latest_occupied_time"] == newer
     assert combined.attributes["last_clear_false_detection"] is False
 
-    # A second cycle whose clear carries only an older lot advances nothing.
+    # A second visit whose clear carries only an older lot advances nothing.
     hass.states.async_set("binary_sensor.m1", "on")
     await settle(hass)
     hass.states.async_set("binary_sensor.m1", "off", {"latest_occupied_time": older})
@@ -2475,10 +2510,10 @@ async def test_combined_retriggers_on_constituent_recovery(
 async def test_occupancy_discards_last_on_time_restored_with_off(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """An anchor restored alongside 'off' belongs to a finished cycle.
+    """An anchor restored alongside 'off' belongs to a finished visit.
 
-    Keeping it would let a fresh post-restart cycle measure its on-duration
-    from the previous cycle's start, skewing classification.
+    Keeping it would let a fresh post-restart visit measure its on-duration
+    from the previous visit's start, skewing classification.
     """
     stale = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     mock_restore_cache(
@@ -2514,7 +2549,7 @@ def _grace_occupancy_entry() -> MockConfigEntry:
 async def test_occupancy_restores_last_on_time_with_on(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A cycle still running at restart keeps its pre-restart anchor.
+    """A visit still running at restart keeps its pre-restart anchor.
 
     The post-restart clear then measures the full on-duration: a long-running
     occupancy is a real one, not a false detection timed from the restart.
@@ -2546,12 +2581,12 @@ async def test_occupancy_restores_last_on_time_with_on(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_classifies_short_cycle_from_restored_anchor(
+async def test_occupancy_classifies_short_visit_from_restored_anchor(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A brief cycle spanning the restart is still classified as false.
+    """A brief visit spanning the restart is still classified as false.
 
-    Without the restored anchor the cycle would be unclassifiable and the
+    Without the restored anchor the visit would be unclassifiable and the
     clear would pass as genuine.
     """
     anchor = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
@@ -2628,7 +2663,7 @@ async def test_occupancy_seeds_last_on_time_from_source(
 async def test_occupancy_does_not_seed_last_on_time_at_startup(
     hass: HomeAssistant, freezer
 ) -> None:
-    """At startup last_changed is the restart moment, so the cycle isn't classified."""
+    """At startup last_changed is the restart moment, so the visit isn't classified."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3287,7 +3322,7 @@ async def test_occupancy_records_a_clear_missed_during_a_reload(
     hass: HomeAssistant, freezer, occupied_for: int, false: bool
 ) -> None:
     """A source that clears while the sensor is not loaded still ends its
-    cycle: the clear is classified and dated when the source reported it."""
+    visit: the clear is classified and dated when the source reported it."""
     hass.states.async_set("binary_sensor.motion_1", "off")
     entry = _grace_occupancy_entry()
     await setup_entries(hass, entry)
@@ -3460,11 +3495,11 @@ async def test_combined_judges_a_clear_by_the_constituent_that_cleared(
 @pytest.mark.parametrize("nested", [False, True])
 @pytest.mark.parametrize("role", [CONF_TRIGGER_SENSORS, CONF_MAINTAIN_SENSORS])
 @pytest.mark.parametrize("genuine_before", [False, True])
-async def test_combined_constituent_added_mid_cycle_brings_only_history(
+async def test_combined_constituent_added_mid_visit_brings_only_history(
     hass: HomeAssistant, freezer, nested: bool, role: str, genuine_before: bool
 ) -> None:
-    """History a constituent added during a cycle already carries is no
-    detection in that cycle; a detection the cycle did contain is kept."""
+    """History a constituent added during a visit already carries is no
+    detection in that visit; a detection the visit did contain is kept."""
     old = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
     hass.states.async_set("binary_sensor.m1", "off")
     hass.states.async_set("binary_sensor.m2", "off")
@@ -3517,7 +3552,7 @@ async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
 ) -> None:
     """A constituent that disappears while showing presence was present up
     to then, even though another keeps the sensor on: the survivor's false
-    clear ends a genuine cycle and the light counts down from the dropout.
+    clear ends a genuine visit and the light counts down from the dropout.
     One that was idle when it disappeared adds nothing."""
     lamp, motion_a, motion_b = RealLight("lamp"), RealBinary("a"), RealBinary("b")
     await add_real(hass, lamp, motion_a, motion_b)
@@ -3572,7 +3607,7 @@ async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
     motion_b.set(True)
     await settle(hass)
     if gone == "idle":
-        # A false cycle of its own, over before it disappears.
+        # A false detection of its own, over before it disappears.
         motion_a.set(False)
         motion_b.set(False)
         await settle(hass)

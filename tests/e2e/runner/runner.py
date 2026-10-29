@@ -2660,7 +2660,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         combined["attributes"].get("latest_occupied_time") is None
         or combined["attributes"].get("last_clear_false_detection") is not False
     ):
-        raise AssertionError(f"Combined clear was not a genuine occupancy: {combined}")
+        raise AssertionError(f"Combined clear was not a genuine visit: {combined}")
     constituents = [
         parse_ts(client.state(entity_id)["attributes"].get("latest_occupied_time"))
         for entity_id in (TRIGGER_OCCUPANCY, VIRTUAL_TIMER_OCCUPANCY)
@@ -4400,7 +4400,7 @@ def set_grace_motion(client: HomeAssistantClient, on: bool) -> None:
 
 
 def run_false_detection_prepare() -> None:
-    """Classify a blip as false and a real stay as genuine, then leave occupied."""
+    """Classify a blip as false and a real visit as genuine, then leave occupied."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4461,7 +4461,7 @@ def run_false_detection_prepare() -> None:
     )
     wait_machine_state(client, "idle", GRACE_LIGHT)
 
-    # A stay longer than timeout + grace is genuine: the normal countdown runs.
+    # A visit longer than timeout + grace is genuine: the normal countdown runs.
     set_grace_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     assert_state_stays(
@@ -4481,7 +4481,7 @@ def run_false_detection_prepare() -> None:
             and state["attributes"].get("latest_occupied_time") is not None
             and state["attributes"].get("last_on_time") is not None
         ),
-        "clearing a genuine stay",
+        "clearing a genuine visit",
     )
     # The clear back-dates latest_occupied_time by the 2 s occupancy timeout.
     latest = parse_ts(genuine["attributes"]["latest_occupied_time"])
@@ -4514,7 +4514,7 @@ def run_false_detection_prepare() -> None:
 
 
 def run_false_detection_verify() -> None:
-    """Occupancy in progress at boot is not a false detection after a restart."""
+    """A visit in progress at boot is not a false detection after a restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4535,7 +4535,7 @@ def run_false_detection_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on: occupancy in progress at boot is not a false detection",
+        "on: a visit in progress at boot is not a false detection",
         duration=5,
     )
     set_grace_motion(client, False)
@@ -4660,7 +4660,7 @@ def run_late_source_verify() -> None:
         "occupied by the late-loading source",
     )
     # Clearing soon after the late arrival is a person leaving, not a blip:
-    # the cycle's real start is unknown, so it must not be classified false.
+    # the visit's real start is unknown, so it must not be classified false.
     client.set_state(RAW_REMOVAL_MOTION, "off")
     client.wait_state(
         LATE_OCCUPANCY,
@@ -7105,7 +7105,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         GRACE_MAINTAIN,
         lambda state: state["attributes"].get("last_clear_false_detection") is False,
-        "clearing a genuine maintain stay",
+        "clearing a genuine maintain visit",
     )
     wait_machine_state(client, "countdown", GRACE_BOTH_LIGHT)
     assert_state_stays(
@@ -7887,7 +7887,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
-    """Nested combined sensors, their form rejections, and an all-false cycle."""
+    """Nested combined sensors, their form rejections, and an all-false visit."""
     trigger_id = create_grace_occupancy(
         client, "E2E Grace Trigger", RAW_MOTION, "e2e_grace_trigger"
     )
@@ -7947,7 +7947,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
     else:
         expect_rejection(client, result, "combined_occupancy_cycle", options=True)
 
-    # A genuine stay propagates through both levels; an all-false cycle is
+    # A genuine visit propagates through both levels; an all-false visit is
     # flagged on the combined sensors just like on the simple one.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(NEST_INNER, lambda state: state["state"] == "on", "on")
@@ -7963,7 +7963,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
             and state["attributes"].get("last_clear_false_detection") is False
             and state["attributes"].get("latest_occupied_time") is not None
         ),
-        "off after a genuine stay through the nesting",
+        "off after a genuine visit through the nesting",
     )
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(NEST_OUTER, lambda state: state["state"] == "on", "on")
@@ -7976,7 +7976,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
                 and state["attributes"].get("last_clear_false_detection") is True
                 and state["attributes"].get("false_detection_count") == 1
             ),
-            "flagging the all-false cycle",
+            "flagging the all-false visit",
         )
     for entry_id, entity_id in (
         (outer_id, NEST_OUTER),
@@ -8021,7 +8021,7 @@ def run_combined_restart_prepare() -> None:
     )
     # Force the load-order race every run: the maintain sensor's own source
     # arrives only after boot, so the maintain sensor seeds off while the
-    # combined sensor restores, and its later "on" must carry the occupancy.
+    # combined sensor restores, and its later "on" must carry the visit.
     client.set_startup_delay(RAW_TIMER_MOTION, 6)
     COMBINED_RESTART_SNAPSHOT.write_text(
         json.dumps({"trigger_id": trigger_id, "combined_id": combined_id})
@@ -8065,9 +8065,7 @@ def run_combined_restart_verify() -> None:
         client.remove_entry(entry_id)
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
-    print(
-        "PASS: a maintain-held combined sensor carried its occupancy across the restart"
-    )
+    print("PASS: a maintain-held combined sensor carried its visit across the restart")
 
 
 def create_time_schedule(

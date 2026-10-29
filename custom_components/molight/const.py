@@ -91,10 +91,10 @@ CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_senso
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 DEFAULT_OCCUPANCY_TIMEOUT = 120
-# A cycle whose on-duration exceeds the timeout by no more than this many
+# A visit whose on-duration exceeds the timeout by no more than this many
 # seconds contained exactly one instantaneous detection (the sensor never
 # re-triggered during its hold time), almost always a false detection.
-# Such cycles don't advance latest_occupied_time and are counted in the
+# Such visits don't advance latest_occupied_time and are counted in the
 # false_detection_count attribute. 0 disables classification.
 CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
 DEFAULT_FALSE_DETECTION_GRACE = 3
@@ -221,8 +221,8 @@ CONF_TURN_ON_SELECT_OPTION = "turn_on_select_option"
 # turn-on time. When it is missing, unavailable, unknown, or not accepted by
 # the target, turn_on_select_option is used as the fixed fallback.
 CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
-# When occupancy clears and the sensor flags the cycle as a false detection,
-# lights that were lit BY that cycle turn off after this short delay instead
+# When occupancy clears and the sensor flags the visit as a false detection,
+# lights that were lit BY that visit turn off after this short delay instead
 # of the normal countdown. Lights turned on manually are never affected.
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 DEFAULT_FALSE_OFF_DELAY = 5

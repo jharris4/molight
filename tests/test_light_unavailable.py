@@ -672,7 +672,7 @@ async def test_occupancy_recovers_directly_to_on(hass: HomeAssistant) -> None:
 async def test_occupancy_briefly_unavailable_respects_manual_off(
     hass: HomeAssistant, bad: str
 ) -> None:
-    """on → outage → on is no new occupancy: a manual off stands."""
+    """on → outage → on is no new visit: a manual off stands."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
@@ -696,7 +696,7 @@ async def test_occupancy_briefly_unavailable_respects_manual_off(
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
-    # A real clear and return is a new occupancy again.
+    # A real clear and return is a new visit again.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     hass.states.async_set(OCC, "on")

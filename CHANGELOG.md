@@ -156,7 +156,7 @@ replying late.
 - Schedule window markers survive restarts, windows chained around the clock,
   sun offsets that push an end past midnight or before its start, and the
   spring-forward clock change.
-- False detections: a combined sensor keeps its cycle's genuine detection
+- False detections: a combined sensor keeps its visit's genuine detection
   across a reload and inherits its constituents' `latest_occupied_time`, and a
   light turned on manually or by a door keeps its full timeout.
 - A maintain sensor clearing or a door closing while brightness or a gate-mode
@@ -176,7 +176,7 @@ replying late.
   the new `bright_forced_off` attribute carries this across a restart.
 - Editing a light's options while its Auto-off switch is off no longer applies
   the turn-off it was holding; disabling the switch while off releases it.
-- Options flows: a changed occupancy source times its cycle from that sensor's
+- Options flows: a changed occupancy source times its visit from that sensor's
   own start, a changed turn-on selection entity drops the old fallback, an
   emptied checklist stays empty, and a stale **Configure** form can't
   overwrite a converted light.

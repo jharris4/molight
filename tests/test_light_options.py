@@ -132,7 +132,7 @@ async def test_options_reload_while_occupied_stays_occupied(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
-    # The cycle still completes normally after the reload.
+    # The visit still completes normally after the reload.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _mstate(hass) == STATE_COUNTDOWN

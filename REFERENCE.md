@@ -12,7 +12,7 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 |---|---|
 | **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded; wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-sensor) |
 | **Occupancy timeout** | Seconds. Default `120`, range 1 to 3600. The source's own hold time; **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time - timeout` |
-| **False-detection grace** | Seconds. `0` disables, default `3`, range 0 to 60. A cycle whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection: the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such cycles don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off after their false-detection off delay |
+| **False-detection grace** | Seconds. `0` disables, default `3`, range 0 to 60. A visit whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection: the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such visits don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off after their false-detection off delay |
 | **Clear after unavailable** | Seconds. `0` disables, default `60`, range 0 to 3600. If the source goes `unavailable`/`unknown` while occupancy is active, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection, since the room may still be occupied, so dependent lights run their normal gentle countdown. A recovery cancels the pending clear |
 
 > [!IMPORTANT]
@@ -22,13 +22,13 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 
 Details:
 
-- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while HA was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the cycle in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
+- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while HA was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the visit in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
 - **Changing the source sensor** leaves the old source's presence behind: the sensor follows the new source from its first valid reading, and a new source that is `unavailable` at the time does not keep it `on`.
 - **A source computed from the sensor itself**, such as a group that contains it (directly, or through another group or a combined occupancy sensor), is refused: it would hold the sensor `on` by its own state. If a group is edited to include the sensor later, the sensor stops following it and clears as for an `unavailable` source (at once when *Clear after unavailable* is disabled) until the group is corrected.
 
 Attributes: `latest_occupied_time`, `occupancy_timeout`, `last_on_time`, `last_clear_false_detection`, `false_detection_count`, `last_clear_unavailable`.
 
-A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted), when a clear is flagged false (see [Events](#events)).
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the visit lasted), when a clear is flagged false (see [Events](#events)).
 
 ## Virtual Combined Occupancy Sensor
 
@@ -39,20 +39,20 @@ Combines multiple MoLight occupancy sensors into one. Constituents are usually s
 | **Trigger sensors** | Any one going `on` starts occupancy |
 | **Maintain sensors** *(optional)* | Keep occupancy alive once started, but cannot start it alone |
 
-`latest_occupied_time` is the max across all constituents, so each constituent's occupancy timeout is respected. A combined cycle during which no constituent advanced `latest_occupied_time` was made up entirely of false cycles and is flagged/counted the same way as on the simple sensor.
+`latest_occupied_time` is the max across all constituents, so each constituent's occupancy timeout is respected. A combined visit during which no constituent advanced `latest_occupied_time` was made up entirely of false detections and is flagged/counted the same way as on the simple sensor.
 
 If the last constituent still `on` drops out of the state machine (it goes `unavailable`, or the entity is deleted), occupancy clears immediately rather than holding forever. This is the combined-sensor counterpart of the simple sensor's *clear after unavailable* timeout. As there, the person is assumed present up to the dropout: `latest_occupied_time` advances to that moment so dependent lights run their normal gentle countdown, and the clear is never classified as a false detection.
 
 Restarts, reloads and edits:
 
-- **Existing history:** history the constituents already carry when the combined sensor is created, or when a reload picks up a newly added constituent, is the visit the next cycle is measured against.
-- **A cycle running through a restart or reload** keeps the detection it already contained, and a clear keeps its false-detection flag until the next one, unless the trigger or maintain sensors were edited.
+- **Existing history:** history the constituents already carry when the combined sensor is created, or when a reload picks up a newly added constituent, is what the next visit is measured against.
+- **A visit running through a restart or reload** keeps the detection it already contained, and a clear keeps its false-detection flag until the next one, unless the trigger or maintain sensors were edited.
 - **A restored `on` with a maintain sensor:** after a restart, if the sensor's restored state was `on` and a *maintain* sensor still shows presence, occupancy is seeded `on`. This is the one exception to "maintain sensors never start occupancy", because the restored state is direct evidence it was already triggered before HA went down. A restored `on` that is still waiting for a maintain sensor to load is saved as waiting, so it is carried across even when HA restarts again before that sensor reports.
 - **A constituent reloading:** editing a constituent's options unloads its entry and brings it back a moment later, so a constituent that was `on` when its entry unloaded keeps counting as `on` for up to 10 seconds, and occupancy clears only if it has not reported by then.
 
 Attributes: `latest_occupied_time` (max across all constituents), `last_on_time` (when the visit started, by its trigger sensors; null when they did not see it start), `last_clear_false_detection`, `false_detection_count`.
 
-A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the cycle lasted, null when its start was not seen), when a clear is flagged false (see [Events](#events)).
+A companion **`<name> Events` entity** fires `false_detection`, with `on_duration` (seconds the visit lasted, null when its start was not seen), when a clear is flagged false (see [Events](#events)).
 
 ## Virtual Illuminance Sensor
 
@@ -186,7 +186,7 @@ At the top level:
 
 | Config | Description |
 |---|---|
-| **False-detection off delay** | Seconds. Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that cycle* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that cycle lit it |
+| **False-detection off delay** | Seconds. Default `5`, range 0 to 300. When occupancy clears flagged as a false detection, lights that were lit *by that visit* turn off after this short delay instead of the normal countdown, or after the turn-off timeout if that is shorter. A blip during an earlier visit's countdown keeps that countdown. Lights turned on manually are never affected, nor is a light that was dimmed, recolored or turned on at the wall, or whose door was opened, after that visit lit it |
 | **Auto-on brightness** *(optional)* | Brightness applied when the light turns on *automatically* (by occupancy, a door opening, illuminance going dark, or a schedule window). Virtual and physical turn-ons keep their own brightness. Blank = automatic turn-ons use the real lights' own last/default brightness. Range 1 to 100 % |
 | **Auto-on color mode** *(optional)* | Whether automatic turn-ons apply the color temperature below, the color below, or (**None**) neither. Only the selected field is used, and choosing **None** is how a previously set color is cleared, since the color fields themselves can't be blanked once set. Left blank (as it starts while no color is set), both fields are kept as entered, so the form rejects setting both |
 | **Auto-on color temperature** *(optional)* | White color temperature applied on automatic turn-ons, for members that support it (a warm hallway at night). Virtual and physical turn-ons keep their own color. Range 2000 to 6500 K |
@@ -383,11 +383,11 @@ Each virtual light and each occupancy sensor creates a companion **`<name> Event
 | `turn_on_blocked` | A trigger that would have lit the room was blocked by a gate: the room was too bright, or it was outside a gate-mode schedule window. Also fires when MoLight checks again, such as at startup, finds someone already in the room, and a gate stops that turn-on. Never fires for a light at standby, which is already on | `trigger`: `occupancy` or `door`. `reason`: `bright`, or `schedule` (outside a gate-mode window) |
 | `adjusted` | A person changed the brightness or color of a light that is on | `reason`: `virtual` or `physical`. `brightness`, `color`: what changed, null for the one that did not |
 
-A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor has one event type, its own judgment of a cycle (see the **False-detection grace** option under [Virtual Occupancy Sensor](#virtual-occupancy-sensor)):
+A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor has one event type, its own judgment of a visit (see the **False-detection grace** option under [Virtual Occupancy Sensor](#virtual-occupancy-sensor)):
 
 | Event type | When | Attributes |
 |---|---|---|
-| `false_detection` | A clear was flagged a false detection | `on_duration`: seconds the cycle lasted; null on a combined sensor whose trigger sensors did not see the visit start |
+| `false_detection` | A clear was flagged a false detection | `on_duration`: seconds the visit lasted; null on a combined sensor whose trigger sensors did not see the visit start |
 
 Counting blips is a trigger on the sensor's Events entity. A light that went dark because of one fires `turned_off` with reason `false_detection` on its own Events entity, so the two can be listened to separately.
 
@@ -528,7 +528,7 @@ An entity that is deleted or disabled while Home Assistant runs, in its entity s
 
 Changing an entity ID in Home Assistant's entity settings is followed. Every entry that references the entity (as a real light, sensor, schedule, door, keep-on entity, select, button or target light) is rewritten to the new entity ID as soon as the entity reports under it, or after 10 seconds if it does not, and reloads like after an options edit.
 
-- The change is not taken for something happening in the room: a light turned off manually stays off, presence that was already there is not a new visit, an occupancy sensor whose source's entity ID changed keeps its running cycle, and a follow-mode window marker or a Virtual Scheduled Light's active settings stay with the schedule under its new entity ID.
+- The change is not taken for something happening in the room: a light turned off manually stays off, presence that was already there is not a new visit, an occupancy sensor whose source's entity ID changed keeps its running visit, and a follow-mode window marker or a Virtual Scheduled Light's active settings stay with the schedule under its new entity ID.
 - A MoLight entity whose own entity ID is changed keeps its state as well: an Auto-off switch that is off stays off, and a light, sensor or schedule carries on from what it knew, as it does through a reload.
 - Entity IDs are followed while Home Assistant runs with at least one MoLight entry loaded.
 

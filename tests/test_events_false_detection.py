@@ -1,6 +1,6 @@
 """Tests for the false_detection event on an occupancy sensor's Events entity.
 
-The sensor whose judgment it is fires it, with how long the cycle lasted;
+The sensor whose judgment it is fires it, with how long the visit lasted;
 a genuine visit fires nothing.
 """
 
@@ -51,7 +51,7 @@ def _combined() -> MockConfigEntry:
     )
 
 
-async def _cycle(hass, freezer, seconds: int) -> None:
+async def _visit(hass, freezer, seconds: int) -> None:
     hass.states.async_set(PIR, "on")
     await settle(hass)
     await tick(hass, freezer, seconds)
@@ -65,7 +65,7 @@ async def test_a_blip_fires_with_its_duration(hass, freezer) -> None:
     await setup_entries(hass, _sensor())
     records = record_events(hass, "event.motion_events")
 
-    await _cycle(hass, freezer, 31)
+    await _visit(hass, freezer, 31)
 
     assert records == [
         {
@@ -81,7 +81,7 @@ async def test_a_genuine_visit_fires_nothing(hass, freezer) -> None:
     await setup_entries(hass, _sensor())
     records = record_events(hass, "event.motion_events")
 
-    await _cycle(hass, freezer, 45)
+    await _visit(hass, freezer, 45)
 
     assert records == []
 
@@ -93,7 +93,7 @@ async def test_a_combined_sensor_fires_its_own(hass, freezer) -> None:
     await settle(hass)
     records = record_events(hass, "event.room_events")
 
-    await _cycle(hass, freezer, 31)
+    await _visit(hass, freezer, 31)
 
     assert records == [
         {

@@ -205,11 +205,11 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     latest_occupied_time = last_turn_off - timeout, representing our best
     estimate of when the person actually left.
 
-    False-detection classification (when false_detection_grace > 0): a cycle
+    False-detection classification (when false_detection_grace > 0): a visit
     whose on-duration exceeds the timeout by no more than the grace contained
     exactly one instantaneous detection: the sensor never re-triggered
     during its hold time, so it was almost certainly a fly/heat blip, or a
-    brief pass-through. Such cycles don't advance latest_occupied_time, are
+    brief pass-through. Such visits don't advance latest_occupied_time, are
     counted in false_detection_count, and flag the clear via
     last_clear_false_detection so lights can turn off after their
     false-detection off delay.
@@ -223,7 +223,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     Such clears are never classified as false detections (the room may well
     still be occupied), so dependent lights run their normal gentle countdown.
     A recovery cancels the pending clear: straight to "off" is processed as a
-    real clear, straight to "on" simply continues the occupancy.
+    real clear, straight to "on" simply continues the visit.
     """
 
     _attr_device_class = "occupancy"
@@ -272,7 +272,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
-        # A cycle's anchor, its clear's classification and an occupied
+        # A visit's anchor, its clear's classification and an occupied
         # dropout describe one source; an options edit that switches the
         # source leaves them behind. A save that predates the source record
         # is trusted.
@@ -292,9 +292,9 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
                 # The flags describe this very clear, which still stands.
                 self._last_clear_false = bool(attrs.get("last_clear_false_detection"))
                 self._last_clear_unavailable = bool(attrs.get("last_clear_unavailable"))
-            # Only a cycle that was still running owns its anchor: a
+            # Only a visit that was still running owns its anchor: a
             # last_on_time restored alongside an "off" state belongs to a
-            # finished pre-restart cycle and would skew the next
+            # finished pre-restart visit and would skew the next
             # classification.
             raw = attrs.get("last_on_time")
             if raw and last.state == "on" and same_source:
@@ -444,13 +444,13 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._dropout = None
         if new_state.state == "on":
             # A recovery from unavailable while already occupied continues the
-            # running cycle; restamping last_on_time here would make a later
+            # running visit; restamping last_on_time here would make a later
             # clear measure the on-duration from the recovery moment and
-            # misclassify a long occupancy as a false detection.
+            # misclassify a long visit as a false detection.
             if not self._attr_is_on:
                 # Before startup finishes, an on-event is a late-loading
-                # source replaying a pre-restart detection: its true start is
-                # unknown, so leave the cycle unclassified (as in _seed_state).
+                # source replaying a pre-restart visit: its true start is
+                # unknown, so leave the visit unclassified (as in _seed_state).
                 # The same holds when the source is first provided after boot
                 # (HA kept a restored placeholder for it until its integration
                 # loaded), however long after HA reported running that is.
@@ -478,8 +478,8 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self.async_write_ha_state()
 
     def _record_clear(self, cleared: datetime) -> None:
-        """Classify the cycle the source just ended and date the departure."""
-        self._last_clear_false = self._is_false_cycle(cleared)
+        """Classify the visit the source just ended and date the departure."""
+        self._last_clear_false = self._is_false_detection(cleared)
         self._last_clear_unavailable = False
         if self._last_clear_false:
             self._false_count += 1
@@ -547,7 +547,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             self._unavailable_unsub()
             self._unavailable_unsub = None
 
-    def _is_false_cycle(self, now: datetime) -> bool:
+    def _is_false_detection(self, now: datetime) -> bool:
         if self._grace <= 0 or self._last_on_time is None:
             return False
         on_duration = (now - self._last_on_time).total_seconds()
@@ -598,8 +598,8 @@ class VirtualCombinedOccupancySensor(
 
     False-detection classification: constituents that classify a clear as a
     false detection don't advance their latest_occupied_time, so a combined
-    cycle during which no constituent advanced its own was made up entirely
-    of false (or stale) cycles, so count it and flag the clear. Each one is
+    visit during which no constituent advanced its own was made up entirely
+    of false (or stale) detections, so count it and flag the clear. Each one is
     judged against its own history: the max can hide one's advance.
     """
 
@@ -621,8 +621,8 @@ class VirtualCombinedOccupancySensor(
         self._seen_lots: dict[str, datetime] = {}
         # Constituents not yet seen: their first report is history.
         self._no_baseline: set[str] = set()
-        # Whether a constituent showed genuine presence in the running cycle.
-        self._cycle_genuine = False
+        # Whether a constituent showed genuine presence in the running visit.
+        self._visit_genuine = False
         # When the visit started, as its trigger dated it; None when unwitnessed.
         self._last_on_time: datetime | None = None
         # The constituents a restored "on" was saved with, each with the
@@ -673,9 +673,11 @@ class VirtualCombinedOccupancySensor(
         )
         if restored_on and last is not None:
             self._last_on_time = _parse_datetime(last.attributes.get("last_on_time"))
-        if restored_on and "cycle_genuine" in saved:
-            # The running cycle keeps a genuine detection it already contained.
-            self._cycle_genuine = bool(saved["cycle_genuine"])
+        # Deprecated name of visit_genuine, kept for one release.
+        genuine = saved.get("visit_genuine", saved.get("cycle_genuine"))
+        if restored_on and genuine is not None:
+            # The running visit keeps a genuine detection it already contained.
+            self._visit_genuine = bool(genuine)
             lots = saved.get("lots")
             self._saved_lots = {
                 entity_id_changed_to(self.hass, entity_id)
@@ -684,7 +686,7 @@ class VirtualCombinedOccupancySensor(
             }
         elif restored_on and extra is not None:
             # A save from before each constituent's history was recorded.
-            self._cycle_genuine = self._latest_occupied_time != _parse_datetime(
+            self._visit_genuine = self._latest_occupied_time != _parse_datetime(
                 saved.get("cycle_start_latest_occupied_time")
             )
         all_sensors = list(
@@ -720,7 +722,7 @@ class VirtualCombinedOccupancySensor(
             # placeholder here (or, for a virtual sensor whose own source has
             # not loaded, a provisional "off"). Let a maintain sensor that
             # shows presence before startup finishes, or on its first sighting
-            # after it, carry the restored occupancy instead (see
+            # after it, carry the restored visit instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
             # dependent lights adopt with a full timer and re-evaluate.
             self._restored_carry = True
@@ -739,16 +741,16 @@ class VirtualCombinedOccupancySensor(
                     EVENT_HOMEASSISTANT_STARTED, self._on_startup_done
                 )
         if not restored_on:
-            self._cycle_genuine = False
+            self._visit_genuine = False
         self.async_write_ha_state()
 
     def _absorb_constituent_history(self) -> None:
         """Take over the latest_occupied_time the constituents already carry.
 
         A visit they saw before this sensor existed, or while it was not
-        loaded, is history to measure the next cycle against, not a
+        loaded, is history to measure the next visit against, not a
         detection made during it. Only a constituent a restored running
-        cycle already had can have added to that cycle meanwhile.
+        visit already had can have added to that visit meanwhile.
         """
         saved = self._saved_lots or {}
         for entity_id in dict.fromkeys(self._trigger_sensors + self._maintain_sensors):
@@ -761,7 +763,7 @@ class VirtualCombinedOccupancySensor(
                 self._note_history(entity_id, self.hass.states.get(entity_id))
                 and entity_id in saved
             ):
-                self._cycle_genuine = True
+                self._visit_genuine = True
 
     def _note_history(self, entity_id: str, state: State) -> bool:
         """Record a constituent's latest_occupied_time; True when it advanced."""
@@ -917,7 +919,7 @@ class VirtualCombinedOccupancySensor(
             if was_showing and isinstance(verdict, bool):
                 genuine = not verdict
             if genuine and was_on and not first_report:
-                self._cycle_genuine = True
+                self._visit_genuine = True
         self._no_baseline.discard(entity_id)
 
         if self._any_on(self._trigger_sensors):
@@ -931,14 +933,14 @@ class VirtualCombinedOccupancySensor(
 
         if not was_on and self._attr_is_on:
             if not self._restored_carry:
-                self._cycle_genuine = False
+                self._visit_genuine = False
             if not carry:
                 self._last_on_time = self._visit_started(witnessed=True)
             # Occupancy has (re)started since the restart; the restored
             # evidence is spent.
             self._restored_carry = False
         elif was_on and not self._attr_is_on:
-            self._last_clear_false = not self._cycle_genuine
+            self._last_clear_false = not self._visit_genuine
             if self._last_clear_false:
                 self._false_count += 1
                 send_event(
@@ -997,7 +999,7 @@ class VirtualCombinedOccupancySensor(
         assumed present right up to the dropout, so latest_occupied_time
         advances to that moment: dependent lights run their normal gentle
         countdown, and a nesting combined sensor sees an advanced lot rather
-        than misreading the clear as a false cycle.
+        than misreading the clear as a false detection.
         """
         new_state = event.data.get("new_state")
         if new_state is not None and new_state.state not in (
@@ -1009,7 +1011,7 @@ class VirtualCombinedOccupancySensor(
             return
         if showed and not self._any_on([event.data["entity_id"]]):
             # Present up to its dropout, whoever else keeps the sensor on.
-            self._cycle_genuine = True
+            self._visit_genuine = True
             if (
                 self._latest_occupied_time is None
                 or dropout > self._latest_occupied_time
@@ -1078,7 +1080,7 @@ class VirtualCombinedOccupancySensor(
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save the running cycle's anchor and the constituents of the clear.
+        """Save the running visit's anchor and the constituents of the clear.
 
         Home Assistant saves as it starts, while a restored "on" may still
         wait for a maintain sensor to carry it: that wait is saved too.
@@ -1090,7 +1092,7 @@ class VirtualCombinedOccupancySensor(
         )
         return RestoredExtraData(
             {
-                "cycle_genuine": self._cycle_genuine,
+                "visit_genuine": self._visit_genuine,
                 "lots": {
                     e: lot.isoformat() if (lot := self._seen_lots.get(e)) else None
                     for e in dict.fromkeys(

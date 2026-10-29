@@ -151,7 +151,7 @@ async def test_restart_occupied_and_dark_lights_the_room(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
-    # The rest of the cycle works normally after the seed.
+    # The rest of the visit works normally after the seed.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     freezer.tick(timedelta(seconds=61))

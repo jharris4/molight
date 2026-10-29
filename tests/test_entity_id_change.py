@@ -903,7 +903,7 @@ async def test_combined_clear_flag_survives_a_constituents_entity_id_change(
     constituent = RealBinary("presence")
     await add_real(hass, constituent)
     await setup_entries(hass, _combined_occupancy_entry(["binary_sensor.presence"]))
-    # A cycle that never advanced latest_occupied_time is a false detection.
+    # A visit that never advanced latest_occupied_time is a false detection.
     constituent.set(True)
     await settle(hass)
     constituent.set(False)
@@ -1448,7 +1448,7 @@ async def test_scheduled_light_with_changed_entity_id_keeps_its_standby(
 async def test_occupancy_sensor_with_changed_entity_id_keeps_its_history(
     hass: HomeAssistant, freezer
 ) -> None:
-    """latest_occupied_time, the false-detection count and the cycle survive."""
+    """latest_occupied_time, the false-detection count and the visit survive."""
     motion = RealBinary("motion")
     await add_real(hass, motion)
     await setup_entries(hass, occupancy_entry(**{CONF_FALSE_DETECTION_GRACE: 3}))
