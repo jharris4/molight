@@ -51,7 +51,7 @@ One release with item 1.
   the field the presets have. Blank turns the lights on at their last brightness, as today; set, it
   turns them on at that brightness, including a light that is already on. It is a value on an
   existing action, not a new action.
-- **Cost.** No state-machine change: the remote's call, one form field, translations, tests and a
+- **Cost.** No state-machine change: the remote's `light.turn_on` call, one form field, translations, tests and a
   REFERENCE.md line.
 
 ### 3. Manual off holds until the room empties

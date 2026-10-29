@@ -649,7 +649,7 @@ async def _step_mid_warning(
     extra_targets: list[str] | None = None,
 ) -> list[dict]:
     """Bring light.matrix_light into a stage from `before`, press `button`, and
-    return the remote's light calls."""
+    return the remote's service calls."""
     light_kwargs, stage_state, stage_level = WARNING_STAGES[stage]
     hass.states.async_set("light.real_1", "off")
     remote = _remote_entry(
@@ -945,7 +945,7 @@ async def test_preset_turns_on_with_values(
     await settle(hass)
     assert _vlight(hass).state == "on"
     # 60% -> 153/255; the color temp is filtered out by HA for this
-    # brightness-only virtual light, but the remote's call carries it.
+    # brightness-only virtual light, but the remote's service call carries it.
     assert _vlight(hass).attributes["brightness"] == 153
     preset_calls = [
         d

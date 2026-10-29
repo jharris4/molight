@@ -6,9 +6,9 @@ subscribes to the state changes of the `event` entities Home Assistant
 exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
 ...) and turns each configured (button, click) pair into one service call on
 the target lights, sending each execution on SIGNAL_REMOTE_ACTION.
-Routing through the light domain's public services means a press on a
-MoLight virtual light behaves exactly like a dashboard tap: never gated by
-darkness or a schedule, cancels an effect/warn sequence, restarts the timer.
+Because each press is a service call, a press on a MoLight virtual light
+behaves exactly like a dashboard tap: never gated by darkness or a schedule,
+cancels an effect/warn sequence, restarts the timer.
 
 Single vs. double click is resolved per button from the `event_types` its
 event entity has, because the same physical click is spelled differently
@@ -162,7 +162,7 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
 def _action_call(
     action: str, cfg: dict[str, Any], dim_step: int
 ) -> tuple[str, dict[str, Any]] | None:
-    """Map an action slot to its light-domain (service, extra data) call.
+    """Map an action slot to its light service call (service, service data).
 
     Returns None for a preset with no values configured: such a binding
     would be a plain turn-on pretending to be a preset, so it stays inert

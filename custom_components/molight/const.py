@@ -445,10 +445,10 @@ RELOAD_GRACE = 10
 # A Virtual Remote entry drives one or more lights from the buttons of a
 # remote control (a Lutron Pico, an IKEA Bilresa, ...). Buttons are the
 # `event` entities Home Assistant creates per physical button; every binding
-# is a (button, click) -> action pair, stored as the flat keys below. Presses
-# execute through the light domain's public services, so a bound press on a
-# MoLight virtual light gets full manual-control semantics (never gated,
-# cancels a warning sequence, restarts the timer).
+# is a (button, click) -> action pair, stored as the flat keys below. Each
+# press is a light service call, so a bound press on a MoLight virtual light
+# gets full manual-control semantics (never gated, cancels a warning
+# sequence, restarts the timer).
 #
 # Which event_type string means a single vs. a double click differs per
 # ecosystem and is resolved per button from the event_types its event
