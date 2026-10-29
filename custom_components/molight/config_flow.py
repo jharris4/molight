@@ -155,7 +155,7 @@ from .const import (
 )
 from .helpers import (
     HOLD_ENTITY_DOMAINS as _HOLD_ENTITY_DOMAINS,
-    MEMBER_LIGHT_TYPES as _MEMBER_LIGHT_TYPES,
+    VIRTUAL_LIGHT_TYPES as _VIRTUAL_LIGHT_TYPES,
     entity_id_changed_to,
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
@@ -168,9 +168,9 @@ from .helpers import (
     lights_support_transition,
     match_option,
     molight_config as _molight_cfg,
-    molight_light_entries as _molight_light_entries,
     sensors_depend_on as _sensors_depend_on,
     shared_lights as _shared_lights,
+    virtual_light_entries as _virtual_light_entries,
 )
 from .remote import (
     CLICK_DOUBLE,
@@ -985,7 +985,7 @@ def _stale_light_settings(
     An occupancy timeout can be raised, or a keep-on group edited, while a later
     page of the light's form is open, since the unsaved light is not yet its
     dependent. Returns the failing scheduled-light side (None for a regular
-    light) and the errors.
+    Virtual Light) and the errors.
     """
     if members is None:
         members = data.get(CONF_LIGHTS, [])
@@ -1009,7 +1009,7 @@ def _stale_light_settings(
 def _validate_turn_on_selection(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
-    """Validate and normalize a Virtual Light's optional turn-on selection."""
+    """Validate and normalize a virtual light's optional turn-on selection."""
     entity_id = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
     option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "")
     source_entity = user_input.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
@@ -1569,7 +1569,7 @@ def _light_option_fields(
 
 
 def _turn_on_selection_fields(target_entity: str) -> dict:
-    """Fields shown after a Virtual Light's target select is known."""
+    """Fields shown after a virtual light's target select is known."""
     return {
         vol.Optional(CONF_TURN_ON_SELECT_SOURCE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -1790,7 +1790,7 @@ def _light_members_create_cycle(
     members: list[str],
 ) -> bool:
     """Return True when the proposed members lead back to the edited light."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     own = {e for e, entry in lights.items() if entry.entry_id == edited_entry.entry_id}
     return not own.isdisjoint(_light_descendants(hass, members, lights))
 
@@ -1806,7 +1806,7 @@ def _light_member_cycle_candidates(
     hass: HomeAssistant, edited_entry: config_entries.ConfigEntry
 ) -> list[str]:
     """Light entity ids that would make the edited light a member of itself."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     own = {e for e, entry in lights.items() if entry.entry_id == edited_entry.entry_id}
     return sorted(
         entity_id
@@ -1831,12 +1831,12 @@ def _shared_light_candidates(
 def _groups_with_virtual_lights(
     hass: HomeAssistant, members: Sequence[str]
 ) -> list[str]:
-    """Light groups among the members that contain a MoLight virtual light.
+    """Light groups among the members that contain a virtual light.
 
     Through a group, the virtual light's own timer and sensors would pass for
     a person at the wall, so its lights are listed directly instead.
     """
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     return [
         member
         for member in members
@@ -1852,7 +1852,7 @@ def _overlapping_picks(
     hass: HomeAssistant, picks: Sequence[str]
 ) -> tuple[str, str] | None:
     """Two picks that would each command one light, as separate virtual lights."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     owners: dict[str, str] = {}
     for pick in picks:
         commanded = _lights_commanded(hass, [pick], lights)
@@ -1866,13 +1866,13 @@ def _overlapping_picks(
 def _reserved_by_discovery(hass: HomeAssistant, members: Sequence[str]) -> bool:
     """Whether a discovery that is creating its entries has one of these lights."""
     reserved = hass.data.get(DATA_DISCOVERY_RESERVED, set())
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     return not reserved.isdisjoint(_lights_commanded(hass, members, lights))
 
 
 def _disjoint_picks(hass: HomeAssistant, candidates: Sequence[str]) -> list[str]:
     """Candidates to preselect: lights first, then groups that overlap none of them."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     commanded = {c: _lights_commanded(hass, [c], lights) for c in candidates}
     picks: set[str] = set()
     taken: set[str] = set()
@@ -1899,7 +1899,7 @@ def _new_light_in_members(
     hass: HomeAssistant, entity_id: str, members: Sequence[str]
 ) -> bool:
     """Return True when a light group among the members already names the new light."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     under = [m for member in members for m in _light_member_ids(hass, member, lights)]
     return entity_id in _light_descendants(hass, under, lights)
 
@@ -1907,8 +1907,8 @@ def _new_light_in_members(
 def _new_wrapped_lights(
     hass: HomeAssistant, members: Sequence[str], known: Sequence[str]
 ) -> list[str]:
-    """MoLight virtual lights among the members that are not already known."""
-    lights = _molight_light_entries(hass, _MEMBER_LIGHT_TYPES)
+    """Virtual lights among the members that are not already known."""
+    lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     known = current_references(hass, {CONF_LIGHTS: list(known)})[0][CONF_LIGHTS]
     return [m for m in members if m in lights and m not in known]
 
@@ -1985,7 +1985,7 @@ def _validate_hold_entities(
 def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     """Return True when a light config may be converted in the given direction.
 
-    Schedule-gated → scheduled needs a regular light with a schedule in any gate
+    Schedule-gated → scheduled needs a regular Virtual Light with a schedule in any gate
     mode; scheduled → schedule-gated needs a scheduled light with a schedule.
     """
     if not cfg.get(CONF_SCHEDULE_ENTITY):
@@ -2369,11 +2369,11 @@ class MoLightConfigFlow(
         if errors:
             return None, errors
         # Another light may have taken a member since the first page checked it.
-        if entity_type in _MEMBER_LIGHT_TYPES and (
+        if entity_type in _VIRTUAL_LIGHT_TYPES and (
             errors := self._new_light_errors(data)
         ):
             return None, errors
-        if entity_type in _MEMBER_LIGHT_TYPES and (
+        if entity_type in _VIRTUAL_LIGHT_TYPES and (
             wrapped := _new_wrapped_lights(
                 self.hass, data[CONF_LIGHTS], self._wrapped_confirmed
             )
@@ -2451,7 +2451,7 @@ class MoLightConfigFlow(
                 return self._show_scheduled_light_side_form(side, None, errors)
             return self._show_light_form(pending["user_input"], errors)
         entity_type = pending["entity_type"]
-        if entity_type in _MEMBER_LIGHT_TYPES and (
+        if entity_type in _VIRTUAL_LIGHT_TYPES and (
             errors := self._new_light_errors(data)
         ):
             if entity_type == ENTITY_TYPE_SCHEDULED_LIGHT:
@@ -2675,7 +2675,7 @@ class MoLightConfigFlow(
         )
 
     def _discovery_light_ids(self) -> list[str]:
-        """Return the IDs the selected lights' new Virtual Lights will get."""
+        """Return the IDs the selected lights' new regular Virtual Lights will get."""
         disc = self._discovery
         ids: list[str] = []
         for entity_id in disc.get("selected", []):
@@ -2727,7 +2727,7 @@ class MoLightConfigFlow(
             )
         # Another flow may have wrapped a pick while this one was open.
         eligible = _discovery_candidates(self.hass, *disc["scan"])
-        lights = _molight_light_entries(self.hass, _MEMBER_LIGHT_TYPES)
+        lights = _virtual_light_entries(self.hass, _VIRTUAL_LIGHT_TYPES)
         claims = {
             entity_id: (
                 _lights_commanded(self.hass, [entity_id], lights)
@@ -2921,7 +2921,7 @@ class MoLightConfigFlow(
                     self._discovery.get("selected", []),
                 )
             )
-            # Each pick becomes its own single-light entry, so the capability
+            # Each pick becomes its own regular Virtual Light entry, so the capability
             # checks must hold per pick; pooled, one capable pick would let a
             # setting through that another pick's entry could never apply.
             for entity_id in self._discovery.get("selected", []):
@@ -2973,7 +2973,7 @@ class MoLightConfigFlow(
         return self.async_create_entry(title=import_data[CONF_NAME], data=import_data)
 
     # ------------------------------------------------------------------
-    # Convert existing Virtual Lights in place
+    # Convert existing virtual lights in place
     # ------------------------------------------------------------------
 
     async def async_step_convert_lights(
@@ -2992,7 +2992,7 @@ class MoLightConfigFlow(
         entity_type = ENTITY_TYPE_LIGHT if to_scheduled else ENTITY_TYPE_SCHEDULED_LIGHT
         return {
             entity_id: entry
-            for entity_id, entry in _molight_light_entries(
+            for entity_id, entry in _virtual_light_entries(
                 self.hass, (entity_type,)
             ).items()
             if _conversion_eligible(_molight_cfg(entry), to_scheduled=to_scheduled)
@@ -3062,7 +3062,7 @@ class MoLightConfigFlow(
     async def async_step_convert_to_scheduled(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Select schedule-gated Virtual Lights to promote to scheduled lights."""
+        """Select schedule-gated regular Virtual Lights to promote."""
         return await self._async_conversion_select(
             to_scheduled=True, user_input=user_input
         )
@@ -3077,7 +3077,7 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_scheduled_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map one schedule-gated Virtual Light into outside and inside settings."""
+        """Map a schedule-gated regular Virtual Light into two sets of settings."""
         inside = {
             key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
@@ -3202,7 +3202,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Bulk-assign a virtual sensor to many virtual lights at once
+    # Bulk-assign a virtual sensor to many regular Virtual Lights at once
     # ------------------------------------------------------------------
 
     async def async_step_assign_sensor(
@@ -3353,9 +3353,9 @@ class MoLightConfigFlow(
                 description_placeholders={"entity_id": removed},
             )
         sensor = current[key]
-        lights = _molight_light_entries(self.hass)
+        lights = _virtual_light_entries(self.hass, (ENTITY_TYPE_LIGHT,))
         scheduled = set(
-            _molight_light_entries(self.hass, (ENTITY_TYPE_SCHEDULED_LIGHT,))
+            _virtual_light_entries(self.hass, (ENTITY_TYPE_SCHEDULED_LIGHT,))
         )
         already = {
             eid
@@ -3844,13 +3844,13 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Virtual Light
+    # regular Virtual Light
     # ------------------------------------------------------------------
 
     async def async_step_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a Virtual Light.
+        """Configure a regular Virtual Light.
 
         Constraint: light_timeout >= occupancy_timeout of any referenced
         occupancy entity (enforced here and in the options flow).
@@ -3913,7 +3913,7 @@ class MoLightConfigFlow(
     def _show_light_form(
         self, prefill: dict[str, Any], errors: dict[str, str]
     ) -> config_entries.FlowResult:
-        """Render the Virtual Light form, prefilled with `prefill`."""
+        """Render the regular Virtual Light form, prefilled with `prefill`."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
@@ -4206,7 +4206,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 reason="reference_removed",
                 description_placeholders={"entity_id": removed},
             )
-        if self._cfg[CONF_ENTITY_TYPE] in _MEMBER_LIGHT_TYPES:
+        if self._cfg[CONF_ENTITY_TYPE] in _VIRTUAL_LIGHT_TYPES:
             if _light_members_create_cycle(self.hass, self._entry, data[CONF_LIGHTS]):
                 return self.async_abort(reason="light_member_cycle")
             if _shared_lights(
@@ -4601,13 +4601,13 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         )
 
     # ------------------------------------------------------------------
-    # Virtual Light
+    # regular Virtual Light
     # ------------------------------------------------------------------
 
     async def async_step_light(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a Virtual Light's settings."""
+        """Edit a regular Virtual Light's settings."""
         errors: dict[str, str] = {}
 
         if user_input is not None:

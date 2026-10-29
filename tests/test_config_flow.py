@@ -194,7 +194,7 @@ async def _choose_time_schedule_options(hass: HomeAssistant, result: dict) -> di
 
 
 async def _setup_night_schedule(hass: HomeAssistant) -> None:
-    """Set up the schedule entity used by Virtual Light flow tests."""
+    """Set up the schedule entity used by virtual light flow tests."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -882,7 +882,7 @@ async def test_schedule_options_can_change_source_definition_to_time(
 
 @pytest.mark.asyncio
 async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
-    """Full config flow creates a virtual light entry."""
+    """Full config flow creates a regular Virtual Light entry."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -916,7 +916,8 @@ async def test_schedule_pickers_exclude_other_molight_binary_sensors(
     illuminance_entry: MockConfigEntry,
     schedule_entry: MockConfigEntry,
 ) -> None:
-    """Regular and Scheduled Light forms only offer MoLight schedules."""
+    """Regular Virtual Light and Virtual Scheduled Light forms only offer MoLight
+    schedules."""
     await setup_entries(hass, occupancy_entry, illuminance_entry, schedule_entry)
     excluded = {"binary_sensor.test_occupancy", "binary_sensor.test_illuminance"}
 
@@ -2605,7 +2606,7 @@ async def test_light_flow_stores_colors(hass: HomeAssistant) -> None:
 
 
 def _colored_light_entry() -> MockConfigEntry:
-    """A Virtual Light entry with a color stored in every color pair."""
+    """A regular Virtual Light entry with a color stored in every color pair."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -4308,7 +4309,7 @@ async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bulk-assign a virtual sensor to many virtual lights
+# Bulk-assign a virtual sensor to many regular Virtual Lights
 # ---------------------------------------------------------------------------
 
 
@@ -4615,7 +4616,7 @@ async def test_assign_keeps_a_selected_light_whose_entity_id_changed_while_open(
 async def test_assign_aborts_when_no_lights(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """With no virtual lights, the second step aborts cleanly."""
+    """With no regular Virtual Lights, the second step aborts cleanly."""
     await setup_entries(hass, occupancy_entry)
 
     result = await _reach_assign_kind(hass, "assign_occupancy")
@@ -5257,7 +5258,7 @@ async def test_assign_schedule_rejects_non_schedule_sensor_from_stale_form(
 
 
 # ---------------------------------------------------------------------------
-# In-place Virtual Light type conversion
+# In-place virtual light type conversion
 # ---------------------------------------------------------------------------
 
 
@@ -6347,7 +6348,7 @@ async def test_discover_light_defaults_reject_fade_no_light_can_apply(
 async def test_discover_light_defaults_reject_fade_one_pick_cannot_apply(
     hass: HomeAssistant,
 ) -> None:
-    """Every pick becomes its own single-light entry, so one capable pick must
+    """Every pick becomes its own regular Virtual Light entry, so one capable pick must
     not carry an incapable one through the shared capability checks."""
     _no_fade(hass)
     _can_fade(hass)
@@ -7585,7 +7586,7 @@ async def test_light_pickers_scan_virtual_lights_once_per_render(
         for n in range(lights):
             hass.states.async_set(f"light.bulb_{n}", "off")
         with patch.object(
-            helpers, "molight_light_entries", wraps=helpers.molight_light_entries
+            helpers, "virtual_light_entries", wraps=helpers.virtual_light_entries
         ) as scan:
             if form == "create":
                 result = await _start_create(hass)
@@ -8200,7 +8201,7 @@ async def test_light_forms_point_out_a_wrapped_virtual_light(
 async def test_light_forms_skip_the_page_for_real_lights_and_groups(
     hass: HomeAssistant, form: str, member: str
 ) -> None:
-    """Only a MoLight virtual light keeps a timer of its own."""
+    """Only a virtual light keeps a timer of its own."""
     await _setup_wrap_test(hass, form)
     hass.states.async_set("light.free", "off")
     hass.states.async_set("light.group", "off", {"entity_id": ["light.free"]})
@@ -8495,7 +8496,7 @@ async def test_discovery_preselects_no_two_picks_that_share_a_light(
 async def test_discovery_refuses_two_picks_that_share_a_light(
     hass: HomeAssistant, picks: list[str], names: dict[str, str]
 ) -> None:
-    """Each pick becomes its own virtual light, and two would fight over the
+    """Each pick becomes its own regular Virtual Light, and two would fight over the
     shared light, so the checklist names them and keeps the ticks."""
     _overlap_lights(hass)
     result = await _reach_discovery_select(hass, "discover_light")
@@ -10275,7 +10276,7 @@ async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open
 async def test_remote_does_not_save_a_target_light_deleted_while_open(
     hass: HomeAssistant, flow: str
 ) -> None:
-    """A Virtual Light deleted while the remote's form was open is not saved."""
+    """A virtual light deleted while the remote's form was open is not saved."""
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
     submitted = {

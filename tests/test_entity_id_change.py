@@ -304,7 +304,7 @@ async def test_entity_id_change_rewrites_every_reference(
 
 
 # ---------------------------------------------------------------------------
-# A Virtual Light's references
+# A virtual light's references
 # ---------------------------------------------------------------------------
 
 

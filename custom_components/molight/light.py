@@ -1,4 +1,4 @@
-"""Virtual Light platform for MoLight.
+"""Light platform for MoLight's virtual lights.
 
 A VirtualLight controls N real light entities and manages a state machine
 that integrates optional occupancy, illuminance, and schedule virtual sensors.
@@ -403,7 +403,7 @@ from .const import (
 )
 from .helpers import (
     HOLD_ENTITY_DOMAINS,
-    MEMBER_LIGHT_TYPES,
+    VIRTUAL_LIGHT_TYPES,
     EntityIdFollowingRestoreEntity,
     GoneJudge,
     entity_gone,
@@ -414,11 +414,11 @@ from .helpers import (
     lights_support_transition,
     match_option,
     molight_config,
-    molight_light_entries,
     same_entity,
     send_event,
     shared_lights,
     suggested_entity_id,
+    virtual_light_entries,
 )
 from .issues import (
     ISSUE_HOLD_ALWAYS_ON,
@@ -539,7 +539,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up MoLight light entities from a config entry."""
+    """Set up virtual light entities from a config entry."""
     if entry.data[CONF_ENTITY_TYPE] in (
         ENTITY_TYPE_LIGHT,
         ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -1022,7 +1022,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # seed puts it back there instead of adopting it with a timer.
         self._restored_standby = False
         # Every settings mapping this light may run under (both sides of a
-        # scheduled light, or the regular light's own config), so the entity
+        # scheduled light, or a regular Virtual Light's own config), so the entity
         # references of all of them can be subscribed to up front.
         self._settings_sets: tuple[dict[str, Any], ...] = (
             (self._outside_schedule_settings, self._inside_schedule_settings)
@@ -1520,7 +1520,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         The flows refuse one, but a light group can change, at any depth, or
         predate the check.
         """
-        lights = molight_light_entries(self.hass, MEMBER_LIGHT_TYPES)
+        lights = virtual_light_entries(self.hass, VIRTUAL_LIGHT_TYPES)
         cyclic = [
             member
             for member in self._lights
@@ -1551,7 +1551,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         The flows refuse such a group, but one can be changed to contain a
         virtual light, at any depth. The group hides that light's stamps.
         """
-        lights = molight_light_entries(self.hass, MEMBER_LIGHT_TYPES)
+        lights = virtual_light_entries(self.hass, VIRTUAL_LIGHT_TYPES)
         grouped = {
             leaf
             for member in self._lights

@@ -1,4 +1,4 @@
-"""Cover-as-door tests for the MoLight Virtual Light.
+"""Cover-as-door tests for virtual lights.
 
 A cover is open in every state but closed, so its moving states (opening,
 closing) are no edge of their own: only closed -> anything lights the room,

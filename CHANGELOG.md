@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Garage door openers and gates as the door sensor**: a door, garage or gate
-  cover can now drive a Virtual Light, open in every state but closed.
+  cover can now drive a virtual light, open in every state but closed.
 - **Repairs and diagnostics**: a setting MoLight cannot act on, such as two
   virtual lights that control one light, is raised as a Repairs issue, and
   every entry offers a diagnostics download to attach to a bug report.
@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tuya scene switches**: their click and double click now bind; the long
   press no longer fires the single-click action.
 - **Commands a real light refuses**: a member whose integration raises no
-  longer leaves the Virtual Light on over a dark room, or off over a lit one.
+  longer leaves the virtual light on over a dark room, or off over a lit one.
 
 ## [1.9.0] - 2026-10-06
 
@@ -49,7 +49,7 @@ Virtual Remote buttons.
 - **Existing entries keep working.** A light saved before the new checks
   under Changed is refused only the next time its options are saved, and
   overlapping lights and invalid keep-on entities are named in a warning at
-  load. The exception is a Virtual Light inside a light group that contains
+  load. The exception is a virtual light inside a light group that contains
   it: it never lit its bulbs, and it now stops controlling that group.
 - **Schedule windows that pair a sun event with a fixed time** now follow
   Home Assistant's own sun and time conditions (REFERENCE.md, "Overnight
@@ -83,7 +83,7 @@ Virtual Remote buttons.
 - **Wrapped virtual lights**: what the wrapped light does by itself, such as
   its timer turning it off, is no longer taken for a change at the wall. It
   recorded a manual off that kept an occupied room dark on the next visit.
-  The light form now explains this when another MoLight light is added.
+  The light form now explains this when another virtual light is added.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on, and a light turned
   off manually no longer comes back on after a restart.
@@ -128,7 +128,7 @@ replying late.
 
 ### Upgrade notes
 
-- **No existing entry stops working after upgrading.** A Virtual Light that
+- **No existing entry stops working after upgrading.** A virtual light that
   refers to itself as a member or keep-on entity is now rejected, but only the
   next time its options are saved.
 
@@ -202,7 +202,7 @@ replying late.
 
 A release focused on scheduling: the new **Virtual Scheduled Light** switches
 between two complete settings profiles as a schedule opens and closes, and
-ordinary Virtual Lights gain two more schedule-end behaviors. Plus a round of
+regular Virtual Lights gain two more schedule-end behaviors. Plus a round of
 restart, occupancy, sensor and slow-bulb edge-case fixes.
 
 MoLight is also now in the HACS default repository list, so installing it no
@@ -224,7 +224,7 @@ longer needs a custom repository.
 - **Virtual Scheduled Light**: a new entity type holding two complete Virtual
   Light settings sets, switched by a Virtual Schedule Sensor; **At schedule
   end** decides what the window's end does to a light that is still on.
-- **Convert virtual lights**: turn a schedule-gated Virtual Light into a
+- **Convert virtual lights**: turn a schedule-gated regular Virtual Light into a
   Virtual Scheduled Light, or back, in place, keeping entity IDs and history.
 - **Turn-on selection**: drive a `select` entity (a preset, theme, or mode)
   whenever the light turns on, with an optional source entity supplying the

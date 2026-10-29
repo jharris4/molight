@@ -15,17 +15,17 @@
       },
       "convert_lights": {
         "title": "Convert virtual lights",
-        "description": "Change existing virtual lights in place without changing their entity IDs, history, dashboard cards, or references. Only Virtual Lights whose Schedule mode is a Gate mode can become Virtual Scheduled Lights.",
+        "description": "Change existing virtual lights in place without changing their entity IDs, history, dashboard cards, or references. Only regular Virtual Lights whose Schedule mode is a Gate mode can become Virtual Scheduled Lights.",
         "menu_options": {
-          "convert_to_scheduled": "Convert Virtual Lights to Virtual Scheduled Lights",
-          "convert_to_regular": "Convert Virtual Scheduled Lights to Virtual Lights"
+          "convert_to_scheduled": "Convert regular Virtual Lights to Virtual Scheduled Lights",
+          "convert_to_regular": "Convert Virtual Scheduled Lights to regular Virtual Lights"
         }
       },
       "convert_to_scheduled": {
-        "title": "Convert Virtual Lights",
-        "description": "Select one or more Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain, illuminance or door sensors.",
+        "title": "Convert regular Virtual Lights",
+        "description": "Select one or more regular Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain, illuminance or door sensors.",
         "data": {
-          "convert_lights": "Virtual Lights"
+          "convert_lights": "Regular Virtual Lights"
         },
         "data_description": {
           "convert_lights": "Each choice shows the light followed by the schedule that will select its settings."
@@ -33,7 +33,7 @@
       },
       "convert_to_regular": {
         "title": "Convert Virtual Scheduled Lights",
-        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the Virtual Light's settings. The schedule stays, with Schedule mode set to the Gate mode that matches At schedule end. Outside-schedule settings and any standby brightness will be discarded.",
+        "description": "Select one or more Virtual Scheduled Lights. The inside-schedule settings become the regular Virtual Light's settings. The schedule stays, with Schedule mode set to the Gate mode that matches At schedule end. Outside-schedule settings and any standby brightness will be discarded.",
         "data": {
           "convert_lights": "Scheduled lights"
         },
@@ -50,14 +50,14 @@
       },
       "confirm_convert_to_regular": {
         "title": "Review light conversion",
-        "description": "The following lights will be converted in place to Virtual Lights: {lights}. Their entity IDs and references will not change. The inside-schedule settings become the Virtual Light's settings, without any standby brightness; the outside-schedule settings are permanently discarded.",
+        "description": "The following lights will be converted in place to regular Virtual Lights: {lights}. Their entity IDs and references will not change. The inside-schedule settings become the regular Virtual Light's settings, without any standby brightness; the outside-schedule settings are permanently discarded.",
         "data": {
           "confirm_conversion": "I understand and want to convert these lights"
         }
       },
       "assign_sensor": {
         "title": "Assign a sensor to lights",
-        "description": "Assign one virtual sensor to several virtual lights at once. Pick the kind of sensor to assign.",
+        "description": "Assign one virtual sensor to several regular Virtual Lights at once. Pick the kind of sensor to assign.",
         "menu_options": {
           "assign_occupancy": "Assign an occupancy sensor",
           "assign_illuminance": "Assign an illuminance sensor",
@@ -185,7 +185,7 @@
       },
       "discover_light_select": {
         "title": "Discover lights",
-        "description": "Select the lights to wrap in virtual lights; the next step lets you adjust the defaults applied to all of them, including occupancy, illuminance, and schedule references.",
+        "description": "Select the lights to wrap in regular Virtual Lights; the next step lets you adjust the defaults applied to all of them, including occupancy, illuminance, and schedule references.",
         "data": {
           "selected_entities": "Lights to add",
           "affix_prefix": "Prefix",
@@ -289,7 +289,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -581,7 +581,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -879,14 +879,14 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Presses count as manual control on a MoLight virtual light: never gated, and they cancel a pending off-warning.",
+        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Presses count as manual control on a virtual light: never gated, and they cancel a pending off-warning.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
           "dim_step": "Brightness step"
         },
         "data_description": {
-          "target_lights": "The lights every bound button drives: usually a MoLight virtual light, but any light works.",
+          "target_lights": "The lights every bound button drives: usually a virtual light, but any light works.",
           "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
         },
         "sections": {
@@ -1002,7 +1002,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       }
     },
     "error": {
@@ -1040,7 +1040,7 @@
       "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two sets of settings has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
-      "discovery_picks_overlap": "{first} and {second} control the same light, and each pick gets its own virtual light, so the two would fight over it. Pick only one of them.",
+      "discovery_picks_overlap": "{first} and {second} control the same light, and each pick gets its own regular Virtual Light, so the two would fight over it. Pick only one of them.",
       "no_lights_selected": "Select at least one light to convert.",
       "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the Auto-on color mode field to choose which applies.",
       "effect_color_conflict": "Set only one of the effect color temperature and color, or use the Effect color mode field to choose which applies.",
@@ -1064,9 +1064,9 @@
       "standby_color_conflict": "Set only one of the standby color temperature and color, or use the Standby color mode field to choose which applies.",
       "standby_color_requires_brightness": "A standby color needs a standby brightness, which is what turns standby on. Set a brightness, or set the Standby color mode field to None for no standby.",
       "reference_removed": "A sensor, schedule or light chosen here was deleted while this form was open. Clear it or choose another.",
-      "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
-      "light_shared": "A light can be controlled by one Virtual Light only, counting a light group as the lights it contains, and another Virtual Light already controls one of these. To control it from here as well, add that Virtual Light instead.",
-      "light_group_virtual": "A light group here contains a Virtual Light or Virtual Scheduled Light. Through the group, that light turning itself off on its own timer would look like a person switching this light off. Add the group's lights directly instead.",
+      "light_member_cycle": "A light cannot include itself, directly or through a virtual light or light group that includes it.",
+      "light_shared": "A light can be controlled by one virtual light only, counting a light group as the lights it contains, and another virtual light already controls one of these. To control it from here as well, add that virtual light instead.",
+      "light_group_virtual": "A light group here contains a virtual light. Through the group, that light turning itself off on its own timer would look like a person switching this light off. Add the group's lights directly instead.",
       "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or any group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
     },
@@ -1074,10 +1074,10 @@
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its Configure button.",
       "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or deleted, since you picked them. Edit any of them further via its Configure button.",
-      "no_lights": "There are no Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a Virtual Light first.",
+      "no_lights": "There are no regular Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a regular Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
-      "no_schedule_gated_lights": "There are no Virtual Lights with a gate-mode schedule to convert.",
+      "no_schedule_gated_lights": "There are no regular Virtual Lights with a gate-mode schedule to convert.",
       "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
       "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
       "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved.",
@@ -1587,7 +1587,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -1640,7 +1640,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are MoLight virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       },
       "remote": {
         "title": "Virtual Remote",
@@ -1651,7 +1651,7 @@
           "dim_step": "Brightness step"
         },
         "data_description": {
-          "target_lights": "The lights every bound button drives: usually a MoLight virtual light, but any light works.",
+          "target_lights": "The lights every bound button drives: usually a virtual light, but any light works.",
           "dim_step": "Percent added or removed per brightness up/down click. Stepping up from off turns the lights on dim; stepping below the minimum turns them off."
         },
         "sections": {
@@ -1762,9 +1762,9 @@
       "trigger_sensors_required": "At least one trigger sensor is required.",
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly, through another combined sensor, or through an occupancy sensor whose source includes them.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly, through another combined schedule, or through a schedule whose source includes them.",
-      "light_member_cycle": "A light cannot include itself, directly or through a Virtual Light or light group that includes it.",
-      "light_shared": "A light can be controlled by one Virtual Light only, counting a light group as the lights it contains, and another Virtual Light already controls one of these. To control it from here as well, add that Virtual Light instead.",
-      "light_group_virtual": "A light group here contains a Virtual Light or Virtual Scheduled Light. Through the group, that light turning itself off on its own timer would look like a person switching this light off. Add the group's lights directly instead.",
+      "light_member_cycle": "A light cannot include itself, directly or through a virtual light or light group that includes it.",
+      "light_shared": "A light can be controlled by one virtual light only, counting a light group as the lights it contains, and another virtual light already controls one of these. To control it from here as well, add that virtual light instead.",
+      "light_group_virtual": "A light group here contains a virtual light. Through the group, that light turning itself off on its own timer would look like a person switching this light off. Add the group's lights directly instead.",
       "hold_entity_own": "A light cannot be kept on by itself, its own Auto-off switch, one of its lights, or a light or any group that includes it or shares one of its lights: each is on whenever this light is, so it would never turn off. Remove them from the keep-on entities.",
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
@@ -1813,9 +1813,9 @@
       "combined_occupancy_timeout_too_long": "The longest occupancy timeout among these sensors exceeds the turn-off timeout of a virtual light that uses this combined sensor. Raise that light's turn-off timeout first, or choose sensors with shorter occupancy timeouts."
     },
     "abort": {
-      "light_member_cycle": "Another Virtual Light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
-      "light_shared": "Another Virtual Light was changed to control one of these lights while this form was open. Open Configure again.",
-      "light_group_virtual": "A light group among these lights came to contain a Virtual Light or Virtual Scheduled Light while this form was open. Open Configure again.",
+      "light_member_cycle": "Another virtual light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
+      "light_shared": "Another virtual light was changed to control one of these lights while this form was open. Open Configure again.",
+      "light_group_virtual": "A light group among these lights came to contain a virtual light while this form was open. Open Configure again.",
       "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again.",
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }

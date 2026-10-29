@@ -202,12 +202,12 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
 
   await convert(
     page,
-    "Convert Virtual Scheduled Lights to Virtual Lights",
+    "Convert Virtual Scheduled Lights to regular Virtual Lights",
     EDITED_LIGHT_NAME,
   );
   await convert(
     page,
-    "Convert Virtual Lights to Virtual Scheduled Lights",
+    "Convert regular Virtual Lights to Virtual Scheduled Lights",
     EDITED_LIGHT_NAME,
   );
 
@@ -372,7 +372,7 @@ test("a light with a turn-on selection gets the selection page", async ({ page }
   await submit(page);
   // Discovery above wrapped E2E CT Light, so the pick is that virtual light.
   await expectFlowTitle(page, "Wrapped virtual lights");
-  await expect(page.getByText(/MoLight virtual lights: E2E CT Light\./)).toBeVisible();
+  await expect(page.getByText(/are virtual lights: E2E CT Light\./)).toBeVisible();
   await submit(page);
   await finishCreated(page, "Browser Selected");
   const state = await entityState(page, "light.browser_selected");

@@ -312,7 +312,7 @@ A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on 
 
 ```text
 Name:               Closet Pico
-Lights to control:  light.master_bedroom_closet   # a MoLight virtual light, or any light
+Lights to control:  light.master_bedroom_closet   # a virtual light, or any light
 Brightness step:    10
 
 Turn on         → Single-click buttons:  event.closet_pico_on
@@ -323,7 +323,7 @@ Preset 1        → Single-click buttons:  event.closet_pico_stop   # the middle
                   Brightness:            60
 ```
 
-Each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a MoLight virtual light: they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
+Each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
 
 ---
 
@@ -392,7 +392,7 @@ Each schedule window is a separate follow window: turn the lamp off at 07:00 and
 
 ### Example 12: Porch light with standby (Virtual Scheduled Light)
 
-Through Example 4's schedule window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
+Through Example 4's schedule window the porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. This *replaces* Example 4's Porch light, so delete that regular Virtual Light first (keep its schedule sensor). It also needs a Virtual Occupancy Sensor wrapping the porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
 
 **1. Virtual Scheduled Light** (shared form)
 
@@ -433,7 +433,7 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 
 ### Example 13: Open-plan kitchen (Virtual Combined Occupancy Sensor)
 
-One room, two PIRs that each cover half of it, and an mmWave sensor over the table. Instead of wiring three sensors into the light, merge them into one occupancy signal that any light can use. Four entries, plus the Virtual Light.
+One room, two PIRs that each cover half of it, and an mmWave sensor over the table. Instead of wiring three sensors into the light, merge them into one occupancy signal that any light can use. Four entries, plus the regular Virtual Light.
 
 **1. to 3. Virtual Occupancy Sensor**: one per real sensor, as in Example 2
 

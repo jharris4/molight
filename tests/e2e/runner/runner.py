@@ -2407,7 +2407,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
 
 
 def create_gate_mode_light(client: HomeAssistantClient, schedule_mode: str) -> str:
-    """Create a regular light gated by the dedicated end schedule."""
+    """Create a regular Virtual Light gated by the dedicated end schedule."""
     return create_entry(
         client,
         "light",
@@ -2555,7 +2555,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
 
 
 def run_schedule_mode_scenarios(client: HomeAssistantClient) -> None:
-    """Exercise follow and the three gate modes on a regular light."""
+    """Exercise follow and the three gate modes on a regular Virtual Light."""
     schedule_entry_id = create_virtual_schedule(
         client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
     )
@@ -3485,7 +3485,9 @@ def assert_converted_to_regular(
 ) -> None:
     """Assert a demoted entry stores the inside settings as a schedule-gated light."""
     effective = wait_stored_entry(
-        entry_id, lambda cfg: cfg.get("entity_type") == "light", "a regular light"
+        entry_id,
+        lambda cfg: cfg.get("entity_type") == "light",
+        "a regular Virtual Light",
     )
     assert_subset(
         effective,
@@ -3716,7 +3718,7 @@ def run_primary() -> None:
     client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: "active_settings" not in state["attributes"],
-        "a regular light after conversion",
+        "a regular Virtual Light after conversion",
     )
     reset_trigger(client)
     client.set_state(RAW_MOTION, "on")
@@ -7383,7 +7385,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_REMOVAL_MOTION, "off")
     remove_entry_and_entity(client, scheduled_entry_id, REF_SCHEDULED_LIGHT)
 
-    # A regular light referencing an illuminance sensor and a schedule.
+    # A regular Virtual Light referencing an illuminance sensor and a schedule.
     schedule_entry_id = create_virtual_schedule(
         client, "E2E Ref Schedule", "e2e_ref_schedule", source=RAW_REMOVAL_MOTION
     )

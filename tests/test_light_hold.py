@@ -1,4 +1,4 @@
-"""Tests for holding a Virtual Light's auto-off.
+"""Tests for holding a virtual light's auto-off.
 
 Auto-off is held while the companion "<name> Auto-off" switch is off or any
 configured keep-on entity is on. While held every automatic turn-off is
@@ -87,7 +87,7 @@ async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
 
 @pytest.mark.asyncio
 async def test_companion_switch_created_default_on(hass: HomeAssistant) -> None:
-    """Every Virtual Light entry gets an Auto-off switch, on by default."""
+    """Every virtual light entry gets an Auto-off switch, on by default."""
     await setup_entries(hass, make_light_entry())
 
     state = hass.states.get(SWITCH)

@@ -1,4 +1,4 @@
-"""Door-sensor tests for the MoLight Virtual Light.
+"""Door-sensor tests for virtual lights.
 
 A configured door entity drives the light directly. Opening the door is a
 turn-on trigger, gated by illuminance/a gate-mode schedule exactly like
@@ -204,7 +204,8 @@ async def test_door_open_is_illuminance_gated_like_occupancy(
 async def test_door_open_is_schedule_gated_like_occupancy(
     hass: HomeAssistant, sched: str, expect_on: bool
 ) -> None:
-    """A regular light's gate schedule also controls the door's automatic turn-on."""
+    """A regular Virtual Light's gate schedule also controls the door's automatic
+    turn-on."""
     await _assert_door_open_gating(hass, "dark", sched, expect_on)
 
 

@@ -1,6 +1,6 @@
-"""Companion Auto-off switch for MoLight Virtual Lights.
+"""Companion Auto-off switch for virtual lights.
 
-Every Virtual Light config entry gets one "<name> Auto-off" switch. ON (the
+Every virtual light config entry gets one "<name> Auto-off" switch. ON (the
 default) means normal behavior; OFF suspends all of the light's automatic
 turn-offs (exactly like a configured keep-on entity being on) until it is
 turned back on. Turn-ons and manual control are never affected.
@@ -41,7 +41,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the companion switch for a Virtual Light entry."""
+    """Set up the companion switch for a virtual light entry."""
     if entry.data[CONF_ENTITY_TYPE] in (
         ENTITY_TYPE_LIGHT,
         ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -56,7 +56,7 @@ async def async_setup_entry(
 
 
 class AutoOffSwitch(SwitchEntity, EntityIdFollowingRestoreEntity):
-    """Enables/disables a Virtual Light's automatic turn-offs."""
+    """Enables/disables a virtual light's automatic turn-offs."""
 
     _attr_should_poll = False
 

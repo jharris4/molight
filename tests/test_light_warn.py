@@ -1,4 +1,4 @@
-"""Effect/warn warning-sequence tests for the MoLight Virtual Light.
+"""Effect/warn warning-sequence tests for virtual lights.
 
 test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and

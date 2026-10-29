@@ -6,7 +6,7 @@ subscribes to the state changes of the `event` entities Home Assistant
 exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
 ...) and turns each configured (button, click) pair into one service call on
 the target lights, sending each execution on SIGNAL_REMOTE_ACTION.
-Because each press is a service call, a press on a MoLight virtual light
+Because each press is a service call, a press on a virtual light
 behaves exactly like a dashboard tap: never gated by darkness or a schedule,
 cancels an effect/warn sequence, restarts the timer.
 
@@ -193,7 +193,7 @@ def _action_call(
 
 
 def _warning_step_level(hass: HomeAssistant, entity_id: str, step: int) -> int | None:
-    """Return the brightness % a step lands on for a MoLight light mid-warning.
+    """Return the brightness % a step lands on for a virtual light mid-warning.
 
     The light reports its effect/warn stage level, which Home Assistant would
     step from, so step from the pre-warning brightness and never reach off.

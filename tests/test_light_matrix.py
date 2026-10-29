@@ -1,4 +1,4 @@
-"""Combination-matrix tests for the MoLight Virtual Light.
+"""Combination-matrix tests for virtual lights.
 
 test_light.py covers the main end-to-end scenarios; this file sweeps the
 remaining occupancy x illuminance x schedule x light-state combinations so
@@ -94,7 +94,7 @@ async def test_occupancy_trigger_illuminance_gating(
 async def test_occupancy_trigger_schedule_gating(
     hass: HomeAssistant, illum: str | None, sched: str, expect_on: bool
 ) -> None:
-    """A regular light's gate schedule combines with illuminance gating."""
+    """A regular Virtual Light's gate schedule combines with illuminance gating."""
     await _assert_occupancy_trigger_gating(hass, illum, sched, expect_on)
 
 
@@ -166,7 +166,7 @@ async def test_illuminance_dark_turn_on(
 async def test_illuminance_dark_turn_on_obeys_gate_schedule(
     hass: HomeAssistant, sched: str, expect_state: str
 ) -> None:
-    """A regular light's gate schedule controls dark-triggered turn-ons."""
+    """A regular Virtual Light's gate schedule controls dark-triggered turn-ons."""
     await _assert_illuminance_dark_turn_on(hass, "on", None, sched, expect_state)
 
 
@@ -1727,7 +1727,7 @@ async def test_virtual_turn_on_not_gated_by_bright_illuminance(
 async def test_virtual_turn_on_not_gated_outside_schedule(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The user can turn a regular light on outside its gate schedule."""
+    """The user can turn a regular Virtual Light on outside its gate schedule."""
     entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)
     hass.states.async_set(SCHED, "off")
     await _assert_virtual_turn_on_runs_timeout(hass, freezer, entry)

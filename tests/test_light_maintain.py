@@ -1,4 +1,4 @@
-"""Tests for the Virtual Light's maintain occupancy entity.
+"""Tests for a virtual light's maintain occupancy entity.
 
 The maintain entity holds an already-on light on while it is on; it never
 turns the light on. Unlike the combined sensor's maintain_sensors (which only

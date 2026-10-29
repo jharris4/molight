@@ -1,4 +1,4 @@
-"""Restart (seed-state) tests for the MoLight Virtual Light.
+"""Restart (seed-state) tests for virtual lights.
 
 Covers every _seed_state / _follow_schedule_seed path: what the light does
 right after a Home Assistant restart for each combination of restored

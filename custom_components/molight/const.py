@@ -72,14 +72,14 @@ AFFIX_TARGET_ENTITY_ID = "entity_id"
 AFFIX_TARGET_NAME = "name"
 AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 
-# Bulk-assign config-flow steps: attach one virtual sensor to many virtual
-# lights at once. The chosen sensor and (for occupancy) its role are picked
-# first; the second step lists all virtual lights, pre-selecting those that
-# already reference the sensor. The submitted set is the source of truth:
+# Bulk-assign config-flow steps: attach one virtual sensor to many regular
+# Virtual Lights at once. The chosen sensor and (for occupancy) its role are
+# picked first; the second step lists all regular Virtual Lights, pre-selecting
+# those that already reference the sensor. The submitted set is the source of truth:
 # deselecting a pre-selected light removes the reference.
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
 CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
-CONF_ASSIGN_LIGHTS = "assign_lights"  # target virtual light entity_ids
+CONF_ASSIGN_LIGHTS = "assign_lights"  # target regular Virtual Light entity_ids
 CONF_CONVERT_LIGHTS = "convert_lights"  # virtual light entity_ids to convert
 CONF_CONFIRM_CONVERSION = "confirm_conversion"
 ASSIGN_ROLE_REGULAR = "regular"
@@ -161,7 +161,7 @@ SCHEDULE_OPERATOR_ALL = "all"
 SCHEDULE_OPERATORS = [SCHEDULE_OPERATOR_ANY, SCHEDULE_OPERATOR_ALL]
 DEFAULT_SCHEDULE_OPERATOR = SCHEDULE_OPERATOR_ANY
 
-# --- Virtual Light ---
+# --- regular Virtual Light and Virtual Scheduled Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
 # A Virtual Scheduled Light keeps its shared identity/targets/schedule at the
 # entry's top level and stores two complete Virtual Light settings mappings.
@@ -211,7 +211,7 @@ ATTR_STANDBY_SUPPRESSED = "standby_suppressed"
 # so a restart does not bring that off back.
 ATTR_MANUAL_OFF_CLEARED = "manual_off_cleared"
 # Optional select entity and option applied immediately before MoLight turns an
-# off Virtual Light on. This is intentionally generic rather than WLED-specific:
+# off virtual light on. This is intentionally generic rather than WLED-specific:
 # WLED presets are exposed as select entities, and the same mechanism works for
 # any integration with a select-backed scene/preset. Both keys must be present;
 # absent = no turn-on selection. Physical member-light turn-ons are not affected.
@@ -291,7 +291,7 @@ CONF_SCHEDULE_ENTITY = "schedule_entity"
 # affected. When the last hold releases the light re-evaluates its rules.
 CONF_HOLD_ENTITIES = "hold_entities"
 
-# Each Virtual Light entry also creates a companion "<name> Auto-off" switch;
+# Each virtual light entry also creates a companion "<name> Auto-off" switch;
 # turning it OFF holds the light the same way a keep-on entity does. The
 # switch mirrors its state into hass.data[DOMAIN][entry_id] and notifies the
 # light via this dispatcher signal (formatted with the entry_id).
@@ -315,7 +315,7 @@ DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
 # --- Events entity ---
-# A Virtual Light or occupancy sensor sends what it did on this signal
+# A virtual light or occupancy sensor sends what it did on this signal
 # (event type, attributes); its "<name> Events" entity records the last one.
 SIGNAL_EVENT = DOMAIN + "_event_{}"
 
@@ -446,7 +446,7 @@ RELOAD_GRACE = 10
 # remote control (a Lutron Pico, an IKEA Bilresa, ...). Buttons are the
 # `event` entities Home Assistant creates per physical button; every binding
 # is a (button, click) -> action pair, stored as the flat keys below. Each
-# press is a light service call, so a bound press on a MoLight virtual light
+# press is a light service call, so a bound press on a virtual light
 # gets full manual-control semantics (never gated, cancels a warning
 # sequence, restarts the timer).
 #

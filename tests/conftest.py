@@ -78,15 +78,15 @@ if TYPE_CHECKING:
     from homeassistant.core import Event, HomeAssistant
 
 
-_LIGHT_BEHAVIOR_VARIANT: ContextVar[str] = ContextVar(
-    "light_behavior_variant", default="regular"
+_VIRTUAL_LIGHT_BEHAVIOR_VARIANT: ContextVar[str] = ContextVar(
+    "virtual_light_behavior_variant", default="regular"
 )
 _BEHAVIOR_SCHEDULE = "binary_sensor.virtual_light_behavior_schedule"
 
 
-def light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
+def virtual_light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
     """Adapt a regular Virtual Light entry for the shared behavior suite."""
-    variant = _LIGHT_BEHAVIOR_VARIANT.get()
+    variant = _VIRTUAL_LIGHT_BEHAVIOR_VARIANT.get()
     if variant == "regular" or entry.data.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_LIGHT:
         return entry
     marker_error = (
@@ -243,7 +243,7 @@ def make_light_entry(
         data[CONF_TURN_ON_SELECT_OPTION] = turn_on_select_option
     if turn_on_select_source_entity is not None:
         data[CONF_TURN_ON_SELECT_SOURCE_ENTITY] = turn_on_select_source_entity
-    return light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
+    return virtual_light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 
 def make_scheduled_light_entry(
@@ -482,16 +482,16 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 @pytest.fixture
 def virtual_light_behavior_variant(request, hass: HomeAssistant):
-    """Run common Virtual Light behavior against all applicable entry types."""
+    """Run common virtual light behavior against all applicable entry types."""
     variant = request.param
-    token = _LIGHT_BEHAVIOR_VARIANT.set(variant)
+    token = _VIRTUAL_LIGHT_BEHAVIOR_VARIANT.set(variant)
     if variant != "regular":
         hass.states.async_set(
             _BEHAVIOR_SCHEDULE,
             "on" if variant == "scheduled_inside" else "off",
         )
     yield variant
-    _LIGHT_BEHAVIOR_VARIANT.reset(token)
+    _VIRTUAL_LIGHT_BEHAVIOR_VARIANT.reset(token)
     if variant != "regular":
         regular = [
             entry.title
@@ -500,7 +500,7 @@ def virtual_light_behavior_variant(request, hass: HomeAssistant):
         ]
         assert not regular, (
             f"a {variant} test set up a regular Virtual Light {regular}; "
-            "build its entry through light_behavior_entry"
+            "build its entry through virtual_light_behavior_entry"
         )
 
 
@@ -548,7 +548,7 @@ def schedule_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def light_entry() -> MockConfigEntry:
-    return light_behavior_entry(
+    return virtual_light_behavior_entry(
         MockConfigEntry(
             domain=DOMAIN,
             data={

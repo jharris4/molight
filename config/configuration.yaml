@@ -190,7 +190,7 @@ input_select:
 
 # Template entities
 template:
-  # Select used to test a Virtual Light's turn-on selection
+  # Select used to test a virtual light's turn-on selection
   - select:
       - name: "Test Turn-on Selection"
         unique_id: test_turn_on_selection

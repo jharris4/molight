@@ -334,8 +334,8 @@ def lights_support_brightness(
     return _judge_lights(hass, entity_ids, _capable)
 
 
-def molight_light_entries(
-    hass: HomeAssistant, entity_types: tuple[str, ...] = (ENTITY_TYPE_LIGHT,)
+def virtual_light_entries(
+    hass: HomeAssistant, entity_types: tuple[str, ...]
 ) -> dict[str, ConfigEntry]:
     """Map each virtual light's entity_id to its config entry.
 
@@ -355,7 +355,7 @@ def molight_light_entries(
     return result
 
 
-MEMBER_LIGHT_TYPES = (ENTITY_TYPE_LIGHT, ENTITY_TYPE_SCHEDULED_LIGHT)
+VIRTUAL_LIGHT_TYPES = (ENTITY_TYPE_LIGHT, ENTITY_TYPE_SCHEDULED_LIGHT)
 
 
 def light_member_ids(
@@ -513,14 +513,14 @@ def light_owners(
     An owner is named by its light's entity id, or its entry's title while it
     has no light entity; the first owner by name wins a light two command.
     """
-    lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
+    lights = virtual_light_entries(hass, VIRTUAL_LIGHT_TYPES)
     names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
     # An entry whose light entity was deleted or not yet set up still has its lights.
     owners = sorted(
         (
             (names.get(entry.entry_id, entry.title), entry)
             for entry in hass.config_entries.async_entries(DOMAIN)
-            if molight_config(entry).get(CONF_ENTITY_TYPE) in MEMBER_LIGHT_TYPES
+            if molight_config(entry).get(CONF_ENTITY_TYPE) in VIRTUAL_LIGHT_TYPES
             and entry.entry_id != own_entry_id
         ),
         key=lambda owner: owner[0],
@@ -584,7 +584,7 @@ def lights_lit_with(
     That is one sharing a member with it, at any depth, or one that includes
     it; a generic group counts like a light group.
     """
-    lights = molight_light_entries(hass, MEMBER_LIGHT_TYPES)
+    lights = virtual_light_entries(hass, VIRTUAL_LIGHT_TYPES)
     lit = light_descendants(hass, members, lights).union(own_entities)
     return {
         entity_id

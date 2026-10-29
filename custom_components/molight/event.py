@@ -1,6 +1,6 @@
-"""Companion Events entity for MoLight Virtual Lights and occupancy sensors.
+"""Companion Events entity for virtual lights and occupancy sensors.
 
-Every Virtual Light or Virtual Scheduled Light entry gets one "<name> Events"
+Every virtual light entry gets one "<name> Events"
 entity, as does every occupancy sensor entry. The light or sensor sends
 what it did on a per-entry dispatcher signal, as the Auto-off switch does,
 and this entity records it as its last event: the state is the time,
@@ -65,7 +65,7 @@ async def async_setup_entry(
 
 
 class MoLightEvents(EventEntity, EntityIdFollowingRestoreEntity):
-    """Records the last thing a Virtual Light or occupancy sensor did."""
+    """Records the last thing a virtual light or occupancy sensor did."""
 
     _attr_should_poll = False
 

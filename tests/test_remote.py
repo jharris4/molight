@@ -856,7 +856,7 @@ async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
 async def test_brightness_step_mid_warning_leaves_other_targets_stepping(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Only the MoLight light mid-warning gets a fixed level: another light,
+    """Only the virtual light mid-warning gets a fixed level: another light,
     even one carrying look-alike attributes, still takes the plain step."""
     hass.states.async_set(
         "light.other",

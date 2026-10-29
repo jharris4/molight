@@ -1,4 +1,4 @@
-"""Options-edit (entry reload) tests for the MoLight Virtual Light.
+"""Options-edit (entry reload) tests for virtual lights.
 
 Editing a virtual light's options reloads its config entry, which tears the
 entity down and re-creates it mid-flight. These tests pin what happens when

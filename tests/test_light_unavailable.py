@@ -1,4 +1,4 @@
-"""Unavailability tests for the MoLight Virtual Light.
+"""Unavailability tests for virtual lights.
 
 Each entity the light watches (real lights, occupancy, illuminance,
 schedule) can drop to unavailable/unknown at any time, e.g. a Zigbee
@@ -2237,7 +2237,7 @@ async def test_follow_member_reload_after_startup_is_reconciled(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> None:
-    """Reloading the config entry of a member that is itself a Virtual Light
+    """Reloading the config entry of a member that is itself a virtual light
     goes through HA's placeholder and is reconciled to the window."""
     inner_entry = make_light_entry(name="Inner", lights=[REAL])
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})

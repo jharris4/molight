@@ -1,4 +1,4 @@
-# MoLight: Smart Virtual Light Control for Home Assistant
+# MoLight: Smart virtual light control for Home Assistant
 
 A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation: wrap your real sensors and lights in virtual entities, wire them together from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
 
@@ -16,6 +16,8 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
 | [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it, optionally resting at a standby level |
 | [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to light actions, with no automations |
+
+Each of these is a *virtual entity*: it stands in front of real devices (sensors, lights, remote buttons) and works from them. The two light types are both *virtual lights*: a *regular* Virtual Light uses one set of settings, and a Virtual Scheduled Light uses different settings inside and outside a schedule.
 
 **Highlights** (everything below is covered by the automated test suite):
 
@@ -56,7 +58,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 - **Create a single entity**: pick a type and fill in its form.
 - **Discover**: scan existing entities and bulk-create virtual ones, with one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
 - **Assign a sensor to several lights**: wire one sensor into many lights at once (see [Bulk assignment](#bulk-assignment)).
-- **Convert virtual lights**: turn Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode into Virtual Scheduled Lights with separate inside- and outside-schedule settings, or turn Virtual Scheduled Lights back into Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
+- **Convert virtual lights**: turn regular Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode into Virtual Scheduled Lights with separate inside- and outside-schedule settings, or turn Virtual Scheduled Lights back into regular Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
 
 The usual order:
 
@@ -127,13 +129,13 @@ A final form then lets you adjust the default settings applied to every pick; fo
 
 ### Bulk assignment
 
-**Assign a sensor to several lights** wires one shared sensor into many virtual lights in a single pass. Pick the kind of sensor, the sensor, and how the lights should use it:
+**Assign a sensor to several lights** wires one shared sensor into many regular Virtual Lights in a single pass. Pick the kind of sensor, the sensor, and how the lights should use it:
 
 - **Occupancy**, with a **role**: *regular* (turns lights on and off) or *maintain* (only holds an already-on light on).
 - **Illuminance**, with its **mode** (**Control** or **Gate only**).
 - **Schedule**, with its **mode** (**Follow**, **Gate and turn off**, **Gate and switch state**, or **Gate and keep state**).
 
-The final step lists your virtual lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
+The final step lists your regular Virtual Lights with current users of that sensor **pre-selected**, so the checklist doubles as an audit of the wiring. The submitted set is authoritative: ticked lights get the reference and mode, unticked pre-selected lights have it removed, and the summary reports how many were newly wired and how many had the reference removed (lights that already had the exact sensor and mode are left untouched and not counted).
 
 Because occupancy feeds the turn-off countdown, a light's turn-off timeout must be at least the occupancy timeout of its occupancy sensor (for a combined sensor, the largest of its constituents'; see [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light)). Lights that break that rule are skipped and named in the summary, so you can raise their timeouts and re-run.
 
@@ -143,10 +145,10 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 
 **Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
-- **Virtual Light → Virtual Scheduled Light**: available for Virtual Lights whose Schedule mode is one of the three Gate modes. Each light retains its own schedule. Its current settings become the inside-schedule settings; the outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection, and keep-on entities but start without occupancy, maintain, illuminance, or door inputs. The **Gate and turn off**, **Gate and switch state** and **Gate and keep state** modes map to the **Turn off**, **Switch state** and **Keep state** [schedule-end actions](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light). This creates a useful starting point rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
-- **Virtual Scheduled Light → Virtual Light**: every Virtual Scheduled Light that still has a schedule can be converted. The inside-schedule settings become the Virtual Light's settings, the schedule stays, and Schedule mode is set to the matching **Gate and turn off**, **Gate and switch state** or **Gate and keep state**. The outside-schedule settings and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
+- **Regular Virtual Light → Virtual Scheduled Light**: available for regular Virtual Lights whose Schedule mode is one of the three Gate modes. Each light retains its own schedule. Its current settings become the inside-schedule settings; the outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection, and keep-on entities but start without occupancy, maintain, illuminance, or door inputs. The **Gate and turn off**, **Gate and switch state** and **Gate and keep state** modes map to the **Turn off**, **Switch state** and **Keep state** [schedule-end actions](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light). This creates a useful starting point rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
+- **Virtual Scheduled Light → regular Virtual Light**: every Virtual Scheduled Light that still has a schedule can be converted. The inside-schedule settings become the regular Virtual Light's settings, the schedule stays, and Schedule mode is set to the matching **Gate and turn off**, **Gate and switch state** or **Gate and keep state**. The outside-schedule settings and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.
 
-Follow-mode Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting which settings are active.
+Follow-mode regular Virtual Lights are not offered for conversion because their schedule directly owns the lights rather than selecting which settings are active.
 
 ## Reference
 
@@ -161,11 +163,11 @@ MoLight writes no debug logs. A setting it cannot act on is raised as a **Repair
 - a Virtual Schedule Sensor saved with a window that never opens at the home location;
 - a Virtual Schedule Sensor whose source group includes it (it goes `unavailable`);
 - a Virtual Occupancy Sensor whose source group includes it (it stops following the source);
-- a Virtual Light whose member light group includes it, directly or through a light group inside it (it stops controlling that group);
+- a virtual light whose member light group includes it, directly or through a light group inside it (it stops controlling that group);
 - two virtual lights, saved before the form refused it, that both control the same light (they fight over it);
 - a keep-on entity saved before the form refused it (it stays as it was).
 
-The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the Virtual Light then reports what its real lights show), and an error when discovery fails to create an entry.
+The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the virtual light then reports what its real lights show), and an error when discovery fails to create an entry.
 
 Every entry offers **Download diagnostics** in its menu on the MoLight page. The file holds the entry's settings, the state and attributes of every entity it created and of every entity it references (real lights, sensors, schedule, door, keep-on entities, select and buttons), which other MoLight entries use its entities, and MoLight's open Repairs issues. Attach it to a bug report.
 

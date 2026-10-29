@@ -135,7 +135,7 @@ Asks that existing blocks answer:
 - Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode
   (EXAMPLES.md, example 5); to keep the time window too, join both in a Virtual Combined Schedule
   Sensor set to All.
-- Only when dark and inside a schedule window, on a plain Virtual Light: a Virtual Combined Schedule
+- Only when dark and inside a schedule window, on a regular Virtual Light: a Virtual Combined Schedule
   Sensor set to All.
 - Dim before turning off: the effect and warn stages.
 - An always-on night light that brightens on motion: a Virtual Scheduled Light on an all-day
@@ -145,7 +145,7 @@ Asks that existing blocks answer:
   a keep-on entity.
 - Weekdays only: a workday sensor and a combined All schedule, until item 4 lands.
 - One remote driving two rooms: two remote entries on different buttons of the same remote.
-- Different levels per lamp from one trigger: two Virtual Lights sharing the sensors.
+- Different levels per lamp from one trigger: two virtual lights sharing the sensors.
 - A notification or spoken warning before an automatic off: an Event received trigger on the Events
   entity.
 

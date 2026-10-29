@@ -1,4 +1,4 @@
-"""Transition (fade) tests for the MoLight Virtual Light.
+"""Transition (fade) tests for virtual lights.
 
 The four optional transition settings shape the service calls the light makes
 itself: auto_on/auto_off fade automatic turn-ons/offs, effect/warn fade the

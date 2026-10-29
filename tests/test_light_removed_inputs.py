@@ -1,4 +1,4 @@
-"""Entities a Virtual Light uses that are deleted or disabled while it runs.
+"""Entities a virtual light uses that are deleted or disabled while it runs.
 
 Such an entity leaves the state machine and can never report again. Startup
 counts a missing keep-on entity as not holding, a missing door as closed,

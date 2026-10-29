@@ -1,6 +1,8 @@
 # MoLight entity reference
 
-Every field, attribute and edge case of each MoLight entity. To get started, see the [README](README.md); for worked setups, see [EXAMPLES.md](EXAMPLES.md).
+This reference lists every field, attribute and edge case of each MoLight entity. To get started, see the [README](README.md); for worked setups, see [EXAMPLES.md](EXAMPLES.md).
+
+Each MoLight entity is a *virtual entity*: it stands in front of real devices and works from them. The sensors give the lights steady signals to act on: the [Virtual Occupancy Sensor](#virtual-occupancy-sensor) and [Virtual Combined Occupancy Sensor](#virtual-combined-occupancy-sensor) for occupancy, the [Virtual Illuminance Sensor](#virtual-illuminance-sensor) for daylight, and the [Virtual Schedule Sensor](#virtual-schedule-sensor) and [Virtual Combined Schedule Sensor](#virtual-combined-schedule-sensor) for schedules. The two light types are both *virtual lights*: a *regular* [Virtual Light](#virtual-light) uses one set of settings, and a [Virtual Scheduled Light](#virtual-scheduled-light) uses different settings inside and outside a schedule. The [Virtual Remote](#virtual-remote) lets remote-control buttons drive lights.
 
 ## Virtual Occupancy Sensor
 
@@ -76,7 +78,7 @@ Attributes: none beyond the standard bright/dark (`on`/`off`) state. The entity 
 A Virtual Schedule Sensor provides a reusable on/off schedule signal. The **Schedule definition** step offers two kinds:
 
 - **Time window**: `on` while the current time is within a fixed-time and/or sun-based window. Its state changes are scheduled ahead (no polling) and happen exactly at each boundary. Overnight windows (e.g. 22:00 → 06:00) are supported; [which windows run overnight](#overnight-windows) is decided from the settings. The form accepts one window per entry; for several windows (say a morning and an evening), combine schedules with a [Virtual Combined Schedule Sensor](#virtual-combined-schedule-sensor).
-- **Binary sensor**: mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every Virtual Light form. MoLight's own schedules are excluded as sources to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead. A source that is computed from the schedule itself, such as a binary sensor group that contains it, directly or through another group or a combined schedule, is refused too; if a group is changed to contain it afterwards, the schedule goes `unavailable` until it is taken out again.
+- **Binary sensor**: mirrors any existing `binary_sensor`. This promotes a helper, template, mode, or integration-provided sensor into MoLight's short schedule picker without exposing every binary sensor in every virtual light form. MoLight's own schedules are excluded as sources to prevent chains and cycles; combine them with a Virtual Combined Schedule Sensor instead. A source that is computed from the schedule itself, such as a binary sensor group that contains it, directly or through another group or a combined schedule, is refused too; if a group is changed to contain it afterwards, the schedule goes `unavailable` until it is taken out again.
 
 The **Binary sensor** definition has two fields:
 
@@ -107,7 +109,7 @@ Edge cases:
 
 Attributes: `current_window_start` (identifies the effective `on` period, where overlapping windows count as one; used by follow-mode lights for restart catch-up; the literal `inverted` when an inverted schedule has no boundary to date it from), `next_change` (also under its deprecated old name `next_transition`, to be removed), `source_entity`, `inverted`.
 
-**Source outages.** Source-backed schedules preserve their effective state and window marker across a temporary source outage, and Virtual Lights do not treat that outage as a schedule boundary: gate modes block new automatic turn-ons while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state.
+**Source outages.** Source-backed schedules preserve their effective state and window marker across a temporary source outage, and virtual lights do not treat that outage as a schedule boundary: gate modes block new automatic turn-ons while the schedule is unavailable but leave already-on lights alone, and follow mode waits for the next valid schedule state.
 
 - As with any generic binary sensor, a complete off/on cycle that happens entirely while Home Assistant is stopped cannot be reconstructed reliably; when startup is ambiguous, the restored window marker is preserved rather than re-triggering Follow mode.
 - A schedule disabled or reloaded while Home Assistant keeps running still follows its source, so it comes back with a window the source started meanwhile.
@@ -163,7 +165,7 @@ At the top level:
 
 | Config | Description |
 |---|---|
-| **Lights to control** | The `light` entities to control: usually real lights, but another MoLight virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A `switch`, such as a smart plug or a wall switch, isn't offered: wrap it as a light with Home Assistant's *Switch as X* helper first. A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
+| **Lights to control** | The `light` entities to control: usually real lights, but another virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A `switch`, such as a smart plug or a wall switch, isn't offered: wrap it as a light with Home Assistant's *Switch as X* helper first. A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
 | **Turn-off timeout** | Seconds. Default `300`, range 1 to 14400 (4 h). Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors |
 
 ***Sensors & triggers*** (expanded):
@@ -232,7 +234,7 @@ At the top level:
 | `bright_forced_off` | Whether the light is off because brightness forced it off; only then can going dark resume the on-period |
 | `bright_resume_until` | While `bright_forced_off`: when the countdown that brightness interrupted would have ended, or one timeout after the off for a light presence was holding. Going dark before then resumes the on-period; null when only a sensor's `latest_occupied_time` can |
 | `active_settings` / `active_settings_schedule` | Virtual Scheduled Light only: which settings are live and the schedule it was derived from (see [Virtual Scheduled Light](#virtual-scheduled-light)) |
-| `schedule_end_off_pending` | Virtual Scheduled Light, or a Virtual Light under **Gate and turn off**: whether a schedule end's off is waiting on an auto-off hold to release. It survives a restart, and any off, or a new window starting, drops it |
+| `schedule_end_off_pending` | Virtual Scheduled Light, or a regular Virtual Light under **Gate and turn off**: whether a schedule end's off is waiting on an auto-off hold to release. It survives a restart, and any off, or a new window starting, drops it |
 | `standby_suppressed` | Virtual Scheduled Light only: whether a manual off has turned [standby](#standby) off until the next schedule boundary |
 | `manual_off_cleared` | Virtual Scheduled Light only: whether a schedule boundary has ended the last manual off, so a restart does not bring it back |
 | `active_settings_window_start` | Virtual Scheduled Light only: the schedule window the inside settings are running in, so a restart in a later window is treated as a boundary |
@@ -415,7 +417,7 @@ actions:
 
 ### Wrapping another virtual light
 
-A virtual light can control another MoLight virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a page that points this out before the light is saved.
+A virtual light can control another virtual light. The wrapped light keeps its own timer, sensors, stages and schedule, and adding one in the form brings up a page that points this out before the light is saved.
 
 - **What the wrapped light does by itself** (its timer turning it off, a warn stage dimming it, its own sensor lighting it) is not a physical change for the light that wraps it. A wrapping light with a 300 s timeout over a wrapped light with a 60 s one goes dark after 60 s without recording a manual off. Turn off the wrapped light's Auto-off switch when the wrapping light's timeout should govern.
 - **A person's change counts for both:** a change at the wall on the wrapped light's bulbs, or a command through its entity, also a turn-on of a wrapped light that is already on.
@@ -540,7 +542,7 @@ Creation uses three main forms:
 
    | Config | Description |
    |---|---|
-   | **Lights to control** | As for a Virtual Light |
+   | **Lights to control** | As for a regular Virtual Light |
    | **Schedule sensor** | A Virtual Schedule Sensor or a Virtual Combined Schedule Sensor; `off` selects the outside-schedule settings, `on` the inside-schedule settings |
    | **At schedule end** | What the `on → off` boundary does to a light that is still on: **Keep state** (the default), **Switch state** or **Turn off**, described below |
    | **Entity ID** *(optional)* | See [Choosing the entity ID](README.md#choosing-the-entity-id) |
@@ -550,7 +552,7 @@ Creation uses three main forms:
 
 If either settings set uses a turn-on selection entity, its usual selection form appears immediately after that settings form. Editing uses the same sequence, but preserves the two saved settings sets independently.
 
-Crossing the schedule boundary in either direction switches which settings are used and immediately re-checks the light against the newly active settings: its sensors are re-read, newly selected active occupancy or a held-open **Open & close** door can turn an off light on, a newly selected illuminance sensor that is bright in **Control** mode forces an on light off, and keep-on holds are picked up. The start boundary (`off → on`) always does exactly this. Only the end boundary (`on → off`) is configurable, through **At schedule end**, which has the same three choices as a Virtual Light's Gate modes (see [Schedule modes](#schedule-modes)):
+Crossing the schedule boundary in either direction switches which settings are used and immediately re-checks the light against the newly active settings: its sensors are re-read, newly selected active occupancy or a held-open **Open & close** door can turn an off light on, a newly selected illuminance sensor that is bright in **Control** mode forces an on light off, and keep-on holds are picked up. The start boundary (`off → on`) always does exactly this. Only the end boundary (`on → off`) is configurable, through **At schedule end**, which has the same three choices as a regular Virtual Light's Gate modes (see [Schedule modes](#schedule-modes)):
 
 - **Keep state** (the default) makes the end boundary behave exactly like the start. The only thing it preserves is a countdown or warning already running, which keeps its original duration and deadline; if the old settings held the light but the new settings do not, a fresh timeout starts.
 - **Switch state** differs from **Keep state** in that one respect only: on the `on → off` boundary it recalculates an already-on light's running state and timer from the outside settings.
@@ -614,14 +616,14 @@ Drives lights from the buttons of a remote control: a Lutron Pico, an IKEA Bilre
 
 > **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration. It exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
 
-Each press calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound press on a MoLight virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. During that warning, **Brightness up** and **Brightness down** step from the pre-warning brightness, never below 1%, rather than from the warning level the light shows. Targets are usually MoLight virtual lights, but any `light` entity works.
+Each press calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound press on a virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. During that warning, **Brightness up** and **Brightness down** step from the pre-warning brightness, never below 1%, rather than from the warning level the light shows. Targets are usually virtual lights, but any `light` entity works.
 
 Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is the last action the remote executed: `turn_on`, `turn_off`, `toggle`, `brightness_up`, `brightness_down`, `preset_1` or `preset_2`. Its attributes are `button` (the event entity that fired), `click` (the resolved `single` or `double`), `event_type` (the raw event type) and `time` (when the action ran). It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts `unknown` after a restart, since a pre-restart action shown as current would be misleading.
 
 | Config | Description |
 |---|---|
 | **Lights to control** | The `light` entities every bound button drives (at least one is required) |
-| **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
+| **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a virtual light in its effect/warn warning, which stops at 1% |
 | **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it. Toggle moves the lights together, as a light group does: if any is on it turns them all off, otherwise all on |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
 | **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* a **color**; its **Color mode** field picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
@@ -666,7 +668,7 @@ Deleting a virtual light strips it from every remote's target list, like any oth
   - an occupancy sensor can't wrap another MoLight occupancy entity;
   - a combined sensor can't reference itself or form a cycle through other combined sensors, and a constituent can't be both a trigger and a maintain sensor;
   - a schedule's source can't be a group that leads back to the schedule;
-  - a Virtual Light can't include itself or a Virtual Light or Home Assistant light group that includes it;
-  - a light belongs to one Virtual Light (a light group counting as the lights it contains, so the Virtual Light that has a light is added instead of the light);
-  - a Virtual Light's keep-on entities can't be its own light, its Auto-off switch, or a light or group that is on whenever it is.
+  - a virtual light can't include itself or a virtual light or Home Assistant light group that includes it;
+  - a light belongs to one virtual light (a light group counting as the lights it contains, so the virtual light that has a light is added instead of the light);
+  - a virtual light's keep-on entities can't be its own light, its Auto-off switch, or a light or group that is on whenever it is.
 - Once an entry's options have been edited, the options fully replace the original data (so cleared optional fields stay cleared).

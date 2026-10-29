@@ -1,6 +1,6 @@
 """Tests for the "<name> Events" entity itself.
 
-Every Virtual Light, Virtual Scheduled Light and occupancy sensor entry gets
+Every virtual light and occupancy sensor entry gets
 one; it follows a typed Entity ID the way the Auto-off switch does, restores
 its last event across a restart, and an event sent while it is disabled
 is simply dropped.

@@ -1,4 +1,4 @@
-"""Tests for the MoLight Virtual Light's color support.
+"""Tests for virtual lights' color support.
 
 The virtual light derives its color capabilities from the real lights it
 wraps (HS when any member can show a color, COLOR_TEMP when any member

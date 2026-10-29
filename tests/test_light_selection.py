@@ -1,4 +1,4 @@
-"""Tests for Virtual Light turn-on selections."""
+"""Tests for virtual light turn-on selections."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ def _selection_entry(
     source_entity: str | None = None,
     **kwargs: Any,
 ):
-    """Build a Virtual Light configured with a turn-on selection."""
+    """Build a virtual light configured with a turn-on selection."""
     return make_light_entry(
         name="Selection Light",
         lights=["light.ambient"],

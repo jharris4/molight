@@ -1,4 +1,4 @@
-"""Tests for the MoLight Virtual Light."""
+"""Tests for virtual lights."""
 
 from __future__ import annotations
 
@@ -49,10 +49,10 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from tests.conftest import (
-    light_behavior_entry,
     light_targets,
     record_service_calls,
     settle,
+    virtual_light_behavior_entry,
 )
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
@@ -75,7 +75,7 @@ def _gated_light_entry() -> MockConfigEntry:
 
 async def _setup_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     for entry in entries:
-        behavior_entry = light_behavior_entry(entry)
+        behavior_entry = virtual_light_behavior_entry(entry)
         behavior_entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(behavior_entry.entry_id)
     await hass.async_block_till_done()
@@ -1444,7 +1444,7 @@ def _warn_light_entry(
         data[CONF_OCCUPANCY_ENTITY] = occupancy
     if hold_entities:
         data[CONF_HOLD_ENTITIES] = hold_entities
-    return light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
+    return virtual_light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 
 def _record_service_calls(hass: HomeAssistant) -> list[dict]:
