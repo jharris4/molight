@@ -89,7 +89,7 @@ async function fillTimeout(page, seconds) {
   await timeoutField(page).fill(String(seconds));
 }
 
-// The options flow prefills each profile from the stored entry.
+// The options flow prefills each profile from the entry settings.
 async function expectTimeout(page, seconds) {
   await expect(timeoutField(page)).toHaveValue(String(seconds));
 }

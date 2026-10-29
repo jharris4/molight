@@ -28,7 +28,7 @@ from .const import (
     OCCUPANCY_EVENT_TYPES,
     SIGNAL_EVENT,
 )
-from .helpers import EntityIdFollowingRestoreEntity, molight_config, suggested_entity_id
+from .helpers import EntityIdFollowingRestoreEntity, entry_settings, suggested_entity_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -72,7 +72,7 @@ class MoLightEvents(EventEntity, EntityIdFollowingRestoreEntity):
     def __init__(self, entry: ConfigEntry, event_types: list[str]) -> None:
         """Initialize the Events entity."""
         self._entry_id = entry.entry_id
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = f"{cfg[CONF_NAME]} Events"
         self._attr_unique_id = f"{entry.entry_id}_events"
         self._attr_event_types = list(event_types)

@@ -60,7 +60,7 @@ def _mstate(hass: HomeAssistant) -> str:
 
 
 async def _update_options(hass: HomeAssistant, entry, **overrides) -> None:
-    """Simulate the options flow: full config stored as options, then reload."""
+    """Simulate the options flow: full entry settings stored as options, then reload."""
     opts = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
         settings_key = (

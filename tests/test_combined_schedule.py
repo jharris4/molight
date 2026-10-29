@@ -46,7 +46,7 @@ from custom_components.molight.const import (
     STATE_IDLE,
     STATE_SCHEDULED,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import (
     ANCHORAGE,
     APIA,
@@ -1054,7 +1054,7 @@ async def test_startup_holds_restored_state_until_inputs_report(
 async def test_editing_an_input_rebuilds_the_combination(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Inputs are read from config, so editing one must reach the combination."""
+    """Inputs come from entry settings, so editing one must reach the combination."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 05:00:00+00:00")
     morning = _time_schedule("Morning", "06:00", "08:00")
@@ -1131,7 +1131,7 @@ async def test_loop_is_unknown_instead_of_hanging(
         await settle(hass)
         # An edit of the root reaches its own entry-change handler too.
         hass.config_entries.async_update_entry(
-            loop_a, options={**molight_config(loop_a), CONF_NAME: "Loop A2"}
+            loop_a, options={**entry_settings(loop_a), CONF_NAME: "Loop A2"}
         )
         await settle(hass)
 
@@ -1274,7 +1274,7 @@ async def test_emptying_an_inner_combination_does_not_turn_its_inverse_on(
     for entry in (morning, afternoon):
         await hass.config_entries.async_remove(entry.entry_id)
         await settle(hass)
-    assert molight_config(daylight)[CONF_SCHEDULE_INPUTS] == []
+    assert entry_settings(daylight)[CONF_SCHEDULE_INPUTS] == []
     for when in ("2026-07-02 21:00:02+00:00", "2026-07-03 03:00:02+00:00"):
         await _move_to(hass, freezer, when)
         assert hass.states.get("binary_sensor.dark").state == "off"
@@ -1318,7 +1318,7 @@ async def test_deleting_every_input_leaves_the_combination_off(
 
     await hass.config_entries.async_remove(day.entry_id)
     await settle(hass)
-    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == []
+    assert entry_settings(combined)[CONF_SCHEDULE_INPUTS] == []
     state = hass.states.get("binary_sensor.porch_hours")
     assert state.state == "off"
     assert state.attributes["next_change"] is None
@@ -1347,7 +1347,7 @@ async def test_deleting_one_input_of_an_all_combination_widens_it(
 
     await hass.config_entries.async_remove(workday.entry_id)
     await settle(hass)
-    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.evening"]
+    assert entry_settings(combined)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.evening"]
     assert hass.states.get("binary_sensor.work_evenings").state == "on"
 
 
@@ -1386,7 +1386,7 @@ async def test_deleting_an_input_already_gone_from_the_registry(
     assert await hass.config_entries.async_remove(morning.entry_id)
     await settle(hass)
 
-    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == inputs[1:]
+    assert entry_settings(combined)[CONF_SCHEDULE_INPUTS] == inputs[1:]
     bedside = survivor != invert if survivor else False
     outer = not bedside if survivor else False
     assert hass.states.get("binary_sensor.bedside").state == (
@@ -1397,7 +1397,7 @@ async def test_deleting_an_input_already_gone_from_the_registry(
 
 @pytest.mark.asyncio
 async def test_sun_anchored_input(hass: HomeAssistant, freezer) -> None:
-    """A sun-based input's window is read from its config, sun event included."""
+    """A sun-based input's window comes from its entry settings, sun event included."""
     day = date(2026, 7, 2)
     sunset = get_astral_event_date(hass, "sunset", day)
     assert sunset is not None

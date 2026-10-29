@@ -18,7 +18,7 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_SCHEDULED_LIGHT,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import make_light_entry, molight_issues, settle, setup_entries
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
     assert list(molight_issues(hass, entry.entry_id)) == [f"hold_never_on_{TV}"]
 
     hass.config_entries.async_update_entry(
-        entry, options={**molight_config(entry), CONF_HOLD_ENTITIES: []}
+        entry, options={**entry_settings(entry), CONF_HOLD_ENTITIES: []}
     )
     await settle(hass)
     assert molight_issues(hass, entry.entry_id) == {}

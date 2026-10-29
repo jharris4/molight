@@ -157,6 +157,7 @@ from .helpers import (
     HOLD_ENTITY_DOMAINS as _HOLD_ENTITY_DOMAINS,
     VIRTUAL_LIGHT_TYPES as _VIRTUAL_LIGHT_TYPES,
     entity_id_changed_to,
+    entry_settings as _entry_settings,
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
     light_owners as _light_owners,
@@ -167,7 +168,6 @@ from .helpers import (
     lights_support_color_temp,
     lights_support_transition,
     match_option,
-    molight_config as _molight_cfg,
     sensors_depend_on as _sensors_depend_on,
     shared_lights as _shared_lights,
     virtual_light_entries as _virtual_light_entries,
@@ -277,7 +277,7 @@ _REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
 #
 # The forms group their fields into collapsible sections, but that grouping is
 # presentation only: entries keep storing one flat mapping. Submitted section
-# sub-dicts are flattened straight back by _flatten_sections, and stored values
+# sub-dicts are flattened straight back by _flatten_sections, and entry settings
 # are re-nested by _nest_sections so add_suggested_values_to_schema (which
 # recurses into sections) can prefill the forms. Section keys must therefore
 # never collide with a CONF_* key.
@@ -388,7 +388,7 @@ def _flatten_sections(
 def _nest_sections(
     values: dict[str, Any], layout: dict[str, tuple[str, ...]]
 ) -> dict[str, Any]:
-    """Group flat stored values into section sub-dicts for form prefills."""
+    """Group flat entry settings into section sub-dicts for form prefills."""
     nested = dict(values)
     for section_key, fields in layout.items():
         inner = {f: nested.pop(f) for f in fields if f in nested}
@@ -457,7 +457,7 @@ def _flatten_remote(user_input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _nest_remote(values: dict[str, Any]) -> dict[str, Any]:
-    """Nest stored Virtual Remote values into the form shape for a prefill."""
+    """Nest a Virtual Remote's entry settings into the form shape for a prefill."""
     return _nest_sections(
         _derive_color_modes(values, _REMOTE_COLOR_GROUPS), _REMOTE_SECTIONS
     )
@@ -630,7 +630,7 @@ def _effective_occupancy_timeout(
     combined sensor it is the max across all constituent sensors (the
     countdown math anchors to the constituent that clears last). Combined
     sensors can reference each other, and while the flows reject cycles a
-    hand-edited config could still hold one, so entities already being
+    hand-edited entry settings could still hold one, so entities already being
     resolved are skipped.
     """
     if _seen is None:
@@ -645,7 +645,7 @@ def _effective_occupancy_timeout(
     if entry is None or entry.domain != DOMAIN:
         return None
 
-    cfg = _molight_cfg(entry)
+    cfg = _entry_settings(entry)
     entity_type = cfg.get(CONF_ENTITY_TYPE)
     if entity_type == ENTITY_TYPE_OCCUPANCY:
         return int(cfg.get(CONF_OCCUPANCY_TIMEOUT, DEFAULT_OCCUPANCY_TIMEOUT))
@@ -667,7 +667,7 @@ def _molight_occupancy_entity_ids(hass: HomeAssistant) -> list[str]:
     registry = er.async_get(hass)
     entity_ids: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in (
+        if _entry_settings(entry).get(CONF_ENTITY_TYPE) not in (
             ENTITY_TYPE_OCCUPANCY,
             ENTITY_TYPE_COMBINED_OCCUPANCY,
         ):
@@ -690,7 +690,7 @@ def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
     return sorted(
         entity.entity_id
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) in _SCHEDULE_ENTITY_TYPES
+        if _entry_settings(entry).get(CONF_ENTITY_TYPE) in _SCHEDULE_ENTITY_TYPES
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.domain == "binary_sensor"
     )
@@ -710,7 +710,7 @@ def _molight_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | No
     entry = hass.config_entries.async_get_entry(reg_entry.config_entry_id)
     if entry is None or entry.domain != DOMAIN:
         return None
-    return _molight_cfg(entry).get(CONF_ENTITY_TYPE)
+    return _entry_settings(entry).get(CONF_ENTITY_TYPE)
 
 
 def _schedule_entity_selector(
@@ -830,7 +830,7 @@ def _combined_creates_cycle(
     Only entries of the edited entry's own combined type are followed.
     """
     target_entry_id = edited_entry.entry_id
-    entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
+    entity_type = _entry_settings(edited_entry)[CONF_ENTITY_TYPE]
     inputs = _COMBINED_INPUTS[entity_type]
     # A schedule's or an occupancy sensor's source can lead back here
     # through a group.
@@ -860,7 +860,7 @@ def _combined_creates_cycle(
             continue
         visited.add(entry.entry_id)
 
-        cfg = _molight_cfg(entry)
+        cfg = _entry_settings(entry)
         if cfg.get(CONF_ENTITY_TYPE) != entity_type:
             continue
         pending.extend(_referenced_entries(inputs(cfg)))
@@ -873,7 +873,7 @@ def _combined_cycle_candidates(
 ) -> list[str]:
     """Entity ids that would create a cycle if selected by the edited entry."""
     registry = er.async_get(hass)
-    entity_type = _molight_cfg(edited_entry)[CONF_ENTITY_TYPE]
+    entity_type = _entry_settings(edited_entry)[CONF_ENTITY_TYPE]
     # A plain schedule or occupancy sensor can lead back too, through its
     # source.
     entity_types = (
@@ -883,7 +883,7 @@ def _combined_cycle_candidates(
     )
     excluded: list[str] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if _molight_cfg(entry).get(CONF_ENTITY_TYPE) not in entity_types:
+        if _entry_settings(entry).get(CONF_ENTITY_TYPE) not in entity_types:
             continue
         excluded.extend(
             entity.entity_id
@@ -916,7 +916,7 @@ def _min_dependent_light_timeout(
     while changed:
         changed = False
         for entry in hass.config_entries.async_entries(DOMAIN):
-            cfg = _molight_cfg(entry)
+            cfg = _entry_settings(entry)
             if cfg.get(CONF_ENTITY_TYPE) != ENTITY_TYPE_COMBINED_OCCUPANCY:
                 continue
             constituents = cfg.get(CONF_TRIGGER_SENSORS, []) + cfg.get(
@@ -933,7 +933,7 @@ def _min_dependent_light_timeout(
 
     timeouts = []
     for entry in hass.config_entries.async_entries(DOMAIN):
-        cfg = _molight_cfg(entry)
+        cfg = _entry_settings(entry)
         settings_sets = []
         if cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT:
             settings_sets.append(cfg)
@@ -980,7 +980,7 @@ def _stale_light_settings(
     own_entities: Sequence[str] = (),
     members: Sequence[str] | None = None,
 ) -> tuple[str | None, dict[str, str]]:
-    """Recheck a light payload's timeouts and keep-on entities as things are now.
+    """Recheck a light's entry settings (timeouts, keep-on entities) as things are now.
 
     An occupancy timeout can be raised, or a keep-on group edited, while a later
     page of the light's form is open, since the unsaved light is not yet its
@@ -1647,7 +1647,7 @@ def _molight_used_entities(hass: HomeAssistant, key: str) -> set[str]:
     """Real entity_ids already wrapped by existing MoLight entries under `key`."""
     used: set[str] = set()
     for entry in hass.config_entries.async_entries(DOMAIN):
-        val = _molight_cfg(entry).get(key)
+        val = _entry_settings(entry).get(key)
         if isinstance(val, list):
             used.update(val)
         elif val:
@@ -1748,7 +1748,7 @@ def _filter_discovery_candidates(
     return filtered
 
 
-def _occupancy_payload(entity_id: str, name: str) -> dict[str, Any]:
+def _occupancy_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
         CONF_NAME: name,
@@ -1759,7 +1759,7 @@ def _occupancy_payload(entity_id: str, name: str) -> dict[str, Any]:
     }
 
 
-def _illuminance_payload(entity_id: str, name: str) -> dict[str, Any]:
+def _illuminance_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
     return {
         CONF_ENTITY_TYPE: ENTITY_TYPE_ILLUMINANCE,
         CONF_NAME: name,
@@ -1769,7 +1769,7 @@ def _illuminance_payload(entity_id: str, name: str) -> dict[str, Any]:
     }
 
 
-def _light_payload(entity_id: str, name: str) -> dict[str, Any]:
+def _light_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
     # Wraps a single real light with defaults; the discovery defaults step
     # layers the chosen sensors and settings on top.
     return {
@@ -1983,7 +1983,7 @@ def _validate_hold_entities(
 
 
 def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
-    """Return True when a light config may be converted in the given direction.
+    """Return True when a light's entry settings may convert in the given direction.
 
     Schedule-gated → scheduled needs a regular Virtual Light with a schedule in any gate
     mode; scheduled → schedule-gated needs a scheduled light with a schedule.
@@ -2004,7 +2004,7 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
 _SCHEDULED_LIGHT_SIDES = (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS)
 # Keys that live at the top level of a light entry (identity, members, the
 # schedule and its policy, the two sets of settings) rather than inside one;
-# conversion strips them when lifting a flat config into a set of settings
+# conversion strips them when lifting flat entry settings into a set of settings
 # and when flattening one back out.
 _LIGHT_ENTRY_KEYS = frozenset(
     {
@@ -2202,7 +2202,7 @@ class MoLightConfigFlow(
         # Set when a manual create step is re-entered from the entity_id
         # confirm step's "change" option, so the form comes back prefilled.
         self._prefill: dict[str, Any] | None = None
-        # Stashed create payload while the entity_id confirm step is shown.
+        # Stashed entry settings while the entity_id confirm step is shown.
         self._pending: dict[str, Any] | None = None
         # Stashed create while the wrapped-lights notice is shown, and the
         # wrapped lights it has already named.
@@ -2354,7 +2354,7 @@ class MoLightConfigFlow(
     ) -> tuple[config_entries.FlowResult | None, dict[str, str]]:
         """Finalize a manual create: create the entry, or divert to confirm.
 
-        `data` is the flat entry payload (sections already flattened);
+        `data` is the flat entry settings (sections already flattened);
         `prefill` is the raw, still-nested form input, stashed so the
         "go back and change" path can re-show the form as submitted.
         Returns (result, errors). When errors is non-empty the caller re-shows
@@ -2691,7 +2691,7 @@ class MoLightConfigFlow(
 
     async def _finish_discovery(
         self,
-        payload: Callable[[str, str], dict[str, Any]],
+        build_entry_settings: Callable[[str, str], dict[str, Any]],
         overrides: dict[str, Any],
     ) -> config_entries.FlowResult:
         """Bulk-create the stashed selection, layering the chosen settings on top.
@@ -2754,15 +2754,15 @@ class MoLightConfigFlow(
             base = candidates.get(entity_id, entity_id)
             composed = f"{prefix}{base}{suffix}"
             if target == AFFIX_TARGET_NAME:
-                data = payload(entity_id, composed)
+                data = build_entry_settings(entity_id, composed)
             else:
-                data = payload(entity_id, base)
+                data = build_entry_settings(entity_id, base)
                 # Only pin an explicit id when the affix actually changes it;
                 # otherwise leave the name-derived default (and its _2 dedupe).
                 if composed != base:
                     data[CONF_ENTITY_ID] = composed
             # The defaults form supplies every editable setting; the source
-            # entity, name and entity_id it never touches stay as the payload
+            # entity, name and entity_id it never touches stay as the builder
             # set them.
             data.update(overrides)
             flows.append(
@@ -2828,7 +2828,8 @@ class MoLightConfigFlow(
         """Adjust the defaults applied to every discovered occupancy sensor."""
         if user_input is not None:
             return await self._finish_discovery(
-                _occupancy_payload, _flatten_sections(user_input, _OCCUPANCY_SECTIONS)
+                _occupancy_entry_settings,
+                _flatten_sections(user_input, _OCCUPANCY_SECTIONS),
             )
         return self.async_show_form(
             step_id="discover_occupancy_defaults",
@@ -2866,7 +2867,9 @@ class MoLightConfigFlow(
         if user_input is not None:
             errors = _validate_illuminance_band(user_input)
             if not errors:
-                return await self._finish_discovery(_illuminance_payload, user_input)
+                return await self._finish_discovery(
+                    _illuminance_entry_settings, user_input
+                )
         return self.async_show_form(
             step_id="discover_illuminance_defaults",
             data_schema=self.add_suggested_values_to_schema(
@@ -2947,7 +2950,7 @@ class MoLightConfigFlow(
                     self._light_pending = {"kind": "discovery", "flat": flat}
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
-                return await self._finish_discovery(_light_payload, flat)
+                return await self._finish_discovery(_light_entry_settings, flat)
         return self._show_discover_light_defaults(user_input, errors, placeholders)
 
     def _show_discover_light_defaults(
@@ -2995,14 +2998,14 @@ class MoLightConfigFlow(
             for entity_id, entry in _virtual_light_entries(
                 self.hass, (entity_type,)
             ).items()
-            if _conversion_eligible(_molight_cfg(entry), to_scheduled=to_scheduled)
+            if _conversion_eligible(_entry_settings(entry), to_scheduled=to_scheduled)
         }
 
     def _conversion_option(
         self, entity_id: str, label: str, entry: config_entries.ConfigEntry
     ) -> selector.SelectOptionDict:
         """Build a labeled conversion choice including its retained schedule."""
-        schedule_name = self._entity_label(_molight_cfg(entry)[CONF_SCHEDULE_ENTITY])
+        schedule_name = self._entity_label(_entry_settings(entry)[CONF_SCHEDULE_ENTITY])
         return selector.SelectOptionDict(
             value=entity_id, label=f"{label} ({schedule_name})"
         )
@@ -3161,7 +3164,7 @@ class MoLightConfigFlow(
                     entry = self.hass.config_entries.async_get_entry(entry_id)
                     if entry is None:
                         return self.async_abort(reason="conversion_targets_changed")
-                    cfg = _molight_cfg(entry)
+                    cfg = _entry_settings(entry)
                     to_scheduled = self._conversion["to_scheduled"]
                     if not _conversion_eligible(cfg, to_scheduled=to_scheduled):
                         return self.async_abort(reason="conversion_targets_changed")
@@ -3360,7 +3363,7 @@ class MoLightConfigFlow(
         already = {
             eid
             for eid, entry in lights.items()
-            if _molight_cfg(entry).get(key) == sensor
+            if _entry_settings(entry).get(key) == sensor
         }
 
         errors: dict[str, str] = {}
@@ -3383,7 +3386,7 @@ class MoLightConfigFlow(
                     entry = lights.get(eid)
                     if entry is None:
                         continue  # a stale pick no longer backed by a light entry
-                    cfg = _molight_cfg(entry)
+                    cfg = _entry_settings(entry)
                     if (
                         occ_timeout is not None
                         and int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
@@ -3412,7 +3415,7 @@ class MoLightConfigFlow(
                     entry = lights[eid]
                     opts = {
                         k: v
-                        for k, v in _molight_cfg(entry).items()
+                        for k, v in _entry_settings(entry).items()
                         if k not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID, key)
                     }
                     self.hass.config_entries.async_update_entry(entry, options=opts)
@@ -3971,7 +3974,7 @@ class MoLightConfigFlow(
                     if key in flat
                 }
                 if pending["kind"] == "discovery":
-                    return await self._finish_discovery(_light_payload, flat)
+                    return await self._finish_discovery(_light_entry_settings, flat)
                 result, errors = await self._resolve_and_create(
                     entity_type=ENTITY_TYPE_LIGHT,
                     name=flat[CONF_NAME],
@@ -4159,7 +4162,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         """Initialize the options flow for the given entry."""
         self._entry = entry
-        self._cfg = _molight_cfg(entry)
+        self._cfg = _entry_settings(entry)
         self._light_pending: dict[str, Any] | None = None
         self._light_selection_values = {
             key: self._cfg[key]
@@ -4172,7 +4175,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         }
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
-        # Payload held while the wrapped-lights notice is shown, and the
+        # Entry settings held while the wrapped-lights notice is shown, and the
         # wrapped lights it has already named.
         self._wrapped_pending: dict[str, Any] | None = None
         self._wrapped_confirmed: list[str] = []
@@ -4663,9 +4666,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     def _show_light_form(
         self, values: dict[str, Any] | None, errors: dict[str, str]
     ) -> config_entries.FlowResult:
-        """Render the light's options form: the input, else the stored values."""
+        """Render the light's options form: the input, else the entry settings."""
         cfg = self._cfg
-        # Current values are applied as suggested values (not defaults) so the
+        # Entry settings are applied as suggested values (not defaults) so the
         # optional fields (sensor references, brightness/fade overrides) can
         # be cleared back to "not set" once given a value.
         schema = vol.Schema(
@@ -4829,11 +4832,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         )
 
     def _scheduled_light_defaults(self, side: str) -> dict[str, Any] | None:
-        """Editing starts each side from the entry's stored settings."""
+        """Editing starts each side from the entry settings."""
         return self._cfg.get(side, {})
 
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
-        """Store both settings mappings as one complete options payload."""
+        """Store both settings mappings as the entry's complete options."""
         data = {**self._scheduled_light_shared, **self._scheduled_light_settings}
         side, errors = _stale_light_settings(
             self.hass,

@@ -45,7 +45,7 @@ from .const import (
     PLATFORMS_BY_ENTITY_TYPE,
     REMOTE_ACTION_FIELDS,
 )
-from .helpers import molight_config
+from .helpers import entry_settings
 from .issues import async_clear_entry_issues, async_clear_issues_naming
 from .remote import async_setup_remote
 
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-# Config keys under which one MoLight entry may reference another entry's
+# Entry settings keys under which one MoLight entry may reference another entry's
 # entities. Cleaned up when the referenced entry is removed: a dangling
 # reference is worse than a missing one (a light whose gate-mode schedule
 # entity no longer exists would read the gate as permanently closed and
@@ -336,7 +336,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         rest = [platform for platform in platforms if platform not in first]
     await hass.config_entries.async_forward_entry_setups(entry, rest)
 
-    # Reload the entry whenever options are updated so entities pick up new values.
+    # Reload the entry on an options edit so entities read the new entry settings.
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
@@ -414,7 +414,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     for other in hass.config_entries.async_entries(DOMAIN):
         if other.entry_id == entry.entry_id:
             continue
-        cfg = molight_config(other)
+        cfg = entry_settings(other)
         cleaned = _remap_references(
             cfg, dict.fromkeys(removed), _REFERENCE_KEYS, _REFERENCE_LIST_KEYS
         )

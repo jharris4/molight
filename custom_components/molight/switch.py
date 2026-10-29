@@ -28,7 +28,7 @@ from .const import (
     ENTITY_TYPE_SCHEDULED_LIGHT,
     SIGNAL_AUTO_OFF_TOGGLED,
 )
-from .helpers import EntityIdFollowingRestoreEntity, molight_config, suggested_entity_id
+from .helpers import EntityIdFollowingRestoreEntity, entry_settings, suggested_entity_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -64,7 +64,7 @@ class AutoOffSwitch(SwitchEntity, EntityIdFollowingRestoreEntity):
         """Initialize the auto-off switch."""
         self.hass = hass
         self._entry_id = entry.entry_id
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = f"{cfg[CONF_NAME]} Auto-off"
         self._attr_unique_id = f"{entry.entry_id}_auto_off"
         self._attr_is_on = True

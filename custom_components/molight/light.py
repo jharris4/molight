@@ -407,13 +407,13 @@ from .helpers import (
     EntityIdFollowingRestoreEntity,
     GoneJudge,
     entity_gone,
+    entry_settings,
     group_leaves,
     light_descendants,
     lights_lit_with,
     lights_support_brightness,
     lights_support_transition,
     match_option,
-    molight_config,
     same_entity,
     send_event,
     shared_lights,
@@ -979,25 +979,23 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual light from its config entry."""
         self.hass = hass
-        entry_cfg = molight_config(entry)
-        self._attr_name = entry_cfg[CONF_NAME]
+        cfg = entry_settings(entry)
+        self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
 
-        self._lights: list[str] = entry_cfg.get(CONF_LIGHTS, [])
-        self._is_scheduled_light = (
-            entry_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
-        )
+        self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
+        self._is_scheduled_light = cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
         self._settings_schedule_entity: str | None = (
-            entry_cfg.get(CONF_SCHEDULE_ENTITY) if self._is_scheduled_light else None
+            cfg.get(CONF_SCHEDULE_ENTITY) if self._is_scheduled_light else None
         )
-        self._schedule_end_action = entry_cfg.get(
+        self._schedule_end_action = cfg.get(
             CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION
         )
-        self._outside_schedule_settings: dict[str, Any] = entry_cfg.get(
+        self._outside_schedule_settings: dict[str, Any] = cfg.get(
             CONF_OUTSIDE_SCHEDULE_SETTINGS, {}
         )
-        self._inside_schedule_settings: dict[str, Any] = entry_cfg.get(
+        self._inside_schedule_settings: dict[str, Any] = cfg.get(
             CONF_INSIDE_SCHEDULE_SETTINGS, {}
         )
         self._inside_schedule = False
@@ -1022,12 +1020,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # seed puts it back there instead of adopting it with a timer.
         self._restored_standby = False
         # Every settings mapping this light may run under (both sides of a
-        # scheduled light, or a regular Virtual Light's own config), so the entity
+        # scheduled light, or a regular Virtual Light's entry settings), so the entity
         # references of all of them can be subscribed to up front.
         self._settings_sets: tuple[dict[str, Any], ...] = (
             (self._outside_schedule_settings, self._inside_schedule_settings)
             if self._is_scheduled_light
-            else (entry_cfg,)
+            else (cfg,)
         )
         self._apply_light_settings(self._settings_sets[0])
 
@@ -1171,7 +1169,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _apply_light_settings(self, cfg: dict[str, Any]) -> None:
         """Load one flat Virtual Light settings mapping.
 
-        A regular Virtual Light applies its entry config once; a Virtual
+        A regular Virtual Light applies its entry settings once; a Virtual
         Scheduled Light applies its outside- or inside-schedule mapping and
         re-applies the other one on every schedule edge, so everything set
         here must be derivable from the mapping alone.
@@ -1242,7 +1240,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._warn_transition = _opt_transition(cfg.get(CONF_WARN_TRANSITION))
 
         # Sensor wiring. The schedule fields only ever come from a regular
-        # Virtual Light's config; a Virtual Scheduled Light's settings forms
+        # Virtual Light's entry settings; a Virtual Scheduled Light's settings forms
         # omit them (its schedule selects settings rather than gating them).
         self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)
         self._maintain_entity = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
@@ -1299,7 +1297,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                         ATTR_ACTIVE_SETTINGS_WINDOW
                     )
                     self._settings_window_start = self._restored_window_start
-                # A boundary off deferred under a previous configuration no
+                # A boundary off deferred under earlier entry settings no
                 # longer applies once the end action is anything but "turn off".
                 # It deliberately survives a schedule swap, unlike the
                 # same-schedule-guarded restores above: the off was already

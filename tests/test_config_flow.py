@@ -146,7 +146,7 @@ from custom_components.molight.const import (
     SCHEDULE_OPERATOR_ANY,
     STANDBY_KEYS,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import TORONTO, set_home, settle, setup_entries
 from tests.real_entities import RealButton, add_real
 
@@ -597,7 +597,7 @@ async def test_schedule_options_reject_a_window_that_never_opens(
 ) -> None:
     """The Configure form applies the same check and keeps the saved window."""
     await setup_entries(hass, schedule_entry)
-    saved = molight_config(schedule_entry)[CONF_TIME_WINDOWS]
+    saved = entry_settings(schedule_entry)[CONF_TIME_WINDOWS]
 
     result = await hass.config_entries.options.async_init(schedule_entry.entry_id)
     result = await _choose_time_schedule_options(hass, result)
@@ -607,7 +607,7 @@ async def test_schedule_options_reject_a_window_that_never_opens(
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "window_never_opens"}
-    assert molight_config(schedule_entry)[CONF_TIME_WINDOWS] == saved
+    assert entry_settings(schedule_entry)[CONF_TIME_WINDOWS] == saved
 
 
 @pytest.mark.asyncio
@@ -741,7 +741,7 @@ async def test_schedule_options_can_change_definition(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    cfg = molight_config(schedule_entry)
+    cfg = entry_settings(schedule_entry)
     assert cfg[CONF_SCHEDULE_DEFINITION] == SCHEDULE_DEFINITION_BINARY_SENSOR
     assert cfg[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
     assert CONF_TIME_WINDOWS not in cfg
@@ -824,7 +824,7 @@ async def test_source_schedule_options_reject_schedule_source(
         "binary_sensor.test_schedule"
         in _selector_config(result, CONF_SCHEDULE_SOURCE)["exclude_entities"]
     )
-    assert molight_config(entry)[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
+    assert entry_settings(entry)[CONF_SCHEDULE_SOURCE] == "binary_sensor.house_mode"
 
 
 @pytest.mark.asyncio
@@ -865,7 +865,7 @@ async def test_schedule_options_can_change_source_definition_to_time(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg == {
         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
         CONF_NAME: "Daytime",
@@ -1290,7 +1290,7 @@ async def test_scheduled_light_options_edit_both_settings(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg[CONF_NAME] == "Hallway Updated"
     assert cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_TURN_OFF
     assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 240
@@ -1597,7 +1597,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
-    # Outside: keep the target, so the selection page shows the stored values.
+    # Outside: keep the target, so the selection page shows the entry settings.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -1639,7 +1639,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     outside = cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert outside[CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
     assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
@@ -1679,7 +1679,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    outside = molight_config(entry)[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    outside = entry_settings(entry)[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
     assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in outside
 
@@ -1733,7 +1733,7 @@ async def test_scheduled_light_options_inside_selection_page(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert CONF_TURN_ON_SELECT_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert cfg[CONF_INSIDE_SCHEDULE_SETTINGS][CONF_TURN_ON_SELECT_OPTION] == "Night"
 
@@ -1981,7 +1981,7 @@ async def _stored_option(
         (created,) = [
             e
             for e in hass.config_entries.async_entries(DOMAIN)
-            if molight_config(e).get(CONF_LIGHTS) == ["light.desk"]
+            if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
         ]
         return created.data[CONF_TURN_ON_SELECT_OPTION]
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -2315,7 +2315,7 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert CONF_TURN_ON_SELECT_ENTITY not in cfg
     assert CONF_TURN_ON_SELECT_OPTION not in cfg
     assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in cfg
@@ -2379,7 +2379,7 @@ async def test_light_options_prefill_and_update_turn_on_selection(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.desired_theme"
     assert cfg[CONF_TURN_ON_SELECT_OPTION] == "Warm White"
 
@@ -2485,7 +2485,7 @@ async def test_light_options_can_clear_warn_brightness(hass: HomeAssistant) -> N
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_WARN_TIMEOUT] == 20
     assert CONF_WARN_BRIGHTNESS not in cfg
 
@@ -2942,7 +2942,7 @@ async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert CONF_DOOR_ENTITY not in molight_config(light)
+    assert CONF_DOOR_ENTITY not in entry_settings(light)
 
 
 @pytest.mark.asyncio
@@ -2999,7 +2999,7 @@ async def test_light_options_validate_and_clear_transitions(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_AUTO_OFF_TRANSITION] == 4
     assert CONF_WARN_TRANSITION not in cfg
     assert CONF_AUTO_ON_TRANSITION not in cfg
@@ -3041,7 +3041,7 @@ async def test_light_flow_error_keeps_submitted_values(hass: HomeAssistant) -> N
 async def test_light_options_error_keeps_submitted_values(
     hass: HomeAssistant,
 ) -> None:
-    """A rejected options submission comes back as typed, not the stored values."""
+    """A rejected options submission comes back as typed, not the entry settings."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3395,7 +3395,7 @@ async def test_light_options_can_clear_occupancy_reference(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(light)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(light)
 
 
 @pytest.mark.asyncio
@@ -3422,7 +3422,7 @@ async def test_schedule_options_round_trip(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    assert molight_config(schedule_entry)[CONF_TIME_WINDOWS] == [
+    assert entry_settings(schedule_entry)[CONF_TIME_WINDOWS] == [
         {
             "start": {"time": "20:00:00", "sun": "sunset", "combine": "latest"},
             "end": {"time": "06:00:00"},
@@ -3545,7 +3545,7 @@ async def test_discover_occupancy_filters_and_creates(hass: HomeAssistant) -> No
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     # Defaults applied.
@@ -3584,7 +3584,7 @@ async def test_discover_affix_targets_name(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     assert created[0].title == "Auto Hall Motion (occ)"
@@ -3623,7 +3623,7 @@ async def test_discover_affix_targets_entity_id(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
+        if entry_settings(e).get(CONF_OCCUPANCY_SENSOR) == "binary_sensor.hall_motion"
     ]
     assert len(created) == 1
     # Name is untouched; only the entity_id carries the affix.
@@ -3666,7 +3666,7 @@ async def test_discover_illuminance_creates_with_defaults(
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_ILLUMINANCE_SENSOR) == "sensor.office_lux"
+        if entry_settings(e).get(CONF_ILLUMINANCE_SENSOR) == "sensor.office_lux"
     ]
     assert len(created) == 1
     assert created[0].data[CONF_ENTITY_TYPE] == ENTITY_TYPE_ILLUMINANCE
@@ -3729,7 +3729,7 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_LIGHTS) == ["light.desk"]
+        if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
     ]
     assert len(created) == 1
     assert created[0].data[CONF_LIGHT_TIMEOUT] == 300
@@ -3802,7 +3802,7 @@ async def test_discover_light_creates_with_turn_on_selection(
     created = [
         entry
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(entry).get(CONF_LIGHTS) == ["light.desk"]
+        if entry_settings(entry).get(CONF_LIGHTS) == ["light.desk"]
     ]
     assert len(created) == 1
     assert created[0].data[CONF_TURN_ON_SELECT_ENTITY] == "select.desk_preset"
@@ -3844,7 +3844,7 @@ async def test_discover_defaults_step_applies_overrides(hass: HomeAssistant) -> 
     created = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_OCCUPANCY
+        if entry_settings(e).get(CONF_ENTITY_TYPE) == ENTITY_TYPE_OCCUPANCY
     ]
     assert len(created) == 2
     assert all(e.data[CONF_OCCUPANCY_TIMEOUT] == 45 for e in created)
@@ -4386,10 +4386,10 @@ async def test_assign_occupancy_adds_and_removes(
     await hass.async_block_till_done()
 
     assert (
-        molight_config(fresh_light)[CONF_OCCUPANCY_ENTITY]
+        entry_settings(fresh_light)[CONF_OCCUPANCY_ENTITY]
         == "binary_sensor.test_occupancy"
     )
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(already_light)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(already_light)
 
 
 @pytest.mark.asyncio
@@ -4417,7 +4417,7 @@ async def test_assign_occupancy_deselect_all_removes(
     assert result["type"] == FlowResultType.ABORT
     assert result["description_placeholders"] == {"assigned": "0", "removed": "1"}
     await hass.async_block_till_done()
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(hall)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(hall)
 
 
 @pytest.mark.asyncio
@@ -4460,7 +4460,7 @@ async def test_assign_occupancy_maintain_uses_maintain_key(
     assert result["type"] == FlowResultType.ABORT
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_MAINTAIN_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
     assert CONF_OCCUPANCY_ENTITY not in cfg
 
@@ -4492,7 +4492,7 @@ async def test_assign_occupancy_skips_short_timeout(
     assert result["description_placeholders"]["skipped"] == "Closet"
     await hass.async_block_till_done()
 
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(short)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(short)
 
 
 @pytest.mark.asyncio
@@ -4519,7 +4519,7 @@ async def test_assign_illuminance_sets_mode(
     assert result["reason"] == "assign_done"
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_ILLUMINANCE_ENTITY] == "binary_sensor.test_illuminance"
     assert cfg[CONF_ILLUMINANCE_MODE] == ILLUMINANCE_MODE_GATE
 
@@ -4608,8 +4608,8 @@ async def test_assign_keeps_a_selected_light_whose_entity_id_changed_while_open(
         "removed": "1",
     }
     await hass.async_block_till_done()
-    assert molight_config(hall)[key] == sensor
-    assert key not in molight_config(kitchen)
+    assert entry_settings(hall)[key] == sensor
+    assert key not in entry_settings(kitchen)
 
 
 @pytest.mark.asyncio
@@ -4760,7 +4760,7 @@ async def test_config_flow_illuminance_rejects_hysteresis_at_threshold(
 async def test_illuminance_options_round_trip(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry
 ) -> None:
-    """Illuminance options replace the stored configuration."""
+    """Illuminance options replace the entry settings."""
     await setup_entries(hass, illuminance_entry)
 
     result = await hass.config_entries.options.async_init(illuminance_entry.entry_id)
@@ -4779,7 +4779,7 @@ async def test_illuminance_options_round_trip(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
-    cfg = molight_config(illuminance_entry)
+    cfg = entry_settings(illuminance_entry)
     assert cfg[CONF_ILLUMINANCE_SENSOR] == "sensor.lux_2"
     assert cfg[CONF_ILLUMINANCE_THRESHOLD] == 42.0
     assert cfg[CONF_ILLUMINANCE_HYSTERESIS] == 2.5
@@ -5228,7 +5228,7 @@ async def test_assign_schedule_sets_mode(
     assert result["reason"] == "assign_done"
     await hass.async_block_till_done()
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.test_schedule"
     assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
 
@@ -5325,8 +5325,8 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
         door_entity="binary_sensor.door",
         hold_entities=["input_boolean.guest"],
     )
-    # Exercise conversion from the effective options configuration, not just
-    # untouched creation data.
+    # Exercise conversion from entry settings held in options, not just
+    # untouched data.
     light = MockConfigEntry(
         domain=DOMAIN,
         data=dict(source.data),
@@ -5375,7 +5375,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
 
     assert light.entry_id == original_entry_id
     assert light.options == {}
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
     assert cfg[CONF_ENTITY_ID] == "kitchen"
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.night"
@@ -5400,7 +5400,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
             er.async_get(hass), light.entry_id
         )
     } == original_entities
-    soft_cfg = molight_config(soft_gate)
+    soft_cfg = entry_settings(soft_gate)
     assert soft_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
     assert soft_cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.dusk"
     assert soft_cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
@@ -5450,7 +5450,7 @@ async def test_convert_scheduled_light_back_to_schedule_gated(
     assert result["reason"] == "conversion_done"
     await hass.async_block_till_done()
 
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
     assert cfg[CONF_ENTITY_ID] == "hall"
     assert cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.night"
@@ -5500,7 +5500,7 @@ async def test_conversion_round_trip_restores_flat_config(
     await setup_entries(hass, source)
 
     await _convert(hass, "convert_to_scheduled", "light.kitchen")
-    cfg = molight_config(source)
+    cfg = entry_settings(source)
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
     assert (
         cfg[CONF_SCHEDULE_END_ACTION]
@@ -5530,7 +5530,7 @@ async def test_conversion_round_trip_restores_flat_config(
 
     await _convert(hass, "convert_to_regular", "light.kitchen")
     assert source.options == {}
-    assert molight_config(source) == original
+    assert entry_settings(source) == original
 
 
 @pytest.mark.asyncio
@@ -5554,7 +5554,7 @@ async def test_options_form_opened_before_a_conversion_is_refused(
     result = await hass.config_entries.options.async_init(light.entry_id)
 
     await _convert(hass, direction, "light.kitchen")
-    converted = molight_config(light)
+    converted = entry_settings(light)
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -5581,7 +5581,7 @@ async def test_options_form_opened_before_a_conversion_is_refused(
             )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "entry_converted"
-    assert molight_config(light) == converted
+    assert entry_settings(light) == converted
 
 
 @pytest.mark.asyncio
@@ -5715,8 +5715,8 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
     assert result["reason"] == "conversion_targets_changed"
     assert dict(kitchen.data) == kitchen_data
     assert dict(kitchen.options) == kitchen_options
-    assert molight_config(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
-    assert molight_config(pantry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert entry_settings(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert entry_settings(pantry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
 @pytest.mark.asyncio
@@ -5756,7 +5756,7 @@ async def test_bulk_conversion_is_atomic_when_target_is_removed(
     assert result["reason"] == "conversion_targets_changed"
     assert dict(kitchen.data) == kitchen_data
     assert dict(kitchen.options) == kitchen_options
-    assert molight_config(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert entry_settings(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
 # ---------------------------------------------------------------------------
@@ -5790,7 +5790,7 @@ async def test_options_rename_updates_entry_title(
         await hass.async_block_till_done()
 
     assert occupancy_entry.title == "Renamed Occupancy"
-    assert molight_config(occupancy_entry)[CONF_NAME] == "Renamed Occupancy"
+    assert entry_settings(occupancy_entry)[CONF_NAME] == "Renamed Occupancy"
     assert reload_spy.call_count == 1
 
 
@@ -6150,7 +6150,7 @@ async def test_assign_noop_leaves_entry_untouched(
     # No options were written; the reference still comes from the entry data.
     assert not light.options
     assert (
-        molight_config(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+        entry_settings(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
     )
 
 
@@ -6750,7 +6750,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
     assert result["step_id"] == "assign_lights"
     assert result["errors"] == {CONF_ASSIGN_LIGHTS: "assign_lights_scheduled"}
     # Nothing was applied: not even the valid pick alongside it.
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(regular)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(regular)
     # The submitted selection is preserved so it needn't be rebuilt.
     assert _suggested_values(result["data_schema"])[CONF_ASSIGN_LIGHTS] == [
         "light.hall",
@@ -6765,7 +6765,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
     assert result["reason"] == "assign_done"
     await hass.async_block_till_done()
     assert (
-        molight_config(regular)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+        entry_settings(regular)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
     )
 
 
@@ -6857,7 +6857,7 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     await hass.async_block_till_done()
 
     wrapped = {
-        molight_config(e).get(CONF_OCCUPANCY_SENSOR)
+        entry_settings(e).get(CONF_OCCUPANCY_SENSOR)
         for e in hass.config_entries.async_entries(DOMAIN)
     }
     assert "binary_sensor.hall_motion" in wrapped
@@ -6928,7 +6928,7 @@ async def test_discovery_flows_submitted_together_wrap_a_pick_once(
     wrapped = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(key) in (pick, [pick])
+        if entry_settings(e).get(key) in (pick, [pick])
     ]
     assert len(wrapped) == 1
     assert not hass.data[DATA_DISCOVERY_RESERVED]
@@ -6965,9 +6965,9 @@ async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
         source
         for e in hass.config_entries.async_entries(DOMAIN)
         for source in (
-            molight_config(e).get(key)
+            entry_settings(e).get(key)
             if key == CONF_LIGHTS
-            else [molight_config(e).get(key)]
+            else [entry_settings(e).get(key)]
         )
     ]
     assert sorted(wrapped) == picks
@@ -7270,7 +7270,7 @@ async def test_combined_schedule_options_reject_cycles(
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert molight_config(outer)[CONF_SCHEDULE_OPERATOR] == SCHEDULE_OPERATOR_ALL
+    assert entry_settings(outer)[CONF_SCHEDULE_OPERATOR] == SCHEDULE_OPERATOR_ALL
 
 
 @pytest.mark.asyncio
@@ -7484,7 +7484,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_member_cycle"
-    assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
+    assert entry_settings(hall)[CONF_LIGHTS] == ["light.hall_real"]
 
 
 @pytest.mark.asyncio
@@ -7758,7 +7758,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_shared"
-    assert molight_config(hall)[CONF_LIGHTS] == ["light.hall_real"]
+    assert entry_settings(hall)[CONF_LIGHTS] == ["light.hall_real"]
 
 
 @pytest.mark.asyncio
@@ -8009,7 +8009,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             "scheduled_light_outside" if scheduled else "light"
         )
     if entry is not None:
-        assert CONF_HOLD_ENTITIES not in molight_config(entry)
+        assert CONF_HOLD_ENTITIES not in entry_settings(entry)
 
 
 @pytest.mark.asyncio
@@ -8078,7 +8078,7 @@ def _entry_named(hass: HomeAssistant, name: str) -> MockConfigEntry:
     return next(
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_NAME) == name
+        if entry_settings(e).get(CONF_NAME) == name
     )
 
 
@@ -8223,7 +8223,7 @@ async def test_light_options_point_out_only_a_newly_wrapped_light(
     await setup_entries(hass, _light_entry("Third", "third"))
     den = _entry_named(hass, "Den")
     hass.config_entries.async_update_entry(
-        den, options={**molight_config(den), CONF_LIGHTS: ["light.other"]}
+        den, options={**entry_settings(den), CONF_LIGHTS: ["light.other"]}
     )
     await settle(hass)
 
@@ -8354,7 +8354,7 @@ async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
     hass.states.async_set("light.lamp", "off")
     hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
     den = _entry_named(hass, "Den")
-    stored = molight_config(den)[CONF_LIGHTS]
+    stored = entry_settings(den)[CONF_LIGHTS]
     result = await _open_wrap_form(hass, form)
     manager = hass.config_entries.options
     if form == "scheduled_options":
@@ -8392,7 +8392,7 @@ async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
     result = await manager.async_configure(result["flow_id"], last_page)
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "light_group_virtual"
-    assert molight_config(den)[CONF_LIGHTS] == stored
+    assert entry_settings(den)[CONF_LIGHTS] == stored
 
 
 @pytest.mark.asyncio
@@ -8517,7 +8517,7 @@ async def test_discovery_refuses_two_picks_that_share_a_light(
 
 def _light_entry_count(hass: HomeAssistant) -> int:
     return sum(
-        molight_config(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+        entry_settings(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
         for e in hass.config_entries.async_entries(DOMAIN)
     )
 
@@ -9205,7 +9205,7 @@ async def test_discovery_selection_page_rejects_timeout_raised_meanwhile(
     assert not [
         entry
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(entry).get(CONF_LIGHTS) == ["light.desk"]
+        if entry_settings(entry).get(CONF_LIGHTS) == ["light.desk"]
     ]
 
 
@@ -9269,7 +9269,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "scheduled_light_outside" if scheduled else "light"
     assert result["errors"] == _TOO_SHORT
-    settings = molight_config(hall)
+    settings = entry_settings(hall)
     if scheduled:
         settings = settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert CONF_OCCUPANCY_ENTITY not in settings
@@ -9459,7 +9459,7 @@ async def test_scheduled_light_options_prefill_and_clear_standby(
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
-    inside = molight_config(entry)[CONF_INSIDE_SCHEDULE_SETTINGS]
+    inside = entry_settings(entry)[CONF_INSIDE_SCHEDULE_SETTINGS]
     assert not set(STANDBY_KEYS) & set(inside)
 
 
@@ -9482,7 +9482,7 @@ async def test_conversion_to_schedule_gated_drops_standby(hass: HomeAssistant) -
     await setup_entries(hass, entry)
 
     await _convert(hass, "convert_to_regular", "light.porch")
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
     assert cfg[CONF_AUTO_ON_BRIGHTNESS] == 100
     assert not set(STANDBY_KEYS) & set(cfg)
@@ -9670,7 +9670,7 @@ async def test_every_form_rejects_a_blank_name(
     assert result["errors"] == {CONF_NAME: "name_required"}
     if entry is not None:
         assert entry.title == "Den"
-        assert molight_config(entry)[CONF_NAME] == "Den"
+        assert entry_settings(entry)[CONF_NAME] == "Den"
 
 
 @pytest.mark.asyncio
@@ -9702,7 +9702,7 @@ async def test_every_form_strips_the_name(
         assert result["data"][CONF_NAME] == "Hall"
     else:
         assert entry.title == "Hall"
-        assert molight_config(entry)[CONF_NAME] == "Hall"
+        assert entry_settings(entry)[CONF_NAME] == "Hall"
 
 
 # ---------------------------------------------------------------------------
@@ -9785,13 +9785,13 @@ async def test_stage_rules_use_the_whole_seconds_the_light_runs(
 
 
 def _subject_cfg(hass: HomeAssistant) -> dict:
-    """The saved config of the light the shared light forms edit or create."""
+    """The entry settings of the light the shared light forms edit or create."""
     (entry,) = [
         e
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
+        if entry_settings(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
     ]
-    return molight_config(entry)
+    return entry_settings(entry)
 
 
 async def _change_occupancy_sensor(
@@ -9897,12 +9897,12 @@ async def test_light_forms_do_not_save_a_sensor_deleted_while_open(
         assert result["description_placeholders"] == {
             "entity_id": "binary_sensor.test_occupancy"
         }
-    configs = [
-        molight_config(e)
+    cfgs = [
+        entry_settings(e)
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
+        if entry_settings(e).get(CONF_LIGHTS) == [SUBJECT_MEMBER]
     ]
-    assert "binary_sensor.test_occupancy" not in str(configs)
+    assert "binary_sensor.test_occupancy" not in str(cfgs)
 
 
 @pytest.mark.asyncio
@@ -10082,7 +10082,7 @@ async def test_combined_schedule_accepts_an_input_whose_entity_id_changed_while_
     result = await manager.async_configure(result["flow_id"], submitted)
     assert result["type"] == FlowResultType.CREATE_ENTRY, result.get("errors")
     saved = result["result"] if flow == "create" else entry
-    assert molight_config(saved)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.day"]
+    assert entry_settings(saved)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.day"]
 
 
 @pytest.mark.asyncio
@@ -10208,10 +10208,10 @@ async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
 
     if change == "removed":
         assert result["reason"] == "reference_removed"
-        assert key not in molight_config(hall)
+        assert key not in entry_settings(hall)
     else:
         assert result["reason"] == "assign_done"
-        assert molight_config(hall)[key] == f"{sensor}_new"
+        assert entry_settings(hall)[key] == f"{sensor}_new"
 
 
 @pytest.mark.asyncio
@@ -10266,7 +10266,7 @@ async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open
         assert result["errors"] == {"base": "reference_removed"}
     else:
         assert result["reason"] == "reference_removed"
-        assert molight_config(combined)[CONF_TRIGGER_SENSORS] == [
+        assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == [
             "binary_sensor.desk_occupancy"
         ]
 
@@ -10315,7 +10315,7 @@ async def test_remote_does_not_save_a_target_light_deleted_while_open(
         assert result["errors"] == {"base": "reference_removed"}
     else:
         assert result["reason"] == "reference_removed"
-        assert molight_config(remote)[CONF_TARGET_LIGHTS] == []
+        assert entry_settings(remote)[CONF_TARGET_LIGHTS] == []
 
 
 @pytest.mark.asyncio
@@ -10372,7 +10372,7 @@ async def test_an_id_taken_again_after_its_removal_is_accepted(
         {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert molight_config(hall)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    assert entry_settings(hall)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
 
 
 # ---------------------------------------------------------------------------
@@ -10739,7 +10739,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
         hass.config_entries.async_update_entry(
             hall,
             options={
-                k: v for k, v in molight_config(hall).items() if k != CONF_ENTITY_TYPE
+                k: v for k, v in entry_settings(hall).items() if k != CONF_ENTITY_TYPE
             }
             | ({} if scheduled else {CONF_HOLD_ENTITIES: [hold]}),
         )
@@ -10919,9 +10919,9 @@ async def test_occupancy_options_check_lights_through_nested_combined_sensors(
     combined = (outer, inner) if outer_first else (inner, outer)
     await setup_entries(hass, occupancy_entry, *combined)
     assert [
-        molight_config(e)[CONF_NAME]
+        entry_settings(e)[CONF_NAME]
         for e in hass.config_entries.async_entries(DOMAIN)
-        if molight_config(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_COMBINED_OCCUPANCY
+        if entry_settings(e)[CONF_ENTITY_TYPE] == ENTITY_TYPE_COMBINED_OCCUPANCY
     ] == (["Outer", "Inner"] if outer_first else ["Inner", "Outer"])
     await setup_entries(
         hass, _light_entry("Hall", "hall", occupancy_entity="binary_sensor.outer")

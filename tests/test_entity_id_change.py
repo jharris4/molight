@@ -85,7 +85,7 @@ from custom_components.molight.const import (
 )
 from custom_components.molight.helpers import (
     entity_id_changed_to,
-    molight_config,
+    entry_settings,
     same_entity,
 )
 from tests.conftest import (
@@ -124,7 +124,7 @@ def attrs(hass: HomeAssistant, entity_id: str = VIRTUAL) -> dict[str, Any]:
 
 
 def occupancy_entry(
-    source: str = "binary_sensor.motion", name: str = "Room Occupancy", **config: Any
+    source: str = "binary_sensor.motion", name: str = "Room Occupancy", **cfg: Any
 ) -> MockConfigEntry:
     """Build a Virtual Occupancy Sensor entry: binary_sensor.room_occupancy."""
     return MockConfigEntry(
@@ -135,12 +135,12 @@ def occupancy_entry(
             CONF_OCCUPANCY_SENSOR: source,
             CONF_OCCUPANCY_TIMEOUT: 30,
             CONF_FALSE_DETECTION_GRACE: 0,
-            **config,
+            **cfg,
         },
     )
 
 
-def schedule_entry(name: str = "Day", **config: Any) -> MockConfigEntry:
+def schedule_entry(name: str = "Day", **cfg: Any) -> MockConfigEntry:
     """Build a Virtual Schedule Sensor that is on at the test's noon."""
     return MockConfigEntry(
         domain=DOMAIN,
@@ -148,7 +148,7 @@ def schedule_entry(name: str = "Day", **config: Any) -> MockConfigEntry:
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
             CONF_NAME: name,
             CONF_TIME_WINDOWS: [{"start": {"time": "07:00"}, "end": {"time": "22:00"}}],
-            **config,
+            **cfg,
         },
     )
 
@@ -169,7 +169,7 @@ _LIGHT_REFERENCES = {
     CONF_TURN_ON_SELECT_OPTION: "Cozy",
     CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.source",
 }
-_REFERENCING_CONFIGS = {
+_REFERENCING_SETTINGS = {
     "light": {
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: "Refs Light",
@@ -233,42 +233,42 @@ _REFERENCING_CONFIGS = {
 _NOT_ENTITY_IDS = (CONF_ENTITY_TYPE, CONF_NAME, CONF_TURN_ON_SELECT_OPTION)
 
 
-def _entity_ids(config: Any) -> set[str]:
-    """Every entity ID anywhere in a config."""
-    if isinstance(config, dict):
+def _entity_ids(cfg: Any) -> set[str]:
+    """Every entity ID anywhere in entry settings."""
+    if isinstance(cfg, dict):
         return set().union(
-            *(_entity_ids(v) for k, v in config.items() if k not in _NOT_ENTITY_IDS)
+            *(_entity_ids(v) for k, v in cfg.items() if k not in _NOT_ENTITY_IDS)
         )
-    if isinstance(config, list):
-        return set().union(*(_entity_ids(v) for v in config))
-    return {config} if isinstance(config, str) and "." in config else set()
+    if isinstance(cfg, list):
+        return set().union(*(_entity_ids(v) for v in cfg))
+    return {cfg} if isinstance(cfg, str) and "." in cfg else set()
 
 
-def _with_new_entity_ids(config: Any) -> Any:
-    """The config with every entity ID in it replaced by its new entity ID."""
-    if isinstance(config, dict):
+def _with_new_entity_ids(cfg: Any) -> Any:
+    """The entry settings with every entity ID replaced by its new entity ID."""
+    if isinstance(cfg, dict):
         return {
             k: v if k in _NOT_ENTITY_IDS else _with_new_entity_ids(v)
-            for k, v in config.items()
+            for k, v in cfg.items()
         }
-    if isinstance(config, list):
-        return [_with_new_entity_ids(v) for v in config]
-    if isinstance(config, str) and "." in config:
-        return f"{config}_new"
-    return config
+    if isinstance(cfg, list):
+        return [_with_new_entity_ids(v) for v in cfg]
+    if isinstance(cfg, str) and "." in cfg:
+        return f"{cfg}_new"
+    return cfg
 
 
 def test_reference_fixtures_cover_every_entity_id_key() -> None:
-    """A key added to the entity ID change walk needs a config above that uses it."""
+    """A key added to the entity ID change walk needs entry settings above using it."""
     used = set()
-    for config in _REFERENCING_CONFIGS.values():
-        used |= set(config)
+    for cfg in _REFERENCING_SETTINGS.values():
+        used |= set(cfg)
         for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
-            used |= set(config.get(side, ()))
+            used |= set(cfg.get(side, ()))
     assert set(_ENTITY_ID_KEYS) | set(_ENTITY_ID_LIST_KEYS) <= used
 
 
-@pytest.mark.parametrize("entity_type", list(_REFERENCING_CONFIGS))
+@pytest.mark.parametrize("entity_type", list(_REFERENCING_SETTINGS))
 @pytest.mark.parametrize("edited", [False, True], ids=["data", "options"])
 async def test_entity_id_change_rewrites_every_reference(
     hass: HomeAssistant, freezer, entity_type: str, edited: bool
@@ -278,29 +278,27 @@ async def test_entity_id_change_rewrites_every_reference(
     The entities are registered but report nothing, so their references are
     rewritten once the time allowed for them to report is over.
     """
-    config = _REFERENCING_CONFIGS[entity_type]
-    options = {k: v for k, v in config.items() if k != CONF_ENTITY_TYPE}
-    entry = MockConfigEntry(
-        domain=DOMAIN, data=config, options=options if edited else {}
-    )
+    cfg = _REFERENCING_SETTINGS[entity_type]
+    options = {k: v for k, v in cfg.items() if k != CONF_ENTITY_TYPE}
+    entry = MockConfigEntry(domain=DOMAIN, data=cfg, options=options if edited else {})
     entry.add_to_hass(hass)
     assert await async_setup_component(hass, DOMAIN, {})
     registry = er.async_get(hass)
-    for entity_id in _entity_ids(config):
+    for entity_id in _entity_ids(cfg):
         domain, object_id = entity_id.split(".")
         registry.async_get_or_create(
             domain, "test", object_id, suggested_object_id=object_id
         )
 
-    for entity_id in _entity_ids(config):
+    for entity_id in _entity_ids(cfg):
         registry.async_update_entity(entity_id, new_entity_id=f"{entity_id}_new")
     await settle(hass)
-    assert dict(entry.data) == config
+    assert dict(entry.data) == cfg
 
     await tick(hass, freezer, ENTITY_ID_CHANGE_SETTLE_SECONDS)
-    assert dict(entry.data) == _with_new_entity_ids(config)
+    assert dict(entry.data) == _with_new_entity_ids(cfg)
     assert dict(entry.options) == (_with_new_entity_ids(options) if edited else {})
-    assert molight_config(entry) == _with_new_entity_ids(config)
+    assert entry_settings(entry) == _with_new_entity_ids(cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -440,12 +438,12 @@ async def test_entity_id_change_waits_for_a_real_light_that_is_slow_to_come_back
     calls = record_service_calls(hass)
     await start_slow_entity_id_change(hass, member, "light.kitchen_bulb")
     assert hass.states.get(MEMBER) is None
-    assert molight_config(entry)[CONF_LIGHTS] == [MEMBER]
+    assert entry_settings(entry)[CONF_LIGHTS] == [MEMBER]
     assert hass.states.get(VIRTUAL).state == "on"
 
     member.added_gate.set()
     await settle(hass)
-    assert molight_config(entry)[CONF_LIGHTS] == ["light.kitchen_bulb"]
+    assert entry_settings(entry)[CONF_LIGHTS] == ["light.kitchen_bulb"]
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["molight_state"] == "occupied"
@@ -627,7 +625,7 @@ async def test_follow_schedule_with_changed_entity_id_is_not_a_new_window(
 
     calls = record_service_calls(hass)
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
-    assert molight_config(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
+    assert entry_settings(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
     assert hass.states.get(VIRTUAL).state == "off"
     assert light_targets(calls, "turn_on") == []
     assert attrs(hass)["schedule_window_start"] == marker
@@ -717,7 +715,7 @@ async def test_settings_schedule_with_changed_entity_id_is_not_a_boundary(
     calls = record_service_calls(hass)
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
 
-    assert molight_config(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
+    assert entry_settings(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
     state = hass.states.get(virtual)
     assert state.state == "off"
     assert state.attributes["active_settings"] == "inside_schedule"
@@ -756,7 +754,7 @@ async def test_motion_source_with_changed_entity_id_continues_the_same_visit(
     motion.added_gate.set()
     await settle(hass)
 
-    assert molight_config(entry)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.hall_motion"
+    assert entry_settings(entry)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.hall_motion"
     state = hass.states.get(OCCUPANCY)
     assert state.state == "on"
     assert state.attributes["last_on_time"] == before["last_on_time"]
@@ -861,7 +859,7 @@ async def test_constituent_with_changed_entity_id_does_not_clear_the_combined_se
     await change_entity_id(hass, old_id, f"{old_id}_new")
 
     key = CONF_TRIGGER_SENSORS if role == "trigger" else CONF_MAINTAIN_SENSORS
-    assert molight_config(combined)[key] == [f"{old_id}_new"]
+    assert entry_settings(combined)[key] == [f"{old_id}_new"]
     assert hass.states.get("binary_sensor.floor_occupancy").state == "on"
     assert "off" not in seen
     assert hass.states.get(VIRTUAL).state == "off"
@@ -891,7 +889,7 @@ async def test_constituent_slow_to_come_back_does_not_clear_the_combined_sensor(
 
     constituent.added_gate.set()
     await settle(hass)
-    assert molight_config(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.radar"]
+    assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.radar"]
     assert hass.states.get("binary_sensor.floor_occupancy").state == "on"
     constituent.set(False)
     await settle(hass)
@@ -952,7 +950,7 @@ async def test_lux_source_with_changed_entity_id_keeps_the_reading(
     assert hass.states.get("binary_sensor.room_bright").state == "on"
 
     await change_entity_id(hass, "sensor.lux", "sensor.window_lux")
-    assert molight_config(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.window_lux"
+    assert entry_settings(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.window_lux"
     assert hass.states.get("binary_sensor.room_bright").state == "on"
     lux.set(1)
     await settle(hass)
@@ -1035,8 +1033,8 @@ async def test_input_with_changed_entity_id_keeps_combined_schedules_on_the_same
 
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
 
-    assert molight_config(inner)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.daytime"]
-    assert molight_config(outer)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.inner"]
+    assert entry_settings(inner)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.daytime"]
+    assert entry_settings(outer)[CONF_SCHEDULE_INPUTS] == ["binary_sensor.inner"]
     for entity_id, marker in markers.items():
         state = hass.states.get(entity_id)
         assert state.state == "on"
@@ -1082,8 +1080,8 @@ async def test_button_and_target_with_changed_entity_ids_keep_the_remote_working
     # Neither entity ID change replays the button's last press.
     await change_entity_id(hass, "event.pico_on", "event.hall_pico_on")
     await change_entity_id(hass, VIRTUAL, "light.hall")
-    assert molight_config(remote)[CONF_ON_BUTTONS_SINGLE] == ["event.hall_pico_on"]
-    assert molight_config(remote)[CONF_TARGET_LIGHTS] == ["light.hall"]
+    assert entry_settings(remote)[CONF_ON_BUTTONS_SINGLE] == ["event.hall_pico_on"]
+    assert entry_settings(remote)[CONF_TARGET_LIGHTS] == ["light.hall"]
     assert hass.states.get("light.hall").state == "off"
 
     button.press()
@@ -1116,7 +1114,7 @@ async def test_wrapping_light_follows_the_inner_lights_entity_id_change(
     assert member.is_on
 
     await change_entity_id(hass, "light.inner", "light.lamp")
-    assert molight_config(outer)[CONF_LIGHTS] == ["light.lamp"]
+    assert entry_settings(outer)[CONF_LIGHTS] == ["light.lamp"]
     state = hass.states.get("light.outer")
     assert state.state == "on"
     assert state.attributes["last_off_manual"] is None
@@ -1142,7 +1140,7 @@ async def test_entity_id_change_reaches_an_entry_that_is_disabled(
     await settle(hass)
 
     await change_entity_id(hass, OCCUPANCY, "binary_sensor.presence")
-    assert molight_config(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.presence"
+    assert entry_settings(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.presence"
     assert light.disabled_by is ConfigEntryDisabler.USER
     assert light.state is ConfigEntryState.NOT_LOADED
 
@@ -1160,7 +1158,7 @@ async def test_entity_id_changed_twice_before_reporting_ends_at_the_last_one(
     registry.async_update_entity("light.a", new_entity_id="light.b")
     registry.async_update_entity("light.b", new_entity_id="light.c")
     await tick(hass, freezer, ENTITY_ID_CHANGE_SETTLE_SECONDS)
-    assert molight_config(entry)[CONF_LIGHTS] == ["light.c"]
+    assert entry_settings(entry)[CONF_LIGHTS] == ["light.c"]
     assert (
         entity_id_changed_to(hass, "light.a")
         == entity_id_changed_to(hass, "light.b")
@@ -1170,7 +1168,7 @@ async def test_entity_id_changed_twice_before_reporting_ends_at_the_last_one(
     # Changed back, the first entity ID is the entity's own again.
     registry.async_update_entity("light.c", new_entity_id="light.a")
     await tick(hass, freezer, ENTITY_ID_CHANGE_SETTLE_SECONDS)
-    assert molight_config(entry)[CONF_LIGHTS] == ["light.a"]
+    assert entry_settings(entry)[CONF_LIGHTS] == ["light.a"]
     assert entity_id_changed_to(hass, "light.a") is None
     assert entity_id_changed_to(hass, "light.c") == "light.a"
 
@@ -1249,8 +1247,8 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
         await settle(hass)
     else:
         await tick(hass, freezer, ENTITY_ID_CHANGE_SETTLE_SECONDS)
-    assert molight_config(keeper)[CONF_HOLD_ENTITIES] == [new]
-    assert molight_config(saved)[role] == [old]
+    assert entry_settings(keeper)[CONF_HOLD_ENTITIES] == [new]
+    assert entry_settings(saved)[role] == [old]
 
 
 async def test_timeout_guard_and_removal_follow_a_sensor_whose_entity_id_changed(
@@ -1281,7 +1279,7 @@ async def test_timeout_guard_and_removal_follow_a_sensor_whose_entity_id_changed
 
     await hass.config_entries.async_remove(sensor.entry_id)
     await settle(hass)
-    assert CONF_OCCUPANCY_ENTITY not in molight_config(light)
+    assert CONF_OCCUPANCY_ENTITY not in entry_settings(light)
 
 
 # ---------------------------------------------------------------------------

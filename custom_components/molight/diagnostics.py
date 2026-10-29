@@ -1,6 +1,6 @@
 """Diagnostics for a MoLight config entry.
 
-The download holds the entry's settings, the state of every entity it created
+The download holds the entry's data and options, the state of every entity it created
 and of every entity it references, and which other MoLight entries use it.
 Home Assistant adds the integration's Repairs issues itself.
 """
@@ -13,7 +13,7 @@ from homeassistant.helpers import entity_registry as er
 
 from . import referenced_entity_ids
 from .const import CONF_ENTITY_TYPE, DOMAIN
-from .helpers import molight_config
+from .helpers import entry_settings
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -25,7 +25,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     registry = er.async_get(hass)
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     own = er.async_entries_for_config_entry(registry, entry.entry_id)
     own_ids = {reg_entry.entity_id for reg_entry in own}
     others = [
@@ -67,7 +67,7 @@ async def async_get_config_entry_diagnostics(
         "referenced_by": [
             _summary(other)
             for other in others
-            if own_ids & set(referenced_entity_ids(molight_config(other)))
+            if own_ids & set(referenced_entity_ids(entry_settings(other)))
         ],
         "runtime": dict(hass.data.get(DOMAIN, {}).get(entry.entry_id, {})),
     }

@@ -65,7 +65,7 @@ from custom_components.molight.const import (
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_GATE,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import make_light_entry, make_scheduled_light_entry, settle
 
 REMOVE_ERROR = "Unable to remove unknown job listener"
@@ -263,13 +263,13 @@ async def test_remove_source_entry_clears_source_backed_schedule_reference(
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
     await settle(hass)
-    assert molight_config(schedule)[CONF_SCHEDULE_SOURCE] == (
+    assert entry_settings(schedule)[CONF_SCHEDULE_SOURCE] == (
         "binary_sensor.rm_occupancy"
     )
 
     await _remove_entry(hass, source, entities_first=entities_first)
 
-    assert CONF_SCHEDULE_SOURCE not in molight_config(schedule)
+    assert CONF_SCHEDULE_SOURCE not in entry_settings(schedule)
     assert hass.states.get("binary_sensor.source_schedule").state == "unavailable"
 
 
@@ -370,11 +370,11 @@ async def test_remove_entry_strips_references_from_dependents(
 
     await _remove_entry(hass, occupancy, entities_first=entities_first)
 
-    light_cfg = molight_config(light)
-    assert CONF_OCCUPANCY_ENTITY not in light_cfg
-    assert light_cfg[CONF_SCHEDULE_ENTITY] == "binary_sensor.rm_schedule"
-    assert light_cfg[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
-    assert molight_config(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.other"]
+    light_settings = entry_settings(light)
+    assert CONF_OCCUPANCY_ENTITY not in light_settings
+    assert light_settings[CONF_SCHEDULE_ENTITY] == "binary_sensor.rm_schedule"
+    assert light_settings[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
+    assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.other"]
     # A form opened before the removal refuses the sensor.
     assert current_references(
         hass, {CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy"}
@@ -384,7 +384,7 @@ async def test_remove_entry_strips_references_from_dependents(
     )
 
     await _remove_entry(hass, schedule, entities_first=entities_first)
-    assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+    assert CONF_SCHEDULE_ENTITY not in entry_settings(light)
 
 
 @pytest.mark.asyncio
@@ -401,7 +401,7 @@ async def test_remove_schedule_strips_it_from_combined_schedules(
     await settle(hass)
 
     await _remove_entry(hass, schedule, entities_first=entities_first)
-    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == []
+    assert entry_settings(combined)[CONF_SCHEDULE_INPUTS] == []
     state = hass.states.get("binary_sensor.rm_combined_schedule")
     assert state.state == "off"
     assert state.attributes["resolved_schedules"] == []
@@ -450,7 +450,7 @@ async def test_remove_entry_strips_scheduled_light_references(
     await hass.config_entries.async_remove(occupancy.entry_id)
     await settle(hass)
 
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert CONF_OCCUPANCY_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert CONF_DOOR_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
     assert CONF_MAINTAIN_OCCUPANCY_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
@@ -460,17 +460,17 @@ async def test_remove_entry_strips_scheduled_light_references(
 
     await hass.config_entries.async_remove(illuminance.entry_id)
     await settle(hass)
-    cfg = molight_config(light)
+    cfg = entry_settings(light)
     assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
 
     await hass.config_entries.async_remove(inner.entry_id)
     await settle(hass)
-    assert molight_config(light)[CONF_LIGHTS] == ["light.real_1"]
+    assert entry_settings(light)[CONF_LIGHTS] == ["light.real_1"]
 
     await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
-    assert CONF_SCHEDULE_ENTITY not in molight_config(light)
+    assert CONF_SCHEDULE_ENTITY not in entry_settings(light)
     state = hass.states.get("light.rm_scheduled_light")
     assert state is not None
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
@@ -507,7 +507,7 @@ async def test_remove_wrapped_virtual_light_strips_member_reference(
 
     await _remove_entry(hass, inner, entities_first=entities_first)
 
-    assert molight_config(outer)[CONF_LIGHTS] == ["light.outer_real"]
+    assert entry_settings(outer)[CONF_LIGHTS] == ["light.outer_real"]
 
 
 @pytest.mark.asyncio
@@ -540,10 +540,10 @@ async def test_remove_entry_keeps_an_entity_id_taken_since_its_deletion(
     assert await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
 
-    assert molight_config(combined)[CONF_SCHEDULE_INPUTS] == [
+    assert entry_settings(combined)[CONF_SCHEDULE_INPUTS] == [
         "binary_sensor.rm_schedule"
     ]
-    assert current_references(hass, molight_config(combined))[1] is None
+    assert current_references(hass, entry_settings(combined))[1] is None
     state = hass.states.get("binary_sensor.rm_combined_schedule")
     assert state.attributes["resolved_schedules"] == ["binary_sensor.rm_schedule"]
 
@@ -580,8 +580,8 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
     """A scheduled light missing a set of settings must not be rewritten just to
-    materialize that set as an empty dict; that would differ from its stored
-    config and force a reload of an entry referencing nothing removed."""
+    materialize that set as an empty dict; that would differ from its entry
+    settings and force a reload of an entry referencing nothing removed."""
     occupancy = _occupancy_entry()
     partial = MockConfigEntry(
         domain=DOMAIN,

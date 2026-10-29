@@ -36,7 +36,7 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_GATE,
     RELOAD_GRACE,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import (
     crash_entries,
     finish_startup,
@@ -1275,7 +1275,7 @@ async def test_illuminance_source_with_changed_entity_id_keeps_its_reading(
     await setup_entries(hass, entry)
 
     await change_entity_id(hass, LUX, "sensor.hall_lux")
-    assert molight_config(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
+    assert entry_settings(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
     assert hass.states.get("binary_sensor.swapped_lux").state == "on"
     # Still on the bright side of the band, so the hold carried over.
     lux.set(8)
@@ -2391,7 +2391,7 @@ async def test_combined_clears_at_once_when_holding_constituent_is_removed(
     assert after.state == "off"
     assert after.attributes["last_clear_false_detection"] is False
     assert after.attributes["latest_occupied_time"] == dropout.isoformat()
-    assert molight_config(combined)[CONF_TRIGGER_SENSORS] == []
+    assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == []
 
 
 @pytest.mark.asyncio
@@ -3494,7 +3494,7 @@ async def test_combined_constituent_added_mid_cycle_brings_only_history(
         await settle(hass)
     freezer.tick(timedelta(seconds=5))
     await _edit_options(
-        hass, inner, **{role: [*molight_config(inner)[role], "binary_sensor.m3"]}
+        hass, inner, **{role: [*entry_settings(inner)[role], "binary_sensor.m3"]}
     )
     await settle(hass)
     assert hass.states.get(entity_id).state == "on"

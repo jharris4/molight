@@ -53,8 +53,8 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant, State
 
 
-def molight_config(entry: ConfigEntry) -> dict:
-    """Return the effective configuration for a MoLight entry.
+def entry_settings(entry: ConfigEntry) -> dict:
+    """Return the entry settings of a MoLight entry.
 
     Options flows store the complete edited form, so once options exist they
     fully replace the original data; merging the two would resurrect
@@ -77,7 +77,7 @@ def suggested_entity_id(
 
     Honored only at first registration: HA uniquifies with _2 on a clash and
     the registry pins the id thereafter. The object_id is read straight from
-    entry.data (the entity id is immutable and absent from molight_config once
+    entry.data (the entity id is immutable and absent from entry_settings once
     options exist). `suffix` lets the companion switch parallel its light, e.g.
     light.kitchen -> switch.kitchen_auto_off.
     """
@@ -346,7 +346,7 @@ def virtual_light_entries(
     registry = er.async_get(hass)
     result: dict[str, ConfigEntry] = {}
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if molight_config(entry).get(CONF_ENTITY_TYPE) not in entity_types:
+        if entry_settings(entry).get(CONF_ENTITY_TYPE) not in entity_types:
             continue
         for ent in er.async_entries_for_config_entry(registry, entry.entry_id):
             if ent.domain == "light":
@@ -365,7 +365,7 @@ def light_member_ids(
 ) -> list[str]:
     """Return the members of a virtual light or a light group."""
     if (entry := lights.get(entity_id)) is not None:
-        return molight_config(entry).get(CONF_LIGHTS, [])
+        return entry_settings(entry).get(CONF_LIGHTS, [])
     return group_member_ids(hass, entity_id)
 
 
@@ -408,7 +408,7 @@ def sensor_input_ids(hass: HomeAssistant, entity_id: str) -> list[str]:
         return group_member_ids(hass, entity_id)
     if reg_entry.domain != "binary_sensor":
         return []
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     inputs: list[str] = []
     for key in _SENSOR_INPUT_KEYS:
         if (
@@ -520,7 +520,7 @@ def light_owners(
         (
             (names.get(entry.entry_id, entry.title), entry)
             for entry in hass.config_entries.async_entries(DOMAIN)
-            if molight_config(entry).get(CONF_ENTITY_TYPE) in VIRTUAL_LIGHT_TYPES
+            if entry_settings(entry).get(CONF_ENTITY_TYPE) in VIRTUAL_LIGHT_TYPES
             and entry.entry_id != own_entry_id
         ),
         key=lambda owner: owner[0],
@@ -528,7 +528,7 @@ def light_owners(
     owned: dict[str, str] = {}
     for name, entry in owners:
         for light in lights_commanded(
-            hass, molight_config(entry).get(CONF_LIGHTS, []), lights
+            hass, entry_settings(entry).get(CONF_LIGHTS, []), lights
         ):
             owned.setdefault(light, name)
     return lights, owned

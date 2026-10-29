@@ -65,7 +65,7 @@ from custom_components.molight.const import (
     STATE_EFFECT,
     STATE_WARN,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import make_light_entry, settle, setup_entries
 from tests.test_config_flow import _suggested_values
 from tests.test_light_selection import _SlowSelect
@@ -119,13 +119,13 @@ def _seed(hass: HomeAssistant, entity_id: str, event_types: list[str]) -> None:
     _fire(hass, entity_id, event_types[0], event_types)
 
 
-def _remote_entry(**config) -> MockConfigEntry:
+def _remote_entry(**cfg) -> MockConfigEntry:
     data = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
         CONF_NAME: "Test Remote",
         CONF_TARGET_LIGHTS: ["light.test_light"],
         CONF_DIM_STEP: 10,
-        **config,
+        **cfg,
     }
     return MockConfigEntry(domain=DOMAIN, data=data)
 
@@ -1049,7 +1049,7 @@ async def test_removing_light_strips_remote_target(
     await hass.config_entries.async_remove(light_entry.entry_id)
     await settle(hass)
 
-    assert molight_config(remote).get(CONF_TARGET_LIGHTS, []) == []
+    assert entry_settings(remote).get(CONF_TARGET_LIGHTS, []) == []
 
 
 @pytest.mark.asyncio
@@ -1671,7 +1671,7 @@ async def test_options_reject_a_single_click_on_a_button_without_one(
 
 @pytest.mark.asyncio
 async def test_remote_options_flow(hass: HomeAssistant) -> None:
-    """Editing a remote replaces its stored config wholesale."""
+    """Editing a remote replaces its entry settings wholesale."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     await setup_entries(hass, remote)
 
@@ -1692,7 +1692,7 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await settle(hass)
 
-    cfg = molight_config(remote)
+    cfg = entry_settings(remote)
     assert cfg[CONF_NAME] == "Renamed Remote"
     assert cfg[CONF_TARGET_LIGHTS] == ["light.other_light"]
     assert cfg[CONF_DIM_STEP] == 20
@@ -1771,7 +1771,7 @@ async def test_remote_options_clears_a_set_preset_color(
     assert result["type"] == FlowResultType.CREATE_ENTRY
     await settle(hass)
 
-    cfg = molight_config(remote)
+    cfg = entry_settings(remote)
     assert CONF_PRESET_1_COLOR_TEMP not in cfg
     assert cfg[CONF_PRESET_1_BRIGHTNESS] == 60
 

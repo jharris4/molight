@@ -34,7 +34,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_OCCUPANCY,
 )
-from custom_components.molight.helpers import molight_config
+from custom_components.molight.helpers import entry_settings
 from tests.conftest import make_light_entry, molight_issues, settle, setup_entries
 from tests.real_entities import RealBinary, RealLight, add_real
 from tests.test_schedule_source_cycle import (
@@ -224,7 +224,7 @@ async def test_editing_an_occupancy_sensor_refuses_a_source_that_includes_it(
     result = await _edit_source(hass, entry, GROUP)
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
-    assert molight_config(entry)[CONF_OCCUPANCY_SENSOR] == REAL
+    assert entry_settings(entry)[CONF_OCCUPANCY_SENSOR] == REAL
 
 
 @pytest.mark.asyncio

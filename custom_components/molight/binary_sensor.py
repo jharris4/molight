@@ -102,7 +102,7 @@ from .helpers import (
     GoneJudge,
     entity_gone,
     entity_id_changed_to,
-    molight_config,
+    entry_settings,
     same_entity,
     send_event,
     sensor_dependencies,
@@ -232,7 +232,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual occupancy sensor."""
         self.hass = hass
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
@@ -609,7 +609,7 @@ class VirtualCombinedOccupancySensor(
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the combined occupancy sensor."""
         self.hass = hass
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
@@ -1139,7 +1139,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual illuminance sensor."""
         self.hass = hass
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
 
@@ -1518,7 +1518,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual schedule sensor."""
         self.hass = hass
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         self._attr_name = cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._entry_id = entry.entry_id
@@ -2035,14 +2035,14 @@ class _ScheduleNode:
 class _ScheduleTree:
     """Expands a combined schedule down to its plain MoLight schedules.
 
-    Time-window schedules are read from their config and sensor-mirroring
+    Time-window schedules are read from their entry settings and sensor-mirroring
     schedules from their state, so the result never depends on another
     combined schedule's state or on the order entities start up.
     """
 
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self.configs: dict[str, dict] = {}
+        self.settings: dict[str, dict] = {}
         self.disabled: dict[str, ConfigEntryDisabler | None] = {}
         # Each input entity, and whether its registry entry is disabled (None: none).
         self.entities: dict[str, bool | None] = {}
@@ -2060,7 +2060,7 @@ class _ScheduleTree:
         path: frozenset[str] = frozenset(),
     ) -> _ScheduleNode:
         path = path | {entry_id}
-        self.configs[entry_id] = cfg
+        self.settings[entry_id] = cfg
         return _ScheduleNode(
             "combined",
             invert=bool(cfg.get(CONF_SCHEDULE_INVERT, False)),
@@ -2097,11 +2097,11 @@ class _ScheduleTree:
             return _ScheduleNode("unknown")
         if entry is None or entry.domain != DOMAIN:
             return _ScheduleNode("unknown")
-        cfg = molight_config(entry)
+        cfg = entry_settings(entry)
         entity_type = cfg[CONF_ENTITY_TYPE]
         if entry.entry_id in path:
             # The config flow rejects loops; this guards hand-edited or
-            # concurrently saved configs against infinite expansion. Not an
+            # concurrently saved entry settings against infinite expansion. Not an
             # input to track: the root's own updates already reload it.
             _LOGGER.warning(
                 "Combined schedule %s includes itself; treating it as unknown",
@@ -2109,7 +2109,7 @@ class _ScheduleTree:
             )
             self.cycles.add(entity_id)
             return None
-        self.configs.setdefault(entry.entry_id, cfg)
+        self.settings.setdefault(entry.entry_id, cfg)
         self.disabled[entry.entry_id] = entry.disabled_by
         self.entities[entity_id] = reg_entry.disabled
         if entry.disabled_by is not None or reg_entry.disabled:
@@ -2144,14 +2144,14 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the virtual combined schedule sensor."""
         self.hass = hass
-        self._cfg = molight_config(entry)
+        self._cfg = entry_settings(entry)
         self._entry_id = entry.entry_id
         self._attr_name = self._cfg[CONF_NAME]
         self._attr_unique_id = entry.entry_id
         self._attr_is_on = False
         self._root = _ScheduleNode("combined")
         self._plain_schedules: list[str] = []
-        self._input_configs: dict[str, dict] = {}
+        self._input_settings: dict[str, dict] = {}
         self._input_disabled: dict[str, ConfigEntryDisabler | None] = {}
         self._input_entities: dict[str, bool | None] = {}
         self._reload_scheduled = False
@@ -2175,9 +2175,9 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         tree = _ScheduleTree(self.hass)
         self._root = tree.combined(self._entry_id, self._cfg)
         self._plain_schedules = sorted(tree.plain_schedules)
-        self._input_configs = {
+        self._input_settings = {
             entry_id: cfg
-            for entry_id, cfg in tree.configs.items()
+            for entry_id, cfg in tree.settings.items()
             if entry_id != self._entry_id
         }
         self._input_disabled = tree.disabled
@@ -2219,7 +2219,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
                 )
             )
             self.async_on_remove(partial(self._watch_sources, sources))
-        # Inputs are read from config, so an edit anywhere beneath must rebuild this.
+        # Inputs come from entry settings, so any edit beneath must rebuild this.
         # Not an update listener on the input: HA can skip it while that entry reloads.
         if self._input_disabled:
             self.async_on_remove(
@@ -2291,14 +2291,14 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         self, change: ConfigEntryChange, entry: ConfigEntry
     ) -> None:
         # UPDATED also fires as an entry loads and unloads; only a changed
-        # config or disabled flag needs a rebuild.
+        # entry settings or disabled flag need a rebuild.
         if (
             change is ConfigEntryChange.UPDATED
             and not self._reload_scheduled
             and entry.entry_id in self._input_disabled
             and (
                 entry.disabled_by != self._input_disabled[entry.entry_id]
-                or molight_config(entry) != self._input_configs[entry.entry_id]
+                or entry_settings(entry) != self._input_settings[entry.entry_id]
             )
         ):
             self._reload_scheduled = True

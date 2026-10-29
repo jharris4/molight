@@ -1,4 +1,4 @@
-"""Direct tests for the shared helpers (molight_config, suggested_entity_id)."""
+"""Direct tests for the shared helpers (entry_settings, suggested_entity_id)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_LIGHT,
 )
-from custom_components.molight.helpers import molight_config, suggested_entity_id
+from custom_components.molight.helpers import entry_settings, suggested_entity_id
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -30,11 +30,11 @@ def _entry(data: dict, options: dict | None = None) -> MockConfigEntry:
 
 
 # ---------------------------------------------------------------------------
-# molight_config
+# entry_settings
 # ---------------------------------------------------------------------------
 
 
-def test_molight_config_without_options_uses_data() -> None:
+def test_entry_settings_without_options_uses_data() -> None:
     entry = _entry(
         {
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
@@ -42,13 +42,13 @@ def test_molight_config_without_options_uses_data() -> None:
             CONF_LIGHTS: ["light.kitchen_real"],
         }
     )
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg[CONF_NAME] == "Kitchen"
     assert cfg[CONF_LIGHTS] == ["light.kitchen_real"]
     assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
-def test_molight_config_options_fully_replace_data() -> None:
+def test_entry_settings_options_fully_replace_data() -> None:
     """Options replace data; cleared optional fields must not resurrect."""
     entry = _entry(
         {
@@ -66,25 +66,25 @@ def test_molight_config_options_fully_replace_data() -> None:
             CONF_LIGHT_TIMEOUT: 120,
         },
     )
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     assert cfg[CONF_NAME] == "Kitchen Renamed"
     assert cfg[CONF_LIGHT_TIMEOUT] == 120
     assert CONF_OCCUPANCY_ENTITY not in cfg
 
 
-def test_molight_config_entity_type_always_comes_from_data() -> None:
+def test_entry_settings_entity_type_always_comes_from_data() -> None:
     """entry.data remains authoritative over a corrupt options type value."""
     entry = _entry(
         {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, CONF_NAME: "Kitchen"},
         options={CONF_ENTITY_TYPE: "occupancy", CONF_NAME: "Kitchen"},
     )
-    assert molight_config(entry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
+    assert entry_settings(entry)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
 
 
-def test_molight_config_returns_copies() -> None:
-    """Mutating the returned mapping must not leak into the entry."""
+def test_entry_settings_returns_copies() -> None:
+    """Mutating the returned entry settings must not leak into the entry."""
     entry = _entry({CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, CONF_NAME: "Kitchen"})
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     cfg[CONF_NAME] = "Mutated"
     assert entry.data[CONF_NAME] == "Kitchen"
 
@@ -140,7 +140,7 @@ async def test_suggested_entity_id_uniquifies_on_clash(hass: HomeAssistant) -> N
 @pytest.mark.asyncio
 async def test_suggested_entity_id_reads_data_not_options(hass: HomeAssistant) -> None:
     """The object_id is immutable: it must come from entry.data even once
-    options exist (molight_config would drop it)."""
+    options exist (entry_settings would drop it)."""
     entry = _entry(
         {
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,

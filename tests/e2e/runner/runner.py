@@ -3441,10 +3441,10 @@ def assert_removal_storage_clean(snapshot: dict[str, str]) -> None:
         )
     # HA retains the entry's immutable original data; non-empty options fully
     # replace it at runtime and are where reference cleanup is persisted.
-    effective = matches[0]["options"] or matches[0]["data"]
-    if REMOVAL_OCCUPANCY in json.dumps(effective, sort_keys=True):
+    cfg = matches[0]["options"] or matches[0]["data"]
+    if REMOVAL_OCCUPANCY in json.dumps(cfg, sort_keys=True):
         raise AssertionError(
-            f"Removed sensor reference remained in effective storage: {effective}"
+            f"Removed sensor reference remained in the entry settings: {cfg}"
         )
 
 
@@ -3454,18 +3454,18 @@ def wait_stored_entry(
     description: str,
     timeout: float = 20,
 ) -> dict[str, Any]:
-    """Poll persisted config entries until one's effective config matches."""
+    """Poll persisted config entries until one's entry settings match."""
     deadline = time.monotonic() + timeout
-    effective: dict[str, Any] | None = None
+    cfg: dict[str, Any] | None = None
     while time.monotonic() < deadline:
         for entry in stored_config_entries():
             if entry["entry_id"] == entry_id:
-                effective = entry["options"] or entry["data"]
-        if effective is not None and predicate(effective):
-            return effective
+                cfg = entry["options"] or entry["data"]
+        if cfg is not None and predicate(cfg):
+            return cfg
         time.sleep(0.2)
     raise AssertionError(
-        f"Stored entry {entry_id} never became {description}; last={effective}"
+        f"Entry settings of {entry_id} never became {description}; last={cfg}"
     )
 
 
@@ -3484,13 +3484,13 @@ def assert_converted_to_regular(
     entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
 ) -> None:
     """Assert a demoted entry stores the inside settings as a schedule-gated light."""
-    effective = wait_stored_entry(
+    cfg = wait_stored_entry(
         entry_id,
         lambda cfg: cfg.get("entity_type") == "light",
         "a regular Virtual Light",
     )
     assert_subset(
-        effective,
+        cfg,
         {
             **settings,
             "schedule_entity": schedule_entity,
@@ -3501,7 +3501,7 @@ def assert_converted_to_regular(
     leftovers = [
         key
         for key in ("outside_schedule_settings", "inside_schedule_settings")
-        if key in effective
+        if key in cfg
     ]
     if leftovers:
         raise AssertionError(f"Demoted light kept profile sections: {leftovers}")
@@ -3511,22 +3511,22 @@ def assert_converted_to_scheduled(
     entry_id: str, schedule_entity: str, end_action: str, settings: dict[str, Any]
 ) -> None:
     """Assert a promoted entry keeps old settings inside and strips inputs outside."""
-    effective = wait_stored_entry(
+    cfg = wait_stored_entry(
         entry_id,
         lambda cfg: cfg.get("entity_type") == "scheduled_light",
         "a scheduled light",
     )
     assert_subset(
-        effective,
+        cfg,
         {"schedule_entity": schedule_entity, "schedule_end_action": end_action},
         "Promoted light schedule settings",
     )
     assert_subset(
-        effective.get("inside_schedule_settings", {}),
+        cfg.get("inside_schedule_settings", {}),
         settings,
         "Promoted inside profile",
     )
-    outside = effective.get("outside_schedule_settings", {})
+    outside = cfg.get("outside_schedule_settings", {})
     retained = {
         key: value
         for key, value in settings.items()
@@ -6073,7 +6073,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_stored_entry(
         light_id,
-        lambda config: config.get("occupancy_entity") == ENTITY_ID_CHANGE_PRESENCE,
+        lambda cfg: cfg.get("occupancy_entity") == ENTITY_ID_CHANGE_PRESENCE,
         "rewritten to the occupancy sensor's new entity ID",
     )
     wait_machine_state(client, "occupied", ENTITY_ID_CHANGE_LIGHT)
@@ -6114,15 +6114,15 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_stored_entry(
         light_id,
-        lambda config: (
-            config.get("lights") == [ENTITY_ID_CHANGE_BULB]
-            and config.get("occupancy_entity") == ENTITY_ID_CHANGE_OCCUPANCY
+        lambda cfg: (
+            cfg.get("lights") == [ENTITY_ID_CHANGE_BULB]
+            and cfg.get("occupancy_entity") == ENTITY_ID_CHANGE_OCCUPANCY
         ),
         "rewritten to the real light's and sensor's new entity IDs",
     )
     wait_stored_entry(
         occupancy_id,
-        lambda config: config.get("occupancy_sensor") == ENTITY_ID_CHANGE_MOTION,
+        lambda cfg: cfg.get("occupancy_sensor") == ENTITY_ID_CHANGE_MOTION,
         "rewritten to the motion source's new entity ID",
     )
     wait_machine_state(client, "idle", ENTITY_ID_CHANGE_LIGHT)
@@ -6165,7 +6165,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
     change_entity_id_and_wait(ENTITY_ID_CHANGE_MOTION, RAW_MOTION, "off")
     wait_stored_entry(
         light_id,
-        lambda config: config.get("lights") == [RAW_TIMER_LIGHT],
+        lambda cfg: cfg.get("lights") == [RAW_TIMER_LIGHT],
         "rewritten back to the real light's first entity ID",
     )
 
@@ -8269,7 +8269,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     )
     checkpoint("unavailable inputs only decide the result when they could")
 
-    # Time-window inputs are read from config, so editing one rebuilds users.
+    # Time-window inputs are read from entry settings, so editing one rebuilds users.
     now = datetime.now(UTC).replace(microsecond=0)
     window_id = create_time_schedule(
         client,

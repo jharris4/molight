@@ -69,7 +69,7 @@ from .const import (
     REMOTE_PRESET_VALUE_KEYS,
     SIGNAL_REMOTE_ACTION,
 )
-from .helpers import molight_config
+from .helpers import entry_settings
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -251,7 +251,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     are restored carrying their last pre-shutdown event, which must never be
     replayed as a fresh press.
     """
-    cfg = molight_config(entry)
+    cfg = entry_settings(entry)
     targets: list[str] = cfg.get(CONF_TARGET_LIGHTS, [])
     dim_step = int(cfg.get(CONF_DIM_STEP) or 0) or DEFAULT_DIM_STEP
 

@@ -169,7 +169,7 @@ MoLight writes no debug logs. A setting it cannot act on is raised as a **Repair
 
 The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the virtual light then reports what its real lights show), and an error when discovery fails to create an entry.
 
-Every entry offers **Download diagnostics** in its menu on the MoLight page. The file holds the entry's settings, the state and attributes of every entity it created and of every entity it references (real lights, sensors, schedule, door, keep-on entities, select and buttons), which other MoLight entries use its entities, and MoLight's open Repairs issues. Attach it to a bug report.
+Every entry offers **Download diagnostics** in its menu on the MoLight page. The file holds the entry's data and options, the state and attributes of every entity it created and of every entity it references (real lights, sensors, schedule, door, keep-on entities, select and buttons), which other MoLight entries use its entities, and MoLight's open Repairs issues. Attach it to a bug report.
 
 To see why a light did what it did, read these [attributes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#attributes) in **Developer tools → States**:
 

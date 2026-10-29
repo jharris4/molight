@@ -39,14 +39,14 @@ PLATFORMS_BY_ENTITY_TYPE = {
     ENTITY_TYPE_REMOTE: ["sensor"],
 }
 
-# --- Shared config keys ---
+# --- Shared entry settings keys ---
 CONF_ENTITY_TYPE = "entity_type"
 CONF_NAME = "name"
 # Optional explicit object_id for the entity this entry creates, applied as a
 # suggested object_id at first registration (HA still uniquifies with _2 on a
 # clash). Absent = derive the entity_id from the name, as usual. Immutable, so
 # it lives only in entry.data and is never edited by the options flow; read it
-# straight from entry.data (molight_config would drop it once options exist).
+# straight from entry.data (entry_settings would drop it once options exist).
 CONF_ENTITY_ID = "entity_id"
 
 # Discovery filter step, shown before the entity checklist: optional area and
