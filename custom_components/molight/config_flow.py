@@ -161,6 +161,7 @@ from .helpers import (
     light_descendants as _light_descendants,
     light_member_ids as _light_member_ids,
     light_owners as _light_owners,
+    light_timeout as _light_timeout,
     lights_commanded as _lights_commanded,
     lights_lit_with as _lights_lit_with,
     lights_support_brightness,
@@ -446,8 +447,13 @@ def _derive_color_modes(
 
 
 def _flatten_light(user_input: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a Virtual Light submission into the stored flat shape."""
+    """Flatten a Virtual Light submission into the stored flat shape.
+
+    A cleared turn-off timeout is absent from the submission; it is stored
+    as None, since a missing key reads as the 300 s default.
+    """
     flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
+    flat.setdefault(CONF_LIGHT_TIMEOUT, None)
     return _apply_color_modes(flat, _LIGHT_COLOR_GROUPS)
 
 
@@ -953,10 +959,13 @@ def _min_referencing_light_timeout(
                 )
             )
         timeouts.extend(
-            int(settings.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+            timeout
             for settings in settings_sets
-            if settings.get(CONF_OCCUPANCY_ENTITY) in sensor_ids
-            or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in sensor_ids
+            if (
+                settings.get(CONF_OCCUPANCY_ENTITY) in sensor_ids
+                or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in sensor_ids
+            )
+            and (timeout := _light_timeout(settings)) is not None
         )
     return min(timeouts, default=None)
 
@@ -967,17 +976,23 @@ def _validate_light_timeout(
     """Check light_timeout >= any referenced occupancy entity's timeout.
 
     The maintain entity's latest_occupied_time feeds the countdown the same
-    way the regular occupancy entity's does, so both are checked.
+    way the regular occupancy entity's does, so both are checked. A blank
+    timeout runs no timer, so it passes that check but allows no effect or
+    warn stage: they only ever warn of a timer off.
     """
+    timeout = _light_timeout(user_input)
+    if timeout is None:
+        if int(user_input.get(CONF_EFFECT_TIMEOUT) or 0) or int(
+            user_input.get(CONF_WARN_TIMEOUT) or 0
+        ):
+            return {CONF_LIGHT_TIMEOUT: "light_timeout_blank_warning"}
+        return {}
     for key in (CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY):
         entity_id = user_input.get(key)
         if not entity_id:
             continue
         occ_timeout = _effective_occupancy_timeout(hass, entity_id)
-        if (
-            occ_timeout is not None
-            and int(user_input[CONF_LIGHT_TIMEOUT]) < occ_timeout
-        ):
+        if occ_timeout is not None and timeout < occ_timeout:
             return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
     return {}
 
@@ -1325,8 +1340,15 @@ def _validate_light_settings(
 
 
 def _clean_optional_values(values: dict[str, Any]) -> dict[str, Any]:
-    """Drop cleared optional form values before storing a settings mapping."""
-    return {key: value for key, value in values.items() if value is not None}
+    """Drop cleared optional form values before storing a settings mapping.
+
+    A blank turn-off timeout stays, as None: a missing key reads as 300 s.
+    """
+    return {
+        key: value
+        for key, value in values.items()
+        if value is not None or key == CONF_LIGHT_TIMEOUT
+    }
 
 
 def _carry_turn_on_selection(
@@ -1499,9 +1521,9 @@ def _light_option_fields(
     )
 
     fields: dict = {
-        vol.Required(
-            CONF_LIGHT_TIMEOUT, default=DEFAULT_LIGHT_TIMEOUT
-        ): selector.NumberSelector(
+        # No default: a new form suggests 300, and a cleared field is a blank
+        # timeout, which runs no timer.
+        vol.Optional(CONF_LIGHT_TIMEOUT): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=1, max=14400, unit_of_measurement="s", mode="box"
             )
@@ -1787,6 +1809,11 @@ def _illuminance_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
         CONF_ILLUMINANCE_THRESHOLD: DEFAULT_ILLUMINANCE_THRESHOLD,
         CONF_ILLUMINANCE_HYSTERESIS: DEFAULT_ILLUMINANCE_HYSTERESIS,
     }
+
+
+# What a new light's form starts from: the timeout is only suggested, so
+# clearing it saves a blank one.
+_NEW_LIGHT_PREFILL = {CONF_LIGHT_TIMEOUT: DEFAULT_LIGHT_TIMEOUT}
 
 
 def _light_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
@@ -2150,7 +2177,7 @@ class _ScheduledLightSettingsSteps:
                         ),
                     )
                 ),
-                user_input or _nest_light(previous or {}),
+                user_input or _nest_light(previous or _NEW_LIGHT_PREFILL),
             ),
             errors=errors,
         )
@@ -2766,9 +2793,7 @@ class MoLightConfigFlow(
         reserved.update(claimed)
         skipped = len(disc["selected"]) - len(selected)
         prefix, suffix, target = disc["prefix"], disc["suffix"], disc["target"]
-        # Drop cleared optional fields so they stay absent from the entry
-        # rather than being stored as None.
-        overrides = {k: v for k, v in overrides.items() if v is not None}
+        overrides = _clean_optional_values(overrides)
         flows = []
         for entity_id in selected:
             base = candidates.get(entity_id, entity_id)
@@ -2983,7 +3008,8 @@ class MoLightConfigFlow(
         return self.async_show_form(
             step_id="discover_light_defaults",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_light_option_fields(self.hass)), values or {}
+                vol.Schema(_light_option_fields(self.hass)),
+                values or _NEW_LIGHT_PREFILL,
             ),
             errors=errors,
             description_placeholders=placeholders or {},
@@ -3409,10 +3435,11 @@ class MoLightConfigFlow(
                     if entry is None:
                         continue  # a stale pick no longer backed by a light entry
                     cfg = _entry_settings(entry)
+                    light_timeout = _light_timeout(cfg)
                     if (
                         occ_timeout is not None
-                        and int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
-                        < occ_timeout
+                        and light_timeout is not None
+                        and light_timeout < occ_timeout
                     ):
                         skipped.append(eid)
                         continue
@@ -3933,7 +3960,9 @@ class MoLightConfigFlow(
                 if result is not None:
                     return result
 
-        return self._show_light_form(user_input or self._prefill or {}, errors)
+        return self._show_light_form(
+            user_input or self._prefill or _NEW_LIGHT_PREFILL, errors
+        )
 
     def _show_light_form(
         self, prefill: dict[str, Any], errors: dict[str, str]
@@ -4679,10 +4708,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self._light_pending = {"flat": flat}
                     return await self.async_step_light_selection()
                 _validate_turn_on_selection(self.hass, flat)
-                # Drop None values so absent optional entity fields are simply
-                # missing from entry.options rather than stored as None.
-                clean = {k: v for k, v in flat.items() if v is not None}
-                return self._finish(clean)
+                return self._finish(_clean_optional_values(flat))
         return self._show_light_form(user_input, errors)
 
     def _show_light_form(
@@ -4756,8 +4782,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 # An occupancy timeout or keep-on group changed with this page open.
                 return self._show_light_form(_nest_light(flat), errors)
             if not errors:
-                clean = {k: v for k, v in flat.items() if v is not None}
-                return self._finish(clean)
+                return self._finish(_clean_optional_values(flat))
 
         target = flat[CONF_TURN_ON_SELECT_ENTITY]
         suggested = {CONF_TURN_ON_SELECT_ENTITY: target}

@@ -166,7 +166,7 @@ At the top level:
 | Config | Description |
 |---|---|
 | **Lights to control** | The `light` entities to control: usually real lights, but another virtual light works too (see [Wrapping another virtual light](#wrapping-another-virtual-light)). A `switch`, such as a smart plug or a wall switch, isn't offered: wrap it as a light with Home Assistant's *Switch as X* helper first. A light belongs to one virtual light, counting a light group as the lights it contains, so to control a light from a second virtual light, add the virtual light that has it. Deleting a member cleans up the reference like any other |
-| **Turn-off timeout** | Seconds. Default `300`, range 1 to 14400 (4 h). Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors |
+| **Turn-off timeout** | Seconds, range 1 to 14400 (4 h); a new light starts at `300`. Must be >= the occupancy timeout of the referenced occupancy and maintain occupancy sensors. Clear it for no timer (see [No turn-off timeout](#no-turn-off-timeout)) |
 
 ***Sensors & triggers*** (expanded):
 
@@ -243,7 +243,7 @@ At the top level:
 
 ```
 IDLE       lights off, no timer
-ACTIVE     lights on, timer running (virtual/physical turn-on, no occupancy)
+ACTIVE     lights on, no occupancy; the turn-off timer running, if the light has one
 OCCUPIED   lights on, occupancy active, timer suspended
 COUNTDOWN  occupancy cleared, timer ticking toward lights-off
 SCHEDULED  lights on inside a follow-mode window, no timer
@@ -259,6 +259,7 @@ WARN       auto-off imminent, grace period before the lights go off
 - `ACTIVE`/`COUNTDOWN` + timer expires → `EFFECT` → `WARN` → `IDLE` (with both stages disabled this collapses to going straight to `IDLE`)
 - any state + all real lights turned off physically → `IDLE`
 - follow-mode window start → `SCHEDULED`; occupancy and illuminance are ignored until the window ends
+- with no turn-off timeout, occupancy clearing goes back to `ACTIVE` and no timer is armed (see [No turn-off timeout](#no-turn-off-timeout))
 
 Manual control is never gated: the user can always turn the virtual light on, even when it's bright or outside a schedule window.
 
@@ -370,6 +371,16 @@ Details:
 - **Unavailable keep-on entities:** one dropping to `unavailable`/`unknown` keeps its last known value (an unavailable keep-on entity never reads as releasing its hold, or as starting one). The one exception is startup, where there is no last known value to hold: a keep-on entity that is unavailable, unknown, or missing counts as not holding.
 - **Restarts:** the switch state survives restarts, and a held light adopted at startup won't start a timer.
 - **Deleted or disabled:** disabling or deleting the Auto-off switch entity releases its hold straight away, since such a switch can't be turned back on; re-enabling a disabled one brings back the state it had. A keep-on entity that is deleted or disabled stops holding in the same way.
+
+### No turn-off timeout
+
+Clear the **Turn-off timeout** field and the light runs no timer: for decorative lights that should stay on from before sunset until their schedule window ends, or a bedside lamp that only turns off manually.
+
+- **Nothing times out.** A manual turn-on, or one by occupancy, by the door or by going dark, leaves the light on, and releasing a keep-on hold or editing the light starts no timer either. Once occupancy clears the light shows `ACTIVE`, since there is no countdown. A real light found on at startup is adopted the same way.
+- **What still turns it off:** a manual off, a schedule window end (follow mode, **Gate and turn off**, or a Virtual Scheduled Light's *Turn off* end action) and a false detection, which turns off the lights it lit after the full false-detection off delay. Bright in illuminance **Control** mode pauses the on-period rather than ending it: going dark brings the light back, hours later too, until one of these ends it.
+- **Sensors are allowed.** An occupancy or door sensor can turn the light on, and the "at least the occupancy timeout" check is skipped in both directions: a blank timeout puts no ceiling on a sensor's occupancy timeout.
+- **No effect or warn stage.** The stages only warn of a timer off, so the form refuses a blank timeout while either stage has a timeout.
+- **A Virtual Scheduled Light** sets the timeout per settings set, so one side can be blank and the other not. With a blank outside timeout, *Keep state* and *Switch state* leave the light on at the window end; a light raised from standby under a blank inside timeout stays raised until the window ends.
 
 ### Events
 

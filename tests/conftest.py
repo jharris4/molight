@@ -145,7 +145,7 @@ def make_light_entry(
     *,
     name: str = "Matrix Light",
     lights: list[str] | None = None,
-    timeout: int = 60,
+    timeout: int | None = 60,
     false_off_delay: int | None = None,
     occupancy: str | None = None,
     maintain: str | None = None,

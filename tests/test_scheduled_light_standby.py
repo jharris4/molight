@@ -1298,6 +1298,49 @@ async def test_schedule_end_keep_gives_standby_the_outside_timeout(
     assert hass.states.get(VIRTUAL).state == "off"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
+)
+async def test_schedule_end_with_a_blank_outside_timeout_leaves_standby_on(
+    hass: HomeAssistant, freezer, end_action: str
+) -> None:
+    """Keep state and Switch state hand standby to settings with no timer."""
+    await _setup_porch(
+        hass, _porch(end_action=end_action, outside={CONF_LIGHT_TIMEOUT: None})
+    )
+    calls = record_service_calls(hass)
+    await _set(hass, SCHEDULE, "off")
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+    assert state.attributes["brightness"] == STANDBY
+
+    await _tick(hass, freezer, 5 * 3600)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert _light_calls(calls, "turn_off") == []
+
+
+@pytest.mark.asyncio
+async def test_blank_inside_timeout_keeps_a_raise_until_the_window_ends(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Each settings set has its own timeout: a blank inside one never drops
+    a raised light back to standby; the window end still turns it off."""
+    await _setup_porch(hass, _porch(inside={CONF_LIGHT_TIMEOUT: None}))
+    _assert_standby(hass)
+
+    await _set(hass, OCCUPANCY, "on")
+    assert _attrs(hass)["brightness"] == BOOST
+    await _set(hass, OCCUPANCY, "off")
+    assert _attrs(hass)["molight_state"] == STATE_ACTIVE
+    await _tick(hass, freezer, 5 * 3600)
+    assert _attrs(hass)["brightness"] == BOOST
+
+    await _set(hass, SCHEDULE, "off")
+    assert hass.states.get(VIRTUAL).state == "off"
+
+
 async def _member_reports_off(hass: HomeAssistant) -> None:
     """Report the member off under MoLight's last command context."""
     context = hass.data["standby_test_contexts"][-1]

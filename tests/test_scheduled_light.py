@@ -3428,3 +3428,75 @@ async def test_settings_schedule_with_a_sunset_past_its_fixed_end_stays_outside(
     state = hass.states.get(VIRTUAL)
     assert state.state == "on"
     assert state.attributes["brightness"] == brightness
+
+
+@pytest.mark.asyncio
+async def test_keep_state_boundary_into_a_blank_side_releases_a_held_light(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A light the inside sensor held passes to a blank outside side: on, no timer."""
+    occupancy = "binary_sensor.boundary_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(occupancy, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: occupancy},
+            outside={CONF_LIGHT_TIMEOUT: None},
+        ),
+    )
+    calls = record_service_calls(hass)
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_OCCUPIED
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    state = hass.states.get(VIRTUAL)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(hours=5))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert not [c for c in calls if c["service"] == "turn_off"]
+
+
+@pytest.mark.asyncio
+async def test_switch_state_into_a_blank_side_with_presence_history_runs_no_timer(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Switch state recalculates from the outside history: no timeout, no timer."""
+    occupancy = "binary_sensor.boundary_occupancy"
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(SCHEDULE, "on")
+    hass.states.async_set(occupancy, "off")
+    await setup_entries(
+        hass,
+        make_scheduled_light_entry(
+            schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
+            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: occupancy},
+            outside={CONF_LIGHT_TIMEOUT: None, CONF_OCCUPANCY_ENTITY: occupancy},
+        ),
+    )
+    calls = record_service_calls(hass)
+    hass.states.async_set(occupancy, "on")
+    await settle(hass)
+    freezer.tick(timedelta(seconds=30))
+    left = datetime.now(UTC).isoformat()
+    hass.states.async_set(occupancy, "off", {"latest_occupied_time": left})
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_COUNTDOWN
+
+    hass.states.async_set(SCHEDULE, "off")
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_ACTIVE
+
+    freezer.tick(timedelta(hours=5))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "on"
+    assert not [c for c in calls if c["service"] == "turn_off"]

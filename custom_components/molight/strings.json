@@ -241,7 +241,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -533,7 +533,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -664,7 +664,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -754,7 +754,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1030,6 +1030,7 @@
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
+      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic off for the effect and warn stages to warn of. Set both stage timeouts to 0, or set a turn-off timeout.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
@@ -1209,7 +1210,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1299,7 +1300,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1555,7 +1556,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified)."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1805,6 +1806,7 @@
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
+      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic off for the effect and warn stages to warn of. Set both stage timeouts to 0, or set a turn-off timeout.",
       "occupancy_timeout_too_long": "This occupancy timeout exceeds the turn-off timeout of a virtual light that references this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",

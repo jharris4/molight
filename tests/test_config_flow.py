@@ -3122,6 +3122,261 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
+async def _reach_light_form(hass: HomeAssistant) -> dict:
+    """Open the create flow's Virtual Light form."""
+    result = await _start_create(hass)
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+
+
+@pytest.mark.asyncio
+async def test_light_form_suggests_the_default_timeout_for_a_new_light(
+    hass: HomeAssistant,
+) -> None:
+    """A new light starts at 300 s, as a suggestion the user can clear."""
+    result = await _reach_light_form(hass)
+    assert _suggested_values(result["data_schema"])[CONF_LIGHT_TIMEOUT] == 300
+
+
+@pytest.mark.asyncio
+async def test_light_flow_saves_a_blank_timeout(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A cleared timeout is stored as a blank one, also with an occupancy sensor
+    whose occupancy timeout a set one would have to match."""
+    await setup_entries(hass, occupancy_entry)
+    result = await _reach_light_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert CONF_LIGHT_TIMEOUT in result["data"]
+    assert result["data"][CONF_LIGHT_TIMEOUT] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_key", [CONF_EFFECT_TIMEOUT, CONF_WARN_TIMEOUT])
+async def test_light_flow_rejects_a_blank_timeout_with_a_warning_stage(
+    hass: HomeAssistant, stage_key: str
+) -> None:
+    """No timer means no automatic off to warn of."""
+    result = await _reach_light_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            SECTION_WARNING: {stage_key: 10},
+        },
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {CONF_LIGHT_TIMEOUT: "light_timeout_blank_warning"}
+    # The re-shown form keeps the timeout blank rather than suggesting 300.
+    assert _suggested_values(result["data_schema"]).get(CONF_LIGHT_TIMEOUT) is None
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            SECTION_WARNING: {stage_key: 0},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_light_options_clears_the_timeout(hass: HomeAssistant) -> None:
+    """Clearing the timeout on edit saves a blank one, and the form shows it blank."""
+    entry = _light_entry("Hall Light", "hall_light")
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert _suggested_values(result["data_schema"])[CONF_LIGHT_TIMEOUT] == 60
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall_light_real"],
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    cfg = entry_settings(entry)
+    assert CONF_LIGHT_TIMEOUT in cfg
+    assert cfg[CONF_LIGHT_TIMEOUT] is None
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert _suggested_values(result["data_schema"]).get(CONF_LIGHT_TIMEOUT) is None
+
+
+@pytest.mark.asyncio
+async def test_light_options_selection_page_keeps_a_blank_timeout(
+    hass: HomeAssistant,
+) -> None:
+    """The turn-on selection page saves the blank timeout from the page before."""
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    entry = _light_entry("Hall", "hall")
+    await setup_entries(hass, entry)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall_real"],
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    cfg = entry_settings(entry)
+    assert CONF_LIGHT_TIMEOUT in cfg
+    assert cfg[CONF_LIGHT_TIMEOUT] is None
+    assert cfg[CONF_TURN_ON_SELECT_OPTION] == "Cozy"
+
+
+@pytest.mark.asyncio
+async def test_light_options_final_page_accepts_a_blank_timeout_raised_meanwhile(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A sensor's occupancy timeout raised behind an open form puts no ceiling on a
+    light with no timer: the save goes through."""
+    hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
+    hall = _light_entry("Hall", "hall")
+    await setup_entries(hass, occupancy_entry, hall)
+
+    result = await hass.config_entries.options.async_init(hall.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_SECTIONS,
+            CONF_NAME: "Hall",
+            CONF_LIGHTS: ["light.hall_real"],
+            SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"},
+            SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
+        },
+    )
+    assert result["step_id"] == "light_selection"
+    await _raise_occupancy_timeout(hass, occupancy_entry, 120)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    cfg = entry_settings(hall)
+    assert cfg[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    assert cfg[CONF_LIGHT_TIMEOUT] is None
+
+
+@pytest.mark.asyncio
+async def test_occupancy_options_ignore_a_blank_timeout_light(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """A light with no timer puts no ceiling on its sensor's occupancy timeout."""
+    light = _light_entry(
+        "Hall Light",
+        "hall_light",
+        timeout=None,
+        occupancy_entity="binary_sensor.test_occupancy",
+    )
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
+            CONF_OCCUPANCY_TIMEOUT: 3600,
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+async def test_assign_occupancy_keeps_a_blank_timeout_light(
+    hass: HomeAssistant, occupancy_entry: MockConfigEntry
+) -> None:
+    """Bulk assign never skips a light with no timer for a short timeout."""
+    light = _light_entry("Closet", "closet", timeout=None)
+    await setup_entries(hass, occupancy_entry, light)
+
+    result = await _reach_assign_kind(hass, "assign_occupancy")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+        },
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.closet"]}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "assign_done"
+    await hass.async_block_till_done()
+    assert (
+        entry_settings(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.test_occupancy"
+    )
+
+
+@pytest.mark.asyncio
+async def test_scheduled_light_saves_a_blank_timeout_per_side(
+    hass: HomeAssistant,
+) -> None:
+    """Each settings set keeps its own blank, and a blank inside form starts blank
+    when it copies a blank outside one."""
+    await _setup_night_schedule(hass)
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hallway",
+            CONF_LIGHTS: ["light.hallway_real"],
+            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            SECTION_ADVANCED: {},
+        },
+    )
+    assert result["step_id"] == "scheduled_light_outside"
+    assert _suggested_values(result["data_schema"])[CONF_LIGHT_TIMEOUT] == 300
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], dict(EMPTY_LIGHT_SECTIONS)
+    )
+    assert result["step_id"] == "scheduled_light_inside"
+    assert _suggested_values(result["data_schema"]).get(CONF_LIGHT_TIMEOUT) is None
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    outside = result["data"][CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_LIGHT_TIMEOUT in outside
+    assert outside[CONF_LIGHT_TIMEOUT] is None
+    assert result["data"][CONF_INSIDE_SCHEDULE_SETTINGS][CONF_LIGHT_TIMEOUT] == 60
+
+
 @pytest.mark.asyncio
 async def test_occupancy_options_reject_timeout_above_light_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
@@ -3722,6 +3977,32 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
     )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "discover_light_defaults"
+    assert _suggested_values(result["data_schema"])[CONF_LIGHT_TIMEOUT] == 300
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
+    )
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
+    ]
+    assert len(created) == 1
+    assert created[0].data[CONF_LIGHT_TIMEOUT] == 300
+
+
+@pytest.mark.asyncio
+async def test_discover_light_defaults_save_a_blank_timeout(
+    hass: HomeAssistant,
+) -> None:
+    """A timeout cleared on the discovery defaults form is stored blank."""
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], dict(EMPTY_LIGHT_SECTIONS)
     )
@@ -3734,7 +4015,8 @@ async def test_discover_light_creates_with_defaults(hass: HomeAssistant) -> None
         if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
     ]
     assert len(created) == 1
-    assert created[0].data[CONF_LIGHT_TIMEOUT] == 300
+    assert CONF_LIGHT_TIMEOUT in created[0].data
+    assert created[0].data[CONF_LIGHT_TIMEOUT] is None
 
 
 @pytest.mark.asyncio
@@ -4331,7 +4613,7 @@ async def _reach_assign_kind(hass: HomeAssistant, kind_step: str) -> dict:
 
 
 def _light_entry(
-    name: str, obj_id: str, *, timeout: int = 60, **refs
+    name: str, obj_id: str, *, timeout: int | None = 60, **refs
 ) -> MockConfigEntry:
     """A virtual-light entry with a pinned entity_id for predictable ids."""
     return MockConfigEntry(

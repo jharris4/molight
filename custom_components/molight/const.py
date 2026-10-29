@@ -173,7 +173,7 @@ CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
 ATTR_ACTIVE_SETTINGS = "active_settings"
 ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
 ACTIVE_SETTINGS_INSIDE = "inside_schedule"
-CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds; must be >= occupancy_timeout
+CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds, None for no timer; >= occupancy_timeout
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* (by occupancy, a door opening, illuminance going dark, or

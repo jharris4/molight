@@ -326,7 +326,6 @@ from .const import (
     CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_NAME,
@@ -352,7 +351,6 @@ from .const import (
     DEFAULT_EFFECT_TIMEOUT,
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_MODE,
-    DEFAULT_LIGHT_TIMEOUT,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_WARN_TIMEOUT,
@@ -410,6 +408,7 @@ from .helpers import (
     entry_settings,
     group_leaves,
     light_descendants,
+    light_timeout,
     lights_lit_with,
     lights_support_brightness,
     lights_support_transition,
@@ -445,6 +444,9 @@ def _is_group(state: State | None) -> bool:
         ATTR_ENTITY_ID in state.attributes or "group_entities" in state.attributes
     )
 
+
+# bright_resume_until of an on-period with no timer: it resumes whenever dark.
+_NO_END = datetime.max.replace(tzinfo=UTC)
 
 # A door binary sensor is open while on; a cover stays open until it is closed.
 _DOOR_OPEN_STATES = ("on", "open", "opening", "closing")
@@ -1174,7 +1176,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         re-applies the other one on every schedule edge, so everything set
         here must be derivable from the mapping alone.
         """
-        self._light_timeout = int(cfg.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT))
+        self._light_timeout = light_timeout(cfg)
         self._false_off_delay = int(
             cfg.get(CONF_FALSE_OFF_DELAY, DEFAULT_FALSE_OFF_DELAY)
         )
@@ -1912,7 +1914,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         elif self._machine_state == STATE_OCCUPIED:
             # The previous settings held the light indefinitely; the new ones
             # do not, so begin their normal timeout now.
-            self._machine_state = STATE_COUNTDOWN
+            self._machine_state = self._countdown_state()
             self._start_timer()
         self.async_write_ha_state()
 
@@ -3755,7 +3757,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             return
 
         has_presence_history = bool(self._occupancy_entity or self._maintain_entity)
-        self._machine_state = STATE_COUNTDOWN if has_presence_history else STATE_ACTIVE
+        self._machine_state = (
+            self._countdown_state() if has_presence_history else STATE_ACTIVE
+        )
         duration = (
             self._compute_occupancy_countdown()
             if has_presence_history
@@ -3765,7 +3769,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # The state switches now, while the usual hold policy suppresses
             # the newly calculated automatic off until the hold is released.
             self.async_write_ha_state()
-        elif duration <= 0:
+        elif duration is not None and duration <= 0:
             # Auto-off is already due. The now-active effect/warn settings
             # decide whether this is immediate or enters a warning sequence.
             self._begin_warning()
@@ -4050,15 +4054,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         elif self._machine_state == STATE_OCCUPIED:
             if self._maintain_active() or self._door_holds():
                 return  # maintain entity / open door holds the light on
-            self._machine_state = STATE_COUNTDOWN
             if self._occupancy_lit_lights and self._occupancy_clear_was_false():
                 # The whole visit was a false detection and nobody else
                 # asked for these lights, so turn them off after the
                 # false-detection off delay.
+                self._machine_state = STATE_COUNTDOWN
                 self._start_timer(
                     self._false_off_countdown(), reason=REASON_FALSE_DETECTION
                 )
             else:
+                self._machine_state = self._countdown_state()
                 self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
 
@@ -4090,7 +4095,6 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 return
             if self._occupancy_holds() or self._door_holds():
                 return  # regular occupancy / open door still holds the light on
-            self._machine_state = STATE_COUNTDOWN
             if (
                 self._occupancy_lit_lights
                 and self._occupancy_clear_was_false()
@@ -4099,10 +4103,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # Both sensors flagged their clears false: the whole episode
                 # was a false detection; a genuine presence on either side
                 # earns the normal countdown instead.
+                self._machine_state = STATE_COUNTDOWN
                 self._start_timer(
                     self._false_off_countdown(), reason=REASON_FALSE_DETECTION
                 )
             else:
+                self._machine_state = self._countdown_state()
                 self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
 
@@ -4389,7 +4395,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 return  # already winding down toward off; let it finish
             # The door was the reason to be on and it just closed: start the
             # normal countdown toward off.
-            self._machine_state = STATE_COUNTDOWN
+            self._machine_state = self._countdown_state()
             self._start_timer()
             self.async_write_ha_state()
 
@@ -4468,9 +4474,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     self._auto_lights_on(reason=REASON_ILLUMINANCE)
                 )
                 self.async_write_ha_state()
-            elif (
-                self._bright_forced_off
-                and (countdown := self._compute_illuminance_countdown()) > 0
+            elif self._bright_forced_off and (
+                (countdown := self._compute_illuminance_countdown()) is None
+                or countdown > 0
             ):
                 # Resumed ahead of standby: its timer ends there anyway.
                 self._last_on_illuminance = datetime.now(UTC)
@@ -4486,6 +4492,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     self._cancel_timer()
                 else:
                     self._machine_state = STATE_COUNTDOWN
+                    if countdown is None:
+                        self._machine_state = self._countdown_state()
                     self._start_timer(countdown)
                 self.async_write_ha_state()
             elif not gated and self._can_rest_at_standby():
@@ -4499,11 +4507,17 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     REASON_OCCUPANCY if occ_active else REASON_DOOR, REASON_SCHEDULE
                 )
 
+    def _countdown_state(self) -> str:
+        """COUNTDOWN when a turn-off timer can run; a blank timeout runs none."""
+        return STATE_ACTIVE if self._light_timeout is None else STATE_COUNTDOWN
+
     def _false_off_countdown(self) -> int:
         """Return the false-detection off delay, capped at the turn-off timeout."""
+        if self._light_timeout is None:
+            return self._false_off_delay
         return min(self._false_off_delay, self._light_timeout)
 
-    def _compute_occupancy_countdown(self) -> int:
+    def _compute_occupancy_countdown(self) -> int | None:
         """Seconds to wait after occupancy clears before turning lights off.
 
         Anchors to the latest_occupied_time across the occupancy and maintain
@@ -4511,16 +4525,19 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         occupancy timeout is respected: the lights go off light_timeout
         seconds after the person actually left, i.e. at
         latest_occupied_time + light_timeout, which is why light_timeout must
-        be >= the sensor's occupancy_timeout (the flows enforce it).
+        be >= the sensor's occupancy_timeout (the flows enforce it). None
+        with a blank timeout: nothing turns the lights off.
         """
         base = self._light_timeout
+        if base is None:
+            return None
         if lots := self._occupancy_lots():
             now = datetime.now(UTC)
             remaining = (max(lots) - now).total_seconds()
             return max(0, int(base + remaining))
         return base
 
-    def _compute_clear_countdown(self) -> int:
+    def _compute_clear_countdown(self) -> int | None:
         """Seconds to wait once the last presence hold clears.
 
         A false detection leaves latest_occupied_time at an earlier visit,
@@ -4531,6 +4548,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         as by a hold releasing, the door closing or a schedule end.
         """
         countdown = self._compute_occupancy_countdown()
+        if countdown is None:
+            return None
         user_ons = [
             t
             for t in (
@@ -4563,21 +4582,24 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     lots.append(datetime.fromisoformat(lot_str))
         return lots
 
-    def _compute_illuminance_countdown(self) -> int:
+    def _compute_illuminance_countdown(self) -> int | None:
         """Seconds left of the on-period that brightness cut short.
 
         It lasts until the later of the end recorded when brightness forced
         the light off and a timeout after the room was last occupied; neither
-        means there is nothing to resume.
+        means there is nothing to resume. None when that on-period has no
+        end: it ran under a blank timeout.
         """
-        ends = [
-            lot + timedelta(seconds=self._light_timeout)
-            for lot in self._occupancy_lots()
-        ]
+        lots = self._occupancy_lots()
+        if lots and self._light_timeout is None:
+            return None
+        ends = [lot + timedelta(seconds=self._light_timeout) for lot in lots]
         if self._bright_resume_until is not None:
             ends.append(self._bright_resume_until)
         if not ends:
             return 0
+        if max(ends) == _NO_END:
+            return None
         return max(0, int((max(ends) - datetime.now(UTC)).total_seconds()))
 
     def _transition_on(self, *, rejoin: bool = True) -> None:
@@ -4654,9 +4676,17 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         resume_until = None
         if bright_forced and not self._in_warning():
             # A countdown resumes until it would have ended; whoever held the
-            # light was there until now, so it lasts a timeout at least.
+            # light was there until now, so it lasts a timeout at least. An
+            # on-period with no timer to end it resumes whenever it is dark.
             resume_until = self._timer_ends
-            if resume_until is None and self._machine_state == STATE_OCCUPIED:
+            if resume_until is None and self._light_timeout is None:
+                if self._machine_state in (
+                    STATE_ACTIVE,
+                    STATE_COUNTDOWN,
+                    STATE_OCCUPIED,
+                ):
+                    resume_until = _NO_END
+            elif resume_until is None and self._machine_state == STATE_OCCUPIED:
                 resume_until = datetime.now(UTC) + timedelta(
                     seconds=self._light_timeout
                 )
@@ -4699,6 +4729,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # timer is armed; releasing the hold starts a fresh one.
             return
         if duration is None:
+            if self._light_timeout is None:
+                return  # a blank timeout: the lights stay on
             duration = self._light_timeout
             self._fresh_timeout_started = datetime.now(UTC)
         self._timer_ends = datetime.now(UTC) + timedelta(seconds=duration)

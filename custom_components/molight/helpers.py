@@ -29,6 +29,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
+    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_SENSORS,
     CONF_OCCUPANCY_SENSOR,
@@ -37,6 +38,7 @@ from .const import (
     CONF_SCHEDULE_SOURCE,
     CONF_TRIGGER_SENSORS,
     DATA_ENTITY_ID_CHANGED,
+    DEFAULT_LIGHT_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -65,6 +67,12 @@ def entry_settings(entry: ConfigEntry) -> dict:
     cfg = dict(entry.options) if entry.options else dict(entry.data)
     cfg[CONF_ENTITY_TYPE] = entry.data[CONF_ENTITY_TYPE]
     return cfg
+
+
+def light_timeout(settings: dict[str, Any]) -> int | None:
+    """Return a settings mapping's turn-off timeout: None if blank, 300 s if absent."""
+    timeout = settings.get(CONF_LIGHT_TIMEOUT, DEFAULT_LIGHT_TIMEOUT)
+    return None if timeout is None else int(timeout)
 
 
 def suggested_entity_id(
