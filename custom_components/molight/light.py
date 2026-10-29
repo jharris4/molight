@@ -404,8 +404,8 @@ from .const import (
 from .helpers import (
     HOLD_ENTITY_DOMAINS,
     MEMBER_LIGHT_TYPES,
+    EntityIdFollowingRestoreEntity,
     GoneJudge,
-    RenamableRestoreEntity,
     entity_gone,
     group_leaves,
     light_descendants,
@@ -961,7 +961,7 @@ _RESTORABLE_COLOR_MODES = (
 )
 
 
-class VirtualLight(LightEntity, RenamableRestoreEntity):
+class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     """A virtual light with occupancy/illuminance/schedule/door awareness."""
 
     _attr_color_mode = ColorMode.BRIGHTNESS
@@ -1268,7 +1268,7 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         could toggle lights or start countdowns based on incomplete state.
         """
         await super().async_added_to_hass()
-        self._removed = False  # a rename removes and adds the same entity
+        self._removed = False  # an entity ID change removes and adds the same entity
         self._gone = GoneJudge(self.hass)
         self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
@@ -2406,8 +2406,8 @@ class VirtualLight(LightEntity, RenamableRestoreEntity):
         new_state = event.data.get("new_state")
         old_state = event.data.get("old_state")
         if new_state is None:
-            # Deleted or disabled, unless it is only being renamed.
-            self._gone.run_unless_renamed(
+            # Deleted or disabled, unless only its entity ID is changing.
+            self._gone.run_unless_entity_id_changed(
                 entity_id, partial(self._on_entity_gone, entity_id, old_state)
             )
             return

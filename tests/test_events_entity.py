@@ -186,7 +186,7 @@ async def test_a_disabled_events_entity_drops_events_without_error(
 
 
 @pytest.mark.asyncio
-async def test_renamed_events_entity_keeps_its_last_event(hass) -> None:
+async def test_events_entity_with_changed_entity_id_keeps_its_last_event(hass) -> None:
     """A new entity ID carries the last event over, like the switch's state."""
     entry = make_light_entry(name="Hall", timeout=10)
     hass.states.async_set(REAL, "off")

@@ -40,9 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 This release adds **standby** for Virtual Scheduled Lights and makes sure each
 light is controlled by only one virtual light. It also carries a large round of
-fixes for restarts, renamed or deleted entities, slow turn-on selects, long and
-colored fades, false detections, doors, illuminance, sun schedules and Virtual
-Remote buttons.
+fixes for restarts, changed entity IDs, deleted entities, slow turn-on selects,
+long and colored fades, false detections, doors, illuminance, sun schedules and
+Virtual Remote buttons.
 
 ### Upgrade notes
 
@@ -87,9 +87,9 @@ Remote buttons.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
   has finished starting, instead of flicking off and on, and a light turned
   off manually no longer comes back on after a restart.
-- **Renamed, deleted or disabled entities**: changing an entity ID in Home
-  Assistant is now followed; every entry that used it kept the old ID and
-  quietly stopped working. A deleted or disabled sensor, door or keep-on
+- **Changed entity IDs, deleted or disabled entities**: changing an entity ID
+  in Home Assistant is now followed; every entry that used it kept the former
+  one and quietly stopped working. A deleted or disabled sensor, door or keep-on
   entity no longer keeps a light on.
 - **Long and colored fades** are no longer taken for a change at the wall.
   These cancelled warnings, restarted the timer, or kept a light on

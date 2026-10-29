@@ -31,10 +31,10 @@ from .const import (
     DEFAULT_STATES,
     DOMAIN,
     PLATFORMS,
+    SERVICE_CHANGE_ENTITY_ID,
     SERVICE_DISABLE_ENTITY,
     SERVICE_FIRE_EVENT,
     SERVICE_PARK_SELECT,
-    SERVICE_RENAME_ENTITY,
     SERVICE_SET_AVAILABLE,
     SERVICE_SET_BEHAVIOR,
     SERVICE_SET_DEVICE,
@@ -73,7 +73,7 @@ SET_STARTUP_DELAY_SCHEMA = vol.Schema(
         vol.Required(ATTR_SECONDS): vol.Coerce(float),
     }
 )
-RENAME_ENTITY_SCHEMA = vol.Schema(
+CHANGE_ENTITY_ID_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required(ATTR_NEW_ENTITY_ID): cv.entity_id,
@@ -241,7 +241,7 @@ async def async_setup_entry(
         )
 
     @callback
-    def _rename_entity(call: ServiceCall) -> None:
+    def _change_entity_id(call: ServiceCall) -> None:
         # Any registered entity, as the entity settings dialog would.
         er.async_get(hass).async_update_entity(
             call.data[ATTR_ENTITY_ID], new_entity_id=call.data[ATTR_NEW_ENTITY_ID]
@@ -304,7 +304,10 @@ async def async_setup_entry(
         schema=SET_STARTUP_DELAY_SCHEMA,
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_RENAME_ENTITY, _rename_entity, schema=RENAME_ENTITY_SCHEMA
+        DOMAIN,
+        SERVICE_CHANGE_ENTITY_ID,
+        _change_entity_id,
+        schema=CHANGE_ENTITY_ID_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN, SERVICE_DISABLE_ENTITY, _disable_entity, schema=DISABLE_ENTITY_SCHEMA

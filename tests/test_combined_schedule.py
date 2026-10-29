@@ -554,8 +554,10 @@ async def test_combination_set_up_before_its_input_picks_it_up(
 
 
 @pytest.mark.asyncio
-async def test_input_renamed_into_place_counts(hass: HomeAssistant, freezer) -> None:
-    """A schedule renamed to the entity ID a combination names is its input."""
+async def test_schedule_given_an_inputs_entity_id_becomes_that_input(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A schedule whose entity ID changes to one a combination names is its input."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     await _setup(

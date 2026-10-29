@@ -36,7 +36,7 @@ from .const import (
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_SOURCE,
     CONF_TRIGGER_SENSORS,
-    DATA_RENAMED,
+    DATA_ENTITY_ID_CHANGED,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
@@ -98,22 +98,22 @@ def send_event(
     async_dispatcher_send(hass, SIGNAL_EVENT.format(entry_id), event_type, attributes)
 
 
-def renamed_to(hass: HomeAssistant, entity_id: str) -> str | None:
-    """Return the ID an entity was renamed to since Home Assistant started."""
-    return hass.data.get(DATA_RENAMED, {}).get(entity_id)
+def entity_id_changed_to(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return the new entity ID of one changed since Home Assistant started."""
+    return hass.data.get(DATA_ENTITY_ID_CHANGED, {}).get(entity_id)
 
 
 def same_entity(hass: HomeAssistant, saved: str | None, current: str | None) -> bool:
     """Return whether a saved entity ID names the current entity.
 
-    A state saved before a rename carries the former ID.
+    A state saved before an entity ID change carries the former one.
     """
     if saved == current:
         return True
     return (
         saved is not None
         and current is not None
-        and (renamed_to(hass, saved) == current)
+        and (entity_id_changed_to(hass, saved) == current)
     )
 
 
@@ -168,14 +168,14 @@ class GoneJudge:
         self._pending: dict[str, CALLBACK_TYPE] = {}
 
     @callback
-    def run_unless_renamed(
+    def run_unless_entity_id_changed(
         self, entity_id: str, action: Callable[[], None], *, grace: bool = True
     ) -> None:
-        """Run action for an entity whose state was removed, unless it was renamed.
+        """Run action for an entity whose state is gone, unless its entity ID changed.
 
-        A rename removes the state under the former ID too, possibly before
-        the registry has fired its update: an ID the registry no
-        longer knows is judged one loop pass later. Unless the registry just
+        An entity ID change removes the state under the former entity ID too,
+        possibly before the registry has fired its update: an entity ID the
+        registry no longer knows is judged one loop pass later. Unless the registry just
         deleted it, it may be an entity with no registry entry whose
         integration is reloading, so with grace it gets RELOAD_GRACE to come
         back.
@@ -190,7 +190,7 @@ class GoneJudge:
         def _gone() -> bool:
             return (
                 hass.states.get(entity_id) is None
-                and renamed_to(hass, entity_id) is None
+                and entity_id_changed_to(hass, entity_id) is None
             )
 
         @callback
@@ -220,15 +220,16 @@ class GoneJudge:
         self._pending.clear()
 
 
-class RenamableRestoreEntity(RestoreEntity):
+class EntityIdFollowingRestoreEntity(RestoreEntity):
     """A RestoreEntity that keeps its saved state when its entity ID changes.
 
-    Home Assistant removes a renamed entity, saving its state under the ID it
-    leaves, and adds the same object again under the new one.
+    Changing an entity ID makes Home Assistant remove the entity, saving its
+    state under the entity ID it leaves, and add the same object again under
+    the new one.
     """
 
     async def async_will_remove_from_hass(self) -> None:
-        """Move the state just saved to the ID the entity is renamed to."""
+        """Move the state just saved to the new entity ID."""
         await super().async_will_remove_from_hass()
         entry = self.registry_entry
         if entry is None or entry.entity_id == self.entity_id:
@@ -443,7 +444,7 @@ def sensor_dependencies(
     pending = list(entity_ids)
     while pending:
         entity_id = pending.pop()
-        entity_id = renamed_to(hass, entity_id) or entity_id
+        entity_id = entity_id_changed_to(hass, entity_id) or entity_id
         if entity_id not in found:
             found.add(entity_id)
             if entity_id in until:
@@ -462,7 +463,7 @@ def light_descendants(
     pending = list(entity_ids)
     while pending:
         entity_id = pending.pop()
-        entity_id = renamed_to(hass, entity_id) or entity_id
+        entity_id = entity_id_changed_to(hass, entity_id) or entity_id
         if entity_id not in found:
             found.add(entity_id)
             pending.extend(light_member_ids(hass, entity_id, lights))
@@ -481,7 +482,7 @@ def lights_commanded(
     pending = list(members)
     while pending:
         entity_id = pending.pop()
-        entity_id = renamed_to(hass, entity_id) or entity_id
+        entity_id = entity_id_changed_to(hass, entity_id) or entity_id
         if entity_id in found:
             continue
         found.add(entity_id)

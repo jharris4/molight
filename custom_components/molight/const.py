@@ -299,9 +299,9 @@ DATA_AUTO_OFF_ENABLED = "auto_off_enabled"
 # hass.data key of the flags of unloaded entries, by entry_id: a reloaded
 # light seeds before its switch has restored.
 DATA_AUTO_OFF_KEPT = DOMAIN + "_auto_off_kept"
-# hass.data key of the entity ID changes followed this run, former ID to
-# current one: a state saved under the former ID describes the same entity.
-DATA_RENAMED = DOMAIN + "_renamed"
+# hass.data key of the entity ID changes followed this run, former entity ID
+# to current one: a state saved under the former one describes the same entity.
+DATA_ENTITY_ID_CHANGED = DOMAIN + "_entity_id_changed"
 # hass.data key of the IDs of entities removed with their entry this run, until
 # another entity takes the ID: a form left open may still offer one.
 DATA_REMOVED = DOMAIN + "_removed"

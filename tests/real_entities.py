@@ -2,7 +2,7 @@
 
 Most tests drive MoLight with plain states. A change to an entity's registry
 entry (a new entity ID, disabling, deleting) only happens to a real entity:
-Home Assistant removes it, and for a new ID adds the same object again.
+Home Assistant removes it, and for a new entity ID adds the same object again.
 """
 
 from __future__ import annotations
@@ -402,16 +402,18 @@ async def add_real_with_entry(
     return entry
 
 
-async def rename(hass: HomeAssistant, entity_id: str, new_entity_id: str) -> None:
-    """Change an entity's ID the way the entity settings dialog does."""
+async def change_entity_id(
+    hass: HomeAssistant, entity_id: str, new_entity_id: str
+) -> None:
+    """Change an entity ID the way the entity settings dialog does."""
     er.async_get(hass).async_update_entity(entity_id, new_entity_id=new_entity_id)
     await settle(hass)
 
 
-async def start_slow_rename(
+async def start_slow_entity_id_change(
     hass: HomeAssistant, entity: RealLight | RealBinary, new_entity_id: str
 ) -> None:
-    """Change an entity's ID and leave it gone: set its added_gate to finish."""
+    """Change an entity ID and leave it gone: set its added_gate to finish."""
     entity.added_gate = asyncio.Event()
     er.async_get(hass).async_update_entity(
         entity.entity_id, new_entity_id=new_entity_id

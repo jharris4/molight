@@ -52,7 +52,7 @@ from tests.real_entities import (
     RealLux,
     add_real,
     add_real_with_entry,
-    rename,
+    change_entity_id,
 )
 
 
@@ -1265,7 +1265,7 @@ async def test_illuminance_source_whose_entry_reloads_keeps_its_reading(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_renamed_source_keeps_its_reading(
+async def test_illuminance_source_with_changed_entity_id_keeps_its_reading(
     hass: HomeAssistant,
 ) -> None:
     """A source whose entity ID changes is followed, not dropped."""
@@ -1274,7 +1274,7 @@ async def test_illuminance_renamed_source_keeps_its_reading(
     entry = _lux_entry(LUX)
     await setup_entries(hass, entry)
 
-    await rename(hass, LUX, "sensor.hall_lux")
+    await change_entity_id(hass, LUX, "sensor.hall_lux")
     assert molight_config(entry)[CONF_ILLUMINANCE_SENSOR] == "sensor.hall_lux"
     assert hass.states.get("binary_sensor.swapped_lux").state == "on"
     # Still on the bright side of the band, so the hold carried over.

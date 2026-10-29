@@ -72,7 +72,7 @@ from tests.conftest import (
     settle,
     setup_entries,
 )
-from tests.real_entities import rename
+from tests.real_entities import change_entity_id
 
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
@@ -2904,13 +2904,13 @@ async def test_gate_recovery_tells_a_door_dropout_from_an_opening(
 
 async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -> None:
     """Make the light seed again: an options reload, a restart, or the reload
-    that follows a rename of the occupancy sensor it uses."""
+    that follows an entity ID change of the occupancy sensor it uses."""
     if how == "reload":
         assert await hass.config_entries.async_reload(light.entry_id)
     elif how == "restart":
         await restart_entries(hass, light)
     else:
-        await rename(hass, PRESENCE, "binary_sensor.presence_2")
+        await change_entity_id(hass, PRESENCE, "binary_sensor.presence_2")
     await settle(hass)
 
 
@@ -2927,7 +2927,7 @@ async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -
         ("raw", "restart"),
         ("simple", "reload"),
         ("simple", "restart"),
-        ("simple", "rename"),
+        ("simple", "entity_id_change"),
         ("combined", "reload"),
         ("combined", "restart"),
     ],

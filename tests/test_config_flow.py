@@ -4561,19 +4561,19 @@ _ASSIGN_ROLES = {
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("renames", [1, 2])
+@pytest.mark.parametrize("entity_id_changes", [1, 2])
 @pytest.mark.parametrize("assigned", [True, False], ids=["already_assigned", "new"])
 @pytest.mark.parametrize("role", list(_ASSIGN_ROLES))
-async def test_assign_keeps_a_selected_light_renamed_while_open(
+async def test_assign_keeps_a_selected_light_whose_entity_id_changed_while_open(
     hass: HomeAssistant,
     occupancy_entry: MockConfigEntry,
     illuminance_entry: MockConfigEntry,
     schedule_entry: MockConfigEntry,
     role: str,
     assigned: bool,
-    renames: int,
+    entity_id_changes: int,
 ) -> None:
-    """A light still ticked under its former ID is the same light, so it keeps
+    """A light still ticked under its former entity ID is the same light, so it keeps
     or gets the sensor; a light that was unticked loses it."""
     step, sensor_form, key = _ASSIGN_ROLES[role]
     sensor = sensor_form[CONF_ASSIGN_SENSOR]
@@ -4593,7 +4593,7 @@ async def test_assign_keeps_a_selected_light_renamed_while_open(
     )
     assert result["step_id"] == "assign_lights"
     for old, new in [("light.hall", "light.hall_new"), ("light.hall_new", "light.den")][
-        :renames
+        :entity_id_changes
     ]:
         er.async_get(hass).async_update_entity(old, new_entity_id=new)
         await settle(hass)
@@ -7487,10 +7487,10 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
 
 
 @pytest.mark.asyncio
-async def test_light_options_reject_itself_renamed_after_form_opened(
+async def test_light_options_reject_itself_with_entity_id_changed_after_form_opened(
     hass: HomeAssistant,
 ) -> None:
-    """The submit check resolves the light by entry, not by the id the form knew."""
+    """The submit check resolves the light by entry, not by the form's entity ID."""
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
     result = await hass.config_entries.options.async_init(hall.entry_id)
@@ -8268,13 +8268,14 @@ async def test_light_create_points_out_a_wrapped_light_once(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("form", _WRAP_FORMS)
-@pytest.mark.parametrize("change", ["removed", "renamed"])
+@pytest.mark.parametrize("change", ["removed", "entity_id_changed"])
 @pytest.mark.allow_warning_log
 async def test_wrapped_light_page_follows_a_light_changed_while_open(
     hass: HomeAssistant, form: str, change: str
 ) -> None:
     """A wrapped light deleted behind the page is refused as on any last page;
-    one renamed is saved under its new ID without the page again."""
+    one whose entity ID changed is saved under the new one without the
+    page again."""
     await _setup_wrap_test(hass, form)
     options = "options" in form
     result = await _open_wrap_form(hass, form)
@@ -8286,16 +8287,16 @@ async def test_wrapped_light_page_follows_a_light_changed_while_open(
         await hass.config_entries.async_remove(other.entry_id)
     else:
         er.async_get(hass).async_update_entity(
-            "light.other", new_entity_id="light.renamed"
+            "light.other", new_entity_id="light.new_id"
         )
     await settle(hass)
     result = await _pass_wrapped_notice(hass, result, options=options)
     await settle(hass)
 
-    if change == "renamed":
+    if change == "entity_id_changed":
         assert result["type"] == FlowResultType.CREATE_ENTRY
         saved = result["data"] if options else result["result"].data
-        assert saved[CONF_LIGHTS] == ["light.renamed"]
+        assert saved[CONF_LIGHTS] == ["light.new_id"]
     elif options:
         assert result["type"] == FlowResultType.ABORT
         assert result["reason"] == "reference_removed"
@@ -8665,7 +8666,7 @@ async def test_light_options_reject_own_keep_on_entities(
     assert _section_selector_config(result, SECTION_SENSORS, CONF_HOLD_ENTITIES)[
         "exclude_entities"
     ] == ["event.hall_events", "light.hall", "switch.hall_auto_off"]
-    # A stale form still knows the switch by its old id.
+    # A stale form still knows the switch by its former entity ID.
     er.async_get(hass).async_update_entity(
         "switch.hall_auto_off", new_entity_id="switch.hall_hold"
     )
@@ -9778,7 +9779,7 @@ async def test_stage_rules_use_the_whole_seconds_the_light_runs(
 
 
 # ---------------------------------------------------------------------------
-# A reference removed or renamed while a form is open
+# A reference removed, or its entity ID changed, while a form is open
 # ---------------------------------------------------------------------------
 
 
@@ -9795,7 +9796,7 @@ def _subject_cfg(hass: HomeAssistant) -> dict:
 async def _change_occupancy_sensor(
     hass: HomeAssistant, entry: MockConfigEntry, change: str
 ) -> None:
-    """Delete the occupancy fixture's entry, or rename its entity."""
+    """Delete the occupancy fixture's entry, or change its entity ID."""
     if change == "removed":
         await hass.config_entries.async_remove(entry.entry_id)
     else:
@@ -9905,16 +9906,17 @@ async def test_light_forms_do_not_save_a_sensor_deleted_while_open(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("form", _LIGHT_FORMS)
-async def test_light_forms_follow_a_sensor_renamed_while_open(
+async def test_light_forms_follow_a_sensor_whose_entity_id_changed_while_open(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str
 ) -> None:
-    """The former ID validates, timeout guard included, and saves as the new one."""
+    """The former entity ID validates, timeout guard included, and saves as
+    the new one."""
     hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry)
     result = await _reach_light_settings_form(hass, form)
     step_id = result["step_id"]
-    await _change_occupancy_sensor(hass, occupancy_entry, "renamed")
+    await _change_occupancy_sensor(hass, occupancy_entry, "entity_id_changed")
     sensors = {SECTION_SENSORS: {CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy"}}
 
     result = await _submit_subject_settings(
@@ -9944,29 +9946,30 @@ class _SingleButton(RealButton):
     _attr_event_types = ["single"]  # noqa: RUF012
 
 
-_RENAMED_WHILE_OPEN = {
-    # Kind: (entity, new ID, submission with the old and new IDs, expected errors)
+_ENTITY_ID_CHANGED_WHILE_OPEN = {
+    # Kind: (entity, new entity ID, submission with the former and new entity IDs,
+    # expected errors)
     "remote_binding": (
         "event.button",
-        "event.renamed_button",
+        "event.new_button",
         {
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.button"]},
-            REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.renamed_button"]},
+            REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.new_button"]},
         },
         {"base": "button_click_conflict"},
     ),
     "remote_double_click": (
         "event.single_button",
-        "event.renamed_button",
+        "event.new_button",
         {REMOTE_ACTION_ON: {CONF_ON_BUTTONS_DOUBLE: ["event.single_button"]}},
         {"base": "double_click_unsupported"},
     ),
     "combined_occupancy_roles": (
         "binary_sensor.test_occupancy",
-        "binary_sensor.renamed_occupancy",
+        "binary_sensor.new_occupancy",
         {
             CONF_TRIGGER_SENSORS: ["binary_sensor.test_occupancy"],
-            CONF_MAINTAIN_SENSORS: ["binary_sensor.renamed_occupancy"],
+            CONF_MAINTAIN_SENSORS: ["binary_sensor.new_occupancy"],
         },
         {"base": "occupancy_sensor_role_overlap"},
     ),
@@ -9975,13 +9978,13 @@ _RENAMED_WHILE_OPEN = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("flow", ["create", "options"])
-@pytest.mark.parametrize("kind", list(_RENAMED_WHILE_OPEN))
-async def test_forms_check_an_entity_renamed_while_open_under_its_new_id(
+@pytest.mark.parametrize("kind", list(_ENTITY_ID_CHANGED_WHILE_OPEN))
+async def test_forms_check_an_entity_id_changed_while_open_under_the_new_one(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, kind: str, flow: str
 ) -> None:
-    """Its former ID and its new one are the same entity, and it is judged as
+    """Its former entity ID and its new one are the same entity, and it is judged as
     it is now, so a conflict between them is refused instead of saved."""
-    entity_id, new_id, submitted, expected = _RENAMED_WHILE_OPEN[kind]
+    entity_id, new_id, submitted, expected = _ENTITY_ID_CHANGED_WHILE_OPEN[kind]
     await add_real(hass, RealButton("button"), _SingleButton("single_button"))
     await setup_entries(hass, occupancy_entry)
     if kind.startswith("remote"):
@@ -10034,10 +10037,10 @@ async def test_forms_check_an_entity_renamed_while_open_under_its_new_id(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("flow", ["create", "options"])
-async def test_combined_schedule_accepts_an_input_renamed_while_open(
+async def test_combined_schedule_accepts_an_input_whose_entity_id_changed_while_open(
     hass: HomeAssistant, schedule_entry: MockConfigEntry, flow: str
 ) -> None:
-    """The former ID names the renamed schedule, and saves as its new ID."""
+    """The former entity ID names the schedule, and saves as the new one."""
     other = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -10083,7 +10086,7 @@ async def test_combined_schedule_accepts_an_input_renamed_while_open(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("flow", ["create", "options"])
-@pytest.mark.parametrize("change", ["removed", "renamed"])
+@pytest.mark.parametrize("change", ["removed", "entity_id_changed"])
 @pytest.mark.allow_warning_log
 async def test_scheduled_light_schedule_changed_before_the_last_form(
     hass: HomeAssistant, flow: str, change: str
@@ -10128,7 +10131,7 @@ async def test_scheduled_light_schedule_changed_before_the_last_form(
     )
     await settle(hass)
 
-    if change == "renamed":
+    if change == "entity_id_changed":
         assert result["type"] == FlowResultType.CREATE_ENTRY
         assert _subject_cfg(hass)[CONF_SCHEDULE_ENTITY] == "binary_sensor.evening"
     elif flow == "create":
@@ -10166,12 +10169,13 @@ _ASSIGN_KINDS = {
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["removed", "renamed"])
+@pytest.mark.parametrize("change", ["removed", "entity_id_changed"])
 @pytest.mark.parametrize("kind", list(_ASSIGN_KINDS))
 async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
     hass: HomeAssistant, request: pytest.FixtureRequest, kind: str, change: str
 ) -> None:
-    """A sensor deleted after it was picked is not written; a renamed one is."""
+    """A sensor deleted after it was picked is not written; one whose entity ID
+    changed is."""
     fixture, fields, key = _ASSIGN_KINDS[kind]
     sensor_entry = request.getfixturevalue(fixture)
     hall = _light_entry("Hall", "hall")
@@ -10194,9 +10198,7 @@ async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
     if change == "removed":
         await hass.config_entries.async_remove(sensor_entry.entry_id)
     else:
-        er.async_get(hass).async_update_entity(
-            sensor, new_entity_id=f"{sensor}_renamed"
-        )
+        er.async_get(hass).async_update_entity(sensor, new_entity_id=f"{sensor}_new")
     await settle(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
@@ -10208,7 +10210,7 @@ async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
         assert key not in molight_config(hall)
     else:
         assert result["reason"] == "assign_done"
-        assert molight_config(hall)[key] == f"{sensor}_renamed"
+        assert molight_config(hall)[key] == f"{sensor}_new"
 
 
 @pytest.mark.asyncio

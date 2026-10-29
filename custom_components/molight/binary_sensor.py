@@ -98,11 +98,11 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
+    EntityIdFollowingRestoreEntity,
     GoneJudge,
-    RenamableRestoreEntity,
     entity_gone,
+    entity_id_changed_to,
     molight_config,
-    renamed_to,
     same_entity,
     send_event,
     sensor_dependencies,
@@ -198,7 +198,7 @@ async def async_setup_entry(
 # ---------------------------------------------------------------------------
 
 
-class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
+class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     """Wraps a single real binary sensor with an occupancy timeout.
 
     is_on mirrors the real sensor directly (no countdown).
@@ -429,9 +429,9 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
             return
         new_state = event.data.get("new_state")
         if new_state is None:
-            # A renamed source did not drop out, and the dropout countdown
-            # is grace enough for a reload.
-            self._gone.run_unless_renamed(
+            # A source whose entity ID changed did not drop out, and the dropout
+            # countdown is grace enough for a reload.
+            self._gone.run_unless_entity_id_changed(
                 self._source_sensor, self._on_source_unavailable, grace=False
             )
             return
@@ -587,7 +587,9 @@ class VirtualOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
 # ---------------------------------------------------------------------------
 
 
-class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity):
+class VirtualCombinedOccupancySensor(
+    BinarySensorEntity, EntityIdFollowingRestoreEntity
+):
     """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
 
     Trigger sensors start occupancy; maintain sensors keep it alive once started.
@@ -676,7 +678,8 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             self._cycle_genuine = bool(saved["cycle_genuine"])
             lots = saved.get("lots")
             self._saved_lots = {
-                renamed_to(self.hass, entity_id) or entity_id: _parse_datetime(raw)
+                entity_id_changed_to(self.hass, entity_id)
+                or entity_id: _parse_datetime(raw)
                 for entity_id, raw in (lots if isinstance(lots, dict) else {}).items()
             }
         elif restored_on and extra is not None:
@@ -853,10 +856,10 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
             cancel()
             was_showing = True
         if event.data.get("new_state") is None:
-            # A renamed constituent did not drop out: this sensor is about to
-            # reload with the new ID.
+            # A constituent whose entity ID changed did not drop out: this sensor
+            # is about to reload with the new one.
             dropout = datetime.now(UTC)
-            self._gone.run_unless_renamed(
+            self._gone.run_unless_entity_id_changed(
                 entity_id,
                 lambda: self._reevaluate_on_dropout(event, dropout, showed=was_showing),
             )
@@ -1061,7 +1064,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         """Return whether a save describes the current constituents.
 
         A save that predates the record is trusted, and one made before a
-        constituent was renamed names its former ID.
+        constituent's entity ID changed names the former one.
         """
         constituents = saved.get("constituents")
         if constituents is None:
@@ -1069,7 +1072,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
         if not isinstance(constituents, dict):
             return False
         return {
-            role: sorted({renamed_to(self.hass, e) or e for e in entity_ids})
+            role: sorted({entity_id_changed_to(self.hass, e) or e for e in entity_ids})
             for role, entity_ids in constituents.items()
         } == self._constituents()
 
@@ -1118,7 +1121,7 @@ class VirtualCombinedOccupancySensor(BinarySensorEntity, RenamableRestoreEntity)
 # ---------------------------------------------------------------------------
 
 
-class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
+class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     """Binary sensor tracking whether illuminance meets a threshold.
 
     ON  → bright enough; no artificial lighting needed
@@ -1195,8 +1198,10 @@ class VirtualIlluminanceSensor(BinarySensorEntity, RenamableRestoreEntity):
     def _handle_illuminance_change(self, event: Event[EventStateChangedData]) -> None:
         new_state = event.data.get("new_state")
         if new_state is None:
-            # Deleted or disabled, unless it is only being renamed.
-            self._gone.run_unless_renamed(self._source_entity, self._on_source_gone)
+            # Deleted or disabled, unless only its entity ID is changing.
+            self._gone.run_unless_entity_id_changed(
+                self._source_entity, self._on_source_gone
+            )
             return
         if new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return  # hold last known value while the source is unavailable
@@ -1493,7 +1498,7 @@ class _MirrorWatch:
 # ---------------------------------------------------------------------------
 
 
-class VirtualScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
+class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     """Binary sensor driven by a time window or another binary sensor.
 
     Each window is {"start": <edge>, "end": <edge>} where an edge is
@@ -2126,7 +2131,7 @@ class _ScheduleTree:
         )
 
 
-class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
+class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     """Binary sensor combining MoLight schedules with any/all logic.
 
     The result is unknown (unavailable) only when an unavailable input could
@@ -2229,7 +2234,8 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, RenamableRestoreEntity):
                     self.hass, sorted(registered), self._handle_registry_change
                 )
             )
-        # One with no registry entry may be created again or renamed into place.
+        # One with no registry entry may be created again, or another entity
+        # may have its entity ID changed to this one.
         if None in self._input_entities.values():
             self.async_on_remove(
                 self.hass.bus.async_listen(

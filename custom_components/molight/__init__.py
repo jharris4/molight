@@ -35,9 +35,9 @@ from .const import (
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     DATA_AUTO_OFF_ENABLED,
     DATA_AUTO_OFF_KEPT,
+    DATA_ENTITY_ID_CHANGED,
     DATA_PLATFORMS,
     DATA_REMOVED,
-    DATA_RENAMED,
     DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
@@ -97,18 +97,18 @@ _ENTITY_ID_LIST_KEYS = (
     *_REFERENCE_LIST_KEYS,
     *(key for single, double, _ in REMOTE_ACTION_FIELDS for key in (single, double)),
 )
-# How long a renamed entity may take to report under its new ID (seconds).
-RENAME_SETTLE_SECONDS = 10
+# How long an entity may take to report under its new entity ID (seconds).
+ENTITY_ID_CHANGE_SETTLE_SECONDS = 10
 
 
 async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     """Follow entity ID changes for as long as Home Assistant runs."""
-    renamed: dict[str, str] = hass.data.setdefault(DATA_RENAMED, {})
+    entity_id_changed: dict[str, str] = hass.data.setdefault(DATA_ENTITY_ID_CHANGED, {})
     removed: set[str] = hass.data.setdefault(DATA_REMOVED, set())
-    # Renames whose entity has yet to report under its new ID.
+    # Entity ID changes whose entity has yet to report under the new one.
     pending: dict[str, str] = {}
-    # For a former ID another entity has taken meanwhile, the entries that
-    # named it then: only they mean the renamed entity.
+    # For a former entity ID another entity has taken meanwhile, the entries that
+    # named it then: only they mean the entity that had it before.
     reused: dict[str, set[str]] = {}
 
     @callback
@@ -117,7 +117,7 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
         for old in mapping:
             del pending[old]
         if mapping:
-            _rename_references(
+            _follow_entity_id_changes(
                 hass,
                 mapping,
                 {old: reused.pop(old) for old in mapping if old in reused},
@@ -127,23 +127,23 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
     def _on_registry_updated(event: Event[er.EventEntityRegistryUpdatedData]) -> None:
         data = event.data
         if data["action"] == "create":
-            # A new entity under a former ID is not the one that was renamed.
-            renamed.pop(data["entity_id"], None)
+            # A new entity under a former entity ID is not the one that had it.
+            entity_id_changed.pop(data["entity_id"], None)
             removed.discard(data["entity_id"])
             if data["entity_id"] in pending:
                 reused[data["entity_id"]] = _entries_naming(hass, data["entity_id"])
         if data["action"] != "update" or "old_entity_id" not in data:
             return
-        old_id, new_id = data["old_entity_id"], data["entity_id"]
-        removed.discard(new_id)
-        for mapping in (renamed, pending):
-            # A second rename moves every earlier ID on to the newest one.
+        old_entity_id, new_entity_id = data["old_entity_id"], data["entity_id"]
+        removed.discard(new_entity_id)
+        for mapping in (entity_id_changed, pending):
+            # A second entity ID change moves every earlier one on to the newest.
             for former, current in mapping.items():
-                if current == old_id:
-                    mapping[former] = new_id
-            mapping[old_id] = new_id
-            mapping.pop(new_id, None)
-        _when_reporting(hass, new_id, _rewrite)
+                if current == old_entity_id:
+                    mapping[former] = new_entity_id
+            mapping[old_entity_id] = new_entity_id
+            mapping.pop(new_entity_id, None)
+        _when_reporting(hass, new_entity_id, _rewrite)
 
     hass.bus.async_listen(er.EVENT_ENTITY_REGISTRY_UPDATED, _on_registry_updated)
     return True
@@ -155,9 +155,10 @@ def _when_reporting(
 ) -> None:
     """Run action once the entity has a state, or at once if none is due.
 
-    A renamed entity is removed and added again under its new ID. The entries
-    that reference it reload when their reference is rewritten, and one that
-    reloads before the entity is back would find, say, its real light gone.
+    Changing an entity ID removes the entity and adds it again under the new
+    one. The entries that reference it reload when their reference is
+    rewritten, and one that reloads before the entity is back would find, say,
+    its real light gone.
     """
     registry_entry = er.async_get(hass).async_get(entity_id)
     entry = (
@@ -181,19 +182,19 @@ def _when_reporting(
         action(entity_id)
 
     unsub_state = async_track_state_change_event(hass, [entity_id], _done)
-    unsub_timer = async_call_later(hass, RENAME_SETTLE_SECONDS, _done)
+    unsub_timer = async_call_later(hass, ENTITY_ID_CHANGE_SETTLE_SECONDS, _done)
 
 
 @callback
-def _rename_references(
+def _follow_entity_id_changes(
     hass: HomeAssistant,
     mapping: dict[str, str],
     only: Mapping[str, set[str]] | None = None,
 ) -> None:
-    """Point every entry's references to renamed entities at their new IDs.
+    """Point every entry's references at the new entity IDs.
 
     Data and options are both rewritten; an entry that changed reloads. A
-    former ID in `only` is rewritten in the entries it lists alone.
+    former entity ID in `only` is rewritten in the entries it lists alone.
     """
     only = only or {}
     for entry in hass.config_entries.async_entries(DOMAIN):
@@ -226,13 +227,16 @@ def _entries_naming(hass: HomeAssistant, entity_id: str) -> set[str]:
 def current_references(
     hass: HomeAssistant, cfg: Mapping[str, Any]
 ) -> tuple[dict[str, Any], str | None]:
-    """Return cfg with renamed references at their new IDs, and one since removed.
+    """Return cfg with references at their new entity IDs, and one since removed.
 
-    A form left open still holds the IDs it showed, which a rename or a
-    removal has since rewritten in every saved entry.
+    A form left open still holds the entity IDs it showed, which an entity ID change or
+    a removal has since rewritten in every saved entry.
     """
     current = _remap_references(
-        cfg, hass.data.get(DATA_RENAMED, {}), _ENTITY_ID_KEYS, _ENTITY_ID_LIST_KEYS
+        cfg,
+        hass.data.get(DATA_ENTITY_ID_CHANGED, {}),
+        _ENTITY_ID_KEYS,
+        _ENTITY_ID_LIST_KEYS,
     )
     removed = hass.data.get(DATA_REMOVED, set())
     return current, next(
@@ -295,7 +299,7 @@ def _remap_settings(
     for key in list_keys:
         values = remapped.get(key)
         if values and any(e in mapping for e in values):
-            # A list that already held the new ID must not hold it twice.
+            # A list that already held the new entity ID must not hold it twice.
             remapped[key] = list(
                 dict.fromkeys(
                     new for e in values if (new := mapping.get(e, e)) is not None

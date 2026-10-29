@@ -417,7 +417,7 @@ async def test_deleting_the_auto_off_switch_applies_a_window_end_it_held(
 
 
 @pytest.mark.asyncio
-async def test_renaming_the_auto_off_switch_keeps_its_hold(
+async def test_changing_the_auto_off_switch_entity_id_keeps_its_hold(
     hass: HomeAssistant, freezer
 ) -> None:
     """A new entity ID removes the switch for a moment; it is still there."""

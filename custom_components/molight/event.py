@@ -28,7 +28,7 @@ from .const import (
     OCCUPANCY_EVENT_TYPES,
     SIGNAL_EVENT,
 )
-from .helpers import RenamableRestoreEntity, molight_config, suggested_entity_id
+from .helpers import EntityIdFollowingRestoreEntity, molight_config, suggested_entity_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -64,7 +64,7 @@ async def async_setup_entry(
     async_add_entities([entity])
 
 
-class MoLightEvents(EventEntity, RenamableRestoreEntity):
+class MoLightEvents(EventEntity, EntityIdFollowingRestoreEntity):
     """Records the last thing a Virtual Light or occupancy sensor did."""
 
     _attr_should_poll = False

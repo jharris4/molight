@@ -63,7 +63,7 @@ from tests.real_entities import (
     RealToggle,
     add_real,
     add_real_with_entry,
-    start_slow_rename,
+    start_slow_entity_id_change,
 )
 
 if TYPE_CHECKING:
@@ -352,10 +352,10 @@ async def test_registered_entity_without_a_state_keeps_its_last_value(
 
 
 @pytest.mark.parametrize("role", ["hold", "door", "occupancy", "maintain"])
-async def test_renamed_entity_that_is_slow_to_come_back_has_not_gone_missing(
+async def test_entity_slow_to_return_after_an_entity_id_change_has_not_gone_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
 ) -> None:
-    """An entity between its old ID and its new one still holds the light."""
+    """An entity between its former entity ID and the new one still holds the light."""
     sensor = RealBinary("input", on=True)
     await add_real(hass, sensor)
     hass.states.async_set(MEMBER, "on", {"brightness": 255})
@@ -378,7 +378,7 @@ async def test_renamed_entity_that_is_slow_to_come_back_has_not_gone_missing(
         STATE_ACTIVE if role == "hold" else STATE_OCCUPIED
     )
 
-    await start_slow_rename(hass, sensor, "binary_sensor.renamed")
+    await start_slow_entity_id_change(hass, sensor, "binary_sensor.new_id")
     assert hass.states.get(INPUT) is None
     assert dict(attrs(hass)) == before
 
