@@ -254,6 +254,7 @@
               "illuminance_mode": "Illuminance mode",
               "schedule_entity": "Schedule sensor",
               "schedule_mode": "Schedule mode",
+              "match_schedule_after_restart": "Match the schedule after a restart",
               "door_entity": "Door sensor",
               "door_mode": "Door mode",
               "hold_entities": "Keep-on entities"
@@ -265,6 +266,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
+              "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -546,6 +548,7 @@
               "illuminance_mode": "Illuminance mode",
               "schedule_entity": "Schedule sensor",
               "schedule_mode": "Schedule mode",
+              "match_schedule_after_restart": "Match the schedule after a restart",
               "door_entity": "Door sensor",
               "door_mode": "Door mode",
               "hold_entities": "Keep-on entities"
@@ -557,6 +560,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
+              "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1040,6 +1044,7 @@
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly, through another combined sensor, or through an occupancy sensor whose source includes them.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly, through another combined schedule, or through a schedule whose source includes them.",
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
+      "match_schedule_after_restart_needs_follow": "Matching the schedule after a restart needs a schedule sensor in Follow mode.",
       "entity_id_conflict": "That entity ID is already in use. Choose a different one, or leave it blank to derive one from the name.",
       "entity_id_invalid": "That entity ID has no usable characters. Use letters and numbers, or leave it blank to derive one from the name.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
@@ -1151,6 +1156,14 @@
         "gate": "Gate and turn off: automatic turn-on only inside the window; off at the end",
         "gate_switch": "Gate and switch state: automatic turn-on only inside the window; recalculate at the end",
         "gate_keep": "Gate and keep state: automatic turn-on only inside the window; preserve state and timer at the end"
+      }
+    },
+    "match_schedule_after_restart": {
+      "options": {
+        "as_found": "No: leave the light as found",
+        "inside": "Inside its window: turn on a light found off",
+        "outside": "Outside its window: turn off a light found on",
+        "inside_and_outside": "Inside and outside its window: turn on a light found off inside, turn off one found on outside"
       }
     },
     "schedule_end_action": {
@@ -1569,6 +1582,7 @@
               "illuminance_mode": "Illuminance mode",
               "schedule_entity": "Schedule sensor",
               "schedule_mode": "Schedule mode",
+              "match_schedule_after_restart": "Match the schedule after a restart",
               "door_entity": "Door sensor",
               "door_mode": "Door mode",
               "hold_entities": "Keep-on entities"
@@ -1580,6 +1594,7 @@
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
+              "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1815,6 +1830,7 @@
       "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule Sensor.",
       "schedule_source_cycle": "This binary sensor is computed from this schedule itself, through a group or another MoLight sensor. Select a source that does not include the schedule.",
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
+      "match_schedule_after_restart_needs_follow": "Matching the schedule after a restart needs a schedule sensor in Follow mode.",
       "effect_transition_too_long": "The effect fade must not exceed the effect warning duration (and the effect stage must be enabled).",
       "warn_transition_too_long": "The warning fade must not exceed the warning grace period (and the warning stage must be enabled).",
       "hysteresis_too_large": "The hysteresis must be smaller than the threshold. Becoming dark requires a reading below threshold minus hysteresis, and no lux sensor reports below 0, so this sensor could never report dark.",

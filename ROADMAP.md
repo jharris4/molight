@@ -21,40 +21,20 @@ records what should be built next, and what was asked for and answered another w
 
 ## Plan
 
-### 1. A blank turn-off timeout means no timer
+### 1. Match the schedule after a Home Assistant restart
 
-One release with item 2.
+Ships alone.
 
-- **Problem.** Some lights should only turn off manually or at the end of a schedule window:
-  decorative lights on from before sunset to 23:00, a child's wake-up light. The turn-off timeout is
-  required (1 to 14400 s), so a light turned on manually always gets a timer, and the only way around
-  it is holding the Auto-off switch.
-- **Design.** Clearing the field saves no timeout, and the light runs no timer. It applies to both
-  light types, to each settings set of a Virtual Scheduled Light on its own, and to turning the light
-  on manually. It is allowed with an occupancy or door sensor (the sensor turns the light on, you turn
-  it off), and the "at least the occupancy timeout" check is skipped. The effect and warn stages
-  don't run, since they only warn of a timer off. A false detection still turns the light off after
-  the false-detection off delay. A new light's field still starts at 300.
-- **Why now.** The decorative lights need it to replace their automation, and the wake-up light
-  builds on it.
-- **Cost.** Every timer path in light.py needs a "no timer" branch, so matrix tests, an e2e run and
-  a REFERENCE.md section.
+- **Problem.** At a restart, a Follow light found off inside its schedule window is read as a
+  manual off, so a whole-house power cut inside the window leaves decorative lights dark until
+  tomorrow, and one outside the window leaves a light the device powered up on until the window end.
+- **Design.** One choice on a Virtual Light, "Match the schedule after a restart": No (today),
+  Inside its window, Outside its window, or Inside and outside its window. A turn-on or turn-off
+  made while Home Assistant is still starting still wins.
+- **Cost.** It changes what a manual off means at startup, so matrix tests, an e2e run and a
+  REFERENCE.md section.
 
-### 2. A brightness on the remote's Turn on
-
-One release with item 1.
-
-- **Problem.** A Caséta dimmer's on button goes to full brightness. A Pico's top button bound to
-  Turn on only turns the lights on at their last brightness, so getting 100% takes a preset, one of
-  the two.
-- **Design.** An optional Brightness field (1 to 100 %) in the Turn on section of a Virtual Remote,
-  the field the presets have. Blank turns the lights on at their last brightness, as today; set, it
-  turns them on at that brightness, including a light that is already on. It is a value on an
-  existing action, not a new action.
-- **Cost.** No state-machine change: the remote's `light.turn_on` call, one form field, translations, tests and a
-  REFERENCE.md line.
-
-### 3. Manual off holds until the room empties
+### 2. Manual off holds until the room empties
 
 Ships alone.
 
@@ -73,7 +53,7 @@ Ships alone.
 - **Cost.** It is an input to precedence rule 5, so matrix tests, an e2e run and a REFERENCE.md
   section.
 
-### 4. Three small additions
+### 3. Three small additions
 
 One release, none touching the precedence rules.
 
@@ -90,7 +70,7 @@ One release, none touching the precedence rules.
   light. One device per entry groups them as Home Assistant groups a bulb's own entities. Entity IDs
   and names stay as they are; the price is a device page per entry.
 
-### 5. Coexist with Adaptive Lighting
+### 4. Coexist with Adaptive Lighting
 
 Ships alone.
 
@@ -104,7 +84,7 @@ Ships alone.
   stops adapting. Verify the failure with a test before designing.
 - **Cost.** It changes what a physical change does, so it ships alone with its own tests.
 
-### 6. Occupancy timeout check
+### 5. Occupancy timeout check
 
 - **Problem.** The README calls the occupancy timeout the anchor for everything downstream and says
   MoLight cannot read it. Set too high, a short visit is classified as a false detection and is
@@ -125,7 +105,7 @@ Worth building if a user asks, not before.
   most delicate code here. Ships alone when it comes.
 - **Auto-on brightness and color read from entities.** The option-source pattern of the turn-on
   selection, applied to brightness and color, for lux-aware or custom curves. Adaptive Lighting with
-  item 5 covers time-of-day brightness without it.
+  item 4 covers time-of-day brightness without it.
 
 ## Already covered
 
@@ -143,7 +123,7 @@ Asks that existing blocks answer:
 - A TV or humidity hold: a Template or Threshold helper as a keep-on entity (EXAMPLES.md, example 14).
 - A timed hold, "keep the lights on for two hours": a Timer helper read through a Template helper as
   a keep-on entity.
-- Weekdays only: a workday sensor and a combined All schedule, until item 4 lands.
+- Weekdays only: a workday sensor and a combined All schedule, until item 3 lands.
 - One remote driving two rooms: two remote entries on different buttons of the same remote.
 - Different levels per lamp from one trigger: two virtual lights sharing the sensors.
 - A notification or spoken warning before an automatic off: an Event received trigger on the Events
@@ -153,15 +133,15 @@ Asks that existing blocks answer:
 
 - Vacation presence simulation.
 - YAML configuration.
-- Adaptive or circadian lighting computed by MoLight itself: Adaptive Lighting does it, and item 5
+- Adaptive or circadian lighting computed by MoLight itself: Adaptive Lighting does it, and item 4
   lets the two share a light.
 - Controlling `switch` entities directly: Home Assistant's Switch as X helper wraps one as a light.
-- Services to extend or hold the timer: a Timer helper does it, and "turn off and stay off" is item 3.
+- Services to extend or hold the timer: a Timer helper does it, and "turn off and stay off" is item 2.
 - Remote hold to dim, more remote actions, targets per binding: the remote binds clicks to light
   actions and no more; hold-to-dim doubles the per-ecosystem vocabulary re-checked on every Home
   Assistant bump, and the rest is one automation or a second remote entry.
 - A re-trigger cooldown after an automatic off: the sensor's hold time means it has rarely cleared by
-  the time the person reaches the door; the off-by-hand case is item 3.
+  the time the person reaches the door; the off-by-hand case is item 2.
 - More than two settings sets on a Virtual Scheduled Light: two sets with combined schedules cover
   most asks, and Adaptive Lighting covers the rest.
 - Setup presets and an area wizard: Discover, bulk assignment and EXAMPLES.md cover them.

@@ -84,6 +84,7 @@ from custom_components.molight.const import (
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
+    CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
@@ -131,6 +132,8 @@ from custom_components.molight.const import (
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODE_GATE,
+    MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
@@ -11304,3 +11307,160 @@ async def test_standby_color_needs_a_light_that_can_show_it(
         assert result["errors"] == {"base": error}
     else:
         assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("schedule", "mode", "choice", "saved"),
+    [
+        (False, None, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, False),
+        (True, SCHEDULE_MODE_GATE, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, False),
+        (True, SCHEDULE_MODE_FOLLOW, MATCH_SCHEDULE_AFTER_RESTART_INSIDE, True),
+        (False, None, MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND, True),
+    ],
+)
+async def test_light_flow_match_schedule_after_restart_needs_follow(
+    hass: HomeAssistant,
+    schedule_entry: MockConfigEntry,
+    schedule: bool,
+    mode: str | None,
+    choice: str,
+    saved: bool,
+) -> None:
+    """Only a Follow light can match its schedule after a restart; As found saves."""
+    await setup_entries(hass, schedule_entry)
+    sensors = {CONF_MATCH_SCHEDULE_AFTER_RESTART: choice}
+    if schedule:
+        sensors[CONF_SCHEDULE_ENTITY] = "binary_sensor.test_schedule"
+        sensors[CONF_SCHEDULE_MODE] = mode
+    result = await _reach_light_form(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            SECTION_SENSORS: sensors,
+        },
+    )
+    if saved:
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_MATCH_SCHEDULE_AFTER_RESTART] == choice
+    else:
+        assert result["type"] == FlowResultType.FORM
+        assert result["errors"] == {"base": "match_schedule_after_restart_needs_follow"}
+
+
+@pytest.mark.asyncio
+async def test_light_options_refuse_match_schedule_after_restart_in_gate_mode(
+    hass: HomeAssistant, schedule_entry: MockConfigEntry
+) -> None:
+    """Switching a Follow light to a Gate mode must also drop its match choice."""
+    light = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
+            CONF_NAME: "Hall Light",
+            CONF_LIGHTS: ["light.hall"],
+            CONF_LIGHT_TIMEOUT: 60,
+            CONF_SCHEDULE_ENTITY: "binary_sensor.test_schedule",
+            CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
+            CONF_MATCH_SCHEDULE_AFTER_RESTART: MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
+        },
+    )
+    await setup_entries(hass, schedule_entry, light)
+    result = await hass.config_entries.options.async_init(light.entry_id)
+
+    def _submit(choice: str):
+        return hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                **EMPTY_LIGHT_SECTIONS,
+                CONF_NAME: "Hall Light",
+                CONF_LIGHTS: ["light.hall"],
+                CONF_LIGHT_TIMEOUT: 60,
+                SECTION_SENSORS: {
+                    CONF_SCHEDULE_ENTITY: "binary_sensor.test_schedule",
+                    CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
+                    CONF_MATCH_SCHEDULE_AFTER_RESTART: choice,
+                },
+            },
+        )
+
+    result = await _submit(MATCH_SCHEDULE_AFTER_RESTART_INSIDE)
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "match_schedule_after_restart_needs_follow"}
+
+    result = await _submit(MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND)
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    cfg = entry_settings(light)
+    assert cfg[CONF_SCHEDULE_MODE] == SCHEDULE_MODE_GATE
+    assert (
+        cfg[CONF_MATCH_SCHEDULE_AFTER_RESTART] == MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
+    )
+
+
+@pytest.mark.asyncio
+async def test_discover_light_defaults_refuse_match_schedule_without_follow(
+    hass: HomeAssistant,
+) -> None:
+    """The discovery defaults form refuses a match choice with no Follow schedule."""
+    hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
+    result = await _reach_discovery_select(hass, "discover_light")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_SELECTED_ENTITIES: ["light.desk"]}
+    )
+    assert result["step_id"] == "discover_light_defaults"
+
+    def _submit(choice: str):
+        return hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                **EMPTY_LIGHT_SECTIONS,
+                SECTION_SENSORS: {CONF_MATCH_SCHEDULE_AFTER_RESTART: choice},
+            },
+        )
+
+    result = await _submit(MATCH_SCHEDULE_AFTER_RESTART_INSIDE)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "discover_light_defaults"
+    assert result["errors"] == {"base": "match_schedule_after_restart_needs_follow"}
+
+    result = await _submit(MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND)
+    assert result["type"] == FlowResultType.ABORT
+    await hass.async_block_till_done()
+    created = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if entry_settings(e).get(CONF_LIGHTS) == ["light.desk"]
+    ]
+    assert len(created) == 1
+    assert (
+        created[0].data[CONF_MATCH_SCHEDULE_AFTER_RESTART]
+        == MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
+    )
+
+
+@pytest.mark.asyncio
+async def test_convert_to_scheduled_strips_the_match_choice(
+    hass: HomeAssistant,
+) -> None:
+    """The match choice every light form saves stays out of both settings sides."""
+    source = _light_entry(
+        "Kitchen",
+        "kitchen",
+        schedule_entity="binary_sensor.night",
+        schedule_mode=SCHEDULE_MODE_GATE,
+        match_schedule_after_restart=MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
+    )
+    hass.states.async_set("binary_sensor.night", "off")
+    await setup_entries(hass, source)
+
+    await _convert(hass, "convert_to_scheduled", "light.kitchen")
+    cfg = entry_settings(source)
+    assert cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert CONF_MATCH_SCHEDULE_AFTER_RESTART not in cfg
+    assert CONF_MATCH_SCHEDULE_AFTER_RESTART not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert CONF_MATCH_SCHEDULE_AFTER_RESTART not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]

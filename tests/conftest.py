@@ -45,6 +45,7 @@ from custom_components.molight.const import (
     CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
@@ -153,6 +154,7 @@ def make_light_entry(
     illuminance_mode: str | None = None,
     schedule: str | None = None,
     schedule_mode: str | None = None,
+    match_schedule_after_restart: str | None = None,
     door: str | None = None,
     door_mode: str | None = None,
     hold_entities: list[str] | None = None,
@@ -201,6 +203,8 @@ def make_light_entry(
         data[CONF_SCHEDULE_ENTITY] = schedule
     if schedule_mode:
         data[CONF_SCHEDULE_MODE] = schedule_mode
+    if match_schedule_after_restart:
+        data[CONF_MATCH_SCHEDULE_AFTER_RESTART] = match_schedule_after_restart
     if door:
         data[CONF_DOOR_ENTITY] = door
     if door_mode:

@@ -33,6 +33,13 @@ from custom_components.molight.const import (
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_OCCUPANCY,
+    EVENT_TURNED_OFF,
+    EVENT_TURNED_ON,
+    MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
+    REASON_STARTUP,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -66,6 +73,7 @@ SCHED_B = "binary_sensor.sched_b"
 HOLD = "input_boolean.keep_on"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
+EVENTS = "event.matrix_light_events"
 MARKER = "2026-07-02T21:00:00+00:00"
 
 
@@ -701,12 +709,13 @@ async def _edit_options(hass: HomeAssistant, entry, **overrides) -> None:
     await settle(hass)
 
 
-async def _lit_in_follow_window(hass: HomeAssistant):
+async def _lit_in_follow_window(hass: HomeAssistant, entry=None):
     """A follow light lit by its window, with the member reporting on."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(SCHED_B, "off")
     hass.states.async_set(REAL, "off")
-    entry = _follow_entry()
+    if entry is None:
+        entry = _follow_entry()
     await setup_entries(hass, entry)
     await settle(hass)
     hass.states.async_set(REAL, "on")
@@ -1089,3 +1098,239 @@ async def test_restart_mid_warning_without_warning_active_uses_the_snapshot(
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 180
     assert state.attributes["warning_active"] is False
+
+
+# ---------------------------------------------------------------------------
+# Follow mode: match the schedule after a restart
+# ---------------------------------------------------------------------------
+
+AS_FOUND = MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
+INSIDE = MATCH_SCHEDULE_AFTER_RESTART_INSIDE
+OUTSIDE = MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE
+BOTH = MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE
+
+
+def _match_entry(choice: str, **kwargs):
+    return make_light_entry(
+        schedule=SCHED,
+        schedule_mode=SCHEDULE_MODE_FOLLOW,
+        match_schedule_after_restart=choice,
+        **kwargs,
+    )
+
+
+def _last_event(hass: HomeAssistant) -> tuple[str | None, str | None]:
+    attrs = hass.states.get(EVENTS).attributes
+    return attrs.get("event_type"), attrs.get("reason")
+
+
+async def _turn(hass: HomeAssistant, on: bool) -> None:
+    await hass.services.async_call(
+        "light", "turn_on" if on else "turn_off", {"entity_id": VIRTUAL}, blocking=True
+    )
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("choice", "on"),
+    [(AS_FOUND, False), (INSIDE, True), (OUTSIDE, False), (BOTH, True)],
+)
+async def test_restart_inside_window_found_off_follows_the_match_choice(
+    hass: HomeAssistant, choice: str, on: bool
+) -> None:
+    """A light found off in a window HA already handled, a manual off today,
+    is turned on only when the choice matches the schedule inside its window."""
+    mock_restore_cache(hass, [State(VIRTUAL, "off", {"schedule_window_start": MARKER})])
+    hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
+    hass.states.async_set(REAL, "off")
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _match_entry(choice))
+    await settle(hass)
+
+    assert light_targets(calls, "turn_on") == ([[REAL]] if on else [])
+    state = _state(hass)
+    assert state.state == ("on" if on else "off")
+    assert state.attributes["molight_state"] == (STATE_SCHEDULED if on else STATE_IDLE)
+    assert state.attributes["schedule_window_start"] == MARKER
+    if on:
+        assert _last_event(hass) == (EVENT_TURNED_ON, REASON_STARTUP)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(
+    ("choice", "off"),
+    [(AS_FOUND, False), (INSIDE, False), (OUTSIDE, True), (BOTH, True)],
+)
+async def test_restart_outside_window_found_on_follows_the_match_choice(
+    hass: HomeAssistant, choice: str, off: bool
+) -> None:
+    """A light found on outside its window, adopted with a timer today, is
+    turned off only when the choice matches the schedule outside its window."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "on")
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _match_entry(choice))
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if off else [])
+    state = _state(hass)
+    assert state.state == ("off" if off else "on")
+    assert state.attributes["molight_state"] == (STATE_IDLE if off else STATE_ACTIVE)
+    if off:
+        assert _last_event(hass) == (EVENT_TURNED_OFF, REASON_STARTUP)
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(("choice", "on"), [(AS_FOUND, False), (INSIDE, True)])
+async def test_real_restart_after_a_manual_off_in_the_window(
+    hass: HomeAssistant, choice: str, on: bool
+) -> None:
+    """A manual off HA saw before it stopped is undone by Inside, kept by As found."""
+    entry = await _lit_in_follow_window(hass, _match_entry(choice))
+    await _turn(hass, False)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    await restart_entries(hass, entry, started=False)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+
+    assert light_targets(calls, "turn_on") == ([[REAL]] if on else [])
+    assert _state(hass).state == ("on" if on else "off")
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+@pytest.mark.parametrize(("choice", "off"), [(AS_FOUND, False), (OUTSIDE, True)])
+async def test_real_restart_after_a_manual_on_outside_the_window(
+    hass: HomeAssistant, choice: str, off: bool
+) -> None:
+    """A manual turn-on outside the window is undone by Outside, kept by As found."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    entry = _match_entry(choice, timeout=None)
+    await setup_entries(hass, entry)
+    await settle(hass)
+    await _turn(hass, True)
+    hass.states.async_set(REAL, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"
+
+    await restart_entries(hass, entry, started=False)
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == ([[REAL]] if off else [])
+    assert _state(hass).state == ("off" if off else "on")
+    assert _state(hass).attributes["molight_state"] == (
+        STATE_IDLE if off else STATE_ACTIVE
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_turn_off_while_starting_wins_over_match_inside(
+    hass: HomeAssistant,
+) -> None:
+    """A turn-off made before the seed stands: the window does not turn it on."""
+    entry = await _lit_in_follow_window(hass, _match_entry(BOTH))
+    await restart_entries(hass, entry, started=False)
+    await _turn(hass, False)
+    hass.states.async_set(REAL, "off")
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+
+    assert light_targets(calls, "turn_on") == []
+    assert _state(hass).state == "off"
+    assert _state(hass).attributes["molight_state"] == STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_turn_on_while_starting_wins_over_match_outside(
+    hass: HomeAssistant,
+) -> None:
+    """A turn-on made before the seed stands: the schedule does not turn it off."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "off")
+    entry = _match_entry(BOTH)
+    await setup_entries(hass, entry)
+    await settle(hass)
+
+    await restart_entries(hass, entry, started=False)
+    await _turn(hass, True)
+    hass.states.async_set(REAL, "on")
+    calls = record_service_calls(hass)
+    await finish_startup(hass)
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_a_keep_on_hold_keeps_a_light_match_outside_would_turn_off(
+    hass: HomeAssistant,
+) -> None:
+    """A hold suspends the restart's turn-off like every automatic turn-off."""
+    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "on")
+    calls = record_service_calls(hass)
+    await setup_entries(hass, _match_entry(BOTH, hold_entities=[HOLD]))
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).state == "on"
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_options_reload_matches_the_schedule_too(hass: HomeAssistant) -> None:
+    """An options edit reloads the light, which turns on a manual off inside."""
+    entry = await _lit_in_follow_window(hass, _match_entry(INSIDE))
+    await _turn(hass, False)
+    hass.states.async_set(REAL, "off")
+    await settle(hass)
+    assert _state(hass).state == "off"
+
+    calls = record_service_calls(hass)
+    opts = {k: v for k, v in entry.data.items() if k != CONF_ENTITY_TYPE}
+    hass.config_entries.async_update_entry(entry, options=opts)
+    await hass.async_block_till_done()
+    await settle(hass)
+
+    assert light_targets(calls, "turn_on") == [[REAL]]
+    assert _state(hass).state == "on"
+    assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
+
+
+@pytest.mark.asyncio
+@pytest.mark.regular_virtual_light_only
+async def test_match_choice_is_ignored_outside_follow_mode(hass: HomeAssistant) -> None:
+    """A choice the bulk schedule assign left on a schedule-gated light does nothing."""
+    hass.states.async_set(SCHED, "off")
+    hass.states.async_set(REAL, "on")
+    calls = record_service_calls(hass)
+    await setup_entries(
+        hass,
+        make_light_entry(
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_GATE,
+            match_schedule_after_restart=BOTH,
+        ),
+    )
+    await settle(hass)
+
+    assert light_targets(calls, "turn_off") == []
+    assert _state(hass).attributes["molight_state"] == STATE_ACTIVE

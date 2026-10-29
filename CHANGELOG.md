@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays on until turned off manually, by a false detection or by a schedule
   window end, for decorative lights or a bedside lamp (see
   [No turn-off timeout](https://github.com/jharris4/molight/blob/main/REFERENCE.md#no-turn-off-timeout)).
+- **Match the schedule after a restart**: a follow-mode light found off inside
+  its schedule window, or on outside it, can be turned on or off at a restart.
 
 ### Deprecated
 

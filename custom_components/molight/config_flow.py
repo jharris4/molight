@@ -71,6 +71,7 @@ from .const import (
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
     CONF_MAINTAIN_SENSORS,
+    CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
@@ -112,6 +113,7 @@ from .const import (
     DEFAULT_ILLUMINANCE_MODE,
     DEFAULT_ILLUMINANCE_THRESHOLD,
     DEFAULT_LIGHT_TIMEOUT,
+    DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
     DEFAULT_OCCUPANCY_TIMEOUT,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
@@ -132,6 +134,8 @@ from .const import (
     ENTITY_TYPE_SCHEDULE,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     ILLUMINANCE_MODES,
+    MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
+    MATCH_SCHEDULE_AFTER_RESTART_CHOICES,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
@@ -145,6 +149,7 @@ from .const import (
     SCHEDULE_END_ACTION_SWITCH,
     SCHEDULE_END_ACTION_TURN_OFF,
     SCHEDULE_END_ACTIONS,
+    SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
     SCHEDULE_MODE_GATE_SWITCH,
@@ -344,6 +349,7 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_ILLUMINANCE_MODE,
         CONF_SCHEDULE_ENTITY,
         CONF_SCHEDULE_MODE,
+        CONF_MATCH_SCHEDULE_AFTER_RESTART,
         CONF_DOOR_ENTITY,
         CONF_DOOR_MODE,
         CONF_HOLD_ENTITIES,
@@ -997,6 +1003,18 @@ def _validate_light_timeout(
     return {}
 
 
+def _validate_match_schedule_after_restart(
+    user_input: dict[str, Any],
+) -> dict[str, str]:
+    """Only a Follow light can match its schedule after a restart."""
+    choice = user_input.get(CONF_MATCH_SCHEDULE_AFTER_RESTART)
+    mode = user_input.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+    follow = user_input.get(CONF_SCHEDULE_ENTITY) and mode == SCHEDULE_MODE_FOLLOW
+    if choice not in (None, MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND) and not follow:
+        return {"base": "match_schedule_after_restart_needs_follow"}
+    return {}
+
+
 def _stale_light_settings(
     hass: HomeAssistant,
     data: dict[str, Any],
@@ -1495,6 +1513,15 @@ def _light_option_fields(
                     selector.SelectSelectorConfig(
                         options=SCHEDULE_MODES,
                         translation_key=CONF_SCHEDULE_MODE,
+                    )
+                ),
+                vol.Required(
+                    CONF_MATCH_SCHEDULE_AFTER_RESTART,
+                    default=DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=MATCH_SCHEDULE_AFTER_RESTART_CHOICES,
+                        translation_key=CONF_MATCH_SCHEDULE_AFTER_RESTART,
                     )
                 ),
             }
@@ -2061,6 +2088,7 @@ _LIGHT_ENTRY_KEYS = frozenset(
         CONF_LIGHTS,
         CONF_SCHEDULE_ENTITY,
         CONF_SCHEDULE_MODE,
+        CONF_MATCH_SCHEDULE_AFTER_RESTART,
         CONF_SCHEDULE_END_ACTION,
         *_SCHEDULED_LIGHT_SIDES,
     }
@@ -2959,6 +2987,7 @@ class MoLightConfigFlow(
         if user_input is not None:
             flat = _current_entity_ids(self.hass, _flatten_light(user_input))
             errors = _validate_light_timeout(self.hass, flat)
+            errors.update(_validate_match_schedule_after_restart(flat))
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
             errors.update(
@@ -3915,6 +3944,7 @@ class MoLightConfigFlow(
                 errors[CONF_LIGHTS] = "lights_required"
             else:
                 errors = _validate_light_timeout(self.hass, flat)
+                errors.update(_validate_match_schedule_after_restart(flat))
             errors.update(_validate_name(flat))
             errors.update(
                 _validate_hold_entities(
@@ -4670,6 +4700,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors[CONF_LIGHTS] = "lights_required"
             else:
                 errors = _validate_light_timeout(self.hass, flat)
+                errors.update(_validate_match_schedule_after_restart(flat))
                 if _light_members_create_cycle(
                     self.hass, self._entry, flat[CONF_LIGHTS]
                 ):

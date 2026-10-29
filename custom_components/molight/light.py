@@ -328,6 +328,7 @@ from .const import (
     CONF_INSIDE_SCHEDULE_SETTINGS,
     CONF_LIGHTS,
     CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
@@ -351,6 +352,7 @@ from .const import (
     DEFAULT_EFFECT_TIMEOUT,
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_MODE,
+    DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_WARN_TIMEOUT,
@@ -366,6 +368,9 @@ from .const import (
     EVENT_TURNED_ON,
     ILLUMINANCE_MODE_CONTROL,
     ILLUMINANCE_MODE_GATE,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
     REASON_BRIGHT,
     REASON_DOOR,
     REASON_FALSE_DETECTION,
@@ -1252,6 +1257,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
         self._schedule_entity = cfg.get(CONF_SCHEDULE_ENTITY)
         self._schedule_mode = cfg.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
+        self._match_schedule_after_restart = cfg.get(
+            CONF_MATCH_SCHEDULE_AFTER_RESTART, DEFAULT_MATCH_SCHEDULE_AFTER_RESTART
+        )
         self._door_entity = cfg.get(CONF_DOOR_ENTITY)
         self._door_mode = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
         self._hold_entities = cfg.get(CONF_HOLD_ENTITIES, [])
@@ -2244,6 +2252,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # Already handled this window before the restart; adopt.
                 self._machine_state = STATE_SCHEDULED
                 self.async_write_ha_state()
+            elif self._early_command is None and self._matches_after_restart(
+                inside=True
+            ):
+                # Found off inside the window: the restart matches the schedule.
+                self._apply_window_start(marker, reason=REASON_STARTUP)
             else:
                 # Already handled, lights off → a manual off; respect it.
                 self.async_write_ha_state()
@@ -2271,7 +2284,29 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self.async_write_ha_state()
             return True
 
+        if (
+            self._attr_is_on
+            and self._early_command is None
+            and not self._held
+            and self._matches_after_restart(inside=False)
+        ):
+            # Found on outside the window: the restart matches the schedule.
+            self._send_event(EVENT_TURNED_OFF, reason=REASON_STARTUP, standby=False)
+            self.hass.async_create_task(self._auto_lights_off())
+            self.async_write_ha_state()
+            return True
+
         return False
+
+    def _matches_after_restart(self, *, inside: bool) -> bool:
+        """Return True when a restart matches the schedule on this side."""
+        both = MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE
+        side = (
+            MATCH_SCHEDULE_AFTER_RESTART_INSIDE
+            if inside
+            else MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE
+        )
+        return self._match_schedule_after_restart in (side, both)
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel the countdown timer and any waiting turn-on on removal."""
@@ -3998,7 +4033,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if state is not None and state.state == "off":
             self._schedule_window_applied = None
 
-    def _apply_window_start(self, marker: str | None) -> None:
+    def _apply_window_start(
+        self, marker: str | None, *, reason: str = REASON_SCHEDULE_START
+    ) -> None:
         """Enter the SCHEDULED state and turn the lights on (follow mode)."""
         self._schedule_window_applied = marker
         was_warning = self._in_warning()
@@ -4010,9 +4047,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # the effect/warn stage; restore them for the window.
             self._resume_lights()
         elif not self._attr_is_on:
-            self.hass.async_create_task(
-                self._auto_lights_on(reason=REASON_SCHEDULE_START)
-            )
+            self.hass.async_create_task(self._auto_lights_on(reason=reason))
         self.async_write_ha_state()
 
     def _on_occupancy_change(self, occupied: bool) -> None:

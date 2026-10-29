@@ -391,6 +391,21 @@ SCHEDULE_MODES = [
 ]
 DEFAULT_SCHEDULE_MODE = SCHEDULE_MODE_FOLLOW
 
+# What a Follow light found on or off gets at a Home Assistant restart or an
+# options reload: left as found, or turned on inside its window, off outside.
+CONF_MATCH_SCHEDULE_AFTER_RESTART = "match_schedule_after_restart"
+MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND = "as_found"
+MATCH_SCHEDULE_AFTER_RESTART_INSIDE = "inside"
+MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE = "outside"
+MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE = "inside_and_outside"
+MATCH_SCHEDULE_AFTER_RESTART_CHOICES = [
+    MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
+    MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
+]
+DEFAULT_MATCH_SCHEDULE_AFTER_RESTART = MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
+
 # A Virtual Scheduled Light's shared schedule selects its inside/outside
 # settings. Its end action chooses whether the on -> off boundary turns an on
 # light off, recalculates it from the outside settings, or preserves its running
