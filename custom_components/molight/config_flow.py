@@ -137,7 +137,7 @@ from .const import (
     REMOTE_ACTION_ON,
     REMOTE_ACTION_PRESET_1,
     REMOTE_ACTION_PRESET_2,
-    REMOTE_PRESET_VALUE_KEYS,
+    REMOTE_ACTION_VALUE_KEYS,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_DEFINITION_TIME,
     SCHEDULE_DEFINITIONS,
@@ -253,6 +253,7 @@ CONF_AUTO_ON_COLOR_MODE = "auto_on_color_mode"
 CONF_EFFECT_COLOR_MODE = "effect_color_mode"
 CONF_WARN_COLOR_MODE = "warn_color_mode"
 CONF_STANDBY_COLOR_MODE = "standby_color_mode"
+CONF_ON_COLOR_MODE = "on_color_mode"
 CONF_PRESET_1_COLOR_MODE = "preset_1_color_mode"
 CONF_PRESET_2_COLOR_MODE = "preset_2_color_mode"
 
@@ -263,13 +264,14 @@ _LIGHT_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = (
     (CONF_WARN_COLOR_MODE, CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR),
     (CONF_STANDBY_COLOR_MODE, CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR),
 )
-_PRESET_COLOR_MODE_KEYS: dict[str, tuple[str, ...]] = {
+_ACTION_COLOR_MODE_KEYS: dict[str, tuple[str, ...]] = {
+    REMOTE_ACTION_ON: (CONF_ON_COLOR_MODE,),
     REMOTE_ACTION_PRESET_1: (CONF_PRESET_1_COLOR_MODE,),
     REMOTE_ACTION_PRESET_2: (CONF_PRESET_2_COLOR_MODE,),
 }
 _REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
-    (_PRESET_COLOR_MODE_KEYS[action][0], temp_key, rgb_key)
-    for action, (_, temp_key, rgb_key) in REMOTE_PRESET_VALUE_KEYS.items()
+    (_ACTION_COLOR_MODE_KEYS[action][0], temp_key, rgb_key)
+    for action, (_, temp_key, rgb_key) in REMOTE_ACTION_VALUE_KEYS.items()
 )
 
 # ---------------------------------------------------------------------------
@@ -297,6 +299,7 @@ SECTION_WARNING = "warning"
 SECTION_STANDBY = "standby"
 SECTION_SENSORS = "sensors"
 SECTION_ADVANCED = "advanced"
+SECTION_ON_VALUES = "turn_on_values"
 
 # Which flat config keys live in which section of the virtual-light form.
 _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
@@ -363,16 +366,21 @@ _ENTITY_ID_SECTIONS: dict[str, tuple[str, ...]] = {
 
 # One section per bindable remote action (the action name is the section key),
 # each holding its single-/double-click button pickers; presets add their
-# brightness/color value fields.
+# brightness/color value fields. Turn on's values get a section of their own,
+# so the everyday form stays short.
+_REMOTE_VALUE_KEYS: dict[str, tuple[str, ...]] = {
+    action: (*keys, *_ACTION_COLOR_MODE_KEYS[action])
+    for action, keys in REMOTE_ACTION_VALUE_KEYS.items()
+}
 _REMOTE_SECTIONS: dict[str, tuple[str, ...]] = {
     action: (
         single_key,
         double_key,
-        *REMOTE_PRESET_VALUE_KEYS.get(action, ()),
-        *_PRESET_COLOR_MODE_KEYS.get(action, ()),
+        *(_REMOTE_VALUE_KEYS.get(action, ()) if action != REMOTE_ACTION_ON else ()),
     )
     for single_key, double_key, action in REMOTE_ACTION_FIELDS
 }
+_REMOTE_SECTIONS[SECTION_ON_VALUES] = _REMOTE_VALUE_KEYS[REMOTE_ACTION_ON]
 
 
 def _flatten_sections(
@@ -1157,12 +1165,14 @@ def _validate_remote(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str]
     if not bound:
         return {"base": "buttons_required"}
     for single_key, double_key, action in REMOTE_ACTION_FIELDS:
-        value_keys = REMOTE_PRESET_VALUE_KEYS.get(action)
+        value_keys = REMOTE_ACTION_VALUE_KEYS.get(action)
         if value_keys is None:
             continue
         brightness_key, color_temp_key, rgb_key = value_keys
         if cfg.get(color_temp_key) and cfg.get(rgb_key):
             return {"base": "preset_color_conflict"}
+        if action == REMOTE_ACTION_ON:
+            continue
         has_buttons = cfg.get(single_key) or cfg.get(double_key)
         has_values = int(cfg.get(brightness_key) or 0) or any(
             cfg.get(k) not in (None, []) for k in (color_temp_key, rgb_key)
@@ -1609,7 +1619,8 @@ def _remote_option_fields() -> dict:
 
     One collapsible section per bindable action, each holding a single- and a
     double-click button multi-picker (multiple remotes can drive one room);
-    the presets add their brightness/color values. Turn on and turn off start
+    the presets add their brightness/color values, and Turn on's optional
+    values follow it in a section of their own. Turn on and turn off start
     expanded as the common case, everything else collapsed.
     """
 
@@ -1618,6 +1629,16 @@ def _remote_option_fields() -> dict:
             selector.EntitySelectorConfig(domain="event", multiple=True)
         )
 
+    def _value_fields(action: str) -> dict:
+        brightness_key, color_temp_key, rgb_key = REMOTE_ACTION_VALUE_KEYS[action]
+        (mode_key,) = _ACTION_COLOR_MODE_KEYS[action]
+        return {
+            vol.Optional(brightness_key): _AUTO_ON_BRIGHTNESS_SELECTOR,
+            vol.Optional(mode_key): _COLOR_MODE_SELECTOR,
+            vol.Optional(color_temp_key): _COLOR_TEMP_SELECTOR,
+            vol.Optional(rgb_key): _RGB_COLOR_SELECTOR,
+        }
+
     expanded = {REMOTE_ACTION_ON, REMOTE_ACTION_OFF}
     fields: dict = {}
     for single_key, double_key, action in REMOTE_ACTION_FIELDS:
@@ -1625,16 +1646,15 @@ def _remote_option_fields() -> dict:
             vol.Optional(single_key): _event_buttons_selector(),
             vol.Optional(double_key): _event_buttons_selector(),
         }
-        if value_keys := REMOTE_PRESET_VALUE_KEYS.get(action):
-            brightness_key, color_temp_key, rgb_key = value_keys
-            (mode_key,) = _PRESET_COLOR_MODE_KEYS[action]
-            inner[vol.Optional(brightness_key)] = _AUTO_ON_BRIGHTNESS_SELECTOR
-            inner[vol.Optional(mode_key)] = _COLOR_MODE_SELECTOR
-            inner[vol.Optional(color_temp_key)] = _COLOR_TEMP_SELECTOR
-            inner[vol.Optional(rgb_key)] = _RGB_COLOR_SELECTOR
+        if action in REMOTE_ACTION_VALUE_KEYS and action != REMOTE_ACTION_ON:
+            inner.update(_value_fields(action))
         fields[vol.Required(action)] = section(
             vol.Schema(inner), {"collapsed": action not in expanded}
         )
+        if action == REMOTE_ACTION_ON:
+            fields[vol.Required(SECTION_ON_VALUES)] = section(
+                vol.Schema(_value_fields(action)), {"collapsed": True}
+            )
     return fields
 
 

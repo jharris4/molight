@@ -30,6 +30,7 @@ from custom_components.molight.config_flow import (
     CONF_WARN_COLOR_MODE,
     SECTION_ADVANCED,
     SECTION_BEHAVIOR,
+    SECTION_ON_VALUES,
     SECTION_SENSORS,
     SECTION_STANDBY,
     SECTION_WARNING,
@@ -9508,6 +9509,7 @@ _NAME_FORMS = [
 ]
 _REMOTE_BUTTONS = {
     **{action: {} for _single, _double, action in REMOTE_ACTION_FIELDS},
+    SECTION_ON_VALUES: {},
     REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
 }
 
@@ -9998,6 +10000,7 @@ async def test_forms_check_an_entity_id_changed_while_open_under_the_new_one(
             CONF_TARGET_LIGHTS: ["light.test_light"],
             CONF_DIM_STEP: 10,
             **{action: {} for _single, _double, action in REMOTE_ACTION_FIELDS},
+            SECTION_ON_VALUES: {},
         }
         stored = {CONF_ON_BUTTONS_SINGLE: [entity_id]}
     else:

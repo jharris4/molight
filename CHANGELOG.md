@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `<name> Events` entity recording what it last did and why, for a spoken off
   warning or a "why did it turn off" notification (see
   [Events](https://github.com/jharris4/molight/blob/main/REFERENCE.md#events)).
+- **Turn on values on a Virtual Remote**: an optional brightness and color for
+  the Turn on buttons, so a Pico's on button can go to 100% like a Caséta
+  dimmer's. Blank keeps today's behavior.
 
 ### Deprecated
 

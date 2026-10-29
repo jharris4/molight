@@ -200,6 +200,7 @@ CONVERSION_INPUT_KEYS = (
 )
 EMPTY_REMOTE_SECTIONS = {
     "turn_on": {},
+    "turn_on_values": {},
     "turn_off": {},
     "toggle": {},
     "brightness_up": {},

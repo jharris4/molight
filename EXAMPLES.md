@@ -316,6 +316,7 @@ Lights to control:  light.master_bedroom_closet   # a virtual light, or any ligh
 Brightness step:    10
 
 Turn on         → Single-click buttons:  event.closet_pico_on
+Turn on values  → Brightness:            100   # the on button goes to full, like a Caséta dimmer's
 Turn off        → Single-click buttons:  event.closet_pico_off
 Brightness up   → Single-click buttons:  event.closet_pico_raise
 Brightness down → Single-click buttons:  event.closet_pico_lower
@@ -323,7 +324,7 @@ Preset 1        → Single-click buttons:  event.closet_pico_stop   # the middle
                   Brightness:            60
 ```
 
-Each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
+The on button turns the light on at 100%; each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
 
 ---
 

@@ -28,7 +28,9 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.config_flow import (
     COLOR_MODE_NONE,
     COLOR_MODE_TEMP,
+    CONF_ON_COLOR_MODE,
     CONF_PRESET_1_COLOR_MODE,
+    SECTION_ON_VALUES,
 )
 from custom_components.molight.const import (
     CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE,
@@ -40,8 +42,11 @@ from custom_components.molight.const import (
     CONF_NAME,
     CONF_OFF_BUTTONS_DOUBLE,
     CONF_OFF_BUTTONS_SINGLE,
+    CONF_ON_BRIGHTNESS,
     CONF_ON_BUTTONS_DOUBLE,
     CONF_ON_BUTTONS_SINGLE,
+    CONF_ON_COLOR_TEMP,
+    CONF_ON_RGB_COLOR,
     CONF_PRESET_1_BRIGHTNESS,
     CONF_PRESET_1_BUTTONS_SINGLE,
     CONF_PRESET_1_COLOR_TEMP,
@@ -66,6 +71,7 @@ from custom_components.molight.const import (
     STATE_WARN,
 )
 from custom_components.molight.helpers import entry_settings
+from custom_components.molight.remote import _action_call
 from tests.conftest import make_light_entry, settle, setup_entries
 from tests.test_config_flow import _suggested_values
 from tests.test_light_selection import _SlowSelect
@@ -981,6 +987,95 @@ async def test_preset_brightness_below_one_percent_is_unset(
     assert "brightness_pct" not in preset_calls[-1]["service_data"]
 
 
+def test_turn_on_call_carries_its_values() -> None:
+    """Turn on sends its optional values; with none it is a plain turn-on."""
+    assert _action_call(REMOTE_ACTION_ON, {}, 10) == ("turn_on", {})
+    assert _action_call(REMOTE_ACTION_ON, {CONF_ON_BRIGHTNESS: 100}, 10) == (
+        "turn_on",
+        {"brightness_pct": 100},
+    )
+    assert _action_call(
+        REMOTE_ACTION_ON, {CONF_ON_BRIGHTNESS: 100, CONF_ON_COLOR_TEMP: 2700}, 10
+    ) == ("turn_on", {"brightness_pct": 100, "color_temp_kelvin": 2700})
+    assert _action_call(REMOTE_ACTION_ON, {CONF_ON_RGB_COLOR: [255, 0, 0]}, 10) == (
+        "turn_on",
+        {"rgb_color": [255, 0, 0]},
+    )
+    # Below 1% is unset, and unlike a preset the binding stays live.
+    assert _action_call(REMOTE_ACTION_ON, {CONF_ON_BRIGHTNESS: 0.5}, 10) == (
+        "turn_on",
+        {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_turn_on_brightness_applies_to_a_lit_light(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A Turn on brightness is applied even to a light that is already on."""
+    remote = _remote_entry(
+        **{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"], CONF_ON_BRIGHTNESS: 100}
+    )
+    hass.states.async_set("light.living_room", "on", {"brightness": 102})
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    assert _vlight(hass).attributes["brightness"] == 102
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+    assert _vlight(hass).attributes["brightness"] == 255
+    on_calls = [d for d in calls if "brightness_pct" in d["service_data"]]
+    assert on_calls
+    assert on_calls[-1]["service_data"]["brightness_pct"] == 100
+
+
+@pytest.mark.asyncio
+async def test_turn_on_without_values_keeps_the_last_brightness(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A blank Turn on brightness leaves the light at its last brightness."""
+    remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
+    hass.states.async_set("light.living_room", "on", {"brightness": 102})
+    _seed(hass, "event.pico_on", PICO_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.pico_on", "press", PICO_TYPES)
+    await settle(hass)
+    assert _vlight(hass).attributes["brightness"] == 102
+    on_calls = [d for d in calls if d["service"] == "turn_on"]
+    assert on_calls
+    assert "brightness_pct" not in on_calls[-1]["service_data"]
+
+
+@pytest.mark.asyncio
+async def test_turn_on_double_click_uses_the_same_values(
+    hass: HomeAssistant, light_entry: MockConfigEntry
+) -> None:
+    """A double-click Turn on binding applies the Turn on values too."""
+    remote = _remote_entry(
+        **{
+            CONF_ON_BUTTONS_DOUBLE: ["event.bilresa_1"],
+            CONF_ON_BRIGHTNESS: 100,
+            CONF_ON_COLOR_TEMP: 2700,
+        }
+    )
+    hass.states.async_set("light.living_room", "off")
+    _seed(hass, "event.bilresa_1", BILRESA_TYPES)
+    await setup_entries(hass, light_entry, remote)
+    calls = _record_service_calls(hass)
+
+    _fire(hass, "event.bilresa_1", "multi_press_2", BILRESA_TYPES)
+    await settle(hass)
+    assert _vlight(hass).state == "on"
+    assert _vlight(hass).attributes["brightness"] == 255
+    on_calls = [d for d in calls if "brightness_pct" in d["service_data"]]
+    assert on_calls
+    assert on_calls[-1]["service_data"]["color_temp_kelvin"] == 2700
+
+
 @pytest.mark.asyncio
 async def test_press_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
     """A bound press mid effect-stage acts as manual control: it cancels the
@@ -1431,8 +1526,11 @@ async def test_options_rebind_takes_effect_live(
 # Config flow
 # ---------------------------------------------------------------------------
 
-# The frontend always submits every action section, even collapsed ones.
-EMPTY_REMOTE_SECTIONS = {action: {} for _s, _d, action in REMOTE_ACTION_FIELDS}
+# The frontend always submits every section, even collapsed ones.
+EMPTY_REMOTE_SECTIONS = {
+    **{action: {} for _s, _d, action in REMOTE_ACTION_FIELDS},
+    SECTION_ON_VALUES: {},
+}
 
 
 async def _start_remote_create(hass: HomeAssistant) -> dict:
@@ -1774,6 +1872,96 @@ async def test_remote_options_clears_a_set_preset_color(
     cfg = entry_settings(remote)
     assert CONF_PRESET_1_COLOR_TEMP not in cfg
     assert cfg[CONF_PRESET_1_BRIGHTNESS] == 60
+
+
+@pytest.mark.asyncio
+async def test_remote_flow_turn_on_values(hass: HomeAssistant) -> None:
+    """The Turn on values sit in their own section, start blank, and are saved
+    even with no Turn on button bound."""
+    result = await _start_remote_create(hass)
+    schema = result["data_schema"].schema
+    sections = {marker.schema: value for marker, value in schema.items()}
+    assert list(sections)[-len(EMPTY_REMOTE_SECTIONS) :][:2] == [
+        REMOTE_ACTION_ON,
+        SECTION_ON_VALUES,
+    ]
+    assert {m.schema for m in sections[SECTION_ON_VALUES].schema.schema} == {
+        CONF_ON_BRIGHTNESS,
+        CONF_ON_COLOR_MODE,
+        CONF_ON_COLOR_TEMP,
+        CONF_ON_RGB_COLOR,
+    }
+    assert {m.schema for m in sections[REMOTE_ACTION_ON].schema.schema} == {
+        CONF_ON_BUTTONS_SINGLE,
+        CONF_ON_BUTTONS_DOUBLE,
+    }
+    assert SECTION_ON_VALUES not in _suggested_values(result["data_schema"])
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Closet Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 15,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.pico_off"]},
+            SECTION_ON_VALUES: {
+                CONF_ON_BRIGHTNESS: 100,
+                CONF_ON_COLOR_MODE: COLOR_MODE_TEMP,
+                CONF_ON_COLOR_TEMP: 2700,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_ON_BRIGHTNESS] == 100
+    assert data[CONF_ON_COLOR_TEMP] == 2700
+    assert CONF_ON_COLOR_MODE not in data
+    assert CONF_ON_BUTTONS_SINGLE not in data
+
+
+@pytest.mark.asyncio
+async def test_remote_options_clears_turn_on_values(hass: HomeAssistant) -> None:
+    """Editing prefills the Turn on values; a cleared brightness and a Color
+    mode of None remove the stored values."""
+    remote = _remote_entry(
+        **{
+            CONF_ON_BUTTONS_SINGLE: ["event.pico_on"],
+            CONF_ON_BRIGHTNESS: 100,
+            CONF_ON_COLOR_TEMP: 2700,
+        }
+    )
+    await setup_entries(hass, remote)
+
+    result = await hass.config_entries.options.async_init(remote.entry_id)
+    suggested = _suggested_values(result["data_schema"])
+    assert suggested[SECTION_ON_VALUES] == {
+        CONF_ON_BRIGHTNESS: 100,
+        CONF_ON_COLOR_MODE: COLOR_MODE_TEMP,
+        CONF_ON_COLOR_TEMP: 2700,
+    }
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_NAME: "Test Remote",
+            CONF_TARGET_LIGHTS: ["light.test_light"],
+            CONF_DIM_STEP: 10,
+            **EMPTY_REMOTE_SECTIONS,
+            REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
+            SECTION_ON_VALUES: {
+                CONF_ON_COLOR_MODE: COLOR_MODE_NONE,
+                CONF_ON_COLOR_TEMP: 2700,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await settle(hass)
+
+    cfg = entry_settings(remote)
+    assert CONF_ON_BRIGHTNESS not in cfg
+    assert CONF_ON_COLOR_TEMP not in cfg
+    assert cfg[CONF_ON_BUTTONS_SINGLE] == ["event.pico_on"]
 
 
 @pytest.mark.asyncio

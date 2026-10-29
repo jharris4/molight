@@ -902,6 +902,22 @@
               "on_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons with a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
             }
           },
+          "turn_on_values": {
+            "name": "Turn on values",
+            "description": "Optional. The brightness and color the Turn on buttons apply, as a preset does. Leave blank to turn the lights on as they were. Set a color temperature or a color, not both.",
+            "data": {
+              "on_brightness": "Brightness",
+              "on_color_mode": "Color mode",
+              "on_color_temp": "Color temperature",
+              "on_rgb_color": "Color"
+            },
+            "data_description": {
+              "on_brightness": "Optional. The brightness Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
+              "on_color_mode": "Optional. Whether Turn on applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
+              "on_color_temp": "Optional. The white color temperature Turn on applies, for lights that support it.",
+              "on_rgb_color": "Optional. The color Turn on applies, for lights that can show it."
+            }
+          },
           "turn_off": {
             "name": "Turn off",
             "description": "Buttons that turn the lights off.",
@@ -1665,6 +1681,22 @@
             "data_description": {
               "on_buttons_single": "Optional. The buttons whose single click fires this action. How a single click is spelled (short_release, multi_press_1, press, ...) is read from each button's own event types.",
               "on_buttons_double": "Optional. The buttons whose double click fires this action. Only buttons with a double-click event type can fire it. A button may serve several actions, but each button/click pair can be bound only once."
+            }
+          },
+          "turn_on_values": {
+            "name": "Turn on values",
+            "description": "Optional. The brightness and color the Turn on buttons apply, as a preset does. Leave blank to turn the lights on as they were. Set a color temperature or a color, not both.",
+            "data": {
+              "on_brightness": "Brightness",
+              "on_color_mode": "Color mode",
+              "on_color_temp": "Color temperature",
+              "on_rgb_color": "Color"
+            },
+            "data_description": {
+              "on_brightness": "Optional. The brightness Turn on applies, also to a light that is already on. Leave blank to turn the lights on at their last brightness.",
+              "on_color_mode": "Optional. Whether Turn on applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
+              "on_color_temp": "Optional. The white color temperature Turn on applies, for lights that support it.",
+              "on_rgb_color": "Optional. The color Turn on applies, for lights that can show it."
             }
           },
           "turn_off": {

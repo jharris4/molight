@@ -65,8 +65,9 @@ from .const import (
     REMOTE_ACTION_BRIGHTNESS_UP,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
+    REMOTE_ACTION_ON,
     REMOTE_ACTION_TOGGLE,
-    REMOTE_PRESET_VALUE_KEYS,
+    REMOTE_ACTION_VALUE_KEYS,
     SIGNAL_REMOTE_ACTION,
 )
 from .helpers import entry_settings
@@ -164,9 +165,10 @@ def _action_call(
 ) -> tuple[str, dict[str, Any]] | None:
     """Map an action slot to its light service call (service, service data).
 
-    Returns None for a preset with no values configured: such a binding
-    would be a plain turn-on pretending to be a preset, so it stays inert
-    (the config flow rejects the combination anyway).
+    Turn on and the presets carry their optional brightness and color. A
+    Turn on with none is a plain turn-on; a preset with none stays inert
+    (such a binding would be a turn-on pretending to be a preset, and the
+    config flow rejects the combination anyway).
     """
     if action == REMOTE_ACTION_OFF:
         return ("turn_off", {})
@@ -176,20 +178,18 @@ def _action_call(
         return ("turn_on", {"brightness_step_pct": dim_step})
     if action == REMOTE_ACTION_BRIGHTNESS_DOWN:
         return ("turn_on", {"brightness_step_pct": -dim_step})
-    if action in REMOTE_PRESET_VALUE_KEYS:
-        brightness_key, color_temp_key, rgb_key = REMOTE_PRESET_VALUE_KEYS[action]
-        data: dict[str, Any] = {}
-        # Below 1% is unset, not a turn-off.
-        if brightness_pct := int(cfg.get(brightness_key) or 0):
-            data["brightness_pct"] = brightness_pct
-        if cfg.get(color_temp_key):
-            data["color_temp_kelvin"] = int(cfg[color_temp_key])
-        elif cfg.get(rgb_key):
-            data["rgb_color"] = [int(c) for c in cfg[rgb_key]]
-        if not data:
-            return None
-        return ("turn_on", data)
-    return ("turn_on", {})  # REMOTE_ACTION_ON
+    brightness_key, color_temp_key, rgb_key = REMOTE_ACTION_VALUE_KEYS[action]
+    data: dict[str, Any] = {}
+    # Below 1% is unset, not a turn-off.
+    if brightness_pct := int(cfg.get(brightness_key) or 0):
+        data["brightness_pct"] = brightness_pct
+    if cfg.get(color_temp_key):
+        data["color_temp_kelvin"] = int(cfg[color_temp_key])
+    elif cfg.get(rgb_key):
+        data["rgb_color"] = [int(c) for c in cfg[rgb_key]]
+    if not data and action != REMOTE_ACTION_ON:
+        return None
+    return ("turn_on", data)
 
 
 def _warning_step_level(hass: HomeAssistant, entity_id: str, step: int) -> int | None:

@@ -462,6 +462,9 @@ DEFAULT_DIM_STEP = 10
 
 CONF_ON_BUTTONS_SINGLE = "on_buttons_single"
 CONF_ON_BUTTONS_DOUBLE = "on_buttons_double"
+CONF_ON_BRIGHTNESS = "on_brightness"
+CONF_ON_COLOR_TEMP = "on_color_temp"
+CONF_ON_RGB_COLOR = "on_rgb_color"
 CONF_OFF_BUTTONS_SINGLE = "off_buttons_single"
 CONF_OFF_BUTTONS_DOUBLE = "off_buttons_double"
 CONF_TOGGLE_BUTTONS_SINGLE = "toggle_buttons_single"
@@ -530,7 +533,10 @@ REMOTE_ACTION_FIELDS = (
 SIGNAL_REMOTE_ACTION = DOMAIN + "_remote_action_{}"
 
 # Preset action -> its (brightness, color temp, rgb color) value keys.
-REMOTE_PRESET_VALUE_KEYS = {
+# (brightness, color temp, rgb) keys of the actions that take values. Turn on
+# works with none; a preset with buttons needs at least one.
+REMOTE_ACTION_VALUE_KEYS = {
+    REMOTE_ACTION_ON: (CONF_ON_BRIGHTNESS, CONF_ON_COLOR_TEMP, CONF_ON_RGB_COLOR),
     REMOTE_ACTION_PRESET_1: (
         CONF_PRESET_1_BRIGHTNESS,
         CONF_PRESET_1_COLOR_TEMP,
