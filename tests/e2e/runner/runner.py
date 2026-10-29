@@ -828,7 +828,7 @@ SCHEDULED_INSIDE_SETTINGS = {
 def submit_selection(
     client: HomeAssistantClient, result: dict[str, Any]
 ) -> dict[str, Any]:
-    """Finish the target-dependent selection page of one set of settings."""
+    """Finish the turn-on selection step of one set of settings."""
     expect_step(result, "scheduled_light_selection")
     return client.continue_flow(
         result,
@@ -1106,8 +1106,8 @@ def trigger_and_assert(
     source: str = SOURCE_SELECT,
 ) -> None:
     """Trigger occupancy and assert routed light/select service effects."""
-    # Move the target off the expected option and note the last occupancy turn-on,
-    # so neither wait below can pass on what an earlier turn-on left behind.
+    # Move the select entity off the expected option and note the last occupancy
+    # turn-on, so neither wait below can pass on what an earlier turn-on left behind.
     options = client.state(TARGET_SELECT)["attributes"]["options"]
     decoy = next(option for option in options if option != selection)
     client.call_service(
@@ -3638,11 +3638,12 @@ def run_primary() -> None:
     trigger_and_assert(client, pct(30), "Cozy", source="fixed")
     reset_trigger(client)
     client.set_available(SOURCE_SELECT, True)
-    # A source option the target does not offer also falls back to the fixed one.
+    # An option source value the select entity does not offer also falls back
+    # to the fixed/fallback option.
     client.set_state(SOURCE_SELECT, "Party")
     trigger_and_assert(client, pct(30), "Cozy", source="fixed")
     reset_trigger(client)
-    # With the target select unavailable no option can be resolved: MoLight
+    # With the select entity unavailable no option can be resolved: MoLight
     # warns (allow-listed) and still turns the lights on.
     client.set_available(TARGET_SELECT, False)
     client.wait_state(
@@ -3682,8 +3683,9 @@ def run_primary() -> None:
         raise AssertionError("A physical turn-on was recorded as a selection turn-on")
     reset_trigger(client)
     checkpoint(
-        "turn-on selection follows its source, falls back when the source is "
-        "unavailable or unmatched, warns without a target, ignores wall turn-ons"
+        "turn-on selection follows its option source entity, falls back when that "
+        "is unavailable or unmatched, warns without its select entity, ignores "
+        "wall turn-ons"
     )
     client.call_service(
         "select",
@@ -4347,8 +4349,8 @@ ALLOWED_WARNINGS = (
     "We found a custom integration molight",
     # Deliberately provoked by the reference-cleanup scenario.
     "has no schedule; using outside-schedule settings",
-    # Deliberately provoked by the turn-on selection scenario (target unavailable).
-    "Turn-on selection target select.e2e_target_mode is unavailable",
+    # Deliberately provoked by the turn-on selection scenario (select unavailable).
+    "Turn-on selection entity select.e2e_target_mode is unavailable",
     # Deliberately provoked by the faulty-member scenario (testbed `reject`).
     "Unable to turn on light.e2e_multi_on_off",
     "Unable to turn off light.e2e_multi_on_off",
@@ -9017,7 +9019,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
 
 
 def wait_parked_calls(client: HomeAssistantClient, calls: int) -> None:
-    """Wait until the parked target select holds this many select calls."""
+    """Wait until the parked select entity holds this many select calls."""
     client.wait_state(
         TARGET_SELECT,
         lambda state: state["attributes"].get("testbed_parked_calls") == calls,

@@ -564,11 +564,12 @@ async def test_maintain_and_illuminance_sensors_keep_their_roles_on_new_entity_i
 async def test_select_entities_on_new_entity_ids_still_apply_the_turn_on_selection(
     hass: HomeAssistant, virtual_light_behavior_variant
 ) -> None:
-    """The turn-on selection reads the source and sets the target by new entity IDs."""
-    target = RealSelect("preset")
+    """The turn-on selection reads the option source entity and sets the select
+    entity by their new entity IDs."""
+    select = RealSelect("preset")
     source = RealSelect("mood", "Bright")
     member = RealLight("real_1")
-    await add_real(hass, target, source, member)
+    await add_real(hass, select, source, member)
     await setup_entries(
         hass,
         make_light_entry(
@@ -584,7 +585,7 @@ async def test_select_entities_on_new_entity_ids_still_apply_the_turn_on_selecti
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
     await settle(hass)
-    assert target.current_option == "Bright"
+    assert select.current_option == "Bright"
     assert attrs(hass)["last_turn_on_selection_source"] == "select.theme"
     assert member.is_on
 

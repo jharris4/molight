@@ -236,7 +236,7 @@ longer needs a custom repository.
 - **Convert virtual lights**: turn a schedule-gated regular Virtual Light into a
   Virtual Scheduled Light, or back, in place, keeping entity IDs and history.
 - **Turn-on selection**: drive a `select` entity (a preset, theme, or mode)
-  whenever the light turns on, with an optional source entity supplying the
+  whenever the light turns on; an option source entity can supply the
   option.
 - **Source-backed and inverted schedules**: a Virtual Schedule Sensor can
   mirror any existing binary sensor, and either definition can be inverted.

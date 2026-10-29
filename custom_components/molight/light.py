@@ -3156,8 +3156,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Return the device of the active settings' select entity, if any."""
         if not self._turn_on_select_entity:
             return None
-        target = er.async_get(self.hass).async_get(self._turn_on_select_entity)
-        return target.device_id if target is not None else None
+        registry_entry = er.async_get(self.hass).async_get(self._turn_on_select_entity)
+        return registry_entry.device_id if registry_entry is not None else None
 
     def _all_lights_off(self) -> bool:
         """Return True when every real light is off (brightness 0 is off)."""
@@ -4846,8 +4846,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._attr_is_on and not self._all_lights_off()
         ):
             return None
-        target = self.hass.states.get(self._turn_on_select_entity)
-        if target is None or target.state == STATE_UNAVAILABLE:
+        select_state = self.hass.states.get(self._turn_on_select_entity)
+        if select_state is None or select_state.state == STATE_UNAVAILABLE:
             return None
         return self._resolve_turn_on_selection()[0]
 
@@ -5472,14 +5472,14 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         select_entity = self._turn_on_select_entity
         if not select_entity:
             return
-        target = self.hass.states.get(select_entity)
-        if target is None or target.state == STATE_UNAVAILABLE:
-            # HA only logs a call to such a target, so it would otherwise be
+        select_state = self.hass.states.get(select_entity)
+        if select_state is None or select_state.state == STATE_UNAVAILABLE:
+            # HA only logs a call to such an entity, so it would otherwise be
             # recorded as applied. An unknown one (no current option) accepts it.
-            state = "missing" if target is None else target.state
+            state = "missing" if select_state is None else select_state.state
             _LOGGER.log(
                 self._selection_log_level(select_entity, state),
-                "Turn-on selection target %s is %s; turning on the lights without it",
+                "Turn-on selection entity %s is %s; turning on the lights without it",
                 select_entity,
                 state,
             )
@@ -5488,17 +5488,25 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if option is None:
             parts = []
             if self._turn_on_select_source_entity:
-                parts.append(f"the source {self._turn_on_select_source_entity}")
+                parts.append(
+                    f"the option source entity {self._turn_on_select_source_entity}"
+                )
             if self._turn_on_select_option:
-                parts.append(f"the fixed fallback {self._turn_on_select_option!r}")
+                parts.append(
+                    f"the fixed/fallback option {self._turn_on_select_option!r}"
+                )
             _LOGGER.log(
                 self._selection_log_level(select_entity, "unresolved"),
                 "Unable to resolve a turn-on selection option for %s: %s; "
                 "turning on the lights without one",
                 select_entity,
-                " and ".join(parts) + " yielded no option the target currently offers"
+                (
+                    " and ".join(parts)
+                    + " yielded no option the turn-on selection entity currently"
+                    " offers"
+                )
                 if parts
-                else "no source or fixed fallback is configured",
+                else "no option source entity or fixed/fallback option is configured",
             )
             return
         try:
@@ -5541,7 +5549,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return level
 
     def _resolve_turn_on_selection(self) -> tuple[str | None, str | None]:
-        """Resolve the source state, falling back to the configured option."""
+        """Resolve the option source entity's state, else the fixed/fallback option."""
         candidates: list[tuple[str, str]] = []
         if self._turn_on_select_source_entity:
             source_state = self.hass.states.get(self._turn_on_select_source_entity)
@@ -5556,16 +5564,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if self._turn_on_select_option:
             candidates.append((self._turn_on_select_option, "fixed"))
 
-        target_state = self.hass.states.get(self._turn_on_select_entity)
-        target_options = (
-            target_state.attributes.get(ATTR_OPTIONS)
-            if target_state is not None
+        select_state = self.hass.states.get(self._turn_on_select_entity)
+        select_options = (
+            select_state.attributes.get(ATTR_OPTIONS)
+            if select_state is not None
             else None
         )
         for option, source in candidates:
-            if not isinstance(target_options, (list, tuple)):
+            if not isinstance(select_options, (list, tuple)):
                 return option, source
-            if (matched := match_option(option, target_options)) is not None:
+            if (matched := match_option(option, select_options)) is not None:
                 return matched, source
         return None, None
 

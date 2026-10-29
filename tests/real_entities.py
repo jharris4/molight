@@ -305,7 +305,7 @@ class RealLux(SensorEntity):
 
 
 class RealSelect(SelectEntity):
-    """A registered select, as a turn-on selection target or source."""
+    """A registered select: a turn-on selection entity or option source entity."""
 
     _attr_should_poll = False
     _attr_options = ["Cozy", "Bright"]  # noqa: RUF012

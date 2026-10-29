@@ -1051,33 +1051,33 @@ def _validate_turn_on_selection(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
     """Validate and normalize a virtual light's optional turn-on selection."""
-    entity_id = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
+    select_entity = user_input.get(CONF_TURN_ON_SELECT_ENTITY)
     option = str(user_input.get(CONF_TURN_ON_SELECT_OPTION) or "")
     source_entity = user_input.get(CONF_TURN_ON_SELECT_SOURCE_ENTITY)
 
     if not option.strip():
         option = ""
-    if not entity_id and not option and not source_entity:
+    if not select_entity and not option and not source_entity:
         user_input.pop(CONF_TURN_ON_SELECT_ENTITY, None)
         user_input.pop(CONF_TURN_ON_SELECT_OPTION, None)
         user_input.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
         return {}
-    if not entity_id or not option:
+    if not select_entity or not option:
         return {"base": "turn_on_selection_incomplete"}
-    if source_entity == entity_id:
+    if source_entity == select_entity:
         return {
             CONF_TURN_ON_SELECT_SOURCE_ENTITY: (
-                "turn_on_selection_source_same_as_target"
+                "turn_on_selection_source_same_as_entity"
             )
         }
 
-    target_state = hass.states.get(entity_id)
-    target_options = (
-        target_state.attributes.get(ATTR_OPTIONS) if target_state is not None else None
+    select_state = hass.states.get(select_entity)
+    select_options = (
+        select_state.attributes.get(ATTR_OPTIONS) if select_state is not None else None
     )
     if (
-        isinstance(target_options, (list, tuple))
-        and (option := match_option(option, target_options)) is None
+        isinstance(select_options, (list, tuple))
+        and (option := match_option(option, select_options)) is None
     ):
         return {"base": "turn_on_selection_invalid_option"}
     # Unverifiable options are stored as typed; each turn-on matches them.
@@ -1091,10 +1091,10 @@ def _validate_turn_on_selection(
             else None
         )
         if (
-            isinstance(target_options, (list, tuple))
+            isinstance(select_options, (list, tuple))
             and isinstance(source_options, (list, tuple))
             and not any(
-                match_option(str(value), target_options) is not None
+                match_option(str(value), select_options) is not None
                 for value in source_options
             )
         ):
@@ -1372,7 +1372,7 @@ def _clean_optional_values(values: dict[str, Any]) -> dict[str, Any]:
 def _carry_turn_on_selection(
     values: dict[str, Any], previous: dict[str, Any] | None
 ) -> None:
-    """Keep hidden selection-step values while its target stays unchanged."""
+    """Keep hidden selection-step values while its select entity stays unchanged."""
     if not previous or values.get(CONF_TURN_ON_SELECT_ENTITY) != previous.get(
         CONF_TURN_ON_SELECT_ENTITY
     ):
@@ -1627,19 +1627,19 @@ def _light_option_fields(
     return fields
 
 
-def _turn_on_selection_fields(target_entity: str) -> dict:
-    """Fields shown after a virtual light's target select is known."""
+def _turn_on_selection_fields(select_entity: str) -> dict:
+    """Fields shown after a virtual light's turn-on selection entity is known."""
     return {
         vol.Optional(CONF_TURN_ON_SELECT_SOURCE_ENTITY): selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain=["input_select", "select"],
-                exclude_entities=[target_entity],
+                exclude_entities=[select_entity],
                 multiple=False,
             )
         ),
         vol.Required(CONF_TURN_ON_SELECT_OPTION): selector.StateSelector(
             selector.StateSelectorConfig(
-                entity_id=target_entity,
+                entity_id=select_entity,
                 hide_states=[STATE_UNAVAILABLE, STATE_UNKNOWN],
                 multiple=False,
             )
@@ -2105,7 +2105,7 @@ class _ScheduledLightSettingsSteps:
     Shared by the config and options flows, which differ only in the shared
     first form and in how the flow ends. Each side gets the regular Virtual
     Light settings form (minus the schedule fields) and, when it picks a
-    turn-on selection target, the same target-dependent selection page.
+    turn-on selection entity, the same turn-on selection step.
 
     Subclasses provide `_scheduled_light_defaults(side)` (what a side's form
     starts from before anything has been entered for it) and an async
@@ -2174,7 +2174,7 @@ class _ScheduledLightSettingsSteps:
                     self._scheduled_light_settings[side] = _clean_optional_values(flat)
                     self._scheduled_light_pending_side = side
                     return await self.async_step_scheduled_light_selection()
-                # No selection target: drop any stale option/source before storing.
+                # No select entity: drop any stale option and option source entity.
                 _validate_turn_on_selection(self.hass, flat)
                 self._scheduled_light_settings[side] = _clean_optional_values(flat)
                 return await self._scheduled_light_next(side)
@@ -2234,8 +2234,8 @@ class _ScheduledLightSettingsSteps:
         flat = dict(self._scheduled_light_settings[side])
         errors: dict[str, str] = {}
         if user_input is not None:
-            # This form owns both selection fields; an absent optional source
-            # means the user cleared it, so it must not survive the update.
+            # This step owns both selection fields; an absent option source
+            # entity means the user cleared it, so it must not survive the update.
             flat.pop(CONF_TURN_ON_SELECT_SOURCE_ENTITY, None)
             flat.update(user_input)
             flat = _current_entity_ids(self.hass, flat)
@@ -2244,7 +2244,7 @@ class _ScheduledLightSettingsSteps:
                 self._scheduled_light_settings[side] = _clean_optional_values(flat)
                 return await self._scheduled_light_next(side)
 
-        target = flat[CONF_TURN_ON_SELECT_ENTITY]
+        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
         suggested = {
             key: flat[key]
             for key in (
@@ -2256,11 +2256,11 @@ class _ScheduledLightSettingsSteps:
         return self.async_show_form(
             step_id="scheduled_light_selection",
             data_schema=self.add_suggested_values_to_schema(
-                vol.Schema(_turn_on_selection_fields(target)),
+                vol.Schema(_turn_on_selection_fields(select_entity)),
                 user_input or suggested,
             ),
             errors=errors,
-            description_placeholders={"entity_id": target},
+            description_placeholders={"entity_id": select_entity},
         )
 
 
@@ -2283,9 +2283,9 @@ class MoLightConfigFlow(
         # wrapped lights it has already named.
         self._wrapped_pending: dict[str, Any] | None = None
         self._wrapped_confirmed: list[str] = []
-        # Stashed Virtual Light form while its target-dependent turn-on
-        # selection step is shown. Selection values are kept separately so a
-        # trip through the entity-id collision menu can prefill them again.
+        # Stashed Virtual Light form while its turn-on selection step is
+        # shown. Selection values are kept separately so a trip through the
+        # entity-id collision menu can prefill them again.
         self._light_pending: dict[str, Any] | None = None
         self._light_selection_values: dict[str, Any] = {}
         # Cross-step state for the Virtual Scheduled Light's shared form; the
@@ -4020,7 +4020,7 @@ class MoLightConfigFlow(
     async def async_step_light_selection(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a target-dependent fixed/source turn-on selection."""
+        """Configure the option source entity and fixed/fallback option."""
         pending = self._light_pending
         flat = dict(pending["flat"])
         errors: dict[str, str] = {}
@@ -4040,7 +4040,7 @@ class MoLightConfigFlow(
                     members=self._discovery["selected"] if discovery else None,
                 )[1]
             ):
-                # An occupancy timeout or keep-on group changed with this page open.
+                # An occupancy timeout or keep-on group changed with this step open.
                 if discovery:
                     return self._show_discover_light_defaults(_nest_light(flat), errors)
                 return self._show_light_form(pending["prefill"], errors)
@@ -4069,17 +4069,17 @@ class MoLightConfigFlow(
                 # been taken since; only that form can change them.
                 return self._show_light_form(pending["prefill"], errors)
 
-        target = flat[CONF_TURN_ON_SELECT_ENTITY]
-        suggested = {CONF_TURN_ON_SELECT_ENTITY: target}
+        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {CONF_TURN_ON_SELECT_ENTITY: select_entity}
         _carry_turn_on_selection(suggested, self._light_selection_values)
-        schema = vol.Schema(_turn_on_selection_fields(target))
+        schema = vol.Schema(_turn_on_selection_fields(select_entity))
         return self.async_show_form(
             step_id="light_selection",
             data_schema=self.add_suggested_values_to_schema(
                 schema, user_input if user_input is not None else suggested
             ),
             errors=errors,
-            description_placeholders={"entity_id": target},
+            description_placeholders={"entity_id": select_entity},
         )
 
     # ------------------------------------------------------------------
@@ -4795,7 +4795,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def async_step_light_selection(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a target-dependent fixed/source turn-on selection."""
+        """Edit the option source entity and fixed/fallback option."""
         flat = dict(self._light_pending["flat"])
         errors: dict[str, str] = {}
 
@@ -4810,22 +4810,22 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     self._hold_exclusions(),
                 )[1]
             ):
-                # An occupancy timeout or keep-on group changed with this page open.
+                # An occupancy timeout or keep-on group changed with this step open.
                 return self._show_light_form(_nest_light(flat), errors)
             if not errors:
                 return self._finish(_clean_optional_values(flat))
 
-        target = flat[CONF_TURN_ON_SELECT_ENTITY]
-        suggested = {CONF_TURN_ON_SELECT_ENTITY: target}
+        select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
+        suggested = {CONF_TURN_ON_SELECT_ENTITY: select_entity}
         _carry_turn_on_selection(suggested, self._light_selection_values)
-        schema = vol.Schema(_turn_on_selection_fields(target))
+        schema = vol.Schema(_turn_on_selection_fields(select_entity))
         return self.async_show_form(
             step_id="light_selection",
             data_schema=self.add_suggested_values_to_schema(
                 schema, user_input if user_input is not None else suggested
             ),
             errors=errors,
-            description_placeholders={"entity_id": target},
+            description_placeholders={"entity_id": select_entity},
         )
 
     # ------------------------------------------------------------------

@@ -358,7 +358,7 @@ test("create a remote through its form", async ({ page }) => {
   expect(sensor.state).toBe("unknown");
 });
 
-test("a light with a turn-on selection gets the selection page", async ({ page }) => {
+test("a light with a turn-on selection gets the selection step", async ({ page }) => {
   await login(page);
   await startCreate(page, "Virtual Light");
   await expectFlowTitle(page, "Virtual Light");

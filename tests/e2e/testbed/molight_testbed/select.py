@@ -85,7 +85,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add source and target select fixtures."""
+    """Add the option source and turn-on selection select fixtures."""
     controller = controller_for_entry(hass, entry)
     async_add_entities(
         [

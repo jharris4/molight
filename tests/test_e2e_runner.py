@@ -270,8 +270,9 @@ def test_main_needs_one_boot_count_for_the_log_check(
 class _SelectionHass(runner.HomeAssistantClient):
     """Fakes the states one turn-on selection call reads, after a previous call.
 
-    The previous call left the light reporting a Cozy turn-on from the fixed
-    option; an occupancy turn-on applies the selection only when asked to.
+    The previous call left the light reporting a Cozy turn-on from the
+    fixed/fallback option; an occupancy turn-on applies the selection only when
+    asked to.
     """
 
     def __init__(self, *, applies: bool, stamps: bool = True) -> None:
@@ -335,7 +336,7 @@ def test_trigger_and_assert_passes_when_the_selection_is_applied(
 
 
 def test_trigger_and_assert_fails_when_no_selection_is_applied(clock: _Clock) -> None:
-    """The target and attributes already show Cozy from the previous call."""
+    """The select entity and attributes already show Cozy from the previous call."""
     with pytest.raises(AssertionError, match=runner.TARGET_SELECT):
         runner.trigger_and_assert(
             _SelectionHass(applies=False), runner.pct(30), "Cozy", source="fixed"

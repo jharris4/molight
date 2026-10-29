@@ -291,7 +291,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -585,7 +585,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -712,7 +712,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
@@ -802,7 +802,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
@@ -865,20 +865,20 @@
           "turn_on_select_option": "Fixed/fallback option"
         },
         "data_description": {
-          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
-          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
+          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the turn-on selection entity. The turn-on selection entity cannot be its own option source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the turn-on selection entity's available options. Used directly when there is no option source entity, or as the fallback when the option source entity is unavailable, unknown, or not accepted by the turn-on selection entity."
         }
       },
       "light_selection": {
         "title": "Turn-on selection",
-        "description": "Choose how MoLight resolves the option sent to {entity_id}. The source entity wins when usable; the required fixed option is its fallback.",
+        "description": "Choose how MoLight resolves the option sent to {entity_id}. The option source entity wins when usable; otherwise the required fixed/fallback option is used.",
         "data": {
           "turn_on_select_source_entity": "Option source entity",
           "turn_on_select_option": "Fixed/fallback option"
         },
         "data_description": {
-          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
-          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
+          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the turn-on selection entity. The turn-on selection entity cannot be its own option source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the turn-on selection entity's available options. Used directly when there is no option source entity, or as the fallback when the option source entity is unavailable, unknown, or not accepted by the turn-on selection entity."
         }
       },
       "remote": {
@@ -1067,10 +1067,10 @@
       "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the Auto-on color mode field to choose which applies.",
       "effect_color_conflict": "Set only one of the effect color temperature and color, or use the Effect color mode field to choose which applies.",
       "warn_color_conflict": "Set only one of the warning color temperature and color, or use the Warning color mode field to choose which applies.",
-      "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
-      "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
-      "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
-      "turn_on_selection_source_no_matching_options": "This source and the turn-on selection entity do not currently offer any of the same options. Choose a source with at least one matching option.",
+      "turn_on_selection_incomplete": "Choose a fixed/fallback option for the turn-on selection entity; to remove the turn-on selection instead, restart the form and clear the Turn-on selection entity field.",
+      "turn_on_selection_invalid_option": "That fixed/fallback option is not currently offered by the turn-on selection entity. Choose one of its available options.",
+      "turn_on_selection_source_same_as_entity": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
+      "turn_on_selection_source_no_matching_options": "This option source entity and the turn-on selection entity do not currently offer any of the same options. Choose an option source entity with at least one matching option.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage. Set an effect warning duration above 0 first.",
       "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled. Set an effect warning duration above 0, or leave the brightness at 0.",
@@ -1267,7 +1267,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
@@ -1357,7 +1357,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and optional source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this Virtual Scheduled Light turns on. The next step picks its fixed/fallback option and an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs. A manual off is unaffected."
             }
@@ -1420,8 +1420,8 @@
           "turn_on_select_option": "Fixed/fallback option"
         },
         "data_description": {
-          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
-          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
+          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the turn-on selection entity. The turn-on selection entity cannot be its own option source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the turn-on selection entity's available options. Used directly when there is no option source entity, or as the fallback when the option source entity is unavailable, unknown, or not accepted by the turn-on selection entity."
         }
       },
       "occupancy": {
@@ -1619,7 +1619,7 @@
               "auto_on_color_mode": "Optional. Whether automatic turn-ons apply a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "auto_on_color_temp": "Optional. White color temperature (Kelvin) for automatic turn-ons, applied to lights that support it. Manual turn-ons keep their own color.",
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
-              "turn_on_select_entity": "Optional. The target select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
+              "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
               "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
             }
@@ -1660,14 +1660,14 @@
       },
       "light_selection": {
         "title": "Turn-on selection",
-        "description": "Choose how MoLight resolves the option sent to {entity_id}. The source entity wins when usable; the required fixed option is its fallback.",
+        "description": "Choose how MoLight resolves the option sent to {entity_id}. The option source entity wins when usable; otherwise the required fixed/fallback option is used.",
         "data": {
           "turn_on_select_source_entity": "Option source entity",
           "turn_on_select_option": "Fixed/fallback option"
         },
         "data_description": {
-          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the target. The target cannot be its own source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
-          "turn_on_select_option": "Required. Choose from the target entity's available options. Used directly when there is no source, or as the fallback when the source is unavailable, unknown, or not accepted by the target."
+          "turn_on_select_source_entity": "Optional. At each turn-on, copy the current state of this input_select or a different select into the turn-on selection entity. The turn-on selection entity cannot be its own option source. If both entities offer options now, they must have at least one in common. Changes while the light is already on are not applied.",
+          "turn_on_select_option": "Required. Choose from the turn-on selection entity's available options. Used directly when there is no option source entity, or as the fallback when the option source entity is unavailable, unknown, or not accepted by the turn-on selection entity."
         }
       },
       "confirm_wrapped_lights": {
@@ -1842,10 +1842,10 @@
       "auto_on_color_conflict": "Set only one of the auto-on color temperature and color, or use the Auto-on color mode field to choose which applies.",
       "effect_color_conflict": "Set only one of the effect color temperature and color, or use the Effect color mode field to choose which applies.",
       "warn_color_conflict": "Set only one of the warning color temperature and color, or use the Warning color mode field to choose which applies.",
-      "turn_on_selection_incomplete": "Choose a fixed fallback option for the turn-on selection entity; to remove the selection instead, restart the form and clear the target entity.",
-      "turn_on_selection_invalid_option": "That fixed fallback is not currently offered by the turn-on selection entity. Choose one of the target's available options.",
-      "turn_on_selection_source_same_as_target": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
-      "turn_on_selection_source_no_matching_options": "This source and the turn-on selection entity do not currently offer any of the same options. Choose a source with at least one matching option.",
+      "turn_on_selection_incomplete": "Choose a fixed/fallback option for the turn-on selection entity; to remove the turn-on selection instead, restart the form and clear the Turn-on selection entity field.",
+      "turn_on_selection_invalid_option": "That fixed/fallback option is not currently offered by the turn-on selection entity. Choose one of its available options.",
+      "turn_on_selection_source_same_as_entity": "The turn-on selection entity cannot also be its own option source. Choose a different input_select or select.",
+      "turn_on_selection_source_no_matching_options": "This option source entity and the turn-on selection entity do not currently offer any of the same options. Choose an option source entity with at least one matching option.",
       "effect_color_requires_brightness": "An effect color needs an effect brightness above 0 (a blink fully off can't show a color).",
       "effect_color_requires_timeout": "An effect color needs an enabled effect stage. Set an effect warning duration above 0 first.",
       "effect_brightness_requires_timeout": "An effect brightness needs the effect stage enabled. Set an effect warning duration above 0, or leave the brightness at 0.",

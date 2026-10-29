@@ -219,7 +219,8 @@ CONF_TURN_ON_SELECT_ENTITY = "turn_on_select_entity"
 CONF_TURN_ON_SELECT_OPTION = "turn_on_select_option"
 # Optional select/input_select whose current state supplies the option at
 # turn-on time. When it is missing, unavailable, unknown, or not accepted by
-# the target, turn_on_select_option is used as the fixed fallback.
+# the turn-on selection entity, turn_on_select_option is used as the
+# fixed/fallback option.
 CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
 # When occupancy clears and the sensor flags the visit as a false detection,
 # lights that were lit BY that visit turn off after this short delay instead

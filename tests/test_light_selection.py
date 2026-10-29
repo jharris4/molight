@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture(autouse=True)
 def _ambient_theme(hass: HomeAssistant) -> None:
-    """Give the selection target a state; tests that need options set their own."""
+    """Give the select entity a state; tests that need options set their own."""
     hass.states.async_set("select.ambient_theme", "Normal")
 
 
@@ -164,7 +164,8 @@ async def test_automatic_turn_on_applies_selection(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_source_entity_is_resolved_at_each_turn_on(hass: HomeAssistant) -> None:
-    """The source overrides the fallback and is read fresh for every on-cycle."""
+    """The option source entity overrides the fixed/fallback option and is read
+    fresh for every on-cycle."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -214,7 +215,8 @@ async def test_source_entity_is_resolved_at_each_turn_on(hass: HomeAssistant) ->
 async def test_unusable_source_falls_back_to_fixed_option(
     hass: HomeAssistant, source_state: str
 ) -> None:
-    """Unavailable and target-invalid source values use the fixed fallback."""
+    """Option source entity values that are unavailable or not offered by the select
+    entity use the fixed/fallback option."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -246,7 +248,8 @@ async def test_unusable_source_falls_back_to_fixed_option(
 async def test_source_without_fallback_can_skip_selection(
     hass: HomeAssistant, caplog
 ) -> None:
-    """An unavailable source without a fallback never blocks the light."""
+    """An unavailable option source entity with no fixed/fallback option never blocks
+    the light."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -355,12 +358,12 @@ async def test_selection_failure_does_not_prevent_turn_on(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target", ["missing", "unavailable"])
+@pytest.mark.parametrize("select_state", ["missing", "unavailable"])
 @pytest.mark.allow_warning_log
-async def test_selection_skipped_when_target_is_missing_or_unavailable(
-    hass: HomeAssistant, caplog, target: str
+async def test_selection_skipped_when_select_entity_is_missing_or_unavailable(
+    hass: HomeAssistant, caplog, select_state: str
 ) -> None:
-    """HA only logs a call to such a target, so MoLight skips it with a warning
+    """HA only logs a call to such an entity, so MoLight skips it with a warning
     of its own and does not record the selection as applied."""
     selected: list[str] = []
 
@@ -368,7 +371,7 @@ async def test_selection_skipped_when_target_is_missing_or_unavailable(
         selected.append(call.data["option"])
 
     hass.services.async_register("select", "select_option", select_option)
-    if target == "missing":
+    if select_state == "missing":
         hass.states.async_remove("select.ambient_theme")
     else:
         hass.states.async_set("select.ambient_theme", "unavailable")
@@ -385,7 +388,10 @@ async def test_selection_skipped_when_target_is_missing_or_unavailable(
     assert selected == []
     assert state.attributes["last_turn_on_selection_option"] is None
     assert state.attributes["last_turn_on_selection_source"] is None
-    assert f"Turn-on selection target select.ambient_theme is {target}" in caplog.text
+    assert (
+        f"Turn-on selection entity select.ambient_theme is {select_state}"
+        in caplog.text
+    )
 
 
 @pytest.mark.asyncio
@@ -456,7 +462,7 @@ async def test_skipped_selection_warns_once_until_one_applies(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door", "resend"])
-async def test_selection_applied_when_target_has_no_current_option(
+async def test_selection_applied_when_select_entity_has_no_current_option(
     hass: HomeAssistant, caplog, trigger: str
 ) -> None:
     """A select with no current option (a WLED preset select after a change
@@ -497,7 +503,7 @@ async def test_selection_applied_when_target_has_no_current_option(
     assert selected == ["Cozy"] * (2 if trigger == "resend" else 1)
     assert state.attributes["last_turn_on_selection_option"] == "Cozy"
     assert state.attributes["last_turn_on_selection_source"] == "fixed"
-    assert "Turn-on selection target" not in caplog.text
+    assert "Turn-on selection entity" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -528,9 +534,9 @@ async def test_selection_prefers_the_exact_option(
     source: str | None,
     sent: str | None,
 ) -> None:
-    """The option sent is the one the target offers, padding and all.
+    """The option sent is the one the select entity offers, padding and all.
 
-    A value stored as typed while the target was unavailable, or stripped
+    A value stored as typed while the select entity was unavailable, or stripped
     before options kept their padding, still finds its single option.
     """
     selected: list[str] = []
@@ -564,7 +570,7 @@ async def test_selection_prefers_the_exact_option(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_window_start_applies_selection_to_a_target_with_no_current_option(
+async def test_window_start_applies_selection_to_select_entity_with_no_current_option(
     hass: HomeAssistant,
 ) -> None:
     """A follow window start applies the option to an unknown select too."""
@@ -2290,7 +2296,7 @@ async def test_device_push_from_the_selection_does_not_drop_a_window_start(
 async def test_wall_turn_on_of_a_light_on_another_device_still_overtakes(
     hass: HomeAssistant, layout: str
 ) -> None:
-    """Only the select target's own device speaks for the selection."""
+    """Only the turn-on selection entity's own device speaks for the selection."""
     if layout == "another_device":
         _one_device(hass, "select.ambient_theme")
     _one_device(hass, "light.ambient")
@@ -2319,7 +2325,7 @@ async def test_wall_turn_on_of_a_light_on_another_device_still_overtakes(
 async def test_wall_turn_on_of_another_member_during_a_device_selection_overtakes(
     hass: HomeAssistant,
 ) -> None:
-    """A second real light, not on the select target's device, turned on at
+    """A second real light, not on the select entity's device, turned on at
     the wall during the wait is still a change at the wall."""
     _one_device(hass, "select.ambient_theme", "light.ambient")
     select = _SlowSelect(hass)

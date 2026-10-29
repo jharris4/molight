@@ -1183,7 +1183,7 @@ async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
 async def test_scheduled_light_turn_on_selection_for_each_side(
     hass: HomeAssistant,
 ) -> None:
-    """Each settings map gets its own generic turn-on selection page."""
+    """Each settings map gets its own generic turn-on selection step."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
     result = await _start_create(hass)
@@ -1503,7 +1503,7 @@ async def test_scheduled_light_derived_id_collision_can_go_back(
 async def test_scheduled_light_inside_selection_prefills_from_outside(
     hass: HomeAssistant,
 ) -> None:
-    """Keeping the outside target on the inside form carries its selection over."""
+    """An inside form keeping the outside select entity carries its selection over."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
     result = await _start_create(hass)
@@ -1533,7 +1533,7 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
         },
     )
     assert result["step_id"] == "scheduled_light_inside"
-    # The inside form is prefilled with the outside settings, target included.
+    # The inside form is prefilled with the outside settings, select entity included.
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
@@ -1563,7 +1563,7 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
 async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Each side's selection page prefills its own values; clearing drops them."""
+    """Each side's selection step prefills its own values; clearing drops them."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night", "Dusk"]})
     entry = MockConfigEntry(
@@ -1601,7 +1601,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
-    # Outside: keep the target, so the selection page shows the entry settings.
+    # Outside: keep the select entity, so the selection step shows the entry settings.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -1636,7 +1636,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     suggested = _suggested_values(result["data_schema"])
     assert suggested[SECTION_BEHAVIOR][CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
 
-    # Inside: clear the target; no selection page, and its values are dropped.
+    # Inside: clear the select entity; no selection step, and its values are dropped.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**EMPTY_INSIDE_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     )
@@ -1647,15 +1647,16 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     outside = cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
     assert outside[CONF_TURN_ON_SELECT_ENTITY] == "select.mode"
     assert outside[CONF_TURN_ON_SELECT_OPTION] == "Dusk"
-    # The resubmitted source survives the round trip through the selection page.
+    # The resubmitted option source entity survives the trip through the selection step.
     assert outside[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
     inside = cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
     assert CONF_TURN_ON_SELECT_ENTITY not in inside
     assert CONF_TURN_ON_SELECT_OPTION not in inside
     assert CONF_TURN_ON_SELECT_SOURCE_ENTITY not in inside
 
-    # A second pass that keeps the target but omits the source clears it:
-    # the selection form owns the field, so absence is a clear, not a keep.
+    # A second pass that keeps the select entity but omits the option source
+    # entity clears it: the selection step owns the field, so absence is a
+    # clear, not a keep.
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -1689,10 +1690,10 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_options_inside_selection_page(
+async def test_scheduled_light_options_inside_selection_step(
     hass: HomeAssistant,
 ) -> None:
-    """The inside settings reach their own selection page and store the result."""
+    """The inside settings reach their own selection step and store the result."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
     entry = MockConfigEntry(
@@ -1970,7 +1971,7 @@ async def _reach_selection(hass: HomeAssistant, flow: str) -> tuple[dict, Any]:
 async def _stored_option(
     hass: HomeAssistant, flow: str, result: dict, manager: Any
 ) -> str:
-    """Finish the flow and return the fixed option it stored."""
+    """Finish the flow and return the fixed/fallback option it stored."""
     if flow == "scheduled":
         assert result["step_id"] == "scheduled_light_inside"
         result = await manager.async_configure(
@@ -2012,7 +2013,7 @@ async def _stored_option(
         "typed_padding_beside_padded",
         "typed_without_padding",
         "typed_other_padding",
-        "target_unavailable",
+        "select_entity_unavailable",
     ],
 )
 async def test_selection_keeps_an_options_own_padding(
@@ -2022,10 +2023,10 @@ async def test_selection_keeps_an_options_own_padding(
     submitted: str,
     stored: str,
 ) -> None:
-    """An option the target offers is stored exactly, padding and all.
+    """An option the select entity offers is stored exactly, padding and all.
 
     Padding typed around an option is dropped when it leaves one option;
-    with the target unavailable the value is stored as typed.
+    with the select entity unavailable the value is stored as typed.
     """
     if options is None:
         hass.states.async_set(_PRESET, "unavailable")
@@ -2061,7 +2062,7 @@ async def test_selection_rejects_typed_padding_that_names_two_options(
 async def test_selection_source_matching_a_padded_option_is_accepted(
     hass: HomeAssistant,
 ) -> None:
-    """A source offering "Cozy" can drive a target that offers "Cozy "."""
+    """An option source entity offering "Cozy" can drive a select offering "Cozy "."""
     hass.states.async_set(_PRESET, "Cozy ", {"options": ["Cozy ", "Night"]})
     hass.states.async_set("input_select.theme", "Cozy", {"options": ["Cozy"]})
     result, manager = await _reach_selection(hass, "create")
@@ -2081,7 +2082,7 @@ async def test_selection_source_matching_a_padded_option_is_accepted(
 async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
     hass: HomeAssistant,
 ) -> None:
-    """An id taken while the selection page is open sends the user back to fix it."""
+    """An id taken while the selection step is open sends the user back to fix it."""
     hass.states.async_set(
         "select.wled_preset", "Christmas", {"options": ["Christmas", "Warm White"]}
     )
@@ -2113,7 +2114,7 @@ async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
     assert suggested[CONF_NAME] == "WLED"
     assert suggested[SECTION_ADVANCED][CONF_ENTITY_ID] == "racy"
 
-    # The same target keeps the chosen fallback; a new one starts blank.
+    # The same select entity keeps its fixed/fallback option; a new one starts blank.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**light_form, SECTION_ADVANCED: {CONF_ENTITY_ID: "free"}}
     )
@@ -2146,7 +2147,7 @@ async def test_light_flow_late_entity_id_conflict_returns_to_light_form(
 async def test_light_flow_rejects_invalid_turn_on_fallback(
     hass: HomeAssistant,
 ) -> None:
-    """The required fixed fallback must be offered by the target."""
+    """The required fixed/fallback option must be offered by the select entity."""
     hass.states.async_set(
         "select.wled_preset",
         "Christmas",
@@ -2180,7 +2181,7 @@ async def test_light_flow_rejects_invalid_turn_on_fallback(
 async def test_light_flow_stores_turn_on_selection_source(
     hass: HomeAssistant,
 ) -> None:
-    """A compatible source entity and mandatory fixed fallback are stored."""
+    """A compatible option source entity and fixed/fallback option are stored."""
     hass.states.async_set(
         "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
     )
@@ -2223,10 +2224,11 @@ async def test_light_flow_stores_turn_on_selection_source(
 
 
 @pytest.mark.asyncio
-async def test_light_flow_rejects_selection_target_as_source(
+async def test_light_flow_rejects_select_entity_as_option_source(
     hass: HomeAssistant,
 ) -> None:
-    """Validation rejects stale/bypassed data that uses the target as source."""
+    """Validation rejects stale/bypassed data naming the select entity as its own
+    option source entity."""
     hass.states.async_set(
         "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
     )
@@ -2240,7 +2242,7 @@ async def test_light_flow_rejects_selection_target_as_source(
     )
 
     assert errors == {
-        CONF_TURN_ON_SELECT_SOURCE_ENTITY: ("turn_on_selection_source_same_as_target")
+        CONF_TURN_ON_SELECT_SOURCE_ENTITY: ("turn_on_selection_source_same_as_entity")
     }
 
 
@@ -2248,7 +2250,7 @@ async def test_light_flow_rejects_selection_target_as_source(
 async def test_light_flow_rejects_source_without_matching_options(
     hass: HomeAssistant,
 ) -> None:
-    """A source whose options can never reach the target is rejected."""
+    """An option source entity that can never match the select entity is rejected."""
     hass.states.async_set(
         "select.wled_preset", "Warm White", {"options": ["Warm White", "Christmas"]}
     )
@@ -2290,7 +2292,7 @@ async def test_light_flow_rejects_source_without_matching_options(
 
 @pytest.mark.asyncio
 async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) -> None:
-    """Clearing the target disables both fixed and sourced selection."""
+    """Clearing the select entity disables both fixed and sourced selection."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -2329,7 +2331,8 @@ async def test_light_options_can_clear_turn_on_selection(hass: HomeAssistant) ->
 async def test_light_options_prefill_and_update_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Editing offers the target's options and retains source/fallback values."""
+    """Editing offers the select entity's options and keeps the option source entity
+    and fixed/fallback option."""
     hass.states.async_set(
         "select.wled_preset",
         "Christmas",
@@ -2389,10 +2392,10 @@ async def test_light_options_prefill_and_update_turn_on_selection(
 
 
 @pytest.mark.asyncio
-async def test_light_options_selection_not_prefilled_after_target_change(
+async def test_light_options_selection_not_prefilled_after_select_entity_change(
     hass: HomeAssistant,
 ) -> None:
-    """A new target starts blank rather than inheriting the old one's values."""
+    """A new select entity starts blank rather than inheriting the old one's values."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -2415,7 +2418,7 @@ async def test_light_options_selection_not_prefilled_after_target_change(
             CONF_NAME: "WLED",
             CONF_LIGHTS: ["light.wled_real"],
             CONF_LIGHT_TIMEOUT: 300,
-            # Unavailable, so any fallback would be accepted as is.
+            # Unavailable, so any fixed/fallback option would be accepted as is.
             SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.other"},
         },
     )
@@ -3224,10 +3227,10 @@ async def test_light_options_clears_the_timeout(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_light_options_selection_page_keeps_a_blank_timeout(
+async def test_light_options_selection_step_keeps_a_blank_timeout(
     hass: HomeAssistant,
 ) -> None:
-    """The turn-on selection page saves the blank timeout from the page before."""
+    """The turn-on selection step saves the blank timeout from the step before."""
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     entry = _light_entry("Hall", "hall")
     await setup_entries(hass, entry)
@@ -4054,7 +4057,7 @@ async def test_discover_light_defaults_rejects_non_schedule_sensor_from_stale_fo
 async def test_discover_light_creates_with_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Discovered lights complete the target-dependent selection subflow."""
+    """Discovered lights complete the turn-on selection step."""
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
     hass.states.async_set(
         "select.desk_preset",
@@ -9336,10 +9339,10 @@ _TOO_SHORT = {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
 
 
 @pytest.mark.asyncio
-async def test_light_selection_page_rejects_timeout_raised_meanwhile(
+async def test_light_selection_step_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A sensor's occupancy timeout raised behind the create flow's selection page
+    """A sensor's occupancy timeout raised behind the create flow's selection step
     sends the user back to the light form with the timeout error."""
     await setup_entries(hass, occupancy_entry)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -9460,10 +9463,10 @@ async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
 
 
 @pytest.mark.asyncio
-async def test_discovery_selection_page_rejects_timeout_raised_meanwhile(
+async def test_discovery_selection_step_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A sensor's occupancy timeout raised behind the discovery selection page sends
+    """A sensor's occupancy timeout raised behind the discovery selection step sends
     the user back to the shared defaults form."""
     await setup_entries(hass, occupancy_entry)
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
