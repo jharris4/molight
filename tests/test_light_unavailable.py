@@ -586,7 +586,7 @@ async def test_failed_turn_off_leaves_the_light_reporting_on_until_sent_again(
 async def test_failed_manual_turn_off_leaves_the_light_reporting_on(
     hass: HomeAssistant, caplog
 ) -> None:
-    """A turn-off through this entity that a member's integration refuses
+    """A turn-off through this entity that a member's integration rejects
     leaves that member burning: the light reports on again."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")

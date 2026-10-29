@@ -2,7 +2,7 @@
 
 A schedule cannot be its own source, but a group can contain it, directly or
 through a nested group or a combined schedule. Mirroring such a source feeds
-the schedule its own state: inverted, it flips without end. The forms refuse
+the schedule its own state: inverted, it flips without end. The forms reject
 one, and a group changed afterwards makes the schedule unavailable.
 """
 
@@ -362,7 +362,7 @@ async def _edit_source(hass: HomeAssistant, entry: MockConfigEntry, source: str)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("topology", TOPOLOGIES)
-async def test_editing_a_schedule_refuses_a_source_that_includes_it(
+async def test_editing_a_schedule_rejects_a_source_that_includes_it(
     hass: HomeAssistant, monkeypatch, topology: str
 ) -> None:
     """The options form names the cycle and saves nothing."""
@@ -415,7 +415,7 @@ async def _start_schedule(hass: HomeAssistant, entity_type: str) -> dict:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("named", ["name", "entity_id", "taken_name"])
 @pytest.mark.parametrize("nested", [False, True])
-async def test_creating_a_schedule_refuses_a_group_that_names_its_id(
+async def test_creating_a_schedule_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
     """A group can name an entity that does not exist yet, including the
@@ -450,7 +450,7 @@ async def test_creating_a_schedule_refuses_a_group_that_names_its_id(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("nested", [False, True])
-async def test_a_combined_schedule_refuses_a_schedule_whose_source_includes_it(
+async def test_a_combined_schedule_rejects_a_schedule_whose_source_includes_it(
     hass: HomeAssistant, nested: bool
 ) -> None:
     """Editing the combined schedule closes the same cycle from its side."""
@@ -490,7 +490,7 @@ async def test_a_combined_schedule_refuses_a_schedule_whose_source_includes_it(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("taken", [False, True], ids=["free", "taken_name"])
-async def test_creating_a_combined_schedule_refuses_a_group_that_names_its_id(
+async def test_creating_a_combined_schedule_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
     """A new combined schedule can take an ID its input's source group names,

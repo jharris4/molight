@@ -115,7 +115,7 @@ The three **Discover** actions scan your existing entities and create a virtual 
 
 Each starts with an optional filter form: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
 
-The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. Each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are refused; a light group whose lights are already ticked starts unticked.
+The next form shows the checklist of matching entities. Only useful candidates appear: MoLight's own entities, disabled entities, anything already wrapped, and light groups that contain a virtual light are hidden, so re-running discovery later only offers what's new. Each pick becomes its own virtual light, so two picks that control the same light, such as a light and a light group that contains it, are rejected; a light group whose lights are already ticked starts unticked.
 
 An optional **prefix**/**suffix** distinguishes the virtual entities from the real ones, applied verbatim to the source's friendly name (you control the spacing), with a target of your choice:
 
@@ -164,10 +164,10 @@ MoLight writes no debug logs. A setting it cannot act on is raised as a **Repair
 - a Virtual Schedule Sensor whose source group includes it (it goes `unavailable`);
 - a Virtual Occupancy Sensor whose source group includes it (it stops following the source);
 - a virtual light whose member light group includes it, directly or through a light group inside it (it stops controlling that group);
-- two virtual lights, saved before the form refused it, that both control the same light (they fight over it);
-- a keep-on entity saved before the form refused it (it stays as it was).
+- two virtual lights, saved before the form rejected it, that both control the same light (they fight over it);
+- a keep-on entity saved before the form rejected it (it stays as it was).
 
-The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration refused (the virtual light then reports what its real lights show), and an error when discovery fails to create an entry.
+The issue clears when the entry is edited or deleted, and comes back if the problem is still there. What goes wrong at runtime is only logged: a warning for a turn-on selection it could not apply or a command a real light's integration rejected (the virtual light then reports what its real lights show), and an error when discovery fails to create an entry.
 
 Every entry offers **Download diagnostics** in its menu on the MoLight page. The file holds the entry's data and options, the state and attributes of every entity it created and of every entity it references (real lights, sensors, schedule, door, keep-on entities, select and buttons), which other MoLight entries use its entities, and MoLight's open Repairs issues. Attach it to a bug report.
 

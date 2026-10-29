@@ -1072,7 +1072,7 @@ async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None
 
 
 # ---------------------------------------------------------------------------
-# Keep-on entities saved before the form refused them
+# Keep-on entities saved before the form rejected them
 # ---------------------------------------------------------------------------
 
 
@@ -1080,8 +1080,8 @@ _ALWAYS = "is on whenever this light is"
 _NEVER = "never reads on"
 
 
-def _refused_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
-    """The (light, keep-on entity, reason) of each refused keep-on warning."""
+def _rejected_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
+    """The (light, keep-on entity, reason) of each rejected keep-on warning."""
     return [
         record.args
         for record in caplog.records
@@ -1091,7 +1091,7 @@ def _refused_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
+async def test_load_warns_about_keep_on_entities_the_form_now_rejects(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Each is named once, with why it never acts as a keep-on entity."""
@@ -1113,7 +1113,7 @@ async def test_load_warns_about_keep_on_entities_the_form_now_refuses(
     )
     await settle(hass)
 
-    assert _refused_holds(caplog) == [
+    assert _rejected_holds(caplog) == [
         (VIRTUAL, REAL, _ALWAYS),
         (VIRTUAL, "light.downstairs", _ALWAYS),
         (VIRTUAL, "group.room", _ALWAYS),
@@ -1135,4 +1135,4 @@ async def test_load_warns_once_for_a_keep_on_entity_on_both_scheduled_sides(
     )
     await settle(hass)
 
-    assert _refused_holds(caplog) == [("light.scheduled_light", "person.alex", _NEVER)]
+    assert _rejected_holds(caplog) == [("light.scheduled_light", "person.alex", _NEVER)]

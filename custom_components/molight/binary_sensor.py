@@ -352,7 +352,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     def _source_includes_self(self) -> bool:
         """Whether the source is computed from this sensor, as a group can be.
 
-        The forms refuse one, but a group can change afterwards. Following it
+        The forms reject one, but a group can change afterwards. Following it
         would keep this sensor on by its own state, so it counts as a source
         that cannot be read. What it is computed from is watched: it can come
         to include this sensor while the source itself reports nothing new.
@@ -1735,7 +1735,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     def _source_includes_self(self) -> bool:
         """Whether the source is computed from this schedule, as a group can be.
 
-        The forms refuse one, but a group can change afterwards. Mirroring it
+        The forms reject one, but a group can change afterwards. Mirroring it
         would feed the schedule its own state, flipping it without end or
         holding it on. What it is computed from is watched: it can come to
         include this schedule while the source itself reports nothing new.

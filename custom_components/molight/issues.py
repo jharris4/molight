@@ -42,7 +42,7 @@ def async_raise_issue(
     """Raise a warning issue for an entry and return its ID.
 
     `about` tells apart several issues of one kind on one entry, such as one
-    per refused keep-on entity.
+    per rejected keep-on entity.
     """
     issue_id = f"{entry_id}_{key}" if about is None else f"{entry_id}_{key}_{about}"
     ir.async_create_issue(

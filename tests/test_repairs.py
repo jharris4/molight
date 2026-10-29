@@ -30,7 +30,7 @@ TV = "media_player.tv"
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_refused_keep_on_entities_raise_one_issue_each(
+async def test_rejected_keep_on_entities_raise_one_issue_each(
     hass: HomeAssistant,
 ) -> None:
     """Each names the light, the entity, and why it never holds."""

@@ -513,7 +513,7 @@ _OFFSET_WITHOUT_SUN = [
 async def test_schedule_rejects_a_sun_offset_without_a_sun_event(
     hass: HomeAssistant, schedule_entry: MockConfigEntry, form: str, start, end
 ) -> None:
-    """An offset with no sun event to shift is refused rather than dropped;
+    """An offset with no sun event to shift is rejected rather than dropped;
     with the offset cleared the same window saves."""
     if form == "create":
         result = await _start_create(hass)
@@ -1306,7 +1306,7 @@ async def test_scheduled_light_options_edit_both_settings(
 async def test_scheduled_light_options_requires_replacing_deleted_schedule(
     hass: HomeAssistant,
 ) -> None:
-    """A removed shared schedule is required and cannot be saved again."""
+    """A removed shared schedule is required and rejected if saved again."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1793,7 +1793,7 @@ async def test_scheduled_light_requires_lights(hass: HomeAssistant) -> None:
 async def test_scheduled_light_explicit_entity_id_conflict(
     hass: HomeAssistant,
 ) -> None:
-    """A taken explicit id blocks the first form, and a late one returns to it."""
+    """A taken explicit id is rejected on the first form; a late one returns to it."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.taken", "off")
     result = await _start_create(hass)
@@ -4429,7 +4429,7 @@ async def test_manual_whitespace_entity_id_treated_as_blank(
 async def test_manual_explicit_entity_id_conflict_errors(
     hass: HomeAssistant,
 ) -> None:
-    """An explicit entity_id that is already taken hard-blocks the form."""
+    """An explicit entity_id that is already taken is rejected."""
     hass.states.async_set("binary_sensor.taken", "off")
 
     result = await _reach_occupancy_form(hass)
@@ -4715,7 +4715,7 @@ async def test_assign_occupancy_deselect_all_removes(
 async def test_discovery_deselect_all_is_rejected(
     hass: HomeAssistant, submitted: dict
 ) -> None:
-    """A discovery checklist with nothing picked is refused, not refilled."""
+    """A discovery checklist with nothing picked is rejected, not refilled."""
     hass.states.async_set("sensor.office_lux", "42", {"device_class": "illuminance"})
     result = await _reach_discovery_select(hass, "discover_illuminance")
     result = await hass.config_entries.flow.async_configure(
@@ -5824,7 +5824,7 @@ async def test_conversion_round_trip_restores_flat_config(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("direction", ["convert_to_scheduled", "convert_to_regular"])
-async def test_options_form_opened_before_a_conversion_is_refused(
+async def test_options_form_opened_before_a_conversion_is_rejected(
     hass: HomeAssistant, direction: str
 ) -> None:
     """A form of the old kind cannot be saved over the converted light."""
@@ -6446,7 +6446,7 @@ async def test_assign_noop_leaves_entry_untouched(
 # ---------------------------------------------------------------------------
 # A fade none of the chosen lights could apply
 #
-# Mirrors the double-click check: only a positive "none of them can" blocks.
+# Mirrors the double-click check: only a positive "none of them can" rejects.
 # A light with no state yet can't be judged, so the fade is allowed through.
 # ---------------------------------------------------------------------------
 
@@ -7411,7 +7411,7 @@ async def test_combined_options_tolerate_foreign_constituents(
     """Cycle detection skips constituents it cannot resolve to MoLight entries.
 
     A stale form can submit a registered foreign sensor or a state-only one;
-    neither can form a cycle, and neither may crash or block the edit.
+    neither can form a cycle, and neither may crash the edit or have it rejected.
     """
     foreign = MockConfigEntry(domain="test")
     foreign.add_to_hass(hass)
@@ -7692,7 +7692,7 @@ async def test_light_options_picker_excludes_member_cycles(
 async def test_light_options_reject_cycle_from_stale_form(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light that came to include this one after the form opened is refused."""
+    """A light that came to include this one after the form opened is rejected."""
     await _setup_night_schedule(hass)
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
@@ -7715,7 +7715,7 @@ async def test_light_options_reject_cycle_from_stale_form(
 async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A cycle another light's save closed behind a later page is refused."""
+    """A cycle another light's save closed behind a later page is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -7891,10 +7891,10 @@ async def test_light_pickers_scan_virtual_lights_once_per_render(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scheduled", [False, True], ids=["light", "scheduled_light"])
-async def test_create_refuses_a_light_wrapped_while_the_form_was_open(
+async def test_create_rejects_a_light_wrapped_while_the_form_was_open(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light another virtual light took while the form was open is refused."""
+    """A light another virtual light took while the form was open is rejected."""
     await _setup_night_schedule(hass)
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -7934,7 +7934,7 @@ async def test_create_refuses_a_light_wrapped_while_the_form_was_open(
     [["light.other_real"], ["light.group"], ["light.other", "light.other_real"]],
     ids=["direct", "through_a_group", "beside_the_light_that_has_it"],
 )
-async def test_light_options_refuse_a_light_another_virtual_light_controls(
+async def test_light_options_reject_a_light_another_virtual_light_controls(
     hass: HomeAssistant, members: list[str]
 ) -> None:
     """Directly, through a light group, or next to the virtual light that has
@@ -7957,7 +7957,7 @@ async def test_light_options_refuse_a_light_another_virtual_light_controls(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_options_refuse_a_light_another_virtual_light_controls(
+async def test_scheduled_light_options_reject_a_light_another_virtual_light_controls(
     hass: HomeAssistant,
 ) -> None:
     """The scheduled light's member picker and submit apply the same rule."""
@@ -7990,7 +7990,7 @@ async def test_scheduled_light_options_refuse_a_light_another_virtual_light_cont
 async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, scheduled: bool
 ) -> None:
-    """A light another light's save took behind a later page is refused."""
+    """A light another light's save took behind a later page is rejected."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -8065,7 +8065,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
 async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     hass: HomeAssistant, last_page: str, taken: str
 ) -> None:
-    """A new light's last page refuses a light another light took behind it,
+    """A new light's last page rejects a light another light took behind it,
     or a member group that came to name the ID the new light will get."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
@@ -8178,7 +8178,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
 ) -> None:
     """A keep-on group that gains the light's member, or the ID the light has
     or will get, behind a later page would hold it on for good, so the final
-    save sends the form back."""
+    save is rejected."""
     await _setup_night_schedule(hass)
     member = "light.subject_real"
     hass.states.async_set(member, "off")
@@ -8563,7 +8563,7 @@ async def test_light_create_points_out_a_wrapped_light_once(
 async def test_wrapped_light_page_follows_a_light_changed_while_open(
     hass: HomeAssistant, form: str, change: str
 ) -> None:
-    """A wrapped light deleted behind the page is refused as on any last page;
+    """A wrapped light deleted behind the page is rejected as on any last page;
     one whose entity ID changed is saved under the new one without the
     page again."""
     await _setup_wrap_test(hass, form)
@@ -8603,7 +8603,7 @@ async def test_wrapped_light_page_follows_a_light_changed_while_open(
     "form", ["create", "options", "scheduled_create", "scheduled_options"]
 )
 @pytest.mark.parametrize("nesting", ["group", "group_in_a_group"])
-async def test_light_forms_refuse_a_group_holding_a_virtual_light(
+async def test_light_forms_reject_a_group_holding_a_virtual_light(
     hass: HomeAssistant, form: str, nesting: str
 ) -> None:
     """Through a group, the virtual light's own timer would pass for a person,
@@ -8638,7 +8638,7 @@ async def test_light_forms_refuse_a_group_holding_a_virtual_light(
 async def test_light_options_final_page_rejects_a_group_given_a_virtual_light(
     hass: HomeAssistant, form: str
 ) -> None:
-    """A group that came to hold a virtual light behind a later page is refused."""
+    """A group that came to hold a virtual light behind a later page is rejected."""
     await _setup_wrap_test(hass, form)
     hass.states.async_set("light.lamp", "off")
     hass.states.async_set("light.living", "off", {"entity_id": ["light.lamp"]})
@@ -8782,7 +8782,7 @@ async def test_discovery_preselects_no_two_picks_that_share_a_light(
     ],
     ids=["a_light_and_its_group", "two_groups_sharing_a_light"],
 )
-async def test_discovery_refuses_two_picks_that_share_a_light(
+async def test_discovery_rejects_two_picks_that_share_a_light(
     hass: HomeAssistant, picks: list[str], names: dict[str, str]
 ) -> None:
     """Each pick becomes its own regular Virtual Light, and two would fight over the
@@ -9505,7 +9505,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
 ) -> None:
     """A light newly referencing a sensor does not reference it in storage yet, so the
     sensor's occupancy timeout can be raised behind the light's last page: the save is
-    refused with the timeout error on the referencing form."""
+    rejected with the timeout error on the referencing form."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hall = (
@@ -9680,7 +9680,7 @@ async def test_scheduled_light_standby_validation(
 async def test_scheduled_light_standby_needs_a_dimmable_light(
     hass: HomeAssistant,
 ) -> None:
-    """A standby level is refused when no member can dim."""
+    """A standby level is rejected when no member can dim."""
     hass.states.async_set(
         "light.porch_real", "off", {"supported_color_modes": ["onoff"]}
     )
@@ -10274,7 +10274,7 @@ async def test_forms_check_an_entity_id_changed_while_open_under_the_new_one(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, kind: str, flow: str
 ) -> None:
     """Its former entity ID and its new one are the same entity, and it is judged as
-    it is now, so a conflict between them is refused instead of saved."""
+    it is now, so a conflict between them is rejected instead of saved."""
     entity_id, new_id, submitted, expected = _ENTITY_ID_CHANGED_WHILE_OPEN[kind]
     await add_real(hass, RealButton("button"), _SingleButton("single_button"))
     await setup_entries(hass, occupancy_entry)
@@ -10510,7 +10510,7 @@ async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
 async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, flow: str
 ) -> None:
-    """A constituent deleted while the form was open is not saved again."""
+    """A constituent deleted while the form was open is rejected."""
     other = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -10567,7 +10567,7 @@ async def test_combined_occupancy_does_not_save_a_constituent_deleted_while_open
 async def test_remote_does_not_save_a_target_light_deleted_while_open(
     hass: HomeAssistant, flow: str
 ) -> None:
-    """A virtual light deleted while the remote's form was open is not saved."""
+    """A virtual light deleted while the remote's form was open is rejected."""
     hall = _light_entry("Hall", "hall")
     await setup_entries(hass, hall)
     submitted = {
@@ -10907,7 +10907,7 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
         "discovery",
     ],
 )
-async def test_new_light_refuses_a_keep_on_group_naming_its_future_id(
+async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
     hass: HomeAssistant, form: str, taken: bool
 ) -> None:
     """A group set up first, naming the ID the new light will get, is on
@@ -11157,7 +11157,7 @@ async def test_occupancy_options_check_lights_using_it_in_either_role(
     key: str,
 ) -> None:
     """Raising a sensor's occupancy timeout above the turn-off timeout of a light
-    that references it is refused."""
+    that references it is rejected."""
     await _setup_night_schedule(hass)
     await setup_entries(
         hass,
@@ -11269,7 +11269,7 @@ async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
 async def test_standby_color_needs_a_light_that_can_show_it(
     hass: HomeAssistant, flow: str, standby: dict, modes: list[str], error: str | None
 ) -> None:
-    """A standby color no chosen light can show is refused, as other colors are."""
+    """A standby color no chosen light can show is rejected, as other colors are."""
     hass.states.async_set("light.porch_real", "off", {"supported_color_modes": modes})
     if flow == "create":
         manager = hass.config_entries.flow
@@ -11353,7 +11353,7 @@ async def test_light_flow_match_schedule_after_restart_needs_follow(
 
 
 @pytest.mark.asyncio
-async def test_light_options_refuse_match_schedule_after_restart_in_gate_mode(
+async def test_light_options_reject_match_schedule_after_restart_in_gate_mode(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
     """Switching a Follow light to a Gate mode must also drop its match choice."""
@@ -11403,10 +11403,10 @@ async def test_light_options_refuse_match_schedule_after_restart_in_gate_mode(
 
 
 @pytest.mark.asyncio
-async def test_discover_light_defaults_refuse_match_schedule_without_follow(
+async def test_discover_light_defaults_reject_match_schedule_without_follow(
     hass: HomeAssistant,
 ) -> None:
-    """The discovery defaults form refuses a match choice with no Follow schedule."""
+    """The discovery defaults form rejects a match choice with no Follow schedule."""
     hass.states.async_set("light.desk", "off", {"friendly_name": "Desk Lamp"})
     result = await _reach_discovery_select(hass, "discover_light")
     result = await hass.config_entries.flow.async_configure(

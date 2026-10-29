@@ -180,7 +180,7 @@ def test_picks_the_newest_package_for_the_release(
 def test_rejects_other_arguments(
     bump: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Anything but --write is refused before PyPI is asked."""
+    """Anything but --write is rejected before PyPI is asked."""
     asked = _serve(bump, monkeypatch, {})
     with pytest.raises(SystemExit, match="usage"):
         _run(bump, monkeypatch, "--apply")

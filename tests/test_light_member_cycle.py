@@ -1,6 +1,6 @@
 """A virtual light whose member is a light group that includes the light.
 
-The flows refuse such a member, but a group can be changed afterwards, or the
+The flows reject such a member, but a group can be changed afterwards, or the
 light saved before the check existed. Driving it would call the light again.
 """
 

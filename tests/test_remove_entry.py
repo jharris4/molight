@@ -375,7 +375,7 @@ async def test_remove_entry_strips_references_from_surviving_entries(
     assert light_settings[CONF_SCHEDULE_ENTITY] == "binary_sensor.rm_schedule"
     assert light_settings[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
     assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.other"]
-    # A form opened before the removal refuses the sensor.
+    # A form opened before the removal rejects the sensor.
     assert current_references(
         hass, {CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy"}
     ) == (

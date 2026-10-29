@@ -2151,7 +2151,7 @@ NATIVE_VOCABULARIES = {
     "switchbot": (["press"], "press", None, []),
 }
 
-# Event entities with no click at all: a single-click binding is refused.
+# Event entities with no click at all: a single-click binding is rejected.
 NATIVE_NON_CLICK_VOCABULARIES = {
     "bthome_dimmer": ["rotate_left", "rotate_right"],
     "bthome_command": ["off", "on", "toggle", "step_up", "step_down"],
@@ -2204,8 +2204,8 @@ async def _create_remote_through_flow(hass: HomeAssistant, sections: dict) -> di
 async def test_native_integration_vocabulary(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer, integration: str
 ) -> None:
-    """Each native button shape passes setup for the clicks it has, is refused
-    a double click it lacks, and fires each bound click exactly once."""
+    """Each native button shape passes setup for the clicks it has, rejects a
+    double click it lacks, and fires each bound click exactly once."""
     types, single, double, noise = NATIVE_VOCABULARIES[integration]
     hass.states.async_set("light.living_room", "off")
     await setup_entries(hass, light_entry)
@@ -2259,7 +2259,7 @@ async def test_native_integration_vocabulary(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("integration", list(NATIVE_NON_CLICK_VOCABULARIES))
-async def test_native_non_click_entity_refuses_a_single_click(
+async def test_native_non_click_entity_rejects_a_single_click(
     hass: HomeAssistant, light_entry: MockConfigEntry, integration: str
 ) -> None:
     """A dial, cube, command or doorbell entity has no single click to bind."""

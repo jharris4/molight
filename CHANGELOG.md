@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tuya scene switches**: their click and double click now bind; the long
   press no longer fires the single-click action.
-- **Commands a real light refuses**: a member whose integration raises no
+- **Commands a real light rejects**: a member whose integration raises no
   longer leaves the virtual light on over a dark room, or off over a lit one.
 
 ## [1.9.0] - 2026-10-06
@@ -56,7 +56,7 @@ Virtual Remote buttons.
 ### Upgrade notes
 
 - **Existing entries keep working.** A light saved before the new checks
-  under Changed is refused only the next time its options are saved, and
+  under Changed is rejected only the next time its options are saved, and
   overlapping lights and invalid keep-on entities are named in a warning at
   load. The exception is a virtual light inside a light group that contains
   it: it never lit its bulbs, and it now stops controlling that group.
@@ -65,7 +65,7 @@ Virtual Remote buttons.
   windows"); *sunset → 21:00* was on almost all day in summer. A window from
   a sun event to a fixed time early the next day, such as *sunrise → 01:00*,
   is now always empty; invert *01:00 → sunrise* instead. The schedule form
-  now refuses a window that never opens, and a schedule saved with one logs a
+  now rejects a window that never opens, and a schedule saved with one logs a
   warning.
 
 ### Added
@@ -78,7 +78,7 @@ Virtual Remote buttons.
 ### Changed
 
 - **A light belongs to one virtual light.** The light forms and Discover
-  lights refuse a light another virtual light already controls, on its own or
+  lights reject a light another virtual light already controls, on its own or
   through a light group. Two virtual lights commanding one light fight over
   it; add the virtual light that has it instead.
 - Keep-on entities can no longer be the light itself, a light or group that

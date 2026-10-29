@@ -427,7 +427,7 @@ With no occupancy sensor on the outside side, motion does nothing in the daytime
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
 - Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
-- To remove standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form refuses a standby color without a brightness.
+- To remove standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form rejects a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---

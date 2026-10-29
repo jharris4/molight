@@ -1464,7 +1464,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._drop_member_cycles()
             self._watch_grouped_lights()
             self._warn_shared_members()
-            self._warn_refused_holds()
+            self._warn_rejected_holds()
             self._select_initial_settings()
             self._seed_state()
 
@@ -1525,7 +1525,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _drop_member_cycles(self) -> bool:
         """Stop driving a member that includes this light, so it can't call itself.
 
-        The flows refuse one, but a light group can change, at any depth, or
+        The flows reject one, but a light group can change, at any depth, or
         predate the check.
         """
         lights = virtual_light_entries(self.hass, VIRTUAL_LIGHT_TYPES)
@@ -1556,7 +1556,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _watch_grouped_lights(self) -> None:
         """Follow the virtual lights that member light groups contain.
 
-        The flows refuse such a group, but one can be changed to contain a
+        The flows reject such a group, but one can be changed to contain a
         virtual light, at any depth. The group hides that light's stamps.
         """
         lights = virtual_light_entries(self.hass, VIRTUAL_LIGHT_TYPES)
@@ -1616,8 +1616,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             )
 
     @callback
-    def _warn_refused_holds(self) -> None:
-        """Name keep-on entities the form now refuses; they never act as one.
+    def _warn_rejected_holds(self) -> None:
+        """Name keep-on entities the form now rejects; they never act as one.
 
         A light that is on whenever this one is holds it for good, or, as a
         member, never; an entity that never reads on never holds.

@@ -1270,7 +1270,7 @@ def _validate_transition_support(
     """Reject a configured fade that none of the chosen lights could apply.
 
     Like the double-click check in _validate_remote, only a positive "none of
-    them can" blocks; an unjudgeable light is allowed through. Base error: the
+    them can" rejects; an unjudgeable light is allowed through. Base error: the
     fade fields sit inside collapsed sections.
     """
     fades = (
@@ -1316,7 +1316,7 @@ def _validate_color_support(
 
     Color temperature and RGB are separate capabilities (a tunable-white bulb
     has one and not the other), so they are judged separately. Same rule as the
-    fade check: only a positive "none of them can" blocks, and a mixed group
+    fade check: only a positive "none of them can" rejects, and a mixed group
     passes on the strength of one capable member, which is the documented case.
     """
     temp_keys = (

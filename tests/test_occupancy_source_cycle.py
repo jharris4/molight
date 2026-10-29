@@ -3,7 +3,7 @@
 An occupancy sensor cannot be its own source, but a group can contain it,
 directly or through a nested group or a combined occupancy sensor. Following
 such a source holds the sensor on by its own state, and the lights that reference
-it with it. The forms refuse one, and a group changed afterwards is a source
+it with it. The forms reject one, and a group changed afterwards is a source
 the sensor stops following.
 """
 
@@ -212,7 +212,7 @@ async def _edit_source(hass: HomeAssistant, entry: MockConfigEntry, source: str)
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("topology", TOPOLOGIES)
-async def test_editing_an_occupancy_sensor_refuses_a_source_that_includes_it(
+async def test_editing_an_occupancy_sensor_rejects_a_source_that_includes_it(
     hass: HomeAssistant, topology: str
 ) -> None:
     """The options form names the cycle and saves nothing."""
@@ -252,7 +252,7 @@ async def test_editing_an_occupancy_sensor_accepts_a_group_of_other_sensors(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("named", ["name", "entity_id", "taken_name"])
 @pytest.mark.parametrize("nested", [False, True])
-async def test_creating_an_occupancy_sensor_refuses_a_group_that_names_its_id(
+async def test_creating_an_occupancy_sensor_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, named: str, nested: bool
 ) -> None:
     """A group can name an entity that does not exist yet, including the
@@ -283,7 +283,7 @@ async def test_creating_an_occupancy_sensor_refuses_a_group_that_names_its_id(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("nested", [False, True])
-async def test_a_combined_sensor_refuses_a_sensor_whose_source_includes_it(
+async def test_a_combined_sensor_rejects_a_sensor_whose_source_includes_it(
     hass: HomeAssistant, nested: bool
 ) -> None:
     """Editing the combined sensor closes the same cycle from its side."""
@@ -320,7 +320,7 @@ async def test_a_combined_sensor_refuses_a_sensor_whose_source_includes_it(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("taken", [False, True], ids=["free", "taken_name"])
-async def test_creating_a_combined_sensor_refuses_a_group_that_names_its_id(
+async def test_creating_a_combined_sensor_rejects_a_group_that_names_its_id(
     hass: HomeAssistant, taken: bool
 ) -> None:
     """A new combined sensor can take an ID its constituent's source names,

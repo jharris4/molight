@@ -5997,7 +5997,7 @@ def run_illuminance_discovery_scenario(client: HomeAssistantClient) -> None:
 
 
 def run_entity_id_taken_scenario(client: HomeAssistantClient) -> None:
-    """A taken entity ID sends the form back, prefilled, for a new one."""
+    """A taken entity ID is rejected, and the form returns prefilled for a new one."""
     payload = {
         "name": "E2E Rename",
         "occupancy_sensor": RAW_MOTION,
@@ -7931,7 +7931,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
             {"name": "E2E Rejected Combined", **payload, "advanced": {}},
         )
         expect_rejection(client, result, code)
-    # The cycle is refused at the selector: the form's schema excludes the
+    # The cycle is rejected at the selector: the form's schema excludes the
     # sensor itself and its descendants, so HA rejects the value outright
     # (a flow-level combined_occupancy_cycle error is the other valid outcome).
     result = client.start_flow(options_entry_id=inner_id)

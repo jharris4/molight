@@ -61,7 +61,7 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
 
 
 def _preflight(version: str) -> None:
-    """Refuse to prepare a release from an unsafe repository state."""
+    """Reject an unsafe repository state before preparing a release."""
     branch = _git("branch", "--show-current").stdout.strip()
     if branch != RELEASE_BRANCH:
         fail(f"releases must be prepared on '{RELEASE_BRANCH}', not '{branch}'")
