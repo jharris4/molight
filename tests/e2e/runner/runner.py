@@ -4877,8 +4877,8 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
     )
     client.call_service("light", "turn_off", {"entity_id": AUTO_COLOR_LIGHT})
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
-    # Clear the color through the options form's color-mode dropdown: the
-    # mode wins over the still-prefilled swatch value beside it.
+    # Clear the color through the options form's Color mode field: its
+    # choice wins over the still-prefilled swatch value beside it.
     result = client.start_flow(options_entry_id=entry_id)
     expect_step(result, "light")
     result = client.continue_flow(
@@ -4899,7 +4899,7 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
     )
     if result.get("type") != "create_entry":
         raise AssertionError(f"Clearing the auto-on color failed: {result}")
-    checkpoint("auto-on color cleared through the options color mode")
+    checkpoint("auto-on color cleared through the options Color mode field")
     set_timer_motion(client, True)
     client.wait_state(
         RAW_MULTI_RGB,

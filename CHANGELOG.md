@@ -192,10 +192,10 @@ replying late.
 ### Fixed
 
 - A configured color can now be un-set: each RGB color / color temperature
-  pair (auto-on, effect, warn, and the remote presets) gained a **color
-  mode** dropdown whose **None** choice clears it. Previously a color that
+  pair (auto-on, effect, warn, and the remote presets) gained a **Color
+  mode** field whose **None** choice clears it. Previously a color that
   the chosen lights couldn't show could leave the form impossible to save.
-  The dropdown also chooses which of the pair applies; the "not both"
+  The field also chooses which of the pair applies; the "not both"
   errors now appear only when it is left blank.
 
 ## [1.6.0] - 2026-08-23

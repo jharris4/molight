@@ -233,11 +233,11 @@ _RGB_COLOR_SELECTOR = selector.ColorRGBSelector()
 # Every optional color is stored as one of two mutually exclusive keys (a
 # color temperature or an [r, g, b]), set through a pair of swatch selectors.
 # The frontend offers no way to clear a bare color selector once it has a
-# value, so each pair gets a companion "color mode" dropdown: it is form-only
-# (never stored), prefilled from whichever key is set, and on submit keeps
-# only the key it selects; "none" keeps neither, which is the only way to
-# un-set a color. Left blank (new forms, programmatic submissions) it keeps
-# the color fields exactly as submitted.
+# value, so each pair gets a "Color mode" field: it is form-only (never
+# stored), prefilled from whichever key is set, and on submit keeps only the
+# key it selects; "none" keeps neither, which is the only way to un-set a
+# color. Left blank (new forms, programmatic submissions) it keeps the color
+# fields exactly as submitted.
 COLOR_MODE_NONE = "none"
 COLOR_MODE_TEMP = "color_temp"
 COLOR_MODE_RGB = "rgb_color"
@@ -400,12 +400,12 @@ def _nest_sections(
 def _apply_color_modes(
     flat: dict[str, Any], groups: tuple[tuple[str, str, str], ...]
 ) -> dict[str, Any]:
-    """Resolve each submitted color-mode dropdown against its color pair.
+    """Resolve each submitted Color mode field against its color pair.
 
     A submitted mode keeps only the color key it names ("none" keeps
     neither, clearing a previously stored color) and is dropped itself, so
     only the color keys are ever stored. An absent mode (a new form's blank
-    dropdown, or a programmatic submission) leaves the pair as submitted;
+    field, or a programmatic submission) leaves the pair as submitted;
     the conflict validations then catch a double submission.
     """
     for mode_key, temp_key, rgb_key in groups:
@@ -422,11 +422,11 @@ def _apply_color_modes(
 def _derive_color_modes(
     values: dict[str, Any], groups: tuple[tuple[str, str, str], ...]
 ) -> dict[str, Any]:
-    """Prefill each color-mode dropdown from whichever of its pair is stored.
+    """Prefill each Color mode field from whichever of its pair is stored.
 
     A group with no stored color gets no mode: prefilling "none" would make
-    the untouched dropdown authoritative and silently discard a color set
-    beside it, so the dropdown starts blank until a color exists.
+    the untouched field authoritative and silently discard a color set
+    beside it, so the field starts blank until a color exists.
     """
     derived = dict(values)
     for mode_key, temp_key, rgb_key in groups:
@@ -1174,8 +1174,8 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     """Check the optional color/brightness stage fields are coherent.
 
     Each color pair is mutually exclusive (a turn-on can only carry one
-    color). A submitted color-mode dropdown enforces that by construction, so
-    the conflict errors only fire when the dropdown was left blank. An effect
+    color). A submitted Color mode field enforces that by construction, so
+    the conflict errors only fire when the field was left blank. An effect
     color needs a visible effect stage (effect_brightness > 0; a blink fully
     off has no color to show), and a stage brightness/color on a disabled
     stage (timeout 0) is rejected rather than silently ignored, mirroring the

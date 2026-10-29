@@ -1706,7 +1706,7 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
 async def test_remote_flow_color_mode_picks_one_of_a_pair(
     hass: HomeAssistant,
 ) -> None:
-    """A submitted preset color mode resolves a temp+rgb double submission
+    """A submitted preset Color mode field resolves a temp+rgb double submission
     instead of the preset_color_conflict error."""
     _seed(hass, "event.pico_on", PICO_TYPES)
     result = await _start_remote_create(hass)
@@ -1736,8 +1736,8 @@ async def test_remote_flow_color_mode_picks_one_of_a_pair(
 async def test_remote_options_clears_a_set_preset_color(
     hass: HomeAssistant,
 ) -> None:
-    """The "None" color mode removes a stored preset color, which the bare
-    color selectors can't clear; the dropdown itself prefills from the store."""
+    """The Color mode field's "None" removes a stored preset color, which the bare
+    color selectors can't clear; the field itself prefills from the store."""
     remote = _remote_entry(
         **{
             CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],

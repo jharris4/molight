@@ -201,13 +201,13 @@ At the top level:
 |---|---|
 | **Effect warning duration** | Seconds. Default `0` (disabled), range 0 to 3600. When the turn-off timer expires, first show a brief *effect* cue for this long instead of going dark (see [Effect / warn warning](#effect--warn-warning)) |
 | **Effect brightness** | Brightness during the effect stage. Default `0`, range 0 to 100 %. `0` blinks the real lights fully off for a distinct "about to turn off" flash |
-| **Effect color mode** *(optional)* | Like the auto-on color mode: picks the effect color temperature, the effect color, or **None** (which also clears a previously set effect color) |
+| **Effect color mode** *(optional)* | Like the **Auto-on color mode** field: picks the effect color temperature, the effect color, or **None** (which also clears a previously set effect color) |
 | **Effect color temperature** *(optional)* | White color temperature during the effect stage, for members that support it, giving temp-only bulbs a warning cue too. Requires an effect brightness above `0`. Range 2000 to 6500 K |
 | **Effect color** *(optional)* | RGB color during the effect stage, for members that can show it. Requires an effect brightness above `0` (a blink fully off has no color to show) |
 | **Effect fade** *(optional)* | Seconds. Fade into the effect brightness. Must fit within the effect duration (a fade on a disabled stage is rejected too). Range 0 to 300, in 0.1 s steps |
 | **Warning grace period** | Seconds. Default `0` (disabled), range 0 to 3600. After the effect, the light stays on this long before finally turning off, giving you time to re-trigger |
 | **Warning brightness** *(optional)* | Brightness during the grace period. Blank keeps whatever brightness the light had before the warning began (full brightness if it never reported one). Range 1 to 100 % |
-| **Warning color mode** *(optional)* | Like the auto-on color mode: picks the warning color temperature, the warning color, or **None** (which also clears a previously set warning color) |
+| **Warning color mode** *(optional)* | Like the **Auto-on color mode** field: picks the warning color temperature, the warning color, or **None** (which also clears a previously set warning color) |
 | **Warning color temperature** *(optional)* | White color temperature during the grace period, for members that support it. Blank keeps the color the lights already had. Range 2000 to 6500 K |
 | **Warning color** *(optional)* | RGB color during the grace period, e.g. red as an unmissable "about to turn off" cue. Blank keeps the color the lights already had |
 | **Warning fade** *(optional)* | Seconds. Fade into the warning brightness. Must fit within the grace period. Range 0 to 300, in 0.1 s steps |
@@ -583,11 +583,11 @@ Take a porch with a dusk-to-dawn schedule, standby at 1%, auto-on at 100%, a 30 
 | Config | Description |
 |---|---|
 | **Standby brightness** *(optional)* | Setting it turns standby on. Range 1 to 100 % |
-| **Standby color mode** *(optional)* | Like the auto-on color mode: picks the standby color temperature, the standby color, or **None** (which also clears a previously set standby color) |
+| **Standby color mode** *(optional)* | Like the **Auto-on color mode** field: picks the standby color temperature, the standby color, or **None** (which also clears a previously set standby color) |
 | **Standby color temperature** *(optional)* | White color temperature at standby, for members that support it. Requires a standby brightness. Range 2000 to 6500 K |
 | **Standby color** *(optional)* | RGB color at standby, for members that can show it. Requires a standby brightness |
 
-To turn standby off again, clear the standby brightness and set the standby color mode to **None**: the form refuses a standby color without a brightness.
+To turn standby off again, clear the standby brightness and set the **Standby color mode** field to **None**: the form refuses a standby color without a brightness.
 
 - **Coming on:** an off light comes on at standby when the inside settings take over (the schedule starting, or startup inside it), with the auto-on fade and the turn-on selection. A light that is already on keeps its level, and its running timer ends at standby.
 - **Rising and falling:** occupancy and the door raise the light to the auto-on brightness and color like any automatic turn-on (the maintain sensor only holds a raised light). When the timer runs out, the effect and warn stages run as usual, and their last step drops to standby with the auto-off fade instead of turning off.
@@ -624,7 +624,7 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 | **Brightness step** | Percent added/removed per brightness up/down click (default 10, range 1 to 50). Stepping up from off turns the lights on dim; stepping below the minimum turns them off, except on a MoLight light in its effect/warn warning, which stops at 1% |
 | **Turn on / Turn off / Toggle** | Per action: the buttons whose **single click** and/or **double click** fire it. Toggle moves the lights together, as a light group does: if any is on it turns them all off, otherwise all on |
 | **Brightness up / Brightness down** | Same single/double pickers; each click steps the brightness once |
-| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* a **color**; its **color mode** dropdown picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
+| **Preset 1 / Preset 2** | Same pickers, plus the values the preset applies: a **brightness** (1 to 100 %), and a **color temperature** (2000 to 6500 K) *or* a **color**; its **Color mode** field picks which one is used, and its **None** choice clears a previously set color. Left blank, the form rejects setting both. Think of the Pico's favorite button |
 
 Each button may appear in several actions, as long as no *(button, click)* pair is bound twice, e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
 

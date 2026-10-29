@@ -2625,7 +2625,7 @@ def _colored_light_entry() -> MockConfigEntry:
 
 @pytest.mark.asyncio
 async def test_light_options_clears_set_colors(hass: HomeAssistant) -> None:
-    """The "None" color mode removes colors that were already set; the bare
+    """The Color mode field's "None" removes colors that were already set; the bare
     color selectors can't be cleared once they have a value."""
     entry = _colored_light_entry()
     await setup_entries(hass, entry)
@@ -2664,7 +2664,7 @@ async def test_light_options_clears_set_colors(hass: HomeAssistant) -> None:
 async def test_light_options_prefills_the_set_color_modes(
     hass: HomeAssistant,
 ) -> None:
-    """Each color-mode dropdown suggests whichever of its pair is stored."""
+    """Each Color mode field suggests whichever of its pair is stored."""
     entry = _colored_light_entry()
     await setup_entries(hass, entry)
 
@@ -2683,7 +2683,7 @@ async def test_light_options_leaves_unset_color_modes_blank(
     hass: HomeAssistant,
 ) -> None:
     """A pair with no stored color suggests no mode: a prefilled "none" would
-    silently discard a color set beside the untouched dropdown."""
+    silently discard a color set beside the untouched field."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -2782,7 +2782,7 @@ async def test_light_flow_rejects_color_conflicts(
     warning_section: dict,
     expected_error: str,
 ) -> None:
-    """A turn-on can only carry one color: with no mode dropdown submitted to
+    """A turn-on can only carry one color: with no Color mode field submitted to
     arbitrate, a temp and rgb together are rejected."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(

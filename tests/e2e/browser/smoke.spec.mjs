@@ -421,7 +421,7 @@ test("set and clear a standby brightness and color", async ({ page }) => {
   standby = await openStandby(page, EDITED_LIGHT_NAME);
   await expect(standbyBrightness(page)).toHaveValue("5");
   await expect(standbyColor(standby)).toHaveValue("#ff8000");
-  // Clearing takes a blank brightness and the color mode set to None.
+  // Clearing takes a blank brightness and the Standby color mode field set to None.
   await selectHaOption(page, "Standby color mode", "None");
   await standbyBrightness(page).fill("");
   await saveOptions(page);
