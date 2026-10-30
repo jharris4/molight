@@ -44,6 +44,7 @@ from custom_components.molight.const import (
 from tests.conftest import (
     make_light_entry,
     make_scheduled_light_entry,
+    restart_entries,
     settle,
     setup_entries,
 )
@@ -294,3 +295,121 @@ async def test_timer_rests_at_standby(hass, freezer) -> None:
     assert records[0]["reason"] == REASON_OCCUPANCY
     assert records[1] == _turned_off(REASON_TIMER, standby=True)
     assert hass.states.get(VIRTUAL).attributes["brightness"] == 51
+
+
+async def _unload_and_switch_off(hass, entry, state: str = "off") -> None:
+    """Take the entry down and change the member, as happens while HA is down.
+
+    The Events entity restores its last event at the restart, which the
+    records list first.
+    """
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await settle(hass)
+    hass.states.async_set(REAL, state, {"restored": True} if state != "off" else {})
+    await settle(hass)
+
+
+@pytest.mark.asyncio
+async def test_a_restart_finding_the_lights_off_ends_the_on_period(hass) -> None:
+    """A light switched off while Home Assistant was down is found off at the
+    restart: its on-period ended, which consumers are told."""
+    entry = make_light_entry(name="Hall", timeout=60)
+    records = await _setup(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await settle(hass)
+    assert [r["event_type"] for r in records] == [EVENT_TURNED_ON]
+    del records[:]
+
+    await _unload_and_switch_off(hass, entry)
+    await restart_entries(hass, entry)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert records[1:] == [_turned_off(REASON_STARTUP)]
+
+
+@pytest.mark.asyncio
+async def test_a_restart_mid_warning_finding_the_lights_off_ends_the_on_period(
+    hass, freezer
+) -> None:
+    """Landing mid-warning with the lights off is the same end, not a
+    cancelled warning."""
+    entry = make_light_entry(
+        name="Hall", timeout=60, occupancy=OCC, warn_timeout=15, warn_brightness=100
+    )
+    records = await _setup(hass, entry, binary_sensor__occ="off")
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 255})
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    await tick(hass, freezer, 61)
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == "warn"
+    del records[:]
+
+    await _unload_and_switch_off(hass, entry)
+    await restart_entries(hass, entry)
+
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert hass.states.get(VIRTUAL).attributes["warning_active"] is False
+    assert records[1:] == [_turned_off(REASON_STARTUP)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("late", ["off", "on"])
+async def test_a_member_loading_late_after_a_restart_settles_the_on_period(
+    hass, late: str
+) -> None:
+    """A member unreadable at the restart proves nothing yet: its first
+    report does. Off ends the on-period; on continues it."""
+    entry = make_light_entry(name="Hall", timeout=60)
+    records = await _setup(hass, entry)
+    await hass.services.async_call(
+        "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
+    )
+    hass.states.async_set(REAL, "on", {"brightness": 200})
+    await settle(hass)
+    del records[:]
+    await _unload_and_switch_off(hass, entry, "unavailable")
+    await restart_entries(hass, entry)
+    assert hass.states.get(VIRTUAL).state == "off"
+    assert records[1:] == []
+
+    hass.states.async_set(REAL, late, {"brightness": 200} if late == "on" else {})
+    await settle(hass)
+
+    assert hass.states.get(VIRTUAL).state == late
+    if late == "off":
+        assert records[1:] == [_turned_off(REASON_STARTUP)]
+    else:
+        assert EVENT_TURNED_OFF not in [r["event_type"] for r in records]
+
+
+@pytest.mark.asyncio
+async def test_a_restart_finding_the_lights_off_at_standby_rests_them_again(
+    hass,
+) -> None:
+    """A light resting at standby that was switched off while Home Assistant
+    was down: the rest ended, and the startup rests the lights again."""
+    entry = make_scheduled_light_entry(
+        name="Hall",
+        schedule=SCHED,
+        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+    )
+    records = await _setup(hass, entry, binary_sensor__sched="on")
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == "standby"
+    hass.states.async_set(REAL, "on", {"brightness": 51})
+    await settle(hass)
+    del records[:]
+
+    await _unload_and_switch_off(hass, entry)
+    await restart_entries(hass, entry)
+
+    assert hass.states.get(VIRTUAL).attributes["molight_state"] == "standby"
+    assert [(r["event_type"], r["reason"], r["standby"]) for r in records[1:]] == [
+        (EVENT_TURNED_OFF, REASON_STARTUP, False),
+        (EVENT_TURNED_ON, REASON_STARTUP, True),
+    ]

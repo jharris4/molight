@@ -1124,6 +1124,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Until the light seeds it reports the on/off and machine state it
         # restored: Home Assistant saves every state as it starts.
         self._showing_restored = False
+        # Restored on, and neither proven off nor lit again since the restart.
+        self._restored_on = False
         self._seeded = False
         # The power last commanded through this entity before it seeded: it
         # is newer than anything the seed infers from the restored state.
@@ -1675,6 +1677,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if self._attr_color_mode not in self._attr_supported_color_modes:
             self._attr_supported_color_modes = {self._attr_color_mode}
         self._attr_is_on = last.state == "on"
+        self._restored_on = self._attr_is_on
         machine_state = last.attributes.get("molight_state")
         if machine_state in _MACHINE_STATES:
             self._machine_state = machine_state
@@ -2035,14 +2038,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
         member_looks = self._pre_warn_members
         self._adopt_members(commanded=commanded)
-        # A disabled member never reports, so nothing is owed to it.
-        registry = er.async_get(self.hass)
-        unknown = {
-            e
-            for e in self._lights
-            if self._member_is_lit(e) is None
-            and not ((entry := registry.async_get(e)) and entry.disabled)
-        }
+        unknown = self._unread_members()
         # A missed end is only owed while the light is off: a new on-period
         # supersedes it.
         off = not self._is_lit()
@@ -2057,6 +2053,27 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if unknown and (owed.ends() or owed.look is not None):
             self._owed = owed
             self.async_write_ha_state()
+
+    def _unread_members(self) -> set[str]:
+        """Members that cannot be read, so nothing is proven about them.
+
+        A disabled member never reports, so nothing is owed to it.
+        """
+        registry = er.async_get(self.hass)
+        return {
+            e
+            for e in self._lights
+            if self._member_is_lit(e) is None
+            and not ((entry := registry.async_get(e)) and entry.disabled)
+        }
+
+    def _end_restored_on_period(self) -> None:
+        """Tell consumers the on-period a restart interrupted ended.
+
+        The lights were found off: switched off while Home Assistant was down.
+        """
+        self._restored_on = False
+        self._send_event(EVENT_TURNED_OFF, reason=REASON_STARTUP, standby=False)
 
     def _adopt_members(self, *, commanded: bool) -> None:
         """Seed from the members that can be read; the others count as off."""
@@ -2080,6 +2097,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._attr_brightness = brightness
         if self._attr_is_on and (color := self._physical_color()):
             self._set_color_state(*color)
+
+        if self._restored_on and (self._attr_is_on or self._early_command is not None):
+            self._restored_on = False  # lit, or commanded, since the restart
+        elif self._restored_on and not self._unread_members():
+            self._end_restored_on_period()
 
         if self._schedule_end_off_pending:
             if not self._attr_is_on:
@@ -2480,6 +2502,16 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._members_seen.add(entity_id)
                 self._note_member(entity_id)
                 self._commanded_power.pop(entity_id, None)
+                if (
+                    self._restored_on
+                    and not member_seen
+                    and not self._member_is_lit(entity_id)
+                    and not self._is_lit()
+                    and not self._unread_members()
+                ):
+                    # The last member loading late proves the lights were
+                    # found off at the restart.
+                    self._end_restored_on_period()
             # Capabilities can appear late (members unavailable at startup):
             # re-derive on every member event, before the echo check; our own
             # service calls still surface a member's first real state.
@@ -4848,6 +4880,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
     def _send_event(self, event_type: str, **attributes: Any) -> None:
         """Send what the light did to its Events entity."""
+        if event_type in (EVENT_TURNED_ON, EVENT_TURNED_OFF):
+            self._restored_on = False  # consumers know what the light did since
         send_event(self.hass, self._entry_id, event_type, **attributes)
 
     def _send_blocked(self, trigger: str, reason: str) -> None:

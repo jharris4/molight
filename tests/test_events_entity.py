@@ -145,6 +145,7 @@ async def test_last_event_survives_a_restart(hass, freezer) -> None:
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.hall"}, blocking=True
     )
+    hass.states.async_set(REAL, "on")  # found on at the restart
     await settle(hass)
     before = hass.states.get("event.hall_events")
     assert before.attributes["event_type"] == "turned_on"
@@ -194,6 +195,7 @@ async def test_events_entity_with_changed_entity_id_keeps_its_last_event(hass) -
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": "light.hall"}, blocking=True
     )
+    hass.states.async_set(REAL, "on")  # found on at the restart
     await settle(hass)
 
     er.async_get(hass).async_update_entity(
