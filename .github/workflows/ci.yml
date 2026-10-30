@@ -65,7 +65,7 @@ jobs:
     name: pytest (${{ matrix.label }})
     if: ${{ !inputs.pinned_only && !startsWith(github.head_ref, 'ha-bump/') }}
     runs-on: ubuntu-26.04
-    # The newest leg reports an upstream break without turning the build red.
+    # The advisory leg reports an upstream break without turning the build red.
     continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false

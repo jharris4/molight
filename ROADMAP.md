@@ -12,7 +12,7 @@ records what should be built next, and what was asked for and answered another w
   the wall ships alone, with matrix tests, an e2e run and a REFERENCE.md section, as standby did.
   Anything else can share a release.
 - **Every new setting starts off**, so an existing entry behaves exactly as before.
-- **An ask that existing blocks plus a Home Assistant helper answer is not built.** It goes under
+- **A request that existing blocks plus a Home Assistant helper answer is not built.** It goes under
   Already covered, so the reply to the request can link here.
 - **Demand is a guess.** With one issue filed, the order below is the maintainer's judgment of what a
   user of the existing blocks still cannot get. A user-filed request gets a line here the day it
@@ -96,7 +96,7 @@ Worth building if a user asks, not before.
 
 ## Already covered
 
-Asks that existing blocks answer:
+Requests that existing blocks answer:
 
 - Vacancy-only control (turn off after people leave, never turn on): a maintain occupancy sensor alone.
 - Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode
@@ -130,6 +130,6 @@ Asks that existing blocks answer:
 - A re-trigger cooldown after an automatic off: the sensor's hold time means it has rarely cleared by
   the time the person reaches the door; the off-by-hand case is item 1.
 - More than two settings sets on a Virtual Scheduled Light: two sets with combined schedules cover
-  most asks, and Adaptive Lighting covers the rest.
+  most requests, and Adaptive Lighting covers the rest.
 - Setup presets and an area wizard: Discover, bulk assignment and EXAMPLES.md cover them.
 - Translations: community work, see CONTRIBUTING.md.

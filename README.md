@@ -19,7 +19,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 
 Each of these is a *virtual entity*: it stands in front of real devices (sensors, lights, remote buttons) and works from them. The two light types are both *virtual lights*: a *regular* Virtual Light uses one set of settings, and a Virtual Scheduled Light uses different settings inside and outside a schedule.
 
-**Highlights** (everything below is covered by the automated test suite):
+**Highlights** (everything below is covered by the unit tests):
 
 - Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's occupancy timeout, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 - Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified: a light that only a blip lit goes off after a short false-detection off delay, and a light the user turned on is never cut short (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).

@@ -1,4 +1,4 @@
-"""Black-box acceptance runner for a live Home Assistant instance."""
+"""Black-box end-to-end runner for a live Home Assistant instance."""
 
 from __future__ import annotations
 
@@ -317,19 +317,19 @@ class HomeAssistantClient:
             return None
         return f"200 {payload!r}"[:300]
 
-    def boot_marker(self) -> str:
-        """Return a value that changes whenever Home Assistant core boots."""
-        # zone.home is written fresh at startup, so its last_changed is the boot time.
+    def start_marker(self) -> str:
+        """Return a value that changes whenever Home Assistant core starts."""
+        # zone.home is written fresh at startup, so its last_changed is the start time.
         return self.state("zone.home")["last_changed"]
 
     def restart_core(self) -> None:
-        """Restart core and wait until the new boot has finished starting."""
-        marker = self.boot_marker()
+        """Restart core and wait until it has finished starting again."""
+        marker = self.start_marker()
         self.call_service("homeassistant", "restart", {})
         self.wait_state(
             "zone.home",
             lambda state: state["last_changed"] != marker,
-            "rebooted after the core restart",
+            "started again after the core restart",
             timeout=WAIT_TIMEOUT,
         )
         self.wait_started()
@@ -471,7 +471,7 @@ class HomeAssistantClient:
         )
 
     def set_startup_delay(self, entity_id: str, seconds: float) -> None:
-        """Hold a simulated entity back for this long at the next boot."""
+        """Hold a simulated entity back for this long at the next startup."""
         self.call_service(
             "molight_testbed",
             "set_startup_delay",
@@ -893,7 +893,7 @@ def create_timeout_light(
 
 
 def create_auto_off_light(client: HomeAssistantClient) -> str:
-    """Create a short-timeout light dedicated to switch persistence."""
+    """Create a short-timeout light for the Auto-off switch's restored state."""
     return create_entry(
         client,
         "light",
@@ -2887,7 +2887,7 @@ def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
 
 
 def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
-    """Check cold-start capabilities, recover routing, and remove the fixture."""
+    """Check post-restart capabilities, recover routing, and remove the fixture."""
     entries = client.molight_entries()
     matches = [entry for entry in entries if entry.get("title") == "E2E Multi"]
     if len(matches) != 1 or matches[0].get("state") != "loaded":
@@ -3301,7 +3301,7 @@ def verify_removal_reference_cleanup(
 def finish_removal_reference_cleanup(
     client: HomeAssistantClient, snapshot: dict[str, str]
 ) -> None:
-    """Verify cold-start cleanup, then remove the surviving temporary light."""
+    """Verify post-restart cleanup, then remove the surviving temporary light."""
     verify_removal_reference_cleanup(client, snapshot, "a full container restart")
 
     client.set_state(RAW_REMOVAL_MOTION, "off")
@@ -3855,7 +3855,7 @@ def run_browser_prepare() -> None:
 
 
 def run_container_restart_verification() -> None:
-    """Verify persisted fixture and MoLight state after a container restart."""
+    """Verify the persisted fixture and MoLight's restored state after the restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -3904,7 +3904,7 @@ def run_container_restart_verification() -> None:
 
 
 def run_unavailable_light_prepare() -> None:
-    """Persist an unavailable physical light for the next cold startup."""
+    """Persist an unavailable physical light for the next container restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4073,7 +4073,7 @@ def run_unavailable_sensors_motion_first() -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "on while both sources drop out again (no false turn-off)",
+        "on while both sources go unavailable again (no false turn-off)",
     )
     print("PASS: motion-first recovery caused no replay or false schedule boundary")
 
@@ -4210,7 +4210,7 @@ def run_auto_off_restart() -> None:
     client.remove_entry(snapshot["entry_id"])
     wait_entity_absent(client, VIRTUAL_AUTO_OFF_LIGHT)
     wait_entity_absent(client, AUTO_OFF_SWITCH)
-    print("PASS: auto-off switch persisted disabled and resumed countdown when enabled")
+    print("PASS: auto-off switch restored disabled and resumed countdown when enabled")
 
 
 def run_restart_warning_prepare() -> None:
@@ -4520,7 +4520,7 @@ def run_false_detection_prepare() -> None:
 
 
 def run_false_detection_verify() -> None:
-    """A visit in progress at boot is not a false detection after a restart."""
+    """A visit in progress at startup is not a false detection after a restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4541,7 +4541,7 @@ def run_false_detection_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on: a visit in progress at boot is not a false detection",
+        "on: a visit in progress at startup is not a false detection",
         duration=5,
     )
     set_grace_motion(client, False)
@@ -4573,7 +4573,7 @@ def run_false_detection_verify() -> None:
 
 
 def run_late_source_prepare() -> None:
-    """Leave a room occupied and make its occupancy source load late next boot."""
+    """Leave a room occupied; its occupancy source loads late at the next startup."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4624,7 +4624,7 @@ def run_late_source_prepare() -> None:
 
 
 def run_late_source_verify() -> None:
-    """A source that appears well after boot is adopted, not misread as a blip."""
+    """A source that appears well after startup is adopted, not misread as a blip."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4648,7 +4648,7 @@ def run_late_source_verify() -> None:
     else:
         if before["state"] != "unavailable":
             raise AssertionError(
-                f"The delayed source was already live after boot: {before}"
+                f"The delayed source was already live after startup: {before}"
             )
     client.wait_state(
         RAW_REMOVAL_MOTION,
@@ -5081,7 +5081,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
 OUTAGE_EDGE_LEAD = timedelta(seconds=20)
 
 
-# How long a real light stays unloaded after a boot in the unreadable-member
+# How long a real light stays unloaded after startup in the unreadable-member
 # scenarios: long enough for Home Assistant to finish starting first.
 UNREADABLE_MEMBER_DELAY = 30
 
@@ -5205,7 +5205,7 @@ def run_follow_restart_prepare() -> None:
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
 
     # A second follow light whose whole window elapses while HA is down: a
-    # start and end both missed must not be caught up at boot.
+    # start and end both missed must not be caught up at startup.
     cycle_end = window_start + timedelta(seconds=4)
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
@@ -6953,7 +6953,7 @@ def run_hold_restart_prepare() -> None:
 
 
 def run_hold_restart_verify() -> None:
-    """A keep-on entity unavailable at boot counts as not holding."""
+    """A keep-on entity unavailable at startup counts as not holding."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -6964,7 +6964,7 @@ def run_hold_restart_verify() -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("auto_off_held") is False
         ),
-        "restored on but not held: the keep-on entity is unavailable at boot",
+        "restored on but not held: the keep-on entity is unavailable at startup",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -6979,7 +6979,9 @@ def run_hold_restart_verify() -> None:
     client.remove_entry(snapshot["entry_id"])
     wait_entity_absent(client, HOLD_BOOT_LIGHT)
     wait_entry_removed(client, snapshot["entry_id"], "Temporary hold-boot light")
-    print("PASS: an unavailable keep-on entity at boot did not hold the restored light")
+    print(
+        "PASS: an unavailable keep-on entity at startup did not hold the restored light"
+    )
 
 
 def create_grace_occupancy(
@@ -8030,7 +8032,7 @@ def run_combined_restart_prepare() -> None:
         client, COMBINED_BOOT, lambda state: state["state"] == "on", "held by maintain"
     )
     # Force the load-order race every run: the maintain sensor's own source
-    # arrives only after boot, so the maintain sensor seeds off while the
+    # arrives only after startup, so the maintain sensor seeds off while the
     # combined sensor restores, and its later "on" must carry the visit.
     client.set_startup_delay(RAW_TIMER_MOTION, 6)
     COMBINED_RESTART_SNAPSHOT.write_text(
@@ -8054,13 +8056,13 @@ def run_combined_restart_verify() -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("last_on_time") is None
         ),
-        "on with an unwitnessed start: the maintain source arrived after boot",
+        "on with an unwitnessed start: the maintain source arrived after startup",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
         COMBINED_BOOT,
         lambda state: state["state"] == "on",
-        "on after boot: restored on and the late maintain sensor shows presence",
+        "on after startup: restored on and the late maintain sensor shows presence",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
@@ -8424,7 +8426,7 @@ def run_combined_schedule_restart_prepare() -> None:
     client.call_service("light", "turn_off", {"entity_id": COMBO_BOOT_LIGHT})
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", COMBO_BOOT_LIGHT)
-    # The mirrored source arrives only after boot, so the combination depends
+    # The mirrored source arrives only after startup, so the combination depends
     # on an input that hasn't reported while it restores. The member light
     # arrives later still, once the window is back on: its first state must
     # read as startup adoption, not as a member reboot to reconcile.
@@ -8475,7 +8477,7 @@ def run_combined_schedule_restart_verify() -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off once its late boot reports",
+        "off once the late member reports",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
@@ -9249,7 +9251,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         "the preset's own light was no wall change; another device's light was, and won"
     )
 
-    # A real light drops out and comes back off shortly before the warning.
+    # A real light goes unavailable and comes back off shortly before the warning.
     # Its re-send waits for the select call while the warn stage begins: the
     # stage is what all real lights show afterwards, not the 200 from before.
     client.call_service(
@@ -9294,7 +9296,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     park_light_off(client, PARK_LIGHT, *members)
     checkpoint("a warning that began during a recovery re-send stayed on the lights")
 
-    # The strip drops out and comes back off; its re-send waits for the select
+    # The strip goes unavailable and comes back off; its re-send waits for the select
     # call when a new level through the light replaces it. The preset then
     # sets the strip's own level, on top: the new level is sent again.
     client.call_service(
@@ -9472,31 +9474,32 @@ def run_scenarios(shard: str) -> None:
 
 
 # The lane scripts save the container's output here before the logs phase. It
-# keeps every boot, while home-assistant.log rolls at each start and keeps one.
+# keeps every start's output, while home-assistant.log rolls at each start and
+# keeps one.
 CONTAINER_LOG = Path("/ha-config/e2e-container.log")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
-# Logged by every boot, so it counts the boots the check covered.
-BOOT_LINE = "We found a custom integration molight which"
+# Logged by every start, so it counts the starts the check covered.
+START_LINE = "We found a custom integration molight which"
 # Some releases (2026.1) log it twice within milliseconds; a restart takes seconds.
-BOOT_LINE_REPEAT = timedelta(seconds=1)
+START_LINE_REPEAT = timedelta(seconds=1)
 
 
-def log_boots(content: str) -> int:
-    """Count the boots whose records the parser could read."""
-    boots = 0
+def log_starts(content: str) -> int:
+    """Count the starts whose records the parser could read."""
+    starts = 0
     last: datetime | None = None
     for level, first, _ in log_records(content):
-        if level != "WARNING" or BOOT_LINE not in first:
+        if level != "WARNING" or START_LINE not in first:
             continue
         at = datetime.fromisoformat(LOG_RECORD.match(first)["at"])
-        if last is None or at - last > BOOT_LINE_REPEAT:
-            boots += 1
+        if last is None or at - last > START_LINE_REPEAT:
+            starts += 1
         last = at
-    return boots
+    return starts
 
 
-def check_logs(expected_boots: int) -> None:
-    """Fail for MoLight errors, warnings, or tracebacks from any HA boot."""
+def check_logs(expected_starts: int) -> None:
+    """Fail for MoLight errors, warnings, or tracebacks from any HA start."""
     if not CONTAINER_LOG.exists():
         raise AssertionError(f"{CONTAINER_LOG} is missing; the lane script saves it")
     content = ANSI_ESCAPE.sub("", CONTAINER_LOG.read_text(errors="replace"))
@@ -9506,13 +9509,13 @@ def check_logs(expected_boots: int) -> None:
             "Unexpected MoLight log failures:\n" + "\n".join(bad_lines)
         )
     # A log the parser cannot read finds no failures, so it must not pass.
-    boots = log_boots(content)
-    if boots != expected_boots:
+    starts = log_starts(content)
+    if starts != expected_starts:
         raise AssertionError(
-            f"Parsed {boots} Home Assistant boot(s) in the logs, expected "
-            f"{expected_boots}; check the log format and the lane's restarts"
+            f"Parsed {starts} Home Assistant start(s) in the logs, expected "
+            f"{expected_starts}; check the log format and the lane's restarts"
         )
-    print(f"PASS: no MoLight errors or warnings in the logs of {boots} boot(s)")
+    print(f"PASS: no MoLight errors or warnings in the logs of {starts} start(s)")
 
 
 def main() -> None:
@@ -9560,7 +9563,7 @@ def main() -> None:
     names = sys.argv[1:]
     if names[:1] == ["logs"]:
         if len(names) != 2 or not names[1].isdigit():
-            raise SystemExit("usage: runner.py logs <expected boots>")
+            raise SystemExit("usage: runner.py logs <expected starts>")
         check_logs(int(names[1]))
         return
     if not names or any(name not in commands for name in names):

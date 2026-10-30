@@ -350,21 +350,21 @@ async def restart_entries(
     finishes startup itself, with finish_startup.
     """
     await restore_state.async_get(hass).async_dump_states()
-    await _boot_entries(hass, *entries, started=started)
+    await _start_entries(hass, *entries, started=started)
 
 
 async def crash_entries(
     hass: HomeAssistant, *entries: MockConfigEntry, started: bool = True
 ) -> None:
     """Restart from what was last saved to disk, with no save at shutdown."""
-    await _boot_entries(hass, *entries, started=started)
+    await _start_entries(hass, *entries, started=started)
 
 
 async def stop_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
     """Shut Home Assistant down around the entries, which stay unloaded.
 
     Setting one up afterwards, with Home Assistant running, is an entry that
-    was disabled at boot being enabled.
+    was disabled at startup being enabled.
     """
     await restore_state.async_get(hass).async_dump_states()
     await _stop_entries(hass, *entries)
@@ -382,7 +382,7 @@ async def _stop_entries(hass: HomeAssistant, *entries: MockConfigEntry) -> None:
         watch.unsub()
 
 
-async def _boot_entries(
+async def _start_entries(
     hass: HomeAssistant, *entries: MockConfigEntry, started: bool
 ) -> None:
     await _stop_entries(hass, *entries)

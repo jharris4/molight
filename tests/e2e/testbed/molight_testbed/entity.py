@@ -15,7 +15,7 @@ from .const import DOMAIN
 
 
 class TestbedEntity(Entity):
-    """Base for a stateful entity controlled by the acceptance runner."""
+    """Base for a stateful entity controlled by the end-to-end runner."""
 
     _attr_has_entity_name = False
     _attr_should_poll = False

@@ -43,7 +43,7 @@ trap 'exit 143' TERM
 echo "Starting isolated Home Assistant ($MOLIGHT_E2E_HA_IMAGE)..."
 compose up --detach homeassistant
 
-echo "Running live API acceptance scenarios..."
+echo "Running live API end-to-end scenarios..."
 compose run --rm runner python runner.py primary
 
 echo "Restarting the full Home Assistant container..."
@@ -72,4 +72,4 @@ compose run --rm runner python runner.py restart-warning-verify
 # The first start, six container restarts and the core restart in primary.
 check_ha_logs 8
 
-echo "MoLight E2E acceptance suite passed."
+echo "MoLight core end-to-end suite passed."

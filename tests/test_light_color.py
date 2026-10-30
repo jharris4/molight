@@ -568,7 +568,7 @@ async def test_restart_mid_warning_restores_pre_warn_color(
     hass: HomeAssistant,
 ) -> None:
     """A restart landing mid-warning with the lights still on undoes the
-    stage's color and brightness from the persisted pre_warn attributes."""
+    stage's color and brightness from the restored pre_warn attributes."""
     mock_restore_cache(
         hass,
         [

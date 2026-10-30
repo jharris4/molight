@@ -163,12 +163,12 @@ illuminance_mode:
     else if brightness forced the lights off and that on-period has time left,
     enter COUNTDOWN for the rest of it. It lasts until the later of
     bright_resume_until, recorded at the forced off, and a timeout after
-    latest_occupied_time. The record is when the interrupted countdown would
-    have ended, or a timeout from the forced off for a light presence was
-    holding (whoever held it was there until then at least); a warning stage
-    or a standby rest leaves none. An on-period ended any other way (manual
-    off, timer, schedule) is never resumed, nor is one the user turned off,
-    or whose gate window ended, while brightness had it off.
+    latest_occupied_time. bright_resume_until is when the interrupted
+    countdown would have ended, or a timeout from the forced off for a light
+    presence was holding (whoever held it was there until then at least); a
+    warning stage or a standby rest leaves none. An on-period ended any other
+    way (manual off, timer, schedule) is never resumed, nor is one the user
+    turned off, or whose gate window ended, while brightness had it off.
   - Illuminance OFF→ON (dark→bright):
       control:  go IDLE, turn lights off.
       gate:     no effect; bright never turns lights off. Use when the lux
@@ -201,7 +201,7 @@ Schedule handling (when a schedule entity is configured), per schedule_mode:
     OFF at window end. Boundaries are edge-triggered: manual changes between
     them stand. A marker that changes while the schedule stays on (an all-day
     window at midnight) is a window start. schedule_window_start records the
-    window whose start we applied; it persists across restarts so a boundary
+    window whose start we applied; it is restored across restarts so a boundary
     missed while HA was down is applied exactly once at startup, while a
     manual off mid-window is respected. Occupancy/illuminance are ignored
     while SCHEDULED.
@@ -984,7 +984,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     _attr_color_mode = ColorMode.BRIGHTNESS
     # Reassigned per-instance by _update_capabilities, never mutated in place.
     _attr_supported_color_modes: ClassVar[set[ColorMode]] = {ColorMode.BRIGHTNESS}
-    # Fail open until the first capability derivation (which at boot waits for
+    # Fail open until the first capability derivation (which at startup waits for
     # EVENT_HOMEASSISTANT_STARTED): a startup caller must not lose their fade.
     _attr_supported_features = LightEntityFeature.TRANSITION
     # Home Assistant 2026.1 defaults these to None and warns of mireds when a
@@ -1024,7 +1024,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._settings_window_seen: str | None = None
         self._restored_window_start: str | None = None
         # A scheduled-light off boundary deferred by an Auto-off/keep-on hold.
-        # Persisted as a state attribute so a restart cannot lose the pending
+        # Restored as a state attribute so a restart cannot lose the pending
         # boundary; returning inside the schedule cancels it.
         self._schedule_end_off_pending = False
         # Ephemeral startup catch-up for a switch-state boundary missed while
@@ -1064,7 +1064,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Each member's own look then, None for one that was off; a member
         # that could not be read gets the light's.
         self._pre_warn_members: dict[str, _Look | None] = {}
-        # Persisted in its own right: the snapshots above are legitimately
+        # Restored in its own right: the snapshots above are legitimately
         # null for members reporting no brightness or color.
         self._warning_active: bool = False
         self._effect_sent_color: bool = False
@@ -2513,7 +2513,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 STATE_UNKNOWN,
             )
             # A first sighting, or the placeholder HA writes for a registered
-            # entity at boot, is startup adoption, not a member reboot. The
+            # entity at startup, is startup adoption, not a member reboot. The
             # same placeholder written after the member was seen is its
             # integration reloading, which is one.
             member_rebooted = (
@@ -5680,8 +5680,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             "last_color_change_virtual": _fmt(self._last_color_change_virtual),
             "last_turn_on_selection_option": self._last_turn_on_selection_option,
             "last_turn_on_selection_source": self._last_turn_on_selection_source,
-            # Non-null only while the effect/warn stage is showing; persisted
-            # so a restart mid-warning can restore the pre-warning brightness
+            # Non-null only while the effect/warn stage is showing; restored
+            # so a restart mid-warning can put back the pre-warning brightness
             # and color. A virtual turn-on waiting for its selection already
             # ends the warning, so a brightness step meanwhile builds on it.
             "warning_active": (

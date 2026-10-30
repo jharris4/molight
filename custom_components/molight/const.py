@@ -205,9 +205,9 @@ STANDBY_KEYS = (
     CONF_STANDBY_RGB_COLOR,
 )
 # State attribute: a manual off cancels standby until the next schedule
-# boundary. Persisted so a restart inside the same window keeps it.
+# boundary. Restored so a restart inside the same window keeps it.
 ATTR_STANDBY_SUPPRESSED = "standby_suppressed"
-# State attribute: a settings boundary ended the last manual off. Persisted
+# State attribute: a settings boundary ended the last manual off. Restored
 # so a restart does not bring that off back.
 ATTR_MANUAL_OFF_CLEARED = "manual_off_cleared"
 # Optional select entity and option applied immediately before MoLight turns an

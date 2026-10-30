@@ -6,9 +6,9 @@ homeassistant:
   unit_system: metric
   time_zone: UTC
 
-# Only what the suites use, instead of default_config, to keep each boot short:
+# Only what the suites use, instead of default_config, to keep each start short:
 # the REST and config-entry APIs, the frontend (onboarding, browser smoke test),
-# person for onboarding's owner, zone (zone.home marks each boot) and sun.
+# person for onboarding's owner, zone (zone.home marks each start) and sun.
 api:
 config:
 frontend:

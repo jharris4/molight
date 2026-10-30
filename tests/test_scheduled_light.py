@@ -2192,7 +2192,7 @@ async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
 async def test_schedule_briefly_unavailable_does_not_restart_running_timeout(
     hass: HomeAssistant, freezer, bad_state: str
 ) -> None:
-    """Dropping out and recovering on the same side leaves its timer alone."""
+    """Going unavailable and recovering on the same side leaves its timer alone."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(

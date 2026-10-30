@@ -393,12 +393,12 @@ async def test_transition_stays_offered_until_the_last_member_is_judged(
 
 
 @pytest.mark.asyncio
-async def test_transition_offered_during_the_startup_window(
+async def test_transition_offered_during_startup(
     hass: HomeAssistant,
 ) -> None:
     """Before the deferred first capability pass, the feature must fail open.
 
-    At boot _seed_state (and with it _update_capabilities) waits for
+    At startup _seed_state (and with it _update_capabilities) waits for
     EVENT_HOMEASSISTANT_STARTED, but the entity exists and takes service
     calls before that: a startup scene's fade must not be stripped.
     """

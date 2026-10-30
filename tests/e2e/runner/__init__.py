@@ -1,1 +1,1 @@
-"""Live Home Assistant acceptance runner package."""
+"""Live Home Assistant end-to-end runner package."""

@@ -451,7 +451,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
                 # Before startup finishes, an on-event is a late-loading
                 # source replaying a pre-restart visit: its true start is
                 # unknown, so leave the visit unclassified (as in _seed_state).
-                # The same holds when the source is first provided after boot
+                # The same holds when the source is first provided after startup
                 # (HA kept a restored placeholder for it until its integration
                 # loaded), however long after HA reported running that is.
                 old_state = event.data.get("old_state")
@@ -713,7 +713,7 @@ class VirtualCombinedOccupancySensor(
             # already triggered before the restart, so a maintain sensor
             # still showing presence carries it across. (An on-duration
             # heuristic can't do this job: constituents rewrite their state
-            # at boot, resetting last_changed, and it would wrongly start
+            # at startup, resetting last_changed, and it would wrongly start
             # occupancy on a mid-run options reload.)
             self._attr_is_on = True
         elif restored_on:
@@ -1235,7 +1235,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
         if not math.isfinite(value):
             return  # nan or inf is no reading either
         if not self._attr_available:
-            # First-ever reading: there is no held state to apply the
+            # A first sighting: there is no held state to apply the
             # hysteresis band to, so judge the bare threshold.
             self._attr_available = True
             self._attr_is_on = value >= self._threshold

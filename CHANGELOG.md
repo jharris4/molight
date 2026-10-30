@@ -265,7 +265,7 @@ longer needs a custom repository.
   level or color), quantized, or as fade steps are recognized as MoLight's own
   echo, while a wall switch or dimmer used right after a MoLight command is no
   longer mistaken for one.
-- Restarts: occupancy already in progress at boot is no longer misread as a
+- Restarts: occupancy already in progress at startup is no longer misread as a
   false detection, and maintained occupancy carries across regardless of which
   entry loads first.
 - Combined occupancy clears instead of holding forever when its last active
@@ -295,7 +295,7 @@ longer needs a custom repository.
 - A diagnostic **Last Action** sensor per Virtual Remote, recording the last
   action executed with its source button, resolved click, raw event type and
   time.
-- Double-press support for Lutron Caséta Picos via the companion
+- Double-press support for Lutron Caséta Picos via the separate
   [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)
   integration.
 

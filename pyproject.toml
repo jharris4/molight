@@ -12,8 +12,8 @@ markers = [
 
 # CI runs `pytest --cov` (plain `pytest` stays fast for local loops); these
 # settings make that one flag measure branch coverage of the integration and
-# fail below the floor, so coverage erosion turns the build red instead of
-# accumulating silently.
+# fail below the coverage threshold, so coverage erosion turns the build red
+# instead of accumulating silently.
 [tool.coverage.run]
 source = ["custom_components/molight"]
 branch = true
@@ -74,7 +74,7 @@ ignore = [
     "S310",    # the runner deliberately calls its configured HA URL
     "T201",    # phase progress is the runner's command-line interface
     "TC003",   # Callable is clearer beside the other runner imports
-    "TRY003",  # detailed assertion messages are acceptance-test output
+    "TRY003",  # detailed assertion messages are end-to-end suite output
     "TRY300",  # polling loops read more clearly with an early return
 ]
 "tests/e2e/testbed/**" = [

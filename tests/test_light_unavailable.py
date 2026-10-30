@@ -120,7 +120,7 @@ def _real_calls(calls: list[dict], service: str) -> list[dict]:
 async def test_real_light_briefly_unavailable_and_back(
     hass: HomeAssistant, bad: str
 ) -> None:
-    """A real light dropping out is not an 'off'; coming back 'on' re-adopts it."""
+    """A real light going unavailable is not an 'off'; coming back 'on' re-adopts it."""
     await setup_entries(hass, make_light_entry())
 
     hass.states.async_set(REAL, "on")
@@ -1392,7 +1392,7 @@ async def test_illuminance_briefly_unavailable_holds_state(hass: HomeAssistant) 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_schedule_briefly_unavailable_keeps_window(hass: HomeAssistant) -> None:
-    """A follow-mode schedule dropping out mid-window keeps the lights on."""
+    """A follow-mode schedule going unavailable mid-window keeps the lights on."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(
         hass, make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW)
@@ -2716,7 +2716,7 @@ async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
 async def test_unreadable_presence_keeps_its_hold_while_other_holds_release(
     hass: HomeAssistant, freezer, role: str, how: str, back: str
 ) -> None:
-    """A presence sensor that reloads or drops out keeps the hold it had.
+    """A presence sensor that reloads or goes unavailable keeps the hold it had.
 
     The other presence role clearing, the door closing and a keep-on entity
     releasing meanwhile start no countdown; what the sensor reports when it
@@ -2936,7 +2936,7 @@ async def _visit_sensor(hass: HomeAssistant, kind: str) -> tuple[str, list]:
 
 
 async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
-    """Reload a visit sensor's entries; a real one drops out and returns."""
+    """Reload a visit sensor's entries; a real one goes unavailable and returns."""
     for entry in entries:
         assert await hass.config_entries.async_reload(entry.entry_id)
         await settle(hass)

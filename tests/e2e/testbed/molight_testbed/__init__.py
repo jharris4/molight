@@ -1,4 +1,4 @@
-"""Persistent simulated entities for live MoLight acceptance tests."""
+"""Persistent simulated entities for live MoLight end-to-end tests."""
 
 from __future__ import annotations
 
@@ -164,7 +164,7 @@ class TestbedController:
         entity.async_write_ha_state()
 
     async def async_set_startup_delay(self, entity_id: str, seconds: float) -> None:
-        """Hold one entity back for this long at the next boot, then add it."""
+        """Hold one entity back for this long at the next startup, then add it."""
         entity = self.entities.get(entity_id)
         if entity is None:
             raise ValueError(f"Unknown testbed entity: {entity_id}")

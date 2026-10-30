@@ -81,7 +81,7 @@ def _record(level: str, logger: str, message: str) -> str:
     return f"2026-10-01 19:37:40.123 {level} (MainThread) [{logger}] {message}"
 
 
-BOOT = _record(
+START = _record(
     "WARNING",
     "homeassistant.loader",
     "We found a custom integration molight which has not been tested by Home "
@@ -95,9 +95,9 @@ TRACEBACK = (
 )
 
 
-def _boot(minute: int) -> str:
-    """The boot line of a boot that started the given number of minutes later."""
-    return BOOT.replace("19:37:", f"19:{37 + minute}:")
+def _start(minute: int) -> str:
+    """The start line of a Home Assistant start the given number of minutes later."""
+    return START.replace("19:37:", f"19:{37 + minute}:")
 
 
 def test_log_records_groups_continuation_lines() -> None:
@@ -153,7 +153,7 @@ def test_log_failures_flags_molight_problems(record: str) -> None:
 @pytest.mark.parametrize(
     "record",
     [
-        BOOT,
+        START,
         *(
             _record("WARNING", "custom_components.molight.light", f"x {allowed} y")
             for allowed in runner.ALLOWED_WARNINGS
@@ -174,25 +174,25 @@ def test_log_failures_passes_allowed_and_unrelated_records(record: str) -> None:
 def test_log_failures_reports_every_failure_once() -> None:
     error = _record("ERROR", "custom_components.molight.light", "boom")
     warning = _record("WARNING", "custom_components.molight.binary_sensor", "odd")
-    content = f"{BOOT}\n{error}\n{TRACEBACK}\n{warning}\n"
+    content = f"{START}\n{error}\n{TRACEBACK}\n{warning}\n"
 
     assert runner.log_failures(content) == [error, warning]
 
 
-def test_log_boots_counts_only_parsed_boot_records() -> None:
-    unparsed = _boot(2).replace("2026-10-01 ", "2026-10-01T")
-    info = _record("INFO", "homeassistant.loader", runner.BOOT_LINE)
+def test_log_starts_counts_only_parsed_start_records() -> None:
+    unparsed = _start(2).replace("2026-10-01 ", "2026-10-01T")
+    info = _record("INFO", "homeassistant.loader", runner.START_LINE)
 
-    assert runner.log_boots(f"{BOOT}\n{_boot(1)}\n{unparsed}\n{info}\n") == 2
+    assert runner.log_starts(f"{START}\n{_start(1)}\n{unparsed}\n{info}\n") == 2
 
 
-def test_log_boots_counts_a_boot_line_logged_twice_once() -> None:
-    """Home Assistant 2026.1 logs the boot line twice, milliseconds apart."""
-    again = BOOT.replace(":40.123", ":40.125")
-    later = BOOT.replace(":40.123", ":41.124")
+def test_log_starts_counts_a_start_line_logged_twice_once() -> None:
+    """Home Assistant 2026.1 logs the start line twice, milliseconds apart."""
+    again = START.replace(":40.123", ":40.125")
+    later = START.replace(":40.123", ":41.124")
 
-    assert runner.log_boots(f"{BOOT}\n{again}\n{_boot(1)}\n") == 2
-    assert runner.log_boots(f"{BOOT}\n{later}\n") == 2
+    assert runner.log_starts(f"{START}\n{again}\n{_start(1)}\n") == 2
+    assert runner.log_starts(f"{START}\n{later}\n") == 2
 
 
 @pytest.fixture
@@ -202,38 +202,38 @@ def container_log(tmp_path, monkeypatch: pytest.MonkeyPatch):
     return path
 
 
-def test_check_logs_passes_a_clean_log_with_every_boot(container_log, capsys) -> None:
+def test_check_logs_passes_a_clean_log_with_every_start(container_log, capsys) -> None:
     info = _record("INFO", "homeassistant.setup", "Setting up molight")
     # The container's output keeps Home Assistant's colors.
-    container_log.write_text(f"\x1b[33m{BOOT}\x1b[0m\n{info}\n{_boot(1)}\n")
+    container_log.write_text(f"\x1b[33m{START}\x1b[0m\n{info}\n{_start(1)}\n")
 
     runner.check_logs(2)
 
-    assert "logs of 2 boot(s)" in capsys.readouterr().out
+    assert "logs of 2 start(s)" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("boots", [0, 1, 3])
-def test_check_logs_fails_on_another_boot_count(container_log, boots: int) -> None:
-    """Fewer boots leave part of the run unchecked; more mean an unplanned restart."""
-    container_log.write_text("".join(f"{_boot(n)}\n" for n in range(boots)))
+@pytest.mark.parametrize("starts", [0, 1, 3])
+def test_check_logs_fails_on_another_start_count(container_log, starts: int) -> None:
+    """Fewer starts leave part of the run unchecked; more mean an unplanned restart."""
+    container_log.write_text("".join(f"{_start(n)}\n" for n in range(starts)))
 
-    with pytest.raises(AssertionError, match=f"Parsed {boots} Home Assistant boot"):
+    with pytest.raises(AssertionError, match=f"Parsed {starts} Home Assistant start"):
         runner.check_logs(2)
 
 
 def test_check_logs_fails_a_log_it_cannot_parse(container_log) -> None:
     """With no record parsed nothing could be flagged, so the gate must fail."""
     error = _record("ERROR", "custom_components.molight.light", "boom")
-    content = f"{BOOT}\n{error}\n".replace("2026-10-01 ", "2026-10-01T")
+    content = f"{START}\n{error}\n".replace("2026-10-01 ", "2026-10-01T")
     container_log.write_text(content)
 
-    with pytest.raises(AssertionError, match="Parsed 0 Home Assistant boot"):
+    with pytest.raises(AssertionError, match="Parsed 0 Home Assistant start"):
         runner.check_logs(1)
 
 
 def test_check_logs_fails_on_a_molight_error(container_log) -> None:
     error = _record("ERROR", "custom_components.molight.light", "boom")
-    container_log.write_text(f"{BOOT}\n{error}\n")
+    container_log.write_text(f"{START}\n{error}\n")
 
     with pytest.raises(AssertionError, match="boom"):
         runner.check_logs(1)
@@ -244,7 +244,7 @@ def test_check_logs_fails_without_the_saved_log(container_log) -> None:
         runner.check_logs(1)
 
 
-def test_main_runs_the_log_check_with_the_boot_count(
+def test_main_runs_the_log_check_with_the_start_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     checked: list[int] = []
@@ -257,13 +257,13 @@ def test_main_runs_the_log_check_with_the_boot_count(
 
 
 @pytest.mark.parametrize("args", [["logs"], ["logs", "x"], ["logs", "1", "2"]])
-def test_main_needs_one_boot_count_for_the_log_check(
+def test_main_needs_one_start_count_for_the_log_check(
     monkeypatch: pytest.MonkeyPatch, args: list[str]
 ) -> None:
     monkeypatch.setattr(runner, "check_logs", lambda _: pytest.fail("ran"))
     monkeypatch.setattr(runner.sys, "argv", ["runner.py", *args])
 
-    with pytest.raises(SystemExit, match="logs <expected boots>"):
+    with pytest.raises(SystemExit, match="logs <expected starts>"):
         runner.main()
 
 

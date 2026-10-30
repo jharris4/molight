@@ -1404,7 +1404,7 @@ async def _begin_turn_on(
     """Set up, start a turn-on and return once it waits for the select call.
 
     member is the real light's state meanwhile: None for not loaded yet,
-    "restored" for the placeholder Home Assistant writes at boot.
+    "restored" for the placeholder Home Assistant writes at startup.
     """
     hass.states.async_set("binary_sensor.occ", "off")
     hass.states.async_set("binary_sensor.door", "off")
@@ -2674,7 +2674,7 @@ async def _lit_light(
 
 
 async def _park_resend(hass: HomeAssistant, select: _SlowSelect) -> None:
-    """The member drops out and comes back off; the re-send waits for its
+    """The member goes unavailable and comes back off; the re-send waits for its
     select call."""
     select.started.clear()
     select.release.clear()
@@ -3046,7 +3046,7 @@ async def _preset_strip(
 async def _park_real_resend(
     hass: HomeAssistant, light: FadingLight, select: _PresetSelect, *, on: bool = False
 ) -> None:
-    """The strip drops out and comes back; its re-send waits for the select."""
+    """The strip goes unavailable and comes back; its re-send waits for the select."""
     select.started.clear()
     select.release.clear()
     light.wall(on=on, available=False)

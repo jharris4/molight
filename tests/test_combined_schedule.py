@@ -2271,12 +2271,12 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
         ("other_input_on", ("off", "on"), False),
     ],
     ids=[
-        "cycle",
-        "cycle_nested",
-        "cycle_inverted_output",
+        "spell",
+        "spell_nested",
+        "spell_inverted_output",
         "unchanged",
         "outage",
-        "cycle_under_another_input",
+        "spell_under_another_input",
     ],
 )
 @pytest.mark.asyncio
@@ -2290,7 +2290,7 @@ async def test_combination_back_from_an_unload_knows_the_window_started_meanwhil
 ) -> None:
     """A combination disabled or unloaded while a source-backed input goes
     off and on comes back with the new window; one whose inputs kept it on,
-    or only dropped out, keeps its window."""
+    or only went unavailable, keeps its window."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set(

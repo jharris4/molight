@@ -2185,7 +2185,7 @@ async def test_schedule_outage_keeps_a_manual_off_only_within_its_window(
 @pytest.mark.parametrize(
     ("meanwhile", "suppressed"),
     [(("off", "on"), False), (("unavailable", "on"), True), ((), True)],
-    ids=["source_cycle", "source_outage", "unchanged"],
+    ids=["source_spell", "source_outage", "unchanged"],
 )
 async def test_source_window_started_while_its_schedule_was_unloaded_is_a_boundary(
     hass: HomeAssistant,
@@ -2196,7 +2196,7 @@ async def test_source_window_started_while_its_schedule_was_unloaded_is_a_bounda
 ) -> None:
     """A source-backed schedule unloaded while its source goes off and on
     comes back on in a new window, which brings standby back after a manual
-    off. A source that only dropped out, or did nothing, leaves the off."""
+    off. A source that only went unavailable, or did nothing, leaves the off."""
     freezer.move_to("2026-03-02 22:00:00-08:00")
     hass.states.async_set("binary_sensor.night_mode", "on")
     schedule = MockConfigEntry(

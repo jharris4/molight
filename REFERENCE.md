@@ -22,7 +22,7 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 
 Details:
 
-- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while Home Assistant was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the visit in progress at boot is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
+- **Restarts:** classification needs a real on-time. `last_on_time` survives restarts, but if motion began while Home Assistant was down there is nothing to restore (the source's `last_changed` is then just the restart moment), so the visit in progress at startup is deliberately left unclassified and takes the normal countdown. A mid-run reload, where `last_changed` is genuine, still uses it.
 - **Changing the source sensor** leaves the old source's presence behind: the sensor follows the new source from its first valid reading, and a new source that is `unavailable` at the time does not keep it `on`.
 - **A source computed from the sensor itself**, such as a group that contains it (directly, or through another group or a combined occupancy sensor), is rejected: it would hold the sensor `on` by its own state. If a group is edited to include the sensor later, the sensor stops following it and clears as for an `unavailable` source (at once when *Clear after unavailable* is disabled) until the group is corrected.
 
@@ -65,7 +65,7 @@ A companion **`<name> Events` entity** fires `false_detection`, with `on_duratio
 | **Threshold** | Lux. Default `10`, at most 100000. The lux level at which the sensor reports `on`. Must be above `0`, since dark means a reading below it |
 | **Hysteresis** | Lux. `0` disables (the default), at most 10000. Becomes bright at `threshold + hysteresis`, dark below `threshold - hysteresis`; readings inside the band hold the current state, suppressing flapping when the light level hovers around the threshold. Must be smaller than the threshold: the form rejects a band whose dark edge would sit below `0 lx`, which no sensor can ever report, latching the state bright forever |
 
-An unavailable or unparsable source (including `nan` and `inf`) holds the last known value, since a lux sensor dropping out must not read as "it got dark". The state also survives restarts.
+An unavailable or unparsable source (including `nan` and `inf`) holds the last known value, since a lux sensor going unavailable must not read as "it got dark". The state also survives restarts.
 
 - **No reading yet:** until a reading has been parsed (or restored) the sensor is `unavailable` rather than `off`, so a source that has never reported doesn't assert darkness. Lights treat that as "not bright", and a light the sensor had kept dark reacts to it as to the room going dark. The first-ever reading is judged against the bare threshold rather than the hysteresis band, since there is no held state yet for the band to preserve.
 - **Source deleted or disabled**, on its own or along with its config entry: it can never report again, so its reading is dropped and the sensor is `unavailable`. That is judged once Home Assistant has started, so a source still loading at startup keeps the restored reading.
@@ -627,7 +627,7 @@ To turn standby off again, clear the standby brightness and set the **Standby co
 
 Drives lights from the buttons of a remote control: a Lutron Pico, an IKEA Bilresa, a HomeKit or Z-Wave scene controller, or any remote whose buttons Home Assistant exposes as `event` entities with one of the click spellings listed below. One entry replaces the pile of hand-written `automation:` blocks that dispatch on button events: pick the target lights, then bind each button's single and/or double click to an action.
 
-> **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the companion [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration. It exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
+> **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the separate [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration. It exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
 
 Each press calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound press on a virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running effect/warn off-warning (restoring the pre-warning brightness), and it restarts the turn-off timer. During that warning, **Brightness up** and **Brightness down** step from the pre-warning brightness, never below 1%, rather than from the warning level the light shows. Targets are usually virtual lights, but any `light` entity works.
 

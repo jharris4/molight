@@ -1,6 +1,6 @@
 # Local editor setup
 
-The development scripts run Python inside the dev container, where the project
+The npm scripts run Python inside the dev container, where the project
 dependencies are installed in `/opt/molight-venv`. When VS Code is opened
 locally instead of in the container, Pylance cannot access that environment and
 reports those imports as unresolved.

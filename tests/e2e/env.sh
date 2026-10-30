@@ -31,12 +31,12 @@ remove_dirs() {
     rm -rf "$@"
 }
 
-# Check every boot's logs; the argument is how many boots the lane made. The
+# Check every start's logs; the argument is how many starts the lane made. The
 # runner cannot reach the container's output, which unlike home-assistant.log
 # keeps them all, so save it where it can.
 check_ha_logs() {
-    echo "Checking the Home Assistant logs of every boot..."
+    echo "Checking the Home Assistant logs of every start..."
     compose logs --no-color --no-log-prefix homeassistant \
         > "$MOLIGHT_E2E_CONFIG_DIR/e2e-container.log"
-    compose run --rm runner python runner.py logs "${1:?check_ha_logs needs the boot count of the lane}"
+    compose run --rm runner python runner.py logs "${1:?check_ha_logs needs the start count of the lane}"
 }

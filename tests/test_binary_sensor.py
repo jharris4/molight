@@ -403,7 +403,7 @@ async def test_early_clear_is_false_detection(hass: HomeAssistant, freezer) -> N
 async def test_late_loading_source_clear_is_not_false_detection(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A source first provided after boot has an unknown start: no false flag.
+    """A source first provided after startup has an unknown start: no false flag.
 
     Until a slow integration provides it, HA shows the source as a restored
     placeholder; a visit arriving then may be a replay of one that began
@@ -1318,7 +1318,7 @@ async def test_light_gated_by_a_sensor_whose_source_went_missing_comes_on(
 async def test_illuminance_first_reading_in_band_uses_bare_threshold(
     hass: HomeAssistant,
 ) -> None:
-    """A first-ever reading has no held state, so the band must not apply."""
+    """A first sighting has no held state, so the band must not apply."""
     for name, source, reading, expected in (
         ("Band Bright", "sensor.lux_a", "11", "on"),
         ("Band Dark", "sensor.lux_b", "9", "off"),

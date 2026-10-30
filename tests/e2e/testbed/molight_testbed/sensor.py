@@ -1,4 +1,4 @@
-"""Simulated sensors for live MoLight acceptance tests."""
+"""Simulated sensors for live MoLight end-to-end tests."""
 
 from __future__ import annotations
 

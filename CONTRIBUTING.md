@@ -15,12 +15,12 @@ The npm scripts prefixed `dev:` and `hass:` act on these two containers. `test`,
 
 ```bash
 npm install         # install tooling
-npm run hass:down   # free port 8123 (devcontainer and HA runtime can't coexist)
-npm run dev:up      # start the devcontainer (fast after first build)
+npm run hass:down   # free port 8123 (dev container and HA runtime can't coexist)
+npm run dev:up      # start the dev container (fast after first build)
 npm test
 ```
 
-`npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13), so a test that passes locally can still fail there, and, as an advisory leg, on the newest version `pytest-homeassistant-custom-component` targets, which is often a beta.
+`npm test` runs the unit tests on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the unit tests on the minimum Home Assistant version in `hacs.json` (with Python 3.13), so a test that passes locally can still fail there, and, as an advisory leg, on the newest version `pytest-homeassistant-custom-component` targets, which is often a beta.
 
 A daily workflow opens a PR when a newer stable Home Assistant is out, moving that pin and the e2e image in `tests/e2e/env.sh` together, and runs pytest and every e2e suite on the new version only. `scripts/ha-bump` previews the same bump locally.
 
@@ -60,9 +60,9 @@ git push origin v1.x.0
 
 Pushing the tag starts the **Release** GitHub Actions workflow. The workflow
 validates that the tag is on `main` and that the tag, manifest and changelog
-versions agree, runs the lint, unit test and validation jobs and every live
-E2E suite, and once all of them pass puts the release notes extracted from
-the changelog in the summary of its **Release notes** job. It does **not**
+versions agree, runs the lint, unit test and validation jobs and every
+end-to-end suite, and once all of them pass puts the release notes extracted
+from the changelog in the summary of its **Release notes** job. It does **not**
 create the GitHub Release. After the workflow succeeds:
 
 1. Open the **Release notes** job summary and copy the generated notes.
@@ -123,7 +123,7 @@ npm run dev:hass     # run the pip-installed HA inside the dev container against
 
 Use `hass:up` to confirm behavior against a real, released HA build; use `dev:hass` for active development, where HA loads the integration from your working tree and can be restarted in place. Remember to `hass:down` before starting the dev container (or vice versa) so port 8123 is free.
 
-## Running the live acceptance tests
+## Running the end-to-end suite
 
 The end-to-end suite starts an isolated official Home Assistant container and
 a short-lived API runner on a private Docker network. It does not use the
@@ -132,7 +132,7 @@ run alongside the dev container. A test-only `molight_testbed` integration
 provides persistent simulated lights, sensors, a door, a schedule and selects
 (lights can be switched into slow, piecewise, stepwise, quantized or XY-reporting
 behavior to emulate real bulbs);
-it is mounted only into the disposable acceptance environment and is never
+it is mounted only into the disposable end-to-end environment and is never
 part of a MoLight release.
 
 ```bash
@@ -171,11 +171,11 @@ browser lane also keeps its failure artifacts (Playwright output, a copy of
 the HA configuration, and Compose logs) in `tests/e2e/artifacts/browser` in
 the repository, and clears that directory at the start of each run.
 
-CI runs the live suite against the pinned current Home Assistant image on
+CI runs the end-to-end suite against the pinned current Home Assistant image on
 pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
-minimum-supported/current matrix plus advisory floating `stable` and `beta`
-canaries; the nightly run covers both `main` and `develop`. Release tags run
+minimum-supported/current matrix plus advisory legs on floating `stable` and
+`beta`; the nightly run covers both `main` and `develop`. Release tags run
 every suite on the current and minimum-supported images, and write their release
 notes only after all of them pass. Every CI job uploads what its lane
 retained (the run directory with the HA config and Compose logs, plus

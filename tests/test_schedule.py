@@ -2324,7 +2324,7 @@ async def _back(hass: HomeAssistant, entry: MockConfigEntry, how: str) -> None:
         (("unavailable", "on"), False),
         (("unknown", "unavailable", "on"), False),
     ],
-    ids=["cycle", "cycle_then_outage", "unchanged", "outage", "two_outages"],
+    ids=["spell", "spell_then_outage", "unchanged", "outage", "two_outages"],
 )
 @pytest.mark.asyncio
 async def test_schedule_back_from_an_unload_knows_the_window_its_source_started(
@@ -2337,7 +2337,7 @@ async def test_schedule_back_from_an_unload_knows_the_window_its_source_started(
 ) -> None:
     """A schedule disabled or unloaded while its source goes off and on comes
     back with the new window, and a follow-mode light turned off manually in
-    the old one is lit. A source that only dropped out kept its window."""
+    the old one is lit. A source that only went unavailable kept its window."""
     freezer.move_to("2026-07-02 12:00:00+00:00")
     source = RealBinary("house_mode", on=not invert)
     lamp = RealLight("lamp")
@@ -2411,7 +2411,7 @@ async def test_schedule_back_from_an_unload_is_off_when_its_source_went_off(
 
 
 @pytest.mark.asyncio
-async def test_restart_keeps_the_saved_marker_over_a_source_cycle_it_could_not_see(
+async def test_restart_keeps_the_saved_marker_over_a_source_spell_it_could_not_see(
     hass: HomeAssistant, freezer
 ) -> None:
     """Across a restart nothing followed the source: an off and on during the
