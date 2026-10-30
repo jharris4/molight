@@ -50,6 +50,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
@@ -149,6 +150,7 @@ def make_light_entry(
     timeout: int | None = 60,
     false_off_delay: int | None = None,
     occupancy: str | None = None,
+    occupancy_turn_on: str | None = None,
     maintain: str | None = None,
     illuminance: str | None = None,
     illuminance_mode: str | None = None,
@@ -193,6 +195,8 @@ def make_light_entry(
         data[CONF_FALSE_OFF_DELAY] = false_off_delay
     if occupancy:
         data[CONF_OCCUPANCY_ENTITY] = occupancy
+    if occupancy_turn_on:
+        data[CONF_OCCUPANCY_TURN_ON] = occupancy_turn_on
     if maintain:
         data[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain
     if illuminance:

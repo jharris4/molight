@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [No turn-off timeout](https://github.com/jharris4/molight/blob/main/REFERENCE.md#no-turn-off-timeout)).
 - **Match the schedule after a restart**: a follow-mode light found off inside
   its schedule window, or on outside it, can be turned on or off at a restart.
+- **Occupancy turn-on by the light's own system**: a light its own system
+  turns on from occupancy, such as a Lutron Caséta occupancy group, keeps that
+  faster turn-on while MoLight runs the turn-off and the rest.
 
 ### Deprecated
 

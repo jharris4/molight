@@ -38,6 +38,7 @@ DEFAULT_BEHAVIOR: Final = {
     "xy_color": False,  # offer and report XY instead of RGB
     "reject": False,  # raise on every command (an unreachable bulb)
     "silent": False,  # apply commands but never report them back
+    "turns_on_from": "",  # a sensor whose on turns the light on by itself
 }
 
 LIGHT_MAIN: Final = "light_main"

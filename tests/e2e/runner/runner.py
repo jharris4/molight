@@ -80,6 +80,7 @@ END_LATE_LIGHT = "light.e2e_end_late"
 END_FOLLOW_LATE_LIGHT = "light.e2e_end_follow_late"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
 WALL_LIGHT = "light.e2e_wall"
+OWN_SYSTEM_LIGHT = "light.e2e_own_system"
 RESTART_EFFECT_LIGHT = "light.e2e_restart_effect"
 RESTART_EFFECT_LATE_LIGHT = "light.e2e_restart_effect_late"
 HOLD_RULES_LIGHT = "light.e2e_hold_rules"
@@ -8833,6 +8834,94 @@ def run_timer_scenarios(client: HomeAssistantClient) -> None:
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
 
 
+def create_own_system_light(client: HomeAssistantClient) -> str:
+    """Create a light its own system turns on for occupancy, then MoLight."""
+    return create_entry(
+        client,
+        "light",
+        {
+            "name": "E2E Own System",
+            "lights": [RAW_TIMER_LIGHT],
+            "light_timeout": 4,
+            "sensors": {
+                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "occupancy_turn_on": "own_system_then_molight",
+            },
+            "behavior": {"auto_on_brightness": 60},
+            "warning": {"effect_timeout": 0, "warn_timeout": 0},
+            "advanced": {"entity_id": "e2e_own_system"},
+        },
+        "Own-system light",
+    )
+
+
+def run_own_system_turn_on_scenarios(client: HomeAssistantClient) -> None:
+    """A light that turns itself on from its sensor, and one that does not."""
+    entry_id = create_own_system_light(client)
+    assert_entry_loaded(client, entry_id)
+    client.wait_state(OWN_SYSTEM_LIGHT, lambda state: state["state"] == "off", "off")
+
+    client.set_behavior(RAW_TIMER_LIGHT, turns_on_from=RAW_TIMER_MOTION)
+    commands = client.state(RAW_TIMER_LIGHT)["attributes"]["testbed_commands"]
+    set_timer_motion(client, True)
+    lit = wait_machine_state(client, "occupied", OWN_SYSTEM_LIGHT)
+    if (
+        lit["attributes"].get("last_on_occupancy") is None
+        or lit["attributes"].get("last_on_physical") is not None
+    ):
+        raise AssertionError(f"Its own system's turn-on was not occupancy: {lit}")
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["attributes"].get("brightness") == pct(60)
+            and state["attributes"]["testbed_commands"] == commands + 1
+        ),
+        "on: raised to the auto-on level by one MoLight command",
+    )
+    assert_state_stays(
+        client,
+        OWN_SYSTEM_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "occupied"
+            and state["attributes"].get("last_brightness_change_physical") is None
+        ),
+        "occupied: the raise read as MoLight's own echo",
+        duration=2,
+    )
+    set_timer_motion(client, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=15
+    )
+    wait_machine_state(client, "idle", OWN_SYSTEM_LIGHT)
+
+    # Its own system leaves the light off: MoLight turns it on after the wait.
+    client.set_behavior(RAW_TIMER_LIGHT, turns_on_from="")
+    before = client.state(OWN_SYSTEM_LIGHT)["attributes"]["last_on_occupancy"]
+    set_timer_motion(client, True)
+    client.wait_state(
+        RAW_TIMER_LIGHT,
+        lambda state: (
+            state["state"] == "on" and command_data(state).get("brightness") == pct(60)
+        ),
+        "on: turned on by MoLight at the end of the wait",
+    )
+    client.wait_state(
+        OWN_SYSTEM_LIGHT,
+        lambda state: (
+            state["attributes"].get("molight_state") == "occupied"
+            and state["attributes"].get("last_on_occupancy") not in (None, before)
+        ),
+        "occupied: MoLight's own turn-on",
+    )
+    set_timer_motion(client, False)
+    client.wait_state(
+        RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off", timeout=15
+    )
+    client.remove_entry(entry_id)
+    wait_entry_removed(client, entry_id, "Temporary own-system light")
+    print("PASS: a light's own occupancy turn-on, and MoLight's when it has none")
+
+
 # Longer than the 5 s Home Assistant keeps a command's context on a light.
 LONG_FADE = 7
 # What a change at the wall leaves on a virtual light.
@@ -9428,6 +9517,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_reference_cleanup_scenarios,
         run_manual_control_scenarios,
         run_color_temp_scenarios,
+        run_own_system_turn_on_scenarios,
     ],
     "b": [
         run_faulty_member_scenarios,

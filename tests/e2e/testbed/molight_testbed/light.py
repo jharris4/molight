@@ -17,10 +17,20 @@ from homeassistant.components.light import (
     LightEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    Context,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+)
 from homeassistant.util import color as color_util
 
 from . import controller_for_entry
@@ -36,6 +46,9 @@ from .const import (
 from .entity import TestbedEntity, async_add_with_startup_delays
 
 REPORT_STEP_GAP = 0.3  # seconds between a piecewise power and attribute report
+# How a light whose own system watches a sensor turns itself on.
+OWN_TURN_ON_DELAY = 0.2
+OWN_TURN_ON_BRIGHTNESS = 102
 # What a fade reports on its way, each blended from where it started.
 FADED = (ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_XY_COLOR, ATTR_COLOR_TEMP_KELVIN)
 
@@ -69,6 +82,7 @@ class TestbedLight(TestbedEntity, LightEntity):
             self._attr_min_color_temp_kelvin = 2000
             self._attr_max_color_temp_kelvin = 6500
         self._pending: list[CALLBACK_TYPE] = []
+        self._own_sensor_unsub: CALLBACK_TYPE | None = None
         self._reported: dict[str, Any] = {}
         self._sync_reported()
         self._set_reported_capabilities(self.available)
@@ -102,6 +116,54 @@ class TestbedLight(TestbedEntity, LightEntity):
             "last_command": deepcopy(self.record.get("last_command")),
             "commands": self.record.get("commands", 0),
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Start watching the sensor its own system turns it on from."""
+        await super().async_added_to_hass()
+        self._watch_own_sensor()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop watching that sensor."""
+        if self._own_sensor_unsub is not None:
+            self._own_sensor_unsub()
+            self._own_sensor_unsub = None
+        await super().async_will_remove_from_hass()
+
+    def _watch_own_sensor(self) -> None:
+        if self._own_sensor_unsub is not None:
+            self._own_sensor_unsub()
+            self._own_sensor_unsub = None
+        if sensor := self.behavior["turns_on_from"]:
+            self._own_sensor_unsub = async_track_state_change_event(
+                self.hass, sensor, self._on_own_sensor
+            )
+
+    @callback
+    def _on_own_sensor(self, event: Event[EventStateChangedData]) -> None:
+        """Turn on by itself shortly after the sensor turns on, as a Lutron group."""
+        new_state = event.data["new_state"]
+        old_state = event.data["old_state"]
+        if (
+            new_state is None
+            or new_state.state != "on"
+            or (old_state is not None and old_state.state == "on")
+            or self.record["state"] == "on"
+        ):
+            return
+        self._pending.append(
+            async_call_later(self.hass, OWN_TURN_ON_DELAY, self._own_turn_on)
+        )
+
+    @callback
+    def _own_turn_on(self, _now: Any) -> None:
+        self.record["state"] = "on"
+        self.record["attributes"][ATTR_BRIGHTNESS] = OWN_TURN_ON_BRIGHTNESS
+        self.record["last_command"] = {"service": "own_system", "data": {}}
+        self.hass.async_create_task(self.controller.async_save())
+        # Its own report, not an echo of a command HA sent within 5 s.
+        self.async_set_context(Context())
+        self._sync_reported()
+        self.async_write_ha_state()
 
     def _cancel_pending(self) -> None:
         for cancel in self._pending:
@@ -331,6 +393,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         self._cancel_pending()
         self._sync_reported()
         self._set_reported_capabilities(self.available)
+        self._watch_own_sensor()
 
 
 async def async_setup_entry(

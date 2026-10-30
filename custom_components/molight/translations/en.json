@@ -249,6 +249,7 @@
             "description": "The virtual sensors and helper entities that drive the lights. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -261,6 +262,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -543,6 +545,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -555,6 +558,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -676,6 +680,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -685,6 +690,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -766,6 +772,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -775,6 +782,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -1197,6 +1205,13 @@
         "open": "On open: turn on when the door opens (normal timeout)",
         "open_close": "Open & close: on while open, countdown when closed"
       }
+    },
+    "occupancy_turn_on": {
+      "options": {
+        "molight": "MoLight",
+        "own_system": "Its own system",
+        "own_system_then_molight": "Its own system, then MoLight"
+      }
     }
   },
   "options": {
@@ -1231,6 +1246,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -1240,6 +1256,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -1321,6 +1338,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -1330,6 +1348,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
@@ -1577,6 +1596,7 @@
             "description": "The virtual sensors and helper entities that drive this light. All are optional, and each mode sits next to the sensor it applies to.",
             "data": {
               "occupancy_entity": "Occupancy sensor",
+              "occupancy_turn_on": "What turns the light on for occupancy",
               "maintain_occupancy_entity": "Maintain occupancy sensor",
               "illuminance_entity": "Illuminance sensor",
               "illuminance_mode": "Illuminance mode",
@@ -1589,6 +1609,7 @@
             },
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",

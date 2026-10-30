@@ -89,6 +89,7 @@ from custom_components.molight.const import (
     CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
+    CONF_OCCUPANCY_TURN_ON,
     CONF_OFF_BUTTONS_SINGLE,
     CONF_ON_BUTTONS_DOUBLE,
     CONF_ON_BUTTONS_SINGLE,
@@ -134,6 +135,8 @@ from custom_components.molight.const import (
     ILLUMINANCE_MODE_GATE,
     MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND,
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
+    OCCUPANCY_TURN_ON_MOLIGHT,
+    OCCUPANCY_TURN_ON_OWN_SYSTEM,
     REMOTE_ACTION_FIELDS,
     REMOTE_ACTION_OFF,
     REMOTE_ACTION_ON,
@@ -2919,6 +2922,33 @@ async def test_light_flow_stores_door_and_false_off_delay(
     hass.states.async_set("binary_sensor.pantry_door", "on")
     await settle(hass)
     assert hass.states.get("light.pantry").state == "on"
+
+
+@pytest.mark.asyncio
+async def test_light_flow_stores_occupancy_turn_on(hass: HomeAssistant) -> None:
+    """The occupancy turn-on defaults to MoLight and round-trips its choice."""
+    result = await _start_create(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
+    )
+    sensors = result["data_schema"].schema[SECTION_SENSORS].schema.schema
+    default = next(k for k in sensors if k == CONF_OCCUPANCY_TURN_ON).default()
+    assert default == OCCUPANCY_TURN_ON_MOLIGHT
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            **EMPTY_LIGHT_CREATE_SECTIONS,
+            CONF_NAME: "Laundry",
+            CONF_LIGHTS: ["light.laundry_real"],
+            SECTION_SENSORS: {
+                CONF_OCCUPANCY_ENTITY: "binary_sensor.laundry_occupancy",
+                CONF_OCCUPANCY_TURN_ON: OCCUPANCY_TURN_ON_OWN_SYSTEM,
+            },
+        },
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_OCCUPANCY_TURN_ON] == OCCUPANCY_TURN_ON_OWN_SYSTEM
 
 
 @pytest.mark.asyncio

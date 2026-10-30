@@ -89,6 +89,17 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
   - A restart puts a light that was at standby back there, and a member
     back from unavailable is re-sent the standby settings.
 
+Occupancy turn-on by the light's own system (occupancy_turn_on)
+  - own_system: an occupancy edge on an idle light opens a 1 s wait; a
+    physical turn-on from off inside it is an occupancy turn-on (OCCUPIED,
+    lit by occupancy, last_on_occupancy, turned_on with reason occupancy),
+    and skips the gates. The auto-on brightness, color and selection follow
+    at the wait's end. MoLight never turns the light on for occupancy, also
+    not when it re-reads presence (startup, a settings or gate window start, dark).
+  - own_system_then_molight: as own_system, and at the wait's end an idle
+    light is turned on the normal, gated way; re-reads turn it on as usual.
+  - Standby and follow windows behave as with molight. The wait is not saved.
+
 Turn-on attribution
   Five timestamps record the last time the virtual light was turned on and why:
     last_on_physical:    a member light changed to ON through a
@@ -332,6 +343,7 @@ from .const import (
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
     CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_END_ACTION,
     CONF_SCHEDULE_ENTITY,
@@ -354,6 +366,7 @@ from .const import (
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_MODE,
     DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
+    DEFAULT_OCCUPANCY_TURN_ON,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_WARN_TIMEOUT,
@@ -372,6 +385,9 @@ from .const import (
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
     MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
+    OCCUPANCY_TURN_ON_MOLIGHT,
+    OCCUPANCY_TURN_ON_OWN_SYSTEM,
+    OCCUPANCY_TURN_ON_WAIT,
     REASON_BRIGHT,
     REASON_DOOR,
     REASON_FALSE_DETECTION,
@@ -1077,6 +1093,10 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._door_open_since: datetime | None = None
         # Counts an open door that stays unavailable as closed, None when idle.
         self._door_dropout_unsub: CALLBACK_TYPE | None = None
+        # The wait an occupancy edge opens for the light's own system to turn
+        # it on, None when closed; the command generation once it has.
+        self._occupancy_wait_unsub: CALLBACK_TYPE | None = None
+        self._occupancy_wait_generation: int | None = None
         # Whether the door has reported open/closed since startup.
         self._door_seen: bool = False
         # Last known on/off of each keep-on entity, kept ourselves so an
@@ -1264,6 +1284,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Virtual Light's entry settings; a Virtual Scheduled Light's settings forms
         # omit them (its schedule selects settings rather than gating them).
         self._occupancy_entity = cfg.get(CONF_OCCUPANCY_ENTITY)
+        self._occupancy_turn_on = cfg.get(
+            CONF_OCCUPANCY_TURN_ON, DEFAULT_OCCUPANCY_TURN_ON
+        )
         self._maintain_entity = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
         self._illuminance_entity = cfg.get(CONF_ILLUMINANCE_ENTITY)
         self._illuminance_mode = cfg.get(
@@ -1924,7 +1947,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _start_settings_for_off_light(self) -> None:
         """Apply a settings boundary to a light that is off."""
         dark = not self._is_illuminance_bright()
-        if dark and self._occupancy_active():
+        if dark and self._occupancy_active() and self._molight_turns_on_for_occupancy():
             self._on_occupancy_change(occupied=True)
         elif dark and self._door_holds():
             # Not _door_open: in plain open mode the door is momentary,
@@ -2147,6 +2170,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # window allow it.
         if (
             self._occupancy_entity
+            and (self._attr_is_on or self._molight_turns_on_for_occupancy())
             and not self._bright_gates_presence()
             and not self._gate_schedule_inactive()
         ):
@@ -2327,6 +2351,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         await super().async_will_remove_from_hass()
         self._cancel_timer()
         self._cancel_door_dropout()
+        self._close_occupancy_wait()
         for unsub in self._failed_command_unsubs:
             unsub()
         self._failed_command_unsubs.clear()
@@ -2712,7 +2737,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if not replay and not (
                 occupied and self._may_replay_manual_off(new_state, observed=observed)
             ):
-                self._on_occupancy_change(occupied)
+                self._on_occupancy_change(occupied, edge=True)
             elif (
                 self._attr_is_on
                 and self._machine_state not in (STATE_OCCUPIED, STATE_SCHEDULED)
@@ -2970,6 +2995,15 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # later dims (which _on_light_attrs_change handles).
             if brightness:
                 self._attr_brightness = brightness
+            if self._occupancy_wait_unsub is not None and claim and human:
+                if self._occupancy_wait_generation is None:
+                    if self._machine_state == STATE_IDLE:
+                        self._on_own_system_turn_on(brightness, color)
+                        return
+                elif self._own_system_turn_on_stands():
+                    # Another real light of the same turn-on.
+                    self.async_write_ha_state()
+                    return
             if send_turned_on and (
                 not self._attr_is_on or self._machine_state == STATE_STANDBY
             ):
@@ -3952,7 +3986,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 if self._occupancy_entity
                 else None
             )
-            occ_active = occ_state is not None and occ_state.state == "on"
+            occ_active = (
+                occ_state is not None
+                and occ_state.state == "on"
+                and self._molight_turns_on_for_occupancy()
+            )
             door_holds = self._door_holds()
             if replay_since is not None:
                 # Only a start the unreadable gate blocked is applied now; a
@@ -4089,14 +4127,34 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self.hass.async_create_task(self._auto_lights_on(reason=reason))
         self.async_write_ha_state()
 
-    def _on_occupancy_change(self, occupied: bool) -> None:
-        """Handle the virtual occupancy sensor changing."""
+    def _on_occupancy_change(self, occupied: bool, *, edge: bool = False) -> None:
+        """Handle the virtual occupancy sensor changing.
+
+        edge is a change the sensor reported, which the light's own system
+        may turn the light on for; the others re-evaluate presence.
+        """
         if not occupied and not self._occupancy_clear_was_false():
             # A genuine visit ended: a later false detection did not light the light.
             self._occupancy_lit_lights = False
+        if not occupied and self._occupancy_wait_generation is None:
+            self._close_occupancy_wait()
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if occupied:
+            if (
+                self._occupancy_turn_on != OCCUPANCY_TURN_ON_MOLIGHT
+                and self._machine_state == STATE_IDLE
+                and not self._attr_is_on  # a light found on is adopted as usual
+            ):
+                if edge:
+                    # Its own system turns the light on and skips MoLight's gates.
+                    self._close_occupancy_wait()
+                    self._occupancy_wait_unsub = async_call_later(
+                        self.hass, OCCUPANCY_TURN_ON_WAIT, self._occupancy_wait_ended
+                    )
+                    return
+                if not self._molight_turns_on_for_occupancy():
+                    return
             if self._bright_gates_presence():
                 # Bright enough: suppress lights; when illuminance turns off we
                 # re-evaluate occupancy from the sensor's current state.
@@ -4140,6 +4198,70 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._machine_state = self._countdown_state()
                 self._start_timer(self._compute_clear_countdown())
             self.async_write_ha_state()
+
+    def _on_own_system_turn_on(
+        self, brightness: int | None, color: tuple[ColorMode, tuple] | None
+    ) -> None:
+        """Take the light's own turn-on inside the wait as an occupancy turn-on.
+
+        The auto-on brightness, color and selection follow at the wait's end,
+        once every real light it turns on has reported.
+        """
+        selection = self._selection_to_apply()
+        self._send_event(
+            EVENT_TURNED_ON,
+            reason=REASON_OCCUPANCY,
+            standby=False,
+            brightness=(
+                brightness
+                if self._auto_on_brightness is None
+                else self._auto_on_brightness
+            ),
+            color=_event_color(self._auto_on_color) or _color_data(color),
+            selection=selection,
+        )
+        self._occupancy_wait_generation = self._command_generation
+        self._last_on_occupancy = datetime.now(UTC)
+        self._machine_state = STATE_OCCUPIED
+        self._cancel_timer()
+        self._occupancy_lit_lights = True
+        self._transition_on(rejoin=False)
+
+    def _molight_turns_on_for_occupancy(self) -> bool:
+        """Return False when only the light's own system turns it on for occupancy."""
+        return self._occupancy_turn_on != OCCUPANCY_TURN_ON_OWN_SYSTEM
+
+    def _own_system_turn_on_stands(self) -> bool:
+        """Return True while nothing has changed the light since its own turn-on."""
+        return self._occupancy_wait_generation == self._command_generation and (
+            self._machine_state in (STATE_OCCUPIED, STATE_COUNTDOWN)
+        )
+
+    @callback
+    def _occupancy_wait_ended(self, _now: datetime) -> None:
+        self._occupancy_wait_unsub = None
+        if self._occupancy_wait_generation is None:
+            if (
+                self._molight_turns_on_for_occupancy()
+                and self._machine_state == STATE_IDLE
+            ):
+                # Its own system did not turn the light on: MoLight does, gated.
+                self._on_occupancy_change(True)
+            return
+        stands = self._own_system_turn_on_stands()
+        self._occupancy_wait_generation = None
+        if stands and (
+            self._auto_on_brightness is not None
+            or self._auto_on_color
+            or self._turn_on_select_entity
+        ):
+            self.hass.async_create_task(self._auto_lights_on(force_selection=True))
+
+    def _close_occupancy_wait(self) -> None:
+        if self._occupancy_wait_unsub is not None:
+            self._occupancy_wait_unsub()
+            self._occupancy_wait_unsub = None
+        self._occupancy_wait_generation = None
 
     def _on_maintain_change(self, maintained: bool) -> None:
         """Handle the maintain occupancy entity changing.
@@ -4539,7 +4661,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 door_holds = door_holds and not self._may_replay_manual_off(
                     self.hass.states.get(self._door_entity), observed=False
                 )
-            if (occ_active or door_holds) and not gated:
+            occ_turns_on = occ_active and self._molight_turns_on_for_occupancy()
+            if (occ_turns_on or door_holds) and not gated:
                 self._last_on_illuminance = datetime.now(UTC)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
@@ -4576,9 +4699,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._enter_standby(
                     self._auto_on_transition, selection=True, reason=REASON_ILLUMINANCE
                 )
-            elif occ_active or door_holds:
+            elif occ_turns_on or door_holds:
                 self._send_blocked(
-                    REASON_OCCUPANCY if occ_active else REASON_DOOR, REASON_SCHEDULE
+                    REASON_OCCUPANCY if occ_turns_on else REASON_DOOR, REASON_SCHEDULE
                 )
 
     def _countdown_state(self) -> str:

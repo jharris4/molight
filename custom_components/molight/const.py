@@ -279,6 +279,25 @@ CONF_EFFECT_TRANSITION = "effect_transition"
 CONF_WARN_TRANSITION = "warn_transition"
 # Optional references to virtual entities (entity_ids)
 CONF_OCCUPANCY_ENTITY = "occupancy_entity"
+# What turns the light on for occupancy:
+#   molight:                  MoLight does.
+#   own_system:               the light's own system (a Lutron occupancy
+#                             group); a turn-on from off within
+#                             OCCUPANCY_TURN_ON_WAIT of the occupancy edge is
+#                             an occupancy turn-on. MoLight never sends one.
+#   own_system_then_molight:  as own_system, and MoLight turns the light on
+#                             when it is still off at the wait's end.
+CONF_OCCUPANCY_TURN_ON = "occupancy_turn_on"
+OCCUPANCY_TURN_ON_MOLIGHT = "molight"
+OCCUPANCY_TURN_ON_OWN_SYSTEM = "own_system"
+OCCUPANCY_TURN_ON_OWN_SYSTEM_THEN_MOLIGHT = "own_system_then_molight"
+OCCUPANCY_TURN_ON_CHOICES = [
+    OCCUPANCY_TURN_ON_MOLIGHT,
+    OCCUPANCY_TURN_ON_OWN_SYSTEM,
+    OCCUPANCY_TURN_ON_OWN_SYSTEM_THEN_MOLIGHT,
+]
+DEFAULT_OCCUPANCY_TURN_ON = OCCUPANCY_TURN_ON_MOLIGHT
+OCCUPANCY_TURN_ON_WAIT = 1.0
 # Maintain occupancy entity: keeps an already-on light on while it is on, but
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
