@@ -2,8 +2,8 @@
 
 Every test goes through Home Assistant's real save, unload and setup
 (restart_entries / crash_entries), with the members reporting each command
-they receive while they are reachable. A member that is still loading
-receives nothing until it reports in.
+they receive while they are reachable. An unreadable member receives
+nothing until it reports in.
 """
 
 from __future__ import annotations
@@ -458,14 +458,14 @@ async def test_nested_follow_light_applies_a_missed_end_in_either_order(
 
 
 # ---------------------------------------------------------------------------
-# Members whose power is not known when the light seeds
+# Members unreadable when the light seeds
 # ---------------------------------------------------------------------------
 
 REAL2 = "light.real_2"
 HOLD = "input_boolean.keep_on"
 RED = (0.0, 100.0)
 
-# How a member that is not readable when the light seeds can look.
+# How a member unreadable when the light seeds can look.
 UNKNOWN = ["placeholder", "unavailable", "absent"]
 
 
@@ -631,10 +631,11 @@ async def test_missed_end_in_a_mixed_group(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", END_MODES)
 @pytest.mark.parametrize("boot", UNKNOWN)
-async def test_held_missed_end_adopts_a_late_member_until_release(
+async def test_held_missed_end_adopts_an_unreadable_member_until_release(
     hass: HomeAssistant, mode: str, boot: str
 ) -> None:
-    """Under a hold the late member stays on, and the release applies the end."""
+    """Under a hold the unreadable member stays on, and the release applies the
+    end."""
     entry = _end_entry(mode, [REAL], hold=True)
     real = await _lit_in_window(hass, entry, [REAL])
     calls = await _restart_across_end(hass, entry, real, {REAL: boot}, hold=True)
@@ -659,7 +660,7 @@ async def test_held_missed_end_adopts_a_late_member_until_release(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", END_MODES)
-async def test_held_missed_end_is_dropped_when_the_late_member_is_off(
+async def test_held_missed_end_is_dropped_when_the_unreadable_member_is_off(
     hass: HomeAssistant, mode: str
 ) -> None:
     """With every member off there is nothing left for the hold to keep."""
@@ -714,7 +715,7 @@ async def test_new_on_period_replaces_an_owed_end(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", END_MODES)
 async def test_a_manual_off_leaves_the_end_owed(hass: HomeAssistant, mode: str) -> None:
-    """An off through the light never reached the member still loading."""
+    """An off through the light never reached the unreadable member."""
     entry = _end_entry(mode, [REAL])
     real = await _lit_in_window(hass, entry, [REAL])
     calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
@@ -737,7 +738,8 @@ async def test_a_manual_off_leaves_the_end_owed(hass: HomeAssistant, mode: str) 
 async def test_owed_end_survives_a_second_restart(
     hass: HomeAssistant, mode: str, how: str
 ) -> None:
-    """The end is still applied when HA restarts again before the member loads."""
+    """The end is still applied when HA restarts again before the unreadable
+    member reports."""
     entry = _end_entry(mode, [REAL])
     real = await _lit_in_window(hass, entry, [REAL])
     await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
@@ -908,7 +910,7 @@ async def test_warning_restart_with_the_member_lit(
 async def test_warning_restart_with_the_member_off_stays_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """Members really off completed the auto-off: the room is not re-lit."""
+    """Members really off completed the auto-off: the light is not turned on again."""
     _, _, calls = await _restart_mid_warn(hass, freezer, {REAL: "off"})
     assert _turn_ons(calls) == []
     assert _state(hass).state == "off"
@@ -940,10 +942,10 @@ async def test_warning_snapshot_is_owed_to_a_member_that_loads_late(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boot", UNKNOWN)
-async def test_warning_snapshot_is_dropped_when_the_late_member_is_off(
+async def test_warning_snapshot_is_dropped_when_the_unreadable_member_is_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
 ) -> None:
-    """A late member reporting off completes the auto-off like any other."""
+    """An unreadable member reporting off completes the auto-off like any other."""
     _, real, calls = await _restart_mid_warn(hass, freezer, {REAL: boot})
     real.load(REAL, "off")
     await settle(hass)
@@ -966,7 +968,8 @@ async def test_warning_restart_in_a_mixed_group(
     known: str,
     color: bool,
 ) -> None:
-    """A late member is sent the restored look, never mirrored at the warn's.
+    """An unreadable member is sent the restored look, never mirrored at the
+    warn's.
     A member found off at the restart stays off."""
     _, real, calls = await _restart_mid_warn(
         hass, freezer, {REAL: known, REAL2: boot}, color=color
@@ -992,7 +995,7 @@ async def test_warning_restart_restores_each_members_own_look(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, late: bool
 ) -> None:
     """After a restart mid-warning each real light gets its own pre-warning
-    look back, one that loads late too; one that was off stays off."""
+    look back, an unreadable one too; one that was off stays off."""
     green = (120.0, 100.0)
     lights = [
         FadingLight("a", on=True, brightness=50, hs=green),
@@ -1030,10 +1033,11 @@ async def test_warning_restart_restores_each_members_own_look(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
-async def test_virtual_turn_on_while_a_member_loads_sets_what_it_is_sent(
+async def test_virtual_turn_on_while_a_member_is_unreadable_sets_what_it_is_sent(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, color: bool
 ) -> None:
-    """The late member gets the new on-period's brightness, not the warn's."""
+    """The unreadable member gets the new on-period's brightness, not the
+    warn's."""
     _, real, calls = await _restart_mid_warn(
         hass, freezer, {REAL: "placeholder"}, color=color
     )
@@ -1059,7 +1063,8 @@ async def test_virtual_turn_on_while_a_member_loads_sets_what_it_is_sent(
 async def test_owed_warning_snapshot_survives_a_second_restart(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
 ) -> None:
-    """The snapshot is still restored when HA restarts again before the member loads."""
+    """The snapshot is still restored when HA restarts again before the
+    unreadable member reports."""
     entry, real, _ = await _restart_mid_warn(hass, freezer, {REAL: "placeholder"})
     assert _attrs(hass)["warning_active"] is True
 
@@ -1171,10 +1176,10 @@ async def test_turn_on_before_the_seed_replaces_a_missed_end(
 @pytest.mark.parametrize("mode", END_MODES)
 @pytest.mark.parametrize("boot", UNKNOWN)
 @pytest.mark.parametrize("late", ["on", "off"])
-async def test_turn_on_before_the_seed_leaves_no_end_owed_to_a_late_member(
+async def test_turn_on_before_the_seed_leaves_no_end_owed_to_an_unreadable_member(
     hass: HomeAssistant, mode: str, boot: str, late: str
 ) -> None:
-    """A member that loads later is not turned off for the old window."""
+    """An unreadable member is not turned off for the old window."""
     entry = _end_entry(mode, [REAL])
     real = await _lit_in_window(hass, entry, [REAL])
     calls = await _restart_then_turn_on(hass, entry, real, boot)

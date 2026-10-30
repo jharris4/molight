@@ -403,7 +403,7 @@ async def test_open_close_dark_arrival_lights_open_door(
 async def test_open_close_dark_return_re_holds_open_door(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright forces off; dark returning re-lights AND re-holds the open door."""
+    """Bright forces off; dark returning turns on again AND re-holds the open door."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
     )

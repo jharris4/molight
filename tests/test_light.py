@@ -381,7 +381,7 @@ async def test_auto_on_brightness_applied_on_schedule_window(
 async def test_auto_on_brightness_applied_on_illuminance_dark(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
 ) -> None:
-    """Illuminance going dark re-lights the light at the configured brightness."""
+    """Illuminance going dark turns the light on again at the configured brightness."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -408,7 +408,8 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
     await _settle(hass)
     assert hass.states.get("light.kitchen_light").state == "off"
 
-    # T0+30: dark again; re-lit automatically, now at the auto-on brightness.
+    # T0+30: dark again; turned on again automatically, now at the auto-on
+    # brightness.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
@@ -1644,7 +1645,7 @@ async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> 
     state = hass.states.get("light.test_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
-    assert _real_calls(calls, "turn_on"), "warn should be undone by re-lighting"
+    assert _real_calls(calls, "turn_on"), "warn should be undone by turning on again"
 
 
 @pytest.mark.asyncio

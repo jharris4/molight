@@ -1386,7 +1386,7 @@ async def test_combined_trigger_maintain_and_lot(
 
 
 def _raw_combined_entry() -> MockConfigEntry:
-    """Combined sensor over raw entity IDs (no virtual constituents needed)."""
+    """Combined sensor over real entity IDs (no virtual constituents needed)."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3443,7 +3443,7 @@ async def test_light_countdown_after_a_clear_missed_during_an_occupancy_reload(
 
 
 def _nesting_entry() -> MockConfigEntry:
-    """A combined sensor triggered by the raw combined one."""
+    """A combined sensor triggered by the combined one over real entities."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={

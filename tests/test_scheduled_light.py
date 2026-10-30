@@ -1257,7 +1257,7 @@ async def test_reload_keeps_deferred_schedule_end_off_held(
 async def test_schedule_change_rechecks_already_open_door(
     hass: HomeAssistant,
 ) -> None:
-    """A held-open door selected by the new settings triggers the light."""
+    """A held-open door selected by the new settings turns the light on."""
     door = "binary_sensor.inside_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -3111,7 +3111,7 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
 ) -> None:
     """A real light back from unavailable after a keep boundary gets the
     effect still running, judged by that stage and not by the new settings'
-    effect: a dim one relights it, a blackout leaves it dark. The effect
+    effect: a dim one turns it on again, a blackout leaves it dark. The effect
     still ends at its own deadline."""
     lamp = RealLight("real_1")
     await add_real(hass, lamp)

@@ -1814,7 +1814,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     wait_machine_state(client, "occupied")
     # The hysteresis band (threshold 10, band 1) keeps the light from flapping:
     # 10.5 is still dark, 11 is bright (forced off), 9.5 is still bright, 8.9
-    # is dark again and re-lights the occupied room.
+    # is dark again and turns the occupied room's light on again.
     client.set_state(RAW_ILLUMINANCE, 10.5)
     assert_state_stays(
         client,
@@ -1845,7 +1845,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "re-lit: going dark while occupancy is active lights the room again",
+        "on: going dark while occupancy is active turns the light on again",
     )
     wait_machine_state(client, "occupied")
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -2864,7 +2864,7 @@ def prepare_multi_light_restart(client: HomeAssistantClient) -> None:
             set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "offering the mixed group's color and transition capabilities",
+        "offering the mixed group's color capabilities and transition support",
     )
     assert_multi_light_routing(client)
     assert_fuzzy_member_reporting(client)
@@ -2920,7 +2920,7 @@ def verify_and_remove_multi_light(client: HomeAssistantClient) -> None:
             and set(state["attributes"].get("supported_color_modes", [])) == {"hs"}
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "offering recovered color and transition capabilities",
+        "offering recovered color capabilities and transition support",
     )
     assert_multi_light_routing(client)
 
@@ -3926,7 +3926,7 @@ def run_unavailable_light_prepare() -> None:
 
 
 def run_unavailable_light_recovery() -> None:
-    """Recover a late-reporting light, then prepare unavailable sensors."""
+    """Recover an unreadable member, then prepare unavailable sensors."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -3937,7 +3937,7 @@ def run_unavailable_light_recovery() -> None:
     client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: state["state"] == "off",
-        "off after unavailable-member startup",
+        "off after unreadable-member startup",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
@@ -3958,7 +3958,7 @@ def run_unavailable_light_recovery() -> None:
             "hs" in state["attributes"].get("supported_color_modes", [])
             and int(state["attributes"].get("supported_features", 0)) > 0
         ),
-        "offering recovered color and transition capabilities",
+        "offering recovered color capabilities and transition support",
     )
     assert_state_stays(
         client,
@@ -4262,7 +4262,8 @@ def run_restart_warning_prepare() -> None:
 
 
 def run_restart_warning_verify() -> None:
-    """Verify a restarted warning safely resumes and completes without relighting."""
+    """Verify a restarted warning safely resumes and completes without turning
+    on again."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4319,7 +4320,7 @@ def run_restart_warning_verify() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off without relighting after the restored warning",
+        "off without turning on again after the restored warning",
         duration=2.5,
     )
     assert_state_stays(
@@ -4336,7 +4337,9 @@ def run_restart_warning_verify() -> None:
     client.remove_entry(snapshot["entry_id"])
     wait_entity_absent(client, VIRTUAL_RESTART_WARNING_LIGHT)
     wait_entity_absent(client, RESTART_WARNING_SWITCH)
-    print("PASS: restarted warning restored safely, completed, and did not relight")
+    print(
+        "PASS: restarted warning restored safely, completed, and did not turn on again"
+    )
 
 
 LOG_RECORD = re.compile(
@@ -4956,8 +4959,8 @@ def create_dusk_light(client: HomeAssistantClient, *, occupancy: bool) -> str:
     )
 
 
-def expect_dark_edge_relight(client: HomeAssistantClient) -> None:
-    """Bright forces the on light off; dark re-lights it for the remainder only."""
+def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
+    """Bright forces the on light off; dark turns it on again for the remainder only."""
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=2
     )
@@ -4977,7 +4980,7 @@ def expect_dark_edge_relight(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
-        "re-lit by going dark while the countdown still had time left",
+        "turned on again by going dark while the countdown still had time left",
     )
     client.wait_state(
         DUSK_LIGHT,
@@ -5014,7 +5017,7 @@ def expect_dark_edge_relight(client: HomeAssistantClient) -> None:
 
 
 def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
-    """Going dark re-lights a room only for a countdown it still has left."""
+    """Going dark turns a light on again only for a countdown it still has left."""
     sensor_entry_id = create_entry(
         client,
         "illuminance",
@@ -5052,7 +5055,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
         "on after a virtual turn-on",
     )
     wait_machine_state(client, "active", DUSK_LIGHT)
-    expect_dark_edge_relight(client)
+    expect_dark_edge_turn_on(client)
     remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
 
     # With an occupancy input the remainder is anchored to latest_occupied_time.
@@ -5062,11 +5065,14 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", DUSK_LIGHT)
-    expect_dark_edge_relight(client)
+    expect_dark_edge_turn_on(client)
     client.set_state(RAW_ILLUMINANCE, 5)
     remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
     remove_entry_and_entity(client, sensor_entry_id, DUSK_ILLUMINANCE)
-    print("PASS: going dark re-lights only a room with countdown left, stamped as such")
+    print(
+        "PASS: going dark turns a light on again only with countdown left, "
+        "stamped as such"
+    )
 
 
 # Schedule edges that must fall while Home Assistant is down are placed this
@@ -5075,9 +5081,9 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
 OUTAGE_EDGE_LEAD = timedelta(seconds=20)
 
 
-# How long a real light stays unloaded after a boot in the late-member
+# How long a real light stays unloaded after a boot in the unreadable-member
 # scenarios: long enough for Home Assistant to finish starting first.
-LATE_MEMBER_DELAY = 30
+UNREADABLE_MEMBER_DELAY = 30
 
 
 def expect_still_loading(client: HomeAssistantClient, entity_id: str) -> None:
@@ -5763,8 +5769,8 @@ def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
         ),
         "scheduled in the window",
     )
-    client.set_startup_delay(RAW_MULTI_DIMMER, LATE_MEMBER_DELAY)
-    client.set_startup_delay(RAW_MULTI_ON_OFF, LATE_MEMBER_DELAY)
+    client.set_startup_delay(RAW_MULTI_DIMMER, UNREADABLE_MEMBER_DELAY)
+    client.set_startup_delay(RAW_MULTI_ON_OFF, UNREADABLE_MEMBER_DELAY)
     return {
         "late_entry_id": late_entry_id,
         "follow_entry_id": follow_entry_id,
@@ -5777,7 +5783,7 @@ def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
 
 
 def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) -> None:
-    """Both lights seeded off with their missed end kept for the absent member."""
+    """Both lights seeded off with their missed end kept for the unreadable member."""
     client.wait_state(
         END_LATE_LIGHT,
         lambda state: (
@@ -5786,7 +5792,7 @@ def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) 
             and state["attributes"].get("molight_state") == "idle"
             and state["attributes"].get("schedule_end_off_pending") is True
         ),
-        "off with its missed turn_off end owed to the member still loading",
+        "off with its missed turn_off end owed to the unreadable member",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -5797,7 +5803,7 @@ def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) 
             and state["attributes"].get("schedule_window_start")
             == snapshot["follow_marker"]
         ),
-        "off with its missed window end owed to the member still loading",
+        "off with its missed window end owed to the unreadable member",
         timeout=WAIT_TIMEOUT,
     )
     # Still absent after both were observed, so neither decision was made
@@ -5850,7 +5856,7 @@ def expect_late_end_applied(
             client,
             member,
             lambda state: state["state"] == "off",
-            "off: the late member is not relit",
+            "off: the unreadable member is not turned on again",
             duration=2,
         )
 
@@ -6552,7 +6558,7 @@ def run_restart_effect_prepare() -> None:
         "Late restart-effect light",
     )
     wait_entry_loaded(client, late_entry_id)
-    client.set_startup_delay(RAW_CT, LATE_MEMBER_DELAY)
+    client.set_startup_delay(RAW_CT, UNREADABLE_MEMBER_DELAY)
     set_timer_motion(client, True)
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
     client.wait_state(RAW_CT, lambda state: state["state"] == "on", "on")
@@ -6647,7 +6653,7 @@ def run_restart_effect_verify() -> None:
             )
             == 3000
         ),
-        "off with the pre-warning appearance kept for the member still loading",
+        "off with the pre-warning appearance kept for the unreadable member",
         timeout=WAIT_TIMEOUT,
     )
     expect_still_loading(client, RAW_CT)
@@ -6673,7 +6679,7 @@ def run_restart_effect_verify() -> None:
         "back at the pre-warning 60 % blue",
         timeout=WAIT_TIMEOUT,
     )
-    # A fresh timer runs: effect again, then off, and nothing relights it.
+    # A fresh timer runs: effect again, then off, and nothing turns it on again.
     client.wait_state(
         RESTART_EFFECT_LIGHT,
         lambda state: state["attributes"].get("molight_state") == "effect",
@@ -6688,7 +6694,7 @@ def run_restart_effect_verify() -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off (no relight)",
+        "off (no turn-on)",
         duration=2.5,
     )
     client.remove_entry(snapshot["entry_id"])
@@ -6698,7 +6704,7 @@ def run_restart_effect_verify() -> None:
         "PASS: restart mid-effect restored the pre-warning look, then finished cleanly"
     )
 
-    # The late member reports in still showing the effect stage.
+    # The unreadable member reports in still showing the effect stage.
     client.wait_state(
         RAW_CT,
         lambda state: (
@@ -6998,7 +7004,7 @@ def create_grace_occupancy(
 
 
 def set_source(client: HomeAssistantClient, raw: str, virtual: str, on: bool) -> None:
-    """Drive a raw occupancy source and wait for its virtual sensor to follow."""
+    """Drive an occupancy source and wait for its virtual sensor to follow."""
     state = "on" if on else "off"
     client.set_state(raw, state)
     client.wait_state(virtual, lambda current: current["state"] == state, state)
@@ -7738,7 +7744,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
         client.wait_state(raw, lambda state: state["state"] == "off", "off")
 
     # One member rejects every command, one applies them silently. The light
-    # stays on for the member that lit (a plain turn-on would leave the raw
+    # stays on for the member that lit (a plain turn-on would leave the real light
     # at its stored brightness 0, which counts as dark).
     client.set_behavior(RAW_MULTI_ON_OFF, reject=True)
     client.set_behavior(RAW_MULTI_DIMMER, silent=True)
@@ -7846,7 +7852,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
         client,
         FAULTY_LIGHT,
         lambda state: state["state"] == "off",
-        "off: nothing relights a room no member lit",
+        "off: nothing turns on a light no member lit",
         duration=2,
     )
     for raw in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
@@ -7879,7 +7885,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     checkpoint(f"the light went off {elapsed:.1f}s after the turn-on (timeout 8s)")
     if elapsed > 11:
         raise AssertionError(
-            f"The late echo restarted the countdown: off after {elapsed:.1f}s, not ~8s"
+            f"The late reply restarted the countdown: off after {elapsed:.1f}s, not ~8s"
         )
     physical_after = client.state(FAULTY_LIGHT)["attributes"].get("last_on_physical")
     if physical_after != physical_before:
@@ -7887,7 +7893,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     client.set_behavior(RAW_MULTI_RGB, latency=0)
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
     remove_entry_and_entity(client, entry_id, FAULTY_LIGHT)
-    print("PASS: rejecting, silent, and slow members handled; a late match is an echo")
+    print("PASS: rejecting, silent, and slow members handled; a late reply is an echo")
 
 
 def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
@@ -8134,7 +8140,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     """Combined schedules follow any/all of their inputs, nest, and track edits."""
     client.set_state(RAW_SCHEDULE, "off")
     client.set_state(RAW_REMOVAL_MOTION, "off")
-    # An earlier scenario may leave this raw light on; the gate light below
+    # An earlier scenario may leave this real light on; the gate light below
     # would adopt it at creation instead of waiting for its window.
     client.set_state(RAW_MULTI_RGB, "off")
     a_id = create_virtual_schedule(
@@ -8421,7 +8427,7 @@ def run_combined_schedule_restart_prepare() -> None:
     # The mirrored source arrives only after boot, so the combination depends
     # on an input that hasn't reported while it restores. The member light
     # arrives later still, once the window is back on: its first state must
-    # read as startup adoption, not as a reboot to reconcile.
+    # read as startup adoption, not as a member reboot to reconcile.
     client.set_startup_delay(RAW_REMOVAL_MOTION, 6)
     client.set_startup_delay(RAW_TIMER_LIGHT, 8)
     COMBINED_SCHEDULE_RESTART_SNAPSHOT.write_text(
@@ -8515,7 +8521,7 @@ def run_combined_schedule_restart_verify() -> None:
     client.set_state(RAW_REMOVAL_MOTION, "off")
     print(
         "PASS: a combined schedule kept its window across a restart with a late "
-        "input and a late member, and a new window lit its follow light"
+        "input and an unreadable member, and a new window lit its follow light"
     )
 
 
@@ -8971,7 +8977,9 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         duration=1,
     )
     remove_entry_and_entity(client, entry_id, FADE_LIGHT)
-    checkpoint("a 7 s automatic fade to off neither relit the light nor was manual")
+    checkpoint(
+        "a 7 s automatic fade to off neither turned the light on again nor was manual"
+    )
 
     # Standby: on at it from off, raised by presence, and dropped back to it.
     schedule_entry_id = create_virtual_schedule(

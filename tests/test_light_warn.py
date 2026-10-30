@@ -127,7 +127,8 @@ async def test_attributes_unchanged_through_effect_and_warn(
     # The snapshot is exposed while the warning shows (restart insurance).
     assert _state(hass).attributes["pre_warn_brightness"] == 200
 
-    # EFFECT → WARN (real lights re-lit at the warn brightness, self-caused).
+    # EFFECT → WARN (real lights turned on again at the warn brightness,
+    # self-caused).
     freezer.tick(timedelta(seconds=11))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -367,7 +368,7 @@ async def test_gate_window_end_during_warn_forces_off(
 async def test_occupancy_retrigger_during_effect_restores_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy returning during the effect blink re-lights the room at the
+    """Occupancy returning during the effect blink turns the light on again at the
     brightness it had before the warning began."""
     entry = make_light_entry(
         occupancy=OCC, effect_timeout=30, effect_brightness=0, warn_timeout=30
@@ -479,7 +480,7 @@ async def test_follow_window_start_during_effect_restores_lights(
     hass: HomeAssistant, freezer
 ) -> None:
     """A follow window starting while the effect has the real lights blinked
-    off must re-light them for the window (regression: they stayed off for
+    off must turn them on again for the window (regression: they stayed off for
     the whole window because the virtual light was still logically on)."""
     entry = make_light_entry(
         schedule=SCHED,
@@ -507,7 +508,7 @@ async def test_follow_window_start_during_effect_restores_lights(
     assert state.attributes["schedule_window_start"] == MARKER
     assert state.attributes["brightness"] == 200
     resume = _real_calls(calls, "turn_on")
-    assert resume, "window start must re-light the blinked-off real lights"
+    assert resume, "window start must turn the blinked-off real lights on again"
     assert resume[-1]["service_data"]["brightness"] == 200
 
     # SCHEDULED runs no timer; the stage timer must be gone.
@@ -984,7 +985,7 @@ def _commands_to(calls: list[dict], light: FadingLight) -> list[dict]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("touched", [0, 1])
-async def test_wall_turn_on_during_blink_off_relights_the_other_light(
+async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
     hass: HomeAssistant, freezer, touched: int
 ) -> None:
     """One switch flipped back on during the blink: the other light comes
@@ -1328,7 +1329,7 @@ async def test_reload_mid_warning_restores_each_real_lights_own_look(
 
 
 @pytest.mark.asyncio
-async def test_reload_mid_blink_relights_only_the_real_lights_found_lit(
+async def test_reload_mid_blink_turns_on_only_the_real_lights_found_lit(
     hass: HomeAssistant, freezer
 ) -> None:
     """A reload finding one real light lit mid blink-off restores that one

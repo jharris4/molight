@@ -326,7 +326,7 @@ async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
     """Occupancy still on at a restart only lights a light turned off manually
-    when the sensor dates its visit after that off. A plain sensor, or a
+    when the sensor dates its visit after that off. A real sensor, or a
     Combined Occupancy Sensor (no last_on_time), can't tell, so it stays off."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(REAL, "off")
@@ -487,7 +487,7 @@ async def test_member_first_seen_off_is_not_a_manual_off(
 async def test_member_reporting_in_off_over_presence_is_lit_across_a_restart(
     hass: HomeAssistant, freezer, late: str
 ) -> None:
-    """Occupancy lights the room while the member is still loading (or
+    """Occupancy lights the room while the member is unreadable (or
     reboots); the member then reporting in as off is no manual off, so the
     presence still there lights the room after a restart."""
     hass.states.async_set(OCC, "on")
@@ -959,7 +959,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
 ) -> None:
     """A restart during the effect blink-off finds the real lights off and
     seeds IDLE: the auto-off effectively completed early; the restored
-    pre-warn snapshot must not re-light the room."""
+    pre-warn snapshot must not turn the light on again."""
     mock_restore_cache(
         hass,
         [

@@ -273,7 +273,7 @@ async def _assert_resumed_for(hass: HomeAssistant, freezer, seconds: int) -> Non
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
 @pytest.mark.parametrize("off_via", ["virtual", "physical"])
-async def test_dark_edge_does_not_relight_after_manual_off(
+async def test_dark_edge_does_not_turn_on_after_manual_off(
     hass: HomeAssistant, freezer, mode: str, off_via: str
 ) -> None:
     """Going dark resumes no on-period that the user ended."""
@@ -309,7 +309,7 @@ async def test_dark_edge_does_not_relight_after_manual_off(
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_does_not_relight_after_manual_off_in_countdown(
+async def test_dark_edge_does_not_turn_on_after_manual_off_in_countdown(
     hass: HomeAssistant, freezer
 ) -> None:
     """A recent latest_occupied_time resumes nothing after a manual off."""
@@ -339,7 +339,7 @@ async def test_dark_edge_does_not_relight_after_manual_off_in_countdown(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_dark_edge_does_not_relight_after_gate_window_end(
+async def test_dark_edge_does_not_turn_on_after_gate_window_end(
     hass: HomeAssistant, freezer
 ) -> None:
     """An on-period ended by a gate window is not resumed in the next one."""
@@ -1115,7 +1115,7 @@ async def test_scheduled_ignores_occupancy_and_illuminance(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_occupancy_can_relight_after_manual_off_mid_window(
+async def test_occupancy_can_turn_on_after_manual_off_mid_window(
     hass: HomeAssistant,
 ) -> None:
     """After a manual off mid-window the state is IDLE, so occupancy applies again.
@@ -1149,7 +1149,7 @@ NEXT_MARKER = "2026-07-03T21:00:00+00:00"
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_marker_change_relights_after_manual_off(
+async def test_follow_marker_change_turns_on_after_manual_off(
     hass: HomeAssistant,
 ) -> None:
     """A new marker on a schedule that stays on is the next window starting."""
@@ -1605,7 +1605,7 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_gate_window_start_relights_at_auto_on_brightness(
+async def test_gate_window_start_turns_on_at_auto_on_brightness(
     hass: HomeAssistant,
 ) -> None:
     """A gate-mode window start re-evaluating standing occupancy is an
@@ -1695,7 +1695,7 @@ async def test_forced_off_beats_occupancy_with_all_three_configured(
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
-    # Dark again with occupancy still active re-lights (control gate lifted).
+    # Dark again with occupancy still active turns on again (control gate lifted).
     hass.states.async_set(ILLUM, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED

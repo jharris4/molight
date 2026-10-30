@@ -501,7 +501,8 @@ async def test_real_light_going_missing_does_not_cancel_a_blink_off(
 async def test_follow_light_whose_real_light_goes_missing_stays_off_in_its_window(
     hass: HomeAssistant, virtual_light_behavior_variant
 ) -> None:
-    """Inside a follow window too, and the remaining real light is not re-lit."""
+    """Inside a follow window too, and the remaining real light is not turned on
+    again."""
     marker = "2026-01-14T09:00:00-08:00"
     hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": marker})
     hass.states.async_set(MEMBER, "off")
@@ -582,7 +583,7 @@ async def test_occupancy_sensor_that_comes_back_lights_an_off_light(
 async def test_real_light_still_owed_a_restore_goes_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """What a restart owes a real light that had not loaded ends when it is deleted."""
+    """What a restart owes an unreadable member ends when it is deleted."""
     first = RealLight("real_1", on=True, brightness=200)
     second = RealLight("real_2", on=True, brightness=200)
     await add_real(hass, first, second)

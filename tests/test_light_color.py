@@ -319,7 +319,7 @@ async def test_auto_on_rgb_color(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_auto_on_color_is_reported_once_a_late_member_replies(
+async def test_auto_on_color_is_reported_once_an_unreadable_member_replies(
     hass: HomeAssistant,
 ) -> None:
     """A member that shows its color modes only with its reply fills the color in."""
@@ -772,9 +772,9 @@ async def test_one_dimmable_member_keeps_brightness(hass: HomeAssistant) -> None
 
 
 @pytest.mark.asyncio
-async def test_unjudgeable_member_keeps_brightness(hass: HomeAssistant) -> None:
-    """Fail open: a member that hasn't reported its modes must not downgrade
-    the virtual light to on/off."""
+async def test_unreadable_member_keeps_brightness(hass: HomeAssistant) -> None:
+    """Fail open: an unreadable member must not downgrade the virtual light to
+    on/off."""
     hass.states.async_set(REAL, "off", ONOFF_CAPS)
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL_2]))
 
@@ -947,7 +947,7 @@ async def test_pre_warn_snapshot_keeps_the_reported_color_temp(
 async def test_reported_color_temp_follows_a_range_that_arrives_late(
     hass: HomeAssistant,
 ) -> None:
-    """A real light still loading has no range to hold the kelvin to; its
+    """An unreadable member has no range to hold the kelvin to; its
     first report brings one."""
     hass.states.async_set(REAL, "unavailable")
     hass.states.async_set(OCC, "off")

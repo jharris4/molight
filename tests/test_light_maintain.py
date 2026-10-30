@@ -513,8 +513,8 @@ async def test_illuminance_turn_back_on_adopted_by_maintain(
     await settle(hass)
     assert _state(hass).state == "off"  # maintain never turns lights on
 
-    # Dark again with time left on the original on-period: the re-lit light
-    # is adopted by the maintain entity instead of running the countdown.
+    # Dark again with time left on the original on-period: the light turned
+    # on again is adopted by the maintain entity instead of running the countdown.
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass)
     hass.states.async_set(ILLUM, "off")

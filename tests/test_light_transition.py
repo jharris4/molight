@@ -319,10 +319,10 @@ async def test_caller_transition_carries_the_pre_warning_restore(
 
 
 @pytest.mark.asyncio
-async def test_transition_offered_while_a_member_is_unaccounted_for(
+async def test_transition_offered_while_a_member_is_unreadable(
     hass: HomeAssistant,
 ) -> None:
-    """Fail open: a member with no state yet must not cost the caller a fade."""
+    """Fail open: an unreadable member must not cost the caller a fade."""
     entry = make_light_entry()
     await setup_entries(hass, entry)
 
@@ -377,7 +377,7 @@ async def test_transition_stays_offered_until_the_last_member_is_judged(
     entry = make_light_entry(lights=[REAL, other])
     await setup_entries(hass, entry)
 
-    # real_2 has no state yet: still unknown, so still offered.
+    # real_2 has no state yet: unreadable, so still offered.
     assert _features(hass) & LightEntityFeature.TRANSITION
 
     hass.states.async_set(other, "off", {"supported_features": 0})

@@ -248,7 +248,7 @@ Door mode:         Open & close                 # on while open, countdown when 
 
 Open the door and the light stays on the whole time it's open, with no timeout while you're rummaging. Close it and a countdown (the **Turn-off timeout**) begins.
 
-- Pick **On open** instead if you only want the *opening* to trigger the light and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
+- Pick **On open** instead if you only want the *opening* to turn the light on and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In **Open & close** mode, if the room turns dark while the door is still standing open, the light comes on then.
 - In **Open & close** mode, closing the door **defers to presence**: if the light also references an occupancy sensor and it still sees someone (or a keep-on entity is holding auto-off), the lights stay on instead of dropping on a person who just shut the door behind them. With an illuminance sensor in **Control** mode, occupancy only counts while it's dark, as for turning the light on; in **Gate only** mode it holds the lit room whatever the reading.
 
@@ -477,7 +477,7 @@ Compare Example 3, which puts the mmWave on the light as its **Maintain occupanc
 
 ### Example 14: TV hold (Template helper as a keep-on entity)
 
-A living room with one PIR and no presence sensor goes dark while everyone sits still through a film. A keep-on entity holds auto-off while it is `on`, and a media player never reads `on` (its states are `playing`, `paused`, `idle`, `off`), so the picker leaves it out. A Home Assistant Template helper turns "the TV is playing" into a binary sensor that does read `on`, and the rule stays visible: you decide whether `paused` counts.
+A living room's light with one PIR and no presence sensor turns off while everyone sits still through a film. A keep-on entity holds auto-off while it is `on`, and a media player never reads `on` (its states are `playing`, `paused`, `idle`, `off`), so the picker leaves it out. A Home Assistant Template helper turns "the TV is playing" into a binary sensor that does read `on`, and the rule stays visible: you decide whether `paused` counts.
 
 **1. Template helper**, not a MoLight entry: go to **Settings → Devices & Services → Helpers → Create helper → Template → Template a binary sensor** and enter:
 

@@ -540,7 +540,7 @@ def _inner_b(trigger: str) -> MockConfigEntry:
 async def test_inner_lit_by_itself_does_not_restart_a_running_outer_timer(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
-    """Another inner light keeps the outer on; this one's sensor relights it."""
+    """Another inner light keeps the outer on; this one's sensor turns it on again."""
     await _outer_over_two(hass, _inner_b(trigger))
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": OUTER, "brightness": 180}, blocking=True

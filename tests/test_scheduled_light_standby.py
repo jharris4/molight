@@ -1745,7 +1745,7 @@ async def test_outside_settings_without_standby_still_turn_off(
 
 @pytest.mark.asyncio
 async def test_rebooted_member_is_sent_standby_again(hass: HomeAssistant) -> None:
-    """A member that comes back off is a reboot, not a manual off."""
+    """A member that comes back off is a member reboot, not a manual off."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_TRANSITION: 2}))
     await _echo_standby(hass)
     sent = len(_light_calls(calls, "turn_on"))
@@ -2508,8 +2508,9 @@ async def test_door_closing_at_standby_starts_no_countdown(
 
 
 @pytest.mark.asyncio
-async def test_member_loading_after_startup_gets_standby(hass: HomeAssistant) -> None:
-    """A slow member's first off is not a manual off of the standby it missed."""
+async def test_unreadable_member_at_startup_gets_standby(hass: HomeAssistant) -> None:
+    """An unreadable member's first off is not a manual off of the standby it
+    missed."""
     hass.states.async_set(REAL, "unavailable", {"restored": True})
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off")
@@ -2527,10 +2528,11 @@ async def test_member_loading_after_startup_gets_standby(hass: HomeAssistant) ->
 
 
 @pytest.mark.asyncio
-async def test_member_loading_after_startup_reports_the_standby_color(
+async def test_unreadable_member_at_startup_reports_the_standby_color(
     hass: HomeAssistant,
 ) -> None:
-    """A late member's color modes arrive with its reply; the color follows."""
+    """An unreadable member's color modes arrive with its reply; the color
+    follows."""
     hass.states.async_set(REAL, "unavailable", {"restored": True})
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off")

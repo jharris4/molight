@@ -320,7 +320,7 @@ async def test_real_light_reporting_in_off_while_off_sends_nothing(
 
 
 @pytest.mark.asyncio
-async def test_one_of_two_real_lights_reporting_in_off_is_relit(
+async def test_one_of_two_real_lights_reporting_in_off_is_turned_on_again(
     hass: HomeAssistant,
 ) -> None:
     """A member rebooting dark beside one still on gets the settings again."""
@@ -1210,7 +1210,7 @@ async def test_occupancy_sensor_reload_changes_nothing(
 async def test_combined_occupancy_sensor_reload_changes_nothing(
     hass: HomeAssistant, holder: str, manual_off: bool
 ) -> None:
-    """Reloading the combined sensor a light uses does not re-light the room."""
+    """Reloading the combined sensor a light uses does not turn the light on again."""
     trigger, maintain = "binary_sensor.trig", "binary_sensor.maint"
     hass.states.async_set(trigger, "off")
     hass.states.async_set(maintain, "off")
@@ -1529,7 +1529,7 @@ async def test_schedule_without_marker_briefly_unavailable_respects_manual_off(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_schedule_without_marker_recovery_readopts_relit_light(
+async def test_schedule_without_marker_recovery_readopts_light_turned_on_again(
     hass: HomeAssistant, freezer
 ) -> None:
     """A light turned on during the outage is owned by the window again."""
@@ -1596,7 +1596,8 @@ async def test_schedule_outage_spanning_a_window_end_applies_it(
 async def test_gate_briefly_unavailable_inside_window_respects_manual_off(
     hass: HomeAssistant, mode: str, bad: str
 ) -> None:
-    """Inside the window, on → outage → on must not re-light an occupied room."""
+    """Inside the window, on → outage → on must not turn the light on again in
+    an occupied room."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
@@ -1715,7 +1716,7 @@ async def test_gate_recovery_respects_a_manual_off_after_the_blocked_start(
 async def test_gate_briefly_unavailable_with_door_standing_open_respects_manual_off(
     hass: HomeAssistant,
 ) -> None:
-    """A door open since before the outage does not re-light the room."""
+    """A door open since before the outage does not turn the light on again."""
     door = "binary_sensor.door"
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(door, "off")
@@ -2052,7 +2053,7 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_schedule_recovery_readopts_physically_relit_light(
+async def test_schedule_recovery_readopts_light_physically_turned_on_again(
     hass: HomeAssistant, freezer
 ) -> None:
     """Recovering mid-window re-adopts a light that was cycled during the outage.
@@ -2133,7 +2134,7 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
 async def test_follow_member_recovery_mid_window_reasserts_window(
     hass: HomeAssistant, booted: str
 ) -> None:
-    """A member rebooting mid-window is re-lit with the scheduled settings.
+    """A member rebooting mid-window is turned on again with the scheduled settings.
 
     Whatever it boots into (dark, or lit at its own defaults) is not human
     activity: the window still owns the lights, so the auto-on brightness is
@@ -2226,12 +2227,12 @@ async def test_follow_member_recovers_dark_outside_window_sends_nothing(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_virtual_on_outside_window_is_lost_on_reboot(
+async def test_follow_virtual_on_outside_window_is_lost_on_a_member_reboot(
     hass: HomeAssistant,
 ) -> None:
     """A virtual turn-on outside the window does not survive a member reboot.
 
-    The reboot edge cannot be told apart from a boot-lit strip, so the
+    The member reboot cannot be told apart from a boot-lit strip, so the
     schedule wins; a virtual turn-on while the member stays connected is an
     ordinary off → on edge and is untouched.
     """
@@ -2258,7 +2259,7 @@ async def test_follow_virtual_on_outside_window_is_lost_on_reboot(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_manual_off_mid_window_is_lost_on_reboot(
+async def test_follow_manual_off_mid_window_is_lost_on_a_member_reboot(
     hass: HomeAssistant,
 ) -> None:
     """A manual off mid-window does not survive a member reboot either.
@@ -2292,10 +2293,10 @@ async def test_follow_manual_off_mid_window_is_lost_on_reboot(
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
 
-async def _start_with_member_loading(
+async def _start_with_unreadable_member(
     hass: HomeAssistant, boot: str, restored_light: State | None
 ) -> None:
-    """Start HA with the member still loading: absent, or the registry's
+    """Start HA with the member unreadable: absent, or the registry's
     restored-unavailable placeholder."""
     if restored_light is not None:
         mock_restore_cache(hass, [restored_light])
@@ -2313,14 +2314,14 @@ async def _start_with_member_loading(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("boot", ["placeholder", "absent"])
-async def test_follow_member_loading_after_startup_keeps_manual_off(
+async def test_follow_unreadable_member_at_startup_keeps_manual_off(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """A member still loading at startup is not a reboot: the manual off the
+    """An unreadable member at startup is not a member reboot: the manual off the
     seed respected survives the member's first real state."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
-    await _start_with_member_loading(
+    await _start_with_unreadable_member(
         hass, boot, State(VIRTUAL, "off", {"schedule_window_start": MARKER})
     )
     assert _state(hass).state == "off"
@@ -2337,14 +2338,14 @@ async def test_follow_member_loading_after_startup_keeps_manual_off(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("boot", ["placeholder", "absent"])
-async def test_follow_member_loading_after_startup_is_adopted_outside_window(
+async def test_follow_unreadable_member_at_startup_is_adopted_outside_window(
     hass: HomeAssistant, boot: str
 ) -> None:
     """A member that first reports lit outside the window after startup is
     adopted with a timer, as the startup seed would have done."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "off")
-    await _start_with_member_loading(hass, boot, None)
+    await _start_with_unreadable_member(hass, boot, None)
     assert _state(hass).state == "off"
 
     hass.states.async_set(REAL, "on")
@@ -2358,11 +2359,11 @@ async def test_follow_member_loading_after_startup_is_adopted_outside_window(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("back", ["on", "off"])
-async def test_follow_member_reload_after_startup_is_reconciled(
+async def test_follow_member_reboot_after_startup_is_reconciled(
     hass: HomeAssistant, back: str
 ) -> None:
     """A member's integration reloading writes the same restored placeholder
-    as startup does, but after the member was seen it is a reboot: the
+    as startup does, but after the member was seen it is a member reboot: the
     window is re-asserted whatever the member comes back as."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "off")
@@ -2425,10 +2426,10 @@ async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> 
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_one_of_two_members_recovering_dark_relights_all(
+async def test_follow_one_of_two_members_recovering_dark_turns_all_on_again(
     hass: HomeAssistant,
 ) -> None:
-    """One of two member lights rebooting dark mid-window gets re-lit.
+    """One of two member lights rebooting dark mid-window is turned on again.
 
     Previously nothing happened: the sibling still on meant the virtual light
     never saw an off, and the dark member stayed dark until the next window.
@@ -2935,7 +2936,7 @@ async def _visit_sensor(hass: HomeAssistant, kind: str) -> tuple[str, list]:
 
 
 async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
-    """Reload a visit sensor's entries; a raw one drops out and returns."""
+    """Reload a visit sensor's entries; a real one drops out and returns."""
     for entry in entries:
         assert await hass.config_entries.async_reload(entry.entry_id)
         await settle(hass)
@@ -3140,7 +3141,8 @@ async def test_gate_recovery_after_the_light_seeds_again_keeps_a_manual_off(
 async def test_gate_recovery_after_the_light_seeds_again_with_the_door_held_open(
     hass: HomeAssistant, freezer, how: str, manual_off: bool
 ) -> None:
-    """The open door relights nothing over a manual off, and a room it never lit."""
+    """The open door turns nothing on again over a manual off, and a room it
+    never lit."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(DOOR, "off")
     hass.states.async_set(REAL, "off")

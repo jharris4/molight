@@ -47,7 +47,11 @@ from custom_components.molight.const import (
     STATE_STANDBY,
     STATE_WARN,
 )
-from custom_components.molight.light import _color_toward, _colors_close
+from custom_components.molight.light import (
+    ECHO_LATE_SECONDS,
+    _color_toward,
+    _colors_close,
+)
 
 from .conftest import (
     make_light_entry,
@@ -688,7 +692,7 @@ async def test_stale_color_while_recolor_settles_is_not_physical(
 
 
 @pytest.mark.asyncio
-async def test_late_color_mismatch_is_physical(
+async def test_late_color_contradiction_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Past the settle window only a full match counts, color included."""
@@ -843,11 +847,15 @@ async def test_partial_reply_counts_up_to_the_settle_edge(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("age", "brightness"), [(30, 153), (31, 151)])
-async def test_matching_reply_counts_up_to_the_late_edge(
+@pytest.mark.parametrize(
+    ("age", "brightness"),
+    [(ECHO_LATE_SECONDS, 153), (ECHO_LATE_SECONDS + 1, 151)],
+)
+async def test_late_reply_counts_up_to_echo_late_seconds(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer, age, brightness
 ) -> None:
-    """A matching reply is an echo up to exactly the end of the late window."""
+    """A matching late reply is still an echo at exactly ECHO_LATE_SECONDS after
+    the command, and not after."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1028,8 +1036,8 @@ async def test_stale_expectation_is_physical(
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
-    # The member never echoes; age the expectation past the late window.
-    _age_expectations(hass, 60)
+    # The member never echoes; age the expectation well past ECHO_LATE_SECONDS.
+    _age_expectations(hass, ECHO_LATE_SECONDS * 2)
 
     await _write(hass, "on", contexts[-1], brightness=151)
 
@@ -1439,7 +1447,7 @@ async def test_turn_on_after_unanswered_turn_off_of_dark_member_is_physical(
 async def test_plain_turn_on_of_unreadable_member_awaits_its_reply(
     hass: HomeAssistant, light_entry: MockConfigEntry, member_state: str | None
 ) -> None:
-    """A member whose power is not known may still answer a plain turn-on."""
+    """An unreadable member may still answer a plain turn-on."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     if member_state is None:
@@ -2248,7 +2256,7 @@ async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
 async def test_auto_off_fade_is_not_a_change_at_the_wall(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """An automatic off fading out neither relights the light nor counts as
+    """An automatic off fading out neither turns the light on again nor counts as
     an off at the wall."""
     member = await _fading_light(hass, make_light_entry(auto_off_transition=fade))
     seen = _reports_of(hass, INSTANT)
@@ -2497,7 +2505,7 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
 #
 # Such a bulb says it is on at the level it was last on at, then brightens
 # from dark in steps. When the turn-on carried a fade, that first report is
-# neither the command's answer nor the anchor for the step after it, for the
+# neither the command's answer nor the echo anchor for the step after it, for the
 # fade's length from that report; after that, or when the turn-on carried no
 # fade, a lower level is a dim at the wall as before.
 # ---------------------------------------------------------------------------
@@ -2649,7 +2657,7 @@ async def test_follow_window_start_power_first_at_remembered_level_is_not_a_dim(
 async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
     hass: HomeAssistant, freezer, fade: int, level: int
 ) -> None:
-    """The warn stage after a blink-off effect relights the member from off,
+    """The warn stage after a blink-off effect turns the member on again from off,
     which answers power first at the level the effect took away."""
     member = FadingLight(
         "real_1", on=True, brightness=level, power_first=True, steps=STEPS

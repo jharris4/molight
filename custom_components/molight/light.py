@@ -63,8 +63,8 @@ Effect/warn warning
   / pre_warn_color attributes (null outside the sequence) and survive
   restarts: a restart landing mid-warning with the lights still on restores
   them instead of adopting the stage's; lights found off stay off (the
-  auto-off completed), and lights not readable yet keep the snapshot until
-  they report.
+  auto-off completed), and unreadable members keep the snapshot until they
+  report.
 
   any + physical turn-off
        → IDLE
@@ -97,9 +97,9 @@ Turn-on attribution
                          light was off or already on.
     last_on_virtual:     the user toggled this virtual light entity ON via the HA UI
                          (async_turn_on was called directly).
-    last_on_occupancy:   occupancy sensor triggered the lights.
-    last_on_illuminance: an illuminance→dark change triggered the lights.
-    last_on_door:        a door sensor opening triggered the lights.
+    last_on_occupancy:   occupancy sensor turned the lights on.
+    last_on_illuminance: an illuminance→dark change turned the lights on.
+    last_on_door:        a door sensor opening turned the lights on.
 
   All are exposed as extra state attributes (ISO strings or null). They
   decide whether a manual off still stands, and after a false detection the
@@ -847,8 +847,8 @@ class _EchoExpectation:
 
         While the command is settling a partial reply is "pending"; after that
         only a full match is still our echo. When the command carried a fade,
-        a member's first report after off settles nothing, and is no anchor
-        for the report after it while the fade runs on from it: a bulb that
+        a member's first report after off settles nothing, and is no echo
+        anchor for the report after it while the fade runs on from it: a bulb that
         reports power first shows what it remembered, not where its fade is,
         so a level at the target may still be followed by steps up from
         dark. Once the fade has run its length, the report is judged against
@@ -912,7 +912,7 @@ class _EchoExpectation:
                     and not _color_toward(old_color, new_color, self.color)
                 ):
                     return "contradiction"
-                # Without an old color there is no anchor to judge against:
+                # Without an old color there is no echo anchor to judge against:
                 # a member showing its color late is not a physical recolor.
                 settled = False
         if settled:
@@ -1086,7 +1086,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # it must not replay the bright/dark edge actions.
         self._illuminance_last_bright: bool | None = None
         # Last known occupied/clear, None until first seen; a recovery
-        # matching it must not re-light a room the user turned off.
+        # matching it must not turn a light the user turned off on again.
         self._occupancy_last_on: bool | None = None
         # When its visit was first seen; its reload moves last_changed.
         self._occupancy_on_since: datetime | None = None
@@ -2027,23 +2027,23 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
         member_looks = self._pre_warn_members
         self._adopt_members(commanded=commanded)
-        unknown = self._unread_members()
+        unreadable = self._unreadable_members()
         # A missed end is only owed while the light is off: a new on-period
         # supersedes it.
         off = not self._is_lit()
         owed = _Owed(
-            unknown,
+            unreadable,
             end_off=end_off and off,
             end_switch=end_switch and off,
             window=window if off and self._schedule_window_applied is None else None,
             look=look,
             member_looks=member_looks,
         )
-        if unknown and (owed.ends() or owed.look is not None):
+        if unreadable and (owed.ends() or owed.look is not None):
             self._owed = owed
             self.async_write_ha_state()
 
-    def _unread_members(self) -> set[str]:
+    def _unreadable_members(self) -> set[str]:
         """Members that cannot be read, so nothing is proven about them.
 
         A disabled member never reports, so nothing is owed to it.
@@ -2089,7 +2089,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         if self._restored_on and (self._attr_is_on or self._early_command is not None):
             self._restored_on = False  # lit, or commanded, since the restart
-        elif self._restored_on and not self._unread_members():
+        elif self._restored_on and not self._unreadable_members():
             self._end_restored_on_period()
 
         if self._schedule_end_off_pending:
@@ -2132,7 +2132,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self._resume_lights(found_lit=True)
             else:
                 # The lights ended up off (e.g. mid blink-off): treat the
-                # auto-off as having completed; the room is not re-lit.
+                # auto-off as having completed; the room is not turned on again.
                 # The light's own look is the one from before the warning.
                 if self._pre_warn_brightness is not None:
                     self._attr_brightness = self._pre_warn_brightness
@@ -2499,9 +2499,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     and not member_seen
                     and not self._member_is_lit(entity_id)
                     and not self._is_lit()
-                    and not self._unread_members()
+                    and not self._unreadable_members()
                 ):
-                    # The last member loading late proves the lights were
+                    # The last unreadable member's report proves the lights were
                     # found off at the restart.
                     self._end_restored_on_period()
             # Capabilities can appear late (members unavailable at startup):
@@ -2864,7 +2864,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self.async_write_ha_state()
 
     def _settle_owed(self, entity_id: str, *, lit: bool) -> bool:
-        """Settle the saved startup decisions with a member reporting in late.
+        """Settle the saved startup decisions with an unreadable member's report.
 
         Returns True when that handled the report.
         """
@@ -2920,7 +2920,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._owed = None
 
     def _owed_look(self) -> tuple[int | None, dict | None] | None:
-        """Return the pre-warning look late members owe while the light is off."""
+        """Return the pre-warning look unreadable members owe while the light is off."""
         if self._owed is None or self._is_lit():
             return None
         return self._owed.look
@@ -3286,7 +3286,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._attr_max_color_temp_kelvin = envelope[1]
             changed = True
 
-        # Fail open like the floor above: an unseen member must not cost the
+        # Fail open like the floor above: an unreadable member must not cost the
         # caller their fade. Withheld only once every member is judged.
         supported_features = (
             LightEntityFeature(0)
@@ -3582,7 +3582,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Adopt what the members came on at when our command named no value.
 
         A value named by a command still awaiting its reply is left alone. A
-        named color we could not report when it was sent (a late member
+        named color we could not report when it was sent (an unreadable member
         brings its color modes with its reply) is adopted now.
         """
         if not expectation.on or not expectation.mirror:
@@ -4561,7 +4561,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 ):
                     # Recent history justified the turn-on; the maintain
                     # entity, or presence a gate blocking only turn-ons let through
-                    # once the light is on, now holds the re-lit light.
+                    # once the light is on, now holds the light it turned on again.
                     self._machine_state = STATE_OCCUPIED
                     self._cancel_timer()
                 else:
@@ -5284,7 +5284,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._clear_bright_forced_off()
             self._close_owed_ends()
             if color and self._owed is not None and self._owed.look is not None:
-                # Late members owe the color named last, not the snapshot's.
+                # Unreadable members owe the color named last, not the snapshot's.
                 self._owed.look = (self._owed.look[0], color)
             if (
                 self._owed is not None

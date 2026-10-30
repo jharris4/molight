@@ -1022,7 +1022,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       }
     },
     "error": {
@@ -1672,7 +1672,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out the room goes dark even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       },
       "remote": {
         "title": "Virtual Remote",

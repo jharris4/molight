@@ -150,8 +150,8 @@ replying late.
 
 ### Changed
 
-- An all-day schedule in follow mode re-lights a manually-off light at each
-  midnight, not just at the next restart or options edit.
+- An all-day schedule in follow mode turns a manually-off light on again at
+  each midnight, not just at the next restart or options edit.
 - The forms reject an illuminance threshold of 0 and a discovered hysteresis
   at or above the threshold, and recheck a light's timeout against its
   sensors when the last page of a multi-page form is saved.
@@ -173,8 +173,8 @@ replying late.
   light on with no timer.
 - Slow and chatty bulbs: late replies, mid-fade colors and clamped color
   temperatures are no longer read as physical changes, so a warning no longer
-  restarts the timer. A dim right after a command that changed nothing is
-  read as one.
+  restarts the timer. A dim right after a MoLight command that changed nothing
+  is read as one.
 - A follow-mode real light returning from `unavailable` is made to match its
   schedule instead of being read as a physical change.
 - Turn-on selection: a missing target select is skipped with a warning, a

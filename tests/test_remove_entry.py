@@ -493,7 +493,7 @@ async def test_remove_wrapped_virtual_light_removes_member_reference(
     the inner entry is removed.
 
     Regression: CONF_LIGHTS was missing from the reference cleanup, and
-    _all_lights_off treats an unresolvable member as "maybe still on"; the
+    _all_lights_off treats an unreadable member as "maybe still on"; the
     dangling entity ID would have pinned the outer light on forever.
     """
     inner = make_light_entry(name="Rm Inner", lights=["light.inner_real"])

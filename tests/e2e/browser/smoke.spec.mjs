@@ -274,7 +274,7 @@ async function startCreate(page, entityType) {
   await submit(page);
 }
 
-test("create an occupancy sensor, then hit the entity-id conflict step", async ({ page }) => {
+test("create an occupancy sensor, then hit the Entity ID already exists step", async ({ page }) => {
   await login(page);
   await startCreate(page, "Virtual Occupancy Sensor");
   await expectFlowTitle(page, "Virtual Occupancy Sensor");

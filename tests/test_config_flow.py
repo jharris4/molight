@@ -675,10 +675,11 @@ async def test_config_flow_source_schedule_excludes_schedule_sources(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_collision_change_preserves_second_step(
+async def test_source_schedule_entity_id_already_exists_change_preserves_second_step(
     hass: HomeAssistant,
 ) -> None:
-    """Going back from a derived-id collision restores the source form."""
+    """Going back from the Entity ID already exists step restores the source
+    form."""
     hass.states.async_set("binary_sensor.house_mode", "off")
     hass.states.async_set("binary_sensor.source_schedule", "off")
     result = await _start_create(hass)
@@ -1437,10 +1438,11 @@ async def test_occupancy_edit_checks_both_scheduled_light_sides(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_derived_id_collision_can_go_back(
+async def test_scheduled_light_entity_id_already_exists_can_go_back(
     hass: HomeAssistant,
 ) -> None:
-    """The late collision prompt preserves all three completed forms."""
+    """The Entity ID already exists step, shown after all three forms,
+    preserves them."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.hallway", "off")
     result = await _start_create(hass)
@@ -4493,11 +4495,11 @@ async def test_manual_explicit_entity_id_no_usable_characters_errors(
 
 
 @pytest.mark.asyncio
-async def test_manual_blank_entity_id_conflict_confirm_proceed(
+async def test_manual_blank_entity_id_already_exists_proceed(
     hass: HomeAssistant,
 ) -> None:
-    """Blank entity ID whose name-derived entity ID collides prompts, then
-    proceeds to _2."""
+    """Blank entity ID whose name-derived entity ID is taken shows the Entity ID
+    already exists step, then proceeds to _2."""
     hass.states.async_set("binary_sensor.hall", "off")
 
     result = await _reach_occupancy_form(hass)
@@ -4529,7 +4531,7 @@ async def test_manual_blank_entity_id_conflict_confirm_proceed(
 
 
 @pytest.mark.asyncio
-async def test_manual_blank_entity_id_conflict_confirm_change(
+async def test_manual_blank_entity_id_already_exists_change(
     hass: HomeAssistant,
 ) -> None:
     """Choosing 'go back' returns to the create form to set an entity_id."""
@@ -7272,7 +7274,7 @@ async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
 
 
 # ---------------------------------------------------------------------------
-# Validation error paths: re-rendered forms, foreign entities, eligibility
+# Validation error paths: re-rendered forms, real entities, eligibility
 # ---------------------------------------------------------------------------
 
 
@@ -7382,7 +7384,7 @@ async def test_convert_to_scheduled_requires_a_schedule(
 
 
 @pytest.mark.asyncio
-async def test_options_light_rejects_foreign_schedule_entity(
+async def test_options_light_rejects_real_schedule_entity(
     hass: HomeAssistant,
 ) -> None:
     """A registered binary sensor from another integration is not a schedule."""
@@ -7414,12 +7416,12 @@ async def test_options_light_rejects_foreign_schedule_entity(
 
 
 @pytest.mark.asyncio
-async def test_combined_options_tolerate_foreign_constituents(
+async def test_combined_options_tolerate_real_constituents(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """Cycle detection skips constituents it cannot resolve to MoLight entries.
 
-    A stale form can submit a registered foreign sensor or a state-only one;
+    A stale form can submit a registered real sensor or a state-only one;
     neither can form a cycle, and neither may crash the edit or have it rejected.
     """
     foreign = MockConfigEntry(domain="test")
@@ -8543,7 +8545,8 @@ async def test_light_options_point_out_only_a_newly_wrapped_light(
 async def test_light_create_points_out_a_wrapped_light_once(
     hass: HomeAssistant,
 ) -> None:
-    """Going back from the entity ID menu does not show the page again."""
+    """Going back from the Entity ID already exists step does not show the
+    page again."""
     await _setup_wrap_test(hass, "create")
     hass.states.async_set("light.den", "off")
 
@@ -9434,13 +9437,13 @@ async def test_scheduled_light_inside_page_rejects_timeout_raised_meanwhile(
 
 
 @pytest.mark.asyncio
-async def test_entity_id_menu_rejects_timeout_raised_meanwhile(
+async def test_entity_id_already_exists_rejects_timeout_raised_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A sensor's occupancy timeout raised while the entity-id collision menu is open
-    sends the user back to the light form."""
+    """A sensor's occupancy timeout raised while the Entity ID already exists
+    step is open sends the user back to the light form."""
     await setup_entries(hass, occupancy_entry)
-    hass.states.async_set("light.hall", "off")  # the name-derived entity ID collides
+    hass.states.async_set("light.hall", "off")  # the name-derived entity ID is taken
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -10620,10 +10623,11 @@ async def test_remote_does_not_save_a_target_light_deleted_while_open(
 
 
 @pytest.mark.asyncio
-async def test_entity_id_menu_does_not_save_a_sensor_deleted_meanwhile(
+async def test_entity_id_already_exists_does_not_save_a_sensor_deleted_meanwhile(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Going ahead from the entity ID collision menu checks the references again."""
+    """Going ahead from the Entity ID already exists step checks the references
+    again."""
     hass.states.async_set("light.hall", "off")
     await setup_entries(hass, occupancy_entry)
     result = await _start_create(hass)

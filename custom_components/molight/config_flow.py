@@ -2274,10 +2274,12 @@ class MoLightConfigFlow(
     def __init__(self) -> None:
         """Initialize the config flow's cross-step stash."""
         self._entity_type: str | None = None
-        # Set when a manual create step is re-entered from the entity_id
-        # confirm step's "change" option, so the form comes back prefilled.
+        # Set when a manual create step is re-entered from the Entity ID
+        # already exists step's "change" option, so the form comes back
+        # prefilled.
         self._prefill: dict[str, Any] | None = None
-        # Stashed entry settings while the entity_id confirm step is shown.
+        # Stashed entry settings while the Entity ID already exists step is
+        # shown.
         self._pending: dict[str, Any] | None = None
         # Stashed create while the wrapped-lights notice is shown, and the
         # wrapped lights it has already named.
@@ -2285,7 +2287,7 @@ class MoLightConfigFlow(
         self._wrapped_confirmed: list[str] = []
         # Stashed Virtual Light form while its turn-on selection step is
         # shown. Selection values are kept separately so a trip through the
-        # entity-id collision menu can prefill them again.
+        # Entity ID already exists step can prefill them again.
         self._light_pending: dict[str, Any] | None = None
         self._light_selection_values: dict[str, Any] = {}
         # Cross-step state for the Virtual Scheduled Light's shared form; the
@@ -2373,8 +2375,9 @@ class MoLightConfigFlow(
                           field sits inside a collapsed section where a field
                           error can't anchor); the caller re-shows the form
           needs_confirm:  True when blank and the name-derived entity ID already
-                          exists (divert to the confirm step)
-          candidate:      the would-be entity_id, for the confirm message
+                          exists (divert to the Entity ID already exists step)
+          candidate:      the would-be entity_id, for the Entity ID already
+                          exists step
         """
         explicit = (user_input.get(CONF_ENTITY_ID) or "").strip()
         if explicit:

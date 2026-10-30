@@ -2183,7 +2183,7 @@ def _one_device(hass: HomeAssistant, *entity_ids: str) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["virtual", "occupancy", "door"])
-async def test_device_push_from_the_selection_is_not_a_wall_turn_on(
+async def test_select_on_device_is_not_a_wall_turn_on(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
     """A preset that lights its own device's light reports that by a push of
@@ -2226,7 +2226,7 @@ async def test_device_push_from_the_selection_is_not_a_wall_turn_on(
 
 
 @pytest.mark.asyncio
-async def test_device_push_after_the_turn_on_was_cancelled_is_adopted(
+async def test_select_on_device_after_the_turn_on_was_cancelled_is_adopted(
     hass: HomeAssistant, freezer
 ) -> None:
     """A preset that still lights the light after an off cancelled the turn-on
@@ -2258,7 +2258,7 @@ async def test_device_push_after_the_turn_on_was_cancelled_is_adopted(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_device_push_from_the_selection_does_not_drop_a_window_start(
+async def test_select_on_device_does_not_drop_a_window_start(
     hass: HomeAssistant,
 ) -> None:
     """A follow window start whose preset lights the light still sends its
@@ -2322,7 +2322,7 @@ async def test_wall_turn_on_of_a_light_on_another_device_still_overtakes(
 
 
 @pytest.mark.asyncio
-async def test_wall_turn_on_of_another_member_during_a_device_selection_overtakes(
+async def test_wall_turn_on_of_another_member_during_a_select_on_device_overtakes(
     hass: HomeAssistant,
 ) -> None:
     """A second real light, not on the select entity's device, turned on at
@@ -2518,7 +2518,7 @@ async def _switch_settings(hass: HomeAssistant, *, inside: bool) -> None:
 @pytest.mark.parametrize("inside", [False, True], ids=["outside", "inside"])
 @pytest.mark.parametrize("other", ["no_selection", "another_device", "no_device"])
 @pytest.mark.parametrize("switch", [False, True], ids=["stay", "switch"])
-async def test_device_push_after_a_settings_switch_is_still_the_selection(
+async def test_select_on_device_after_a_settings_switch_is_still_the_selection(
     hass: HomeAssistant, inside: bool, other: str, switch: bool
 ) -> None:
     """A select call in progress speaks for the device it was made on, also
@@ -2726,7 +2726,7 @@ async def test_resend_waiting_into_a_stage_sends_the_stage(
 
 
 @pytest.mark.asyncio
-async def test_resend_waiting_into_a_blink_off_does_not_relight_it(
+async def test_resend_waiting_into_a_blink_off_does_not_turn_it_on(
     hass: HomeAssistant, freezer
 ) -> None:
     """A stage that blinks the lights off is sent again as an off."""
@@ -2859,7 +2859,7 @@ async def test_resend_started_in_a_stage_follows_how_the_stage_ends(
 
 
 @pytest.mark.asyncio
-async def test_preset_push_during_a_resend_into_a_stage_keeps_the_warning(
+async def test_select_on_device_during_a_resend_into_a_stage_keeps_the_warning(
     hass: HomeAssistant, freezer
 ) -> None:
     """The preset of a re-send lighting its own device's light during a
@@ -3181,7 +3181,7 @@ async def _off_then_preset(hass: HomeAssistant, reported: str) -> FadingLight:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("reported", ["push", "select_call"])
-async def test_preset_landing_after_a_manual_off_keeps_standby_paused(
+async def test_select_on_device_after_a_manual_off_keeps_standby_paused(
     hass: HomeAssistant, freezer, reported: str
 ) -> None:
     """The manual off paused standby until the next boundary. The preset
@@ -3234,7 +3234,7 @@ async def test_turn_on_after_such_a_preset_still_rejoins_standby(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("reported", ["push", "select_call"])
-async def test_preset_landing_as_standby_comes_on_leaves_standby(
+async def test_select_on_device_as_standby_comes_on_leaves_standby(
     hass: HomeAssistant, reported: str
 ) -> None:
     """With no manual off, the preset is the turn-on's own: standby is sent
@@ -3715,7 +3715,7 @@ async def test_torn_down_light_drops_both_of_two_waiting_turn_ons(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
-async def test_preset_landing_as_the_select_call_returns_is_no_wall_turn_on(
+async def test_select_on_device_as_the_select_call_returns_is_no_wall_turn_on(
     hass: HomeAssistant, trigger: str
 ) -> None:
     """A preset that lights the strip in the last moment of the select call:

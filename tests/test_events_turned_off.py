@@ -360,7 +360,7 @@ async def test_a_restart_mid_warning_finding_the_lights_off_ends_the_on_period(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("late", ["off", "on"])
-async def test_a_member_loading_late_after_a_restart_settles_the_on_period(
+async def test_an_unreadable_member_at_a_restart_settles_the_on_period(
     hass, late: str
 ) -> None:
     """A member unreadable at the restart proves nothing yet: its first

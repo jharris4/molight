@@ -228,7 +228,7 @@ CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 DEFAULT_FALSE_OFF_DELAY = 5
 # Effect/warn warning sequence before an automatic turn-off. When the auto-off
-# timer expires the light can flag the impending off before going dark:
+# timer expires the light can flag the impending off before turning off:
 #   EFFECT: a brief attention cue (a blink/dip to effect_brightness), shown
 #           for effect_timeout seconds. effect_brightness is a percent 0-100
 #           where 0 blinks the real lights fully off.
