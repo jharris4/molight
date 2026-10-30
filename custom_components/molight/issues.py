@@ -7,12 +7,21 @@ it again. Issue IDs start with the entry ID so an entry's issues can be found.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.core import callback
 from homeassistant.helpers import issue_registry as ir
 
-from .const import DOMAIN
+from .const import CONF_ENTITY_TYPE, CONF_LIGHTS, DOMAIN
+from .helpers import (
+    VIRTUAL_LIGHT_TYPES,
+    entry_settings,
+    light_owners,
+    lights_commanded,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -55,6 +64,53 @@ def async_raise_issue(
         translation_placeholders=placeholders,
     )
     return issue_id
+
+
+@callback
+def async_check_shared_members(hass: HomeAssistant) -> None:
+    """Raise one issue per light two virtual lights command, and clear the rest.
+
+    A light belongs to the first virtual light by name that commands it
+    (see light_owners); every other one commanding it gets the issue,
+    naming the owner. Run when a virtual light loads, unloads or is removed
+    and when a member light group changes, so an issue clears as soon as
+    the fight ends, whichever side ended it.
+    """
+    lights, owned = light_owners(hass)
+    names = {entry.entry_id: entity_id for entity_id, entry in lights.items()}
+    wanted: dict[str, tuple[str, str, dict[str, str]]] = {}
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        settings = entry_settings(entry)
+        if settings.get(CONF_ENTITY_TYPE) not in VIRTUAL_LIGHT_TYPES:
+            continue
+        name = names.get(entry.entry_id, entry.title)
+        for light in lights_commanded(hass, settings.get(CONF_LIGHTS, []), lights):
+            owner = owned.get(light)
+            if owner is None or owner == name:
+                continue
+            issue_id = f"{entry.entry_id}_{ISSUE_LIGHT_SHARED_MEMBER}_{light}"
+            placeholders = {"entity": name, "other": owner, "light": light}
+            wanted[issue_id] = (entry.entry_id, light, placeholders)
+    registry = ir.async_get(hass)
+    existing = {
+        issue_id
+        for (domain, issue_id), issue in registry.issues.items()
+        if domain == DOMAIN and issue.translation_key == ISSUE_LIGHT_SHARED_MEMBER
+    }
+    for issue_id in existing - wanted.keys():
+        registry.async_delete(DOMAIN, issue_id)
+    for issue_id, (entry_id, light, placeholders) in wanted.items():
+        if issue_id not in existing:
+            _LOGGER.warning(
+                "%s and %s both control %s, so they fight over it; give it to one "
+                "of them in Configure, or add the other light instead of it",
+                placeholders["entity"],
+                placeholders["other"],
+                light,
+            )
+        async_raise_issue(
+            hass, entry_id, ISSUE_LIGHT_SHARED_MEMBER, placeholders, about=light
+        )
 
 
 @callback

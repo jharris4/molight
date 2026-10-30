@@ -421,7 +421,6 @@ from .helpers import (
     match_option,
     same_entity,
     send_event,
-    shared_lights,
     suggested_entity_id,
     virtual_light_entries,
 )
@@ -429,8 +428,8 @@ from .issues import (
     ISSUE_HOLD_ALWAYS_ON,
     ISSUE_HOLD_NEVER_ON,
     ISSUE_LIGHT_MEMBER_CYCLE,
-    ISSUE_LIGHT_SHARED_MEMBER,
     ISSUE_SCHEDULED_LIGHT_NO_SCHEDULE,
+    async_check_shared_members,
     async_raise_issue,
 )
 
@@ -449,6 +448,16 @@ def _is_group(state: State | None) -> bool:
     return state is not None and (
         ATTR_ENTITY_ID in state.attributes or "group_entities" in state.attributes
     )
+
+
+def _group_members(state: State | None) -> tuple[str, ...]:
+    """Return the members a light group's state names."""
+    if state is None:
+        return ()
+    for key in (ATTR_ENTITY_ID, "group_entities"):
+        if key in state.attributes:
+            return tuple(state.attributes[key] or ())
+    return ()
 
 
 # bright_resume_until of an on-period with no timer: it resumes whenever dark.
@@ -1468,7 +1477,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             )
             self._drop_member_cycles()
             self._watch_grouped_lights()
-            self._warn_shared_members()
+            async_check_shared_members(self.hass)
             self._warn_rejected_holds()
             self._select_initial_settings()
             self._seed_state()
@@ -1599,26 +1608,6 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """
         causes = [alone for id_, alone in self._grouped_reports if id_ == context.id]
         return bool(causes) and all(causes)
-
-    @callback
-    def _warn_shared_members(self) -> None:
-        """Name lights another virtual light also controls: the two fight."""
-        shared = shared_lights(self.hass, self._lights, own_entry_id=self._entry_id)
-        for light, other in shared.items():
-            _LOGGER.warning(
-                "%s and %s both control %s, so they fight over it; give it to one "
-                "of them in Configure, or add the other light instead of it",
-                self.entity_id,
-                other,
-                light,
-            )
-            async_raise_issue(
-                self.hass,
-                self._entry_id,
-                ISSUE_LIGHT_SHARED_MEMBER,
-                {"entity": self.entity_id, "other": other, "light": light},
-                about=light,
-            )
 
     @callback
     def _warn_rejected_holds(self) -> None:
@@ -2493,6 +2482,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if self._drop_member_cycles() and entity_id not in self._lights:
                 return
             self._watch_grouped_lights()
+            if _group_members(old_state) != _group_members(new_state):
+                # Which lights this one commands changed, and with it the fights.
+                async_check_shared_members(self.hass)
         if entity_id in self._lights:
             group_alone = _is_group(new_state) and self._group_acted_alone(
                 event.context

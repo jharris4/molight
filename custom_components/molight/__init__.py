@@ -45,8 +45,12 @@ from .const import (
     PLATFORMS_BY_ENTITY_TYPE,
     REMOTE_ACTION_FIELDS,
 )
-from .helpers import entry_settings
-from .issues import async_clear_entry_issues, async_clear_issues_naming
+from .helpers import VIRTUAL_LIGHT_TYPES, entry_settings
+from .issues import (
+    async_check_shared_members,
+    async_clear_entry_issues,
+    async_clear_issues_naming,
+)
 from .remote import async_setup_remote
 
 if TYPE_CHECKING:
@@ -351,6 +355,10 @@ def _auto_off_switch_disabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return reg_entry is not None and reg_entry.disabled
 
 
+def _is_virtual_light(entry: ConfigEntry) -> bool:
+    return entry_settings(entry).get(CONF_ENTITY_TYPE) in VIRTUAL_LIGHT_TYPES
+
+
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
@@ -363,6 +371,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     unload_ok = await hass.config_entries.async_unload_platforms(entry, platforms)
     if unload_ok:
+        if _is_virtual_light(entry) and not hass.is_stopping:
+            # Its edited settings may have ended a fight another light names.
+            async_check_shared_members(hass)
         # A corrected entry starts clean; one still broken raises them again.
         async_clear_entry_issues(hass, entry.entry_id)
         entry_data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, {})
@@ -381,6 +392,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     keeping a reference to an entity that no longer exists.
     """
     async_clear_entry_issues(hass, entry.entry_id)
+    if _is_virtual_light(entry):
+        async_check_shared_members(hass)  # the entry is already gone from the list
     hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, None)
     if watch := hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(entry.entry_id, None):
         watch.unsub()
