@@ -2602,13 +2602,15 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # shown, but no activity that restarts the timer or a warning.
                 self._mirror_member(new_state)
                 return
-            if new_state.state == "on" and (color := self._member_color(new_state)):
+            color = self._member_color(new_state) if new_state.state == "on" else None
+            if color:
                 # Mirror the real light's color on the off→on adoption edge,
                 # like the brightness mirror in _on_light_state_change.
                 self._set_color_state(*color)
             self._on_light_state_change(
                 new_state.state,
                 new_state.attributes.get("brightness"),
+                color=color,
                 # A member reporting in was not turned off.
                 manual=human and not member_recovered,
                 claim=claim and human,
@@ -2914,6 +2916,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         state: str,
         brightness: int | None = None,
         *,
+        color: tuple[ColorMode, tuple] | None = None,
         manual: bool = True,
         claim: bool = True,
         touched: str | None = None,
@@ -2922,6 +2925,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     ) -> None:
         """Handle a real light being turned on/off physically.
 
+        brightness and color are what the real light reported with its on.
         claim is False for a turn-on our own select call caused. touched is
         the real light that changed. send_turned_on is False when no person
         or other automation is known to have turned it on: our own select
@@ -2949,8 +2953,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     EVENT_TURNED_ON,
                     reason=reason,
                     standby=False,
-                    brightness=self._attr_brightness,
-                    color=self._current_color(),
+                    brightness=brightness,
+                    color=_color_data(color),
                     selection=None,
                 )
             if claim:
@@ -3028,7 +3032,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # color-only change on a light we consider off is just
                 # mirrored.
                 self._on_light_state_change(
-                    "on", claim=claim and human, send_turned_on=claim, human=human
+                    "on",
+                    new_b,
+                    color=new_color,
+                    claim=claim and human,
+                    send_turned_on=claim,
+                    human=human,
                 )
             self.async_write_ha_state()
             return

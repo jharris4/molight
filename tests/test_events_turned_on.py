@@ -105,6 +105,71 @@ async def test_physical_turn_on(hass) -> None:
     assert records == [_turned_on(REASON_PHYSICAL, brightness=120)]
 
 
+TEMP_CAPS = {
+    "supported_color_modes": ["color_temp"],
+    "color_mode": "color_temp",
+    "min_color_temp_kelvin": 2000,
+    "max_color_temp_kelvin": 6500,
+}
+
+
+@pytest.mark.asyncio
+async def test_physical_turn_on_without_a_level_or_color_names_none(hass) -> None:
+    """A member lit again with no level or color reported names neither,
+    not the look of the last on-period."""
+    records = await _setup(hass, make_light_entry(name="Hall"))
+    hass.states.async_set(
+        REAL, "on", {"brightness": 120, "color_temp_kelvin": 3000, **TEMP_CAPS}
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "off", TEMP_CAPS)
+    await settle(hass)
+
+    hass.states.async_set(REAL, "on", TEMP_CAPS)
+    await settle(hass)
+
+    assert records[0] == _turned_on(
+        REASON_PHYSICAL, brightness=120, color={"color_temp_kelvin": 3000}
+    )
+    assert records[-1] == _turned_on(REASON_PHYSICAL)
+    assert hass.states.get(VIRTUAL).attributes["brightness"] == 120
+
+
+@pytest.mark.asyncio
+async def test_physical_turn_on_with_a_level_but_no_color_names_the_level(
+    hass,
+) -> None:
+    """Only what the member reported with its on is named."""
+    records = await _setup(hass, make_light_entry(name="Hall"))
+    hass.states.async_set(
+        REAL, "on", {"brightness": 120, "color_temp_kelvin": 3000, **TEMP_CAPS}
+    )
+    await settle(hass)
+    hass.states.async_set(REAL, "off", TEMP_CAPS)
+    await settle(hass)
+
+    hass.states.async_set(REAL, "on", {"brightness": 90, **TEMP_CAPS})
+    await settle(hass)
+
+    assert records[-1] == _turned_on(REASON_PHYSICAL, brightness=90)
+
+
+@pytest.mark.asyncio
+async def test_physical_dim_up_from_zero_names_the_level(hass) -> None:
+    """A member on at brightness 0 is off; dimming it up is the turn-on."""
+    records = await _setup(hass, make_light_entry(name="Hall"))
+    hass.states.async_set(REAL, "on", {"brightness": 120})
+    await settle(hass)
+    hass.states.async_set(REAL, "on", {"brightness": 0})
+    await settle(hass)
+    assert hass.states.get(VIRTUAL).state == "off"
+
+    hass.states.async_set(REAL, "on", {"brightness": 90})
+    await settle(hass)
+
+    assert records[-1] == _turned_on(REASON_PHYSICAL, brightness=90)
+
+
 @pytest.mark.asyncio
 async def test_occupancy_turn_on_names_the_auto_on_look(hass) -> None:
     """An automatic turn-on names the auto-on brightness and color."""
