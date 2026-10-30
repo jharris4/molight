@@ -1095,6 +1095,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._members_lit: set[str] = set()
         # Power last sent to each member that has not reported since.
         self._commanded_power: dict[str, bool] = {}
+        # Judgments of failed group commands waiting for a slow member's reply.
+        self._failed_command_unsubs: set[CALLBACK_TYPE] = set()
         # Virtual lights inside member light groups, and what they last did:
         # (context ID, whether it was their own automation).
         self._grouped_lights: set[str] = set()
@@ -2314,6 +2316,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         await super().async_will_remove_from_hass()
         self._cancel_timer()
         self._cancel_door_dropout()
+        for unsub in self._failed_command_unsubs:
+            unsub()
+        self._failed_command_unsubs.clear()
         if self._grouped_unsub is not None:
             self._grouped_unsub()
             self._grouped_unsub = None
@@ -5387,15 +5392,33 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # A call that fails at once fails inside its caller: judge the
             # light once the caller has moved the state machine on.
             await asyncio.sleep(0)
-            if not self._removed:
+            if self._removed:
+                return
+            if len(group) == 1:
                 self._on_member_command_failed(group, on, context)
+                return
+            # Home Assistant raises for the group once every member answered,
+            # so one whose integration took the command may still report it.
+            # Judge once such a reply would have settled.
+            delay = ECHO_SETTLE_SECONDS + float(service_data.get(ATTR_TRANSITION) or 0)
+
+            @callback
+            def _judge(_now: datetime) -> None:
+                self._failed_command_unsubs.discard(unsub)
+                if not self._removed:
+                    self._on_member_command_failed(group, on, context)
+
+            unsub = async_call_later(self.hass, delay, _judge)
+            self._failed_command_unsubs.add(unsub)
 
     def _on_member_command_failed(
         self, group: list[str], on: bool, context: Context
     ) -> None:
         """Take back a command the members will not answer, and judge the light.
 
-        A member a newer command has reached since is left to that one. With
+        Called at once for one member, and for a group once a slow member's
+        reply would have settled; a reply that came meanwhile stands. A
+        member a newer command has reached since is left to that one. With
         nothing lit, a light reporting on goes idle, as it does when its lit
         member is deleted; one reporting off while a member still burns
         adopts it, as it would a bulb lit by nobody.

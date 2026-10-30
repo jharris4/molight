@@ -18,7 +18,7 @@ from homeassistant.const import (
     EVENT_CALL_SERVICE,
     EVENT_HOMEASSISTANT_STARTED,
 )
-from homeassistant.core import CoreState, ServiceCall, State, callback
+from homeassistant.core import Context, CoreState, ServiceCall, State, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
@@ -506,6 +506,158 @@ async def test_failed_turn_on_that_lit_one_member_leaves_the_light_on(
     hass.states.async_set(REAL2, "off")
     await settle(hass)
     assert _state(hass).state == "off"
+
+
+class _SlowAndBrokenMembers(_MemberLight):
+    """A call one member's integration rejects at once while another took it.
+
+    Home Assistant raises for the whole call; the member that took the
+    command reports its new state later, through answer().
+    """
+
+    def __init__(self, hass: HomeAssistant, service: str, *, slow: str) -> None:
+        super().__init__(hass, service, error=_OFFLINE)
+        self._slow = slow
+        self._on = service == "turn_on"
+        self.pending: tuple[int | None, Context] | None = None
+
+    async def _handle(self, call: ServiceCall) -> None:
+        if VIRTUAL in call.data["entity_id"]:
+            await self._original.job.target(call)
+            return
+        params = call.data.get("params", call.data)
+        self.pending = (params.get("brightness"), call.context)
+        raise _OFFLINE
+
+    def answer(self) -> None:
+        assert self.pending is not None
+        brightness, context = self.pending
+        self._hass.states.async_set(
+            self._slow,
+            "on" if self._on else "off",
+            {"brightness": brightness} if self._on else {},
+            context=context,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_slow_member_answering_after_another_raised_keeps_the_light_on(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """A member that took the turn-on another member's integration rejected
+    reports on a moment later: that is its reply, not a turn-on at the wall,
+    and the judgment of the failure waits for it."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(REAL2, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, lights=[REAL, REAL2], auto_on_brightness=40),
+    )
+    await settle(hass)
+    member = _SlowAndBrokenMembers(hass, "turn_on", slow=REAL)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert f"Unable to turn on {REAL}, {REAL2}" in caplog.text
+
+    member.answer()
+    await settle(hass)
+    state = _state(hass)
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["last_on_physical"] is None
+    assert state.attributes["brightness"] == 102
+
+    freezer.tick(timedelta(seconds=4))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "on"
+    assert state.attributes["molight_state"] == STATE_OCCUPIED
+    assert state.attributes["last_on_physical"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_failed_group_turn_on_nobody_answers_goes_idle_once_settled(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """A rejected turn-on to several members is judged once a slow reply
+    would have settled: with nothing lit by then, the light goes idle."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(REAL2, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, lights=[REAL, REAL2], auto_on_brightness=40),
+    )
+    await settle(hass)
+    _MemberLight(hass, "turn_on", error=_OFFLINE)
+
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    assert _state(hass).state == "on"  # a member may still answer
+    assert f"Unable to turn on {REAL}, {REAL2}" in caplog.text
+
+    freezer.tick(timedelta(seconds=4))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["last_off_manual"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.allow_warning_log
+async def test_slow_member_answering_after_another_rejected_the_turn_off_keeps_it_off(
+    hass: HomeAssistant, freezer, caplog
+) -> None:
+    """The mirror: the lit member took the timeout's turn-off that a dark
+    member's integration rejected, and reports off a moment later. The
+    light does not come back on meanwhile, and the off is its own."""
+    hass.states.async_set(OCC, "off")
+    hass.states.async_set(REAL, "off")
+    hass.states.async_set(REAL2, "off")
+    await setup_entries(
+        hass,
+        make_light_entry(occupancy=OCC, lights=[REAL, REAL2], auto_on_brightness=40),
+    )
+    await settle(hass)
+    _MemberLight(hass, "turn_on", lit=(REAL,))
+    hass.states.async_set(OCC, "on")
+    await settle(hass)
+    hass.states.async_set(OCC, "off")
+    await settle(hass)
+    member = _SlowAndBrokenMembers(hass, "turn_off", slow=REAL)
+
+    freezer.tick(timedelta(seconds=61))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert f"Unable to turn off {REAL}, {REAL2}" in caplog.text
+
+    member.answer()
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["molight_state"] == STATE_IDLE
+    assert state.attributes["last_off_manual"] is None
+
+    freezer.tick(timedelta(seconds=4))
+    async_fire_time_changed(hass)
+    await settle(hass)
+    state = _state(hass)
+    assert state.state == "off"
+    assert state.attributes["last_off_manual"] is None
 
 
 @pytest.mark.asyncio
