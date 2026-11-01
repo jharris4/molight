@@ -996,7 +996,7 @@ async def test_occupancy_recovery_applies_a_window_started_during_outage(
 async def test_occupancy_recovery_applies_a_settings_switch_during_outage(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A scheduled light switching to settings without the bright gate while
+    """A Virtual Scheduled Light switching to settings without the bright gate while
     occupancy is unavailable lights the room once the sensor is back."""
     hass.states.async_set("binary_sensor.settings_schedule", "off")
     hass.states.async_set(ILLUM, "on")
@@ -1406,7 +1406,7 @@ async def test_schedule_briefly_unavailable_keeps_window(hass: HomeAssistant) ->
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
-    # Recovery straight to off applies the window-end boundary.
+    # Recovery straight to off applies the window end.
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     state = _state(hass)
@@ -1437,7 +1437,7 @@ async def test_schedule_briefly_unavailable_respects_manual_off(
     await settle(hass)
     assert _state(hass).state == "off"
 
-    # The schedule entity is briefly unavailable inside the same window.
+    # The schedule sensor is briefly unavailable inside the same window.
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -1783,7 +1783,7 @@ async def test_gate_recovery_adopts_light_turned_on_during_outage(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_schedule_outage_is_not_end_boundary_on_hold_release(
+async def test_follow_schedule_outage_is_not_window_end_on_hold_release(
     hass: HomeAssistant,
 ) -> None:
     """Releasing an auto-off hold during an outage keeps the applied window."""
@@ -1812,7 +1812,7 @@ async def test_follow_schedule_outage_is_not_end_boundary_on_hold_release(
 async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A held window that ended is forgotten once the light is off, even when
+    """A pending schedule end off is forgotten once the light is off, even when
     the off came while the schedule was unavailable: a later virtual on is not
     turned off when the hold releases."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -1858,10 +1858,11 @@ async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_hard_gate_outage_does_not_force_off_on_hold_release(
+async def test_gate_and_turn_off_outage_does_not_force_off_on_hold_release(
     hass: HomeAssistant,
 ) -> None:
-    """An unavailable hard gate blocks new starts without forcing an on light off."""
+    """An unavailable Gate and turn off schedule blocks new starts without forcing an
+    on light off."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(HOLD, "on")
     await setup_entries(
@@ -2878,7 +2879,8 @@ async def test_gate_outage_keeps_the_hold_of_an_occupied_room(
 async def test_gate_window_that_ended_during_its_outage_turns_the_room_off(
     hass: HomeAssistant,
 ) -> None:
-    """A hard gate back off is a real window end, whoever is in the room."""
+    """A Gate and turn off schedule back off is a real window end, whoever is in the
+    room."""
     await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source")
     hass.states.async_set(HOLD, "off")
     await settle(hass)
@@ -2896,7 +2898,8 @@ async def test_gate_window_that_ended_during_its_outage_turns_the_room_off(
 async def test_gate_outage_outside_the_window_keeps_occupancy_gated(
     hass: HomeAssistant,
 ) -> None:
-    """Last known outside its window, an unreadable hard gate still gates."""
+    """Last known outside its window, an unreadable Gate and turn off schedule still
+    gates."""
     await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source", window="off")
     hass.states.async_set(HOLD, "off")
     hass.states.async_set(DOOR, "off")

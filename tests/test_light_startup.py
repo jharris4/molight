@@ -292,11 +292,13 @@ async def test_command_before_the_seed_acts_on_the_restored_state(
     assert _attrs(hass)["molight_state"] == (STATE_ACTIVE if on else STATE_IDLE)
 
 
-def _standby_entry(end_action: str = SCHEDULE_END_ACTION_TURN_OFF) -> MockConfigEntry:
+def _standby_entry(
+    schedule_end_action: str = SCHEDULE_END_ACTION_TURN_OFF,
+) -> MockConfigEntry:
     return make_scheduled_light_entry(
         name="Matrix Light",
         schedule=SCHED,
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside={CONF_LIGHT_TIMEOUT: 60},
         inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
     )
@@ -306,7 +308,7 @@ def _standby_entry(end_action: str = SCHEDULE_END_ACTION_TURN_OFF) -> MockConfig
 async def test_scheduled_light_reports_its_restored_settings_until_it_seeds(
     hass: HomeAssistant,
 ) -> None:
-    """The active side and its window marker are the saved ones, not live reads."""
+    """The active settings and window marker are the saved ones, not live reads."""
     _Members(hass, [REAL], {})
     # A touching window started while Home Assistant was down.
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER2})
@@ -389,10 +391,10 @@ async def test_standby_rest_survives_a_crash_after_restart(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "end_action", [SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_END_ACTION_SWITCH]
+    "schedule_end_action", [SCHEDULE_END_ACTION_TURN_OFF, SCHEDULE_END_ACTION_SWITCH]
 )
 async def test_missed_end_survives_a_stop_during_startup(
-    hass: HomeAssistant, end_action: str
+    hass: HomeAssistant, schedule_end_action: str
 ) -> None:
     """HA stopped again before it finished starting still applies the end."""
     real = _Members(hass, [REAL], {})
@@ -402,7 +404,7 @@ async def test_missed_end_survives_a_stop_during_startup(
     entry = make_scheduled_light_entry(
         name="Matrix Light",
         schedule=SCHED,
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
         inside={CONF_LIGHT_TIMEOUT: 60},
     )
@@ -1573,7 +1575,7 @@ async def test_late_setup_keeps_a_missed_end_under_the_saved_auto_off_hold(
 async def test_late_setup_keeps_a_held_gate_end_under_the_saved_auto_off_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A Gate and turn off end the switch held stays held when set up late."""
+    """A schedule end off left pending by the switch stays pending when set up late."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on")
     entry = make_light_entry(schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE)

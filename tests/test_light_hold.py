@@ -525,7 +525,8 @@ async def test_hold_blocks_follow_window_end_release_applies_it(
 
 
 async def _hold_through_window_end(hass: HomeAssistant) -> None:
-    """Light lit by a follow window whose end the Auto-off switch held."""
+    """Light lit by a follow window whose schedule end off the Auto-off switch left
+    pending."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(HOLD, "off")
     await setup_entries(
@@ -562,7 +563,8 @@ async def _assert_on_period_survives_a_hold_cycle(hass: HomeAssistant) -> None:
 async def test_manual_off_after_held_window_end_drops_the_window(
     hass: HomeAssistant, off_via: str
 ) -> None:
-    """Turned off manually after a held window end, the light owes it nothing."""
+    """Turned off manually after a pending schedule end off, the light owes it
+    nothing."""
     await _hold_through_window_end(hass)
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -609,7 +611,7 @@ async def test_virtual_on_again_before_release_runs_a_timer(
 async def test_window_end_while_held_with_light_off_drops_the_window(
     hass: HomeAssistant,
 ) -> None:
-    """A hold defers a window end only for a light that is still on."""
+    """A hold leaves a schedule end off pending only for a light that is still on."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(HOLD, "off")
     await setup_entries(
@@ -811,7 +813,7 @@ async def test_manual_off_and_on_after_a_held_gate_end_runs_a_timer(
 async def test_gate_window_start_drops_a_held_gate_end(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A window starting again while held ends the owed off."""
+    """A window starting again while held ends the pending schedule end off."""
     await _hold_through_gate_end(hass, "switch")
     hass.states.async_set(SCHED, "on")
     await settle(hass)
@@ -823,7 +825,7 @@ async def test_gate_window_start_drops_a_held_gate_end(
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["switch", "keep_on"])
 async def test_restart_keeps_a_held_gate_end(hass: HomeAssistant, hold: str) -> None:
-    """A held Gate and turn off end survives a restart under the hold."""
+    """A pending Gate and turn off end survives a restart under the hold."""
     entry = await _hold_through_gate_end(hass, hold)
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -844,7 +846,7 @@ async def test_restart_after_the_hold_released_applies_a_held_gate_end(
     hass: HomeAssistant,
 ) -> None:
     """A keep-on entity released while Home Assistant was down: startup
-    applies the owed off."""
+    applies the pending schedule end off."""
     entry = await _hold_through_gate_end(hass, "keep_on")
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -862,7 +864,8 @@ async def test_restart_after_the_hold_released_applies_a_held_gate_end(
 async def test_restart_into_a_new_gate_window_drops_a_held_gate_end(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A window that started while Home Assistant was down ends the owed off."""
+    """A window that started while Home Assistant was down ends the pending schedule end
+    off."""
     entry = await _hold_through_gate_end(hass, "switch")
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -879,7 +882,7 @@ async def test_restart_into_a_new_gate_window_drops_a_held_gate_end(
 async def test_options_edit_to_another_gate_mode_drops_a_held_gate_end(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Only Gate and turn off owes an end its off."""
+    """Only Gate and turn off keeps a schedule end off pending."""
     entry = await _hold_through_gate_end(hass, "switch")
     hass.states.async_set(REAL, "on")
     await settle(hass)
@@ -1124,10 +1127,10 @@ async def test_load_warns_about_keep_on_entities_the_form_now_rejects(
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_load_warns_once_for_a_keep_on_entity_on_both_scheduled_sides(
+async def test_load_warns_once_for_a_keep_on_entity_in_both_settings_sets(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A scheduled light checks both sets of settings, naming each entity once."""
+    """A Virtual Scheduled Light checks both settings sets, naming each entity once."""
     hass.states.async_set(REAL, "off")
     hold = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
     await setup_entries(

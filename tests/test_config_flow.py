@@ -166,7 +166,7 @@ if TYPE_CHECKING:
 # per-field defaults. Spread one of these first so explicit sections override.
 EMPTY_LIGHT_SECTIONS = {SECTION_SENSORS: {}, SECTION_BEHAVIOR: {}, SECTION_WARNING: {}}
 EMPTY_LIGHT_CREATE_SECTIONS = {**EMPTY_LIGHT_SECTIONS, SECTION_ADVANCED: {}}
-# A scheduled light's inside-schedule form adds the standby section.
+# A Virtual Scheduled Light's inside-schedule form adds the standby section.
 EMPTY_INSIDE_LIGHT_SECTIONS = {**EMPTY_LIGHT_SECTIONS, SECTION_STANDBY: {}}
 
 
@@ -201,7 +201,7 @@ async def _choose_time_schedule_options(hass: HomeAssistant, result: dict) -> di
 
 
 async def _setup_night_schedule(hass: HomeAssistant) -> None:
-    """Set up the schedule entity used by virtual light flow tests."""
+    """Set up the schedule sensor used by virtual light flow tests."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -371,7 +371,7 @@ async def test_occupancy_create_rejects_molight_source_from_stale_form(
 
 @pytest.mark.asyncio
 async def test_config_flow_schedule_with_sun(hass: HomeAssistant) -> None:
-    """Schedule flow builds a window with sun-anchored edges."""
+    """Schedule flow builds a window with sun event edges."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE}
@@ -618,10 +618,10 @@ async def test_schedule_options_reject_a_window_that_never_opens(
 
 
 @pytest.mark.asyncio
-async def test_config_flow_source_schedule_excludes_schedule_sources(
+async def test_config_flow_binary_sensor_schedule_excludes_schedule_sources(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
-    """A source schedule is reusable but cannot chain another schedule."""
+    """A binary sensor schedule is reusable but cannot chain another schedule."""
     hass.states.async_set("binary_sensor.house_mode", "off")
 
     result = await _start_create(hass)
@@ -678,7 +678,7 @@ async def test_config_flow_source_schedule_excludes_schedule_sources(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_entity_id_already_exists_change_preserves_second_step(
+async def test_binary_sensor_schedule_entity_id_exists_change_preserves_second_step(
     hass: HomeAssistant,
 ) -> None:
     """Going back from the Entity ID already exists step restores the source
@@ -756,10 +756,10 @@ async def test_schedule_options_can_change_definition(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_options_prefill_source_and_inversion(
+async def test_binary_sensor_schedule_options_prefill_source_and_inversion(
     hass: HomeAssistant,
 ) -> None:
-    """Editing a source schedule restores its source-specific values."""
+    """Editing a binary sensor schedule restores its source-specific values."""
     hass.states.async_set("binary_sensor.house_mode", "off")
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -786,7 +786,7 @@ async def test_source_schedule_options_prefill_source_and_inversion(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_options_reject_schedule_source(
+async def test_binary_sensor_schedule_options_reject_schedule_source(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
     """Options reject a forced source that is another MoLight schedule."""
@@ -1121,7 +1121,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
 
 @pytest.mark.asyncio
 async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
-    """The three main forms store two independent Virtual Light settings maps."""
+    """The three main forms store two independent settings sets."""
     await _setup_night_schedule(hass)
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -1184,10 +1184,10 @@ async def test_config_flow_virtual_scheduled_light(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_turn_on_selection_for_each_side(
+async def test_scheduled_light_turn_on_selection_for_each_settings_set(
     hass: HomeAssistant,
 ) -> None:
-    """Each settings map gets its own generic turn-on selection step."""
+    """Each settings set gets its own generic turn-on selection step."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night"]})
     result = await _start_create(hass)
@@ -1245,7 +1245,8 @@ async def test_scheduled_light_turn_on_selection_for_each_side(
 async def test_scheduled_light_options_edit_both_settings(
     hass: HomeAssistant,
 ) -> None:
-    """The options flow uses the same three main forms and preserves each side."""
+    """The options flow uses the same three main forms and preserves each settings
+    set."""
     await _setup_night_schedule(hass)
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1310,7 +1311,7 @@ async def test_scheduled_light_options_edit_both_settings(
 async def test_scheduled_light_options_requires_replacing_deleted_schedule(
     hass: HomeAssistant,
 ) -> None:
-    """A removed shared schedule is required and rejected if saved again."""
+    """A removed schedule sensor is required and rejected if saved again."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1345,10 +1346,10 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_validates_each_side_timeout(
+async def test_scheduled_light_validates_each_settings_set_timeout(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Both settings forms enforce the referenced occupancy timeout."""
+    """Both settings forms enforce the occupancy sensor's timeout."""
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry)
     result = await _start_create(hass)
@@ -1393,7 +1394,7 @@ async def test_scheduled_light_validates_each_side_timeout(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_edit_checks_both_scheduled_light_sides(
+async def test_occupancy_edit_checks_both_settings_sets(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """Raising an occupancy timeout respects the shorter of the two light timeouts."""
@@ -1568,7 +1569,8 @@ async def test_scheduled_light_inside_selection_prefills_from_outside(
 async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
-    """Each side's selection step prefills its own values; clearing drops them."""
+    """Each settings set's selection step prefills its own values; clearing drops
+    them."""
     await _setup_night_schedule(hass)
     hass.states.async_set("select.mode", "Day", {"options": ["Day", "Night", "Dusk"]})
     entry = MockConfigEntry(
@@ -1623,7 +1625,7 @@ async def test_scheduled_light_options_edit_and_clear_turn_on_selection(
     assert suggested[CONF_TURN_ON_SELECT_OPTION] == "Day"
     assert suggested[CONF_TURN_ON_SELECT_SOURCE_ENTITY] == "input_select.theme"
 
-    # A bad option is rejected on this page, and the form stays on this side.
+    # A bad option is rejected on this page, and the form stays on this settings set.
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {CONF_TURN_ON_SELECT_OPTION: "Nope"}
     )
@@ -3379,7 +3381,7 @@ async def test_assign_occupancy_keeps_a_blank_timeout_light(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_saves_a_blank_timeout_per_side(
+async def test_scheduled_light_saves_a_blank_timeout_per_settings_set(
     hass: HomeAssistant,
 ) -> None:
     """Each settings set keeps its own blank, and a blank inside form starts blank
@@ -4964,7 +4966,8 @@ async def test_assign_aborts_when_no_lights(
 async def test_assign_aborts_when_only_scheduled_lights_exist(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Scheduled lights have sensors in each set of settings, so none can be picked."""
+    """Virtual Scheduled Lights have sensors in each settings set, so none can be
+    picked."""
     await _setup_night_schedule(hass)
     await setup_entries(hass, occupancy_entry, _scheduled_light_entry("Porch", "porch"))
 
@@ -5538,7 +5541,7 @@ async def test_occupancy_options_validate_through_nested_combined(
 async def test_assign_schedule_sets_mode(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
-    """Assigning a schedule sensor stamps the schedule reference and mode."""
+    """Assigning a schedule sensor stamps the schedule sensor and mode."""
     light = _light_entry("Kitchen", "kitchen")
     await setup_entries(hass, schedule_entry, light)
 
@@ -5738,7 +5741,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("end_action", "expected_mode"),
+    ("schedule_end_action", "expected_mode"),
     [
         (SCHEDULE_END_ACTION_KEEP, SCHEDULE_MODE_GATE_KEEP),
         (SCHEDULE_END_ACTION_SWITCH, SCHEDULE_MODE_GATE_SWITCH),
@@ -5746,9 +5749,10 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
     ],
 )
 async def test_convert_scheduled_light_back_to_schedule_gated(
-    hass: HomeAssistant, end_action: str, expected_mode: str
+    hass: HomeAssistant, schedule_end_action: str, expected_mode: str
 ) -> None:
-    """Reverse conversion keeps the inside settings and maps the end action."""
+    """Reverse conversion keeps the inside settings and maps the At schedule end
+    field."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -5757,7 +5761,7 @@ async def test_convert_scheduled_light_back_to_schedule_gated(
             CONF_NAME: "Hall",
             CONF_LIGHTS: ["light.hall_real"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night",
-            CONF_SCHEDULE_END_ACTION: end_action,
+            CONF_SCHEDULE_END_ACTION: schedule_end_action,
             CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 300},
             CONF_INSIDE_SCHEDULE_SETTINGS: {
                 CONF_LIGHT_TIMEOUT: 45,
@@ -5840,7 +5844,7 @@ async def test_conversion_round_trip_restores_flat_config(
             SCHEDULE_MODE_GATE_KEEP: SCHEDULE_END_ACTION_KEEP,
         }[mode]
     )
-    for profile in (CONF_INSIDE_SCHEDULE_SETTINGS, CONF_OUTSIDE_SCHEDULE_SETTINGS):
+    for settings_set in (CONF_INSIDE_SCHEDULE_SETTINGS, CONF_OUTSIDE_SCHEDULE_SETTINGS):
         for key in (
             CONF_ENTITY_TYPE,
             CONF_ENTITY_ID,
@@ -5852,7 +5856,7 @@ async def test_conversion_round_trip_restores_flat_config(
             CONF_INSIDE_SCHEDULE_SETTINGS,
             CONF_OUTSIDE_SCHEDULE_SETTINGS,
         ):
-            assert key not in cfg[profile], (profile, key)
+            assert key not in cfg[settings_set], (settings_set, key)
     assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS] == {
         CONF_LIGHT_TIMEOUT: 45,
         CONF_HOLD_ENTITIES: ["input_boolean.guest"],
@@ -5903,7 +5907,7 @@ async def test_options_form_opened_before_a_conversion_is_rejected(
         },
     )
     if direction == "convert_to_regular":
-        # The scheduled form only saves after both side pages.
+        # The Virtual Scheduled Light form only saves after both settings set pages.
         assert result["step_id"] == "scheduled_light_outside"
         for sections in (EMPTY_LIGHT_SECTIONS, EMPTY_INSIDE_LIGHT_SECTIONS):
             result = await hass.config_entries.options.async_configure(
@@ -5951,7 +5955,7 @@ async def test_conversion_round_trip_keeps_a_derived_entity_id(
 
 @pytest.mark.asyncio
 async def test_conversion_excludes_follow_mode_lights(hass: HomeAssistant) -> None:
-    """Follow schedules cannot be reinterpreted as settings selectors."""
+    """Follow schedules cannot be a Virtual Scheduled Light's schedule sensor."""
     await setup_entries(
         hass,
         _light_entry(
@@ -6615,10 +6619,10 @@ async def test_light_options_reject_fade_no_light_can_apply(
 
 
 @pytest.mark.asyncio
-async def test_scheduled_light_side_form_rejects_fade_no_light_can_apply(
+async def test_settings_set_form_rejects_fade_no_light_can_apply(
     hass: HomeAssistant,
 ) -> None:
-    """A scheduled light's side forms carry no light picker; the guard reads
+    """A settings set's form carries no light picker; the guard reads
     the members from the shared first form."""
     await _setup_night_schedule(hass)
     _no_fade(hass)
@@ -7001,7 +7005,7 @@ async def test_light_flow_allows_brightness_when_lights_cannot_be_judged(
 # ---------------------------------------------------------------------------
 # Bulk assignment and Virtual Scheduled Lights
 #
-# A scheduled light has its own sensors in each set of settings, so there is no
+# A Virtual Scheduled Light has its own sensors in each settings set, so there is no
 # single reference to write. It used to be offered and then silently dropped,
 # leaving the summary reporting a successful no-op.
 # ---------------------------------------------------------------------------
@@ -7026,7 +7030,7 @@ def _scheduled_light_entry(name: str, obj_id: str) -> MockConfigEntry:
 async def test_assign_lights_picker_excludes_scheduled_lights(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A scheduled light is never offered as a light to assign."""
+    """A Virtual Scheduled Light is never offered as a light to assign."""
     await _setup_night_schedule(hass)
     regular = _light_entry("Hall", "hall")
     scheduled = _scheduled_light_entry("Hallway Night", "hallway_night")
@@ -7087,7 +7091,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
         "light.hallway_night",
     ]
 
-    # Dropping the scheduled light lets the rest through.
+    # Dropping the Virtual Scheduled Light lets the rest through.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ASSIGN_LIGHTS: ["light.hall"]}
     )
@@ -7312,7 +7316,8 @@ async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
 async def test_schedule_source_explicit_entity_id_conflict_errors(
     hass: HomeAssistant,
 ) -> None:
-    """A taken explicit entity ID re-renders the source-schedule form with the error."""
+    """A taken explicit entity ID re-renders the binary sensor schedule form with the
+    error."""
     hass.states.async_set("binary_sensor.taken", "off")
     hass.states.async_set("binary_sensor.house_mode", "off")
     result = await _start_create(hass)
@@ -7404,7 +7409,7 @@ async def test_options_light_selection_invalid_option_errors(
 async def test_convert_to_scheduled_requires_a_schedule(
     hass: HomeAssistant,
 ) -> None:
-    """A light with gate modes but no schedule entity is not convertible."""
+    """A light with gate modes but no schedule sensor is not convertible."""
     light = _light_entry("Hall", "hall", schedule_mode=SCHEDULE_MODE_GATE)
     await setup_entries(hass, light)
 
@@ -7607,7 +7612,7 @@ async def test_combined_schedule_options_reject_cycles(
 async def test_combined_schedule_is_a_schedule_everywhere(
     hass: HomeAssistant, schedule_entry: MockConfigEntry
 ) -> None:
-    """Lights can use a combined schedule; a mirroring schedule can't mirror one."""
+    """Lights can use a combined schedule; a binary sensor schedule can't mirror one."""
     await setup_entries(hass, schedule_entry)
     mirror = await _start_create(hass)
     mirror = await hass.config_entries.flow.async_configure(
@@ -7766,7 +7771,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     )
     outer = _light_entry("Outer", "outer")
     await setup_entries(hass, hall, outer)
-    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
 
     result = await hass.config_entries.options.async_init(hall.entry_id)
     if scheduled:
@@ -7781,14 +7786,14 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
         )
         assert result["step_id"] == "scheduled_light_outside"
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], side
+            result["flow_id"], settings_set
         )
         assert result["step_id"] == "scheduled_light_inside"
     else:
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
-                **side,
+                **settings_set,
                 CONF_NAME: "Hall",
                 CONF_LIGHTS: ["light.outer"],
                 SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
@@ -7800,7 +7805,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
     other = await hass.config_entries.options.async_init(outer.entry_id)
     other = await hass.config_entries.options.async_configure(
         other["flow_id"],
-        {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.hall"]},
+        {**settings_set, CONF_NAME: "Outer", CONF_LIGHTS: ["light.hall"]},
     )
     other = await _pass_wrapped_notice(hass, other)
     assert other["type"] == FlowResultType.CREATE_ENTRY
@@ -7808,7 +7813,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {**side, SECTION_STANDBY: {}}
+        {**settings_set, SECTION_STANDBY: {}}
         if scheduled
         else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
     )
@@ -7837,7 +7842,7 @@ async def test_light_options_reject_itself_with_entity_id_changed_after_form_ope
 async def test_scheduled_light_options_reject_member_cycle(
     hass: HomeAssistant,
 ) -> None:
-    """The scheduled light's member picker and submit apply the same rule."""
+    """The Virtual Scheduled Light's member picker and submit apply the same rule."""
     await _setup_night_schedule(hass)
     night = _scheduled_light_entry("Night", "night")
     outer = _light_entry("Outer", "outer")
@@ -8001,7 +8006,7 @@ async def test_light_options_reject_a_light_another_virtual_light_controls(
 async def test_scheduled_light_options_reject_a_light_another_virtual_light_controls(
     hass: HomeAssistant,
 ) -> None:
-    """The scheduled light's member picker and submit apply the same rule."""
+    """The Virtual Scheduled Light's member picker and submit apply the same rule."""
     await _setup_night_schedule(hass)
     hass.states.async_set("light.other_real", "off")
     night = _scheduled_light_entry("Night", "night")
@@ -8041,7 +8046,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     )
     outer = _light_entry("Outer", "outer")
     await setup_entries(hass, hall, outer)
-    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
 
     result = await hass.config_entries.options.async_init(hall.entry_id)
     if scheduled:
@@ -8056,14 +8061,14 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
         )
         assert result["step_id"] == "scheduled_light_outside"
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], side
+            result["flow_id"], settings_set
         )
         assert result["step_id"] == "scheduled_light_inside"
     else:
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
-                **side,
+                **settings_set,
                 CONF_NAME: "Hall",
                 CONF_LIGHTS: ["light.free"],
                 SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"},
@@ -8075,14 +8080,14 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     other = await hass.config_entries.options.async_init(outer.entry_id)
     other = await hass.config_entries.options.async_configure(
         other["flow_id"],
-        {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
+        {**settings_set, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
     )
     assert other["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {**side, SECTION_STANDBY: {}}
+        {**settings_set, SECTION_STANDBY: {}}
         if scheduled
         else {CONF_TURN_ON_SELECT_OPTION: "Cozy"},
     )
@@ -8116,7 +8121,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     outer = _light_entry("Outer", "outer")
     await setup_entries(hass, outer, _light_entry("Inner", "inner"))
     member = "light.free" if taken == "by_another_light" else "light.group"
-    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
 
     result = await _start_create(hass)
     if last_page.startswith("scheduled"):
@@ -8132,17 +8137,24 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
                 SECTION_ADVANCED: {},
             },
         )
-        result = await hass.config_entries.flow.async_configure(result["flow_id"], side)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], settings_set
+        )
         assert result["step_id"] == "scheduled_light_inside"
         if last_page == "scheduled_collision":
             result = await hass.config_entries.flow.async_configure(
-                result["flow_id"], {**side, SECTION_STANDBY: {}}
+                result["flow_id"], {**settings_set, SECTION_STANDBY: {}}
             )
     else:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
         )
-        page = {**side, SECTION_ADVANCED: {}, CONF_NAME: "New", CONF_LIGHTS: [member]}
+        page = {
+            **settings_set,
+            SECTION_ADVANCED: {},
+            CONF_NAME: "New",
+            CONF_LIGHTS: [member],
+        }
         if last_page == "selection":
             page[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
         elif last_page == "wrapped_notice":
@@ -8160,7 +8172,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         other = await hass.config_entries.options.async_init(outer.entry_id)
         other = await hass.config_entries.options.async_configure(
             other["flow_id"],
-            {**side, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
+            {**settings_set, CONF_NAME: "Outer", CONF_LIGHTS: ["light.free"]},
         )
         assert other["type"] == FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
@@ -8177,7 +8189,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     if last_page == "selection":
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
     elif last_page == "scheduled_inside":
-        user_input = {**side, SECTION_STANDBY: {}}
+        user_input = {**settings_set, SECTION_STANDBY: {}}
     elif last_page == "wrapped_notice":
         user_input = {}
     else:
@@ -8241,7 +8253,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         flow = hass.config_entries.options
     hold = {SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["light.keep"]}}
     select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}}
-    side = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
+    settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     members = [member, "light.inner"] if "wrapped" in last_page else [member]
 
     if last_page == "discovery_selection":
@@ -8250,7 +8262,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             result["flow_id"], {CONF_SELECTED_ENTITIES: [member]}
         )
         result = await flow.async_configure(
-            result["flow_id"], {**side, **hold, **select}
+            result["flow_id"], {**settings_set, **hold, **select}
         )
     elif scheduled:
         if entry is None:
@@ -8271,10 +8283,10 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
                 CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             },
         )
-        result = await flow.async_configure(result["flow_id"], {**side, **hold})
+        result = await flow.async_configure(result["flow_id"], {**settings_set, **hold})
         assert result["step_id"] == "scheduled_light_inside"
         if not last_page.endswith("inside"):
-            inside = {**side, SECTION_STANDBY: {}}
+            inside = {**settings_set, SECTION_STANDBY: {}}
             if last_page.endswith("selection"):
                 inside.update(select)
             result = await flow.async_configure(result["flow_id"], inside)
@@ -8288,7 +8300,9 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         else:
             result = await flow.async_init(entry.entry_id)
             page = {}
-        page.update({**side, **hold, CONF_NAME: "Subject", CONF_LIGHTS: members})
+        page.update(
+            {**settings_set, **hold, CONF_NAME: "Subject", CONF_LIGHTS: members}
+        )
         if last_page.endswith("selection"):
             page.update(select)
         result = await flow.async_configure(result["flow_id"], page)
@@ -8319,7 +8333,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     if last_page.endswith("selection"):
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
     elif last_page.endswith("inside"):
-        user_input = {**side, SECTION_STANDBY: {}}
+        user_input = {**settings_set, SECTION_STANDBY: {}}
     elif last_page.endswith("collision"):
         user_input = {"next_step_id": "entity_id_proceed"}
     else:
@@ -9017,7 +9031,8 @@ async def test_light_options_reject_own_keep_on_entities(
 async def test_scheduled_light_options_reject_own_keep_on_entities(
     hass: HomeAssistant,
 ) -> None:
-    """A scheduled light's inside and outside settings apply the same keep-on rule."""
+    """A Virtual Scheduled Light's inside and outside settings apply the same keep-on
+    rule."""
     await _setup_night_schedule(hass)
     night = _scheduled_light_entry("Night", "night")
     await setup_entries(hass, night)
@@ -9276,7 +9291,8 @@ async def _reach_light_settings_form(hass: HomeAssistant, form: str) -> dict:
                 CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
             },
         )
-        # The inside settings, so the two scheduled forms cover both sets.
+        # The inside settings, so the two Virtual Scheduled Light forms cover both
+        # settings sets.
         return await hass.config_entries.options.async_configure(
             result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 300}
         )
@@ -9607,7 +9623,7 @@ async def test_light_options_final_page_rejects_timeout_raised_meanwhile(
 
 
 async def _reach_scheduled_light_inside(hass: HomeAssistant) -> dict:
-    """Create a scheduled light up to its inside-schedule form."""
+    """Create a Virtual Scheduled Light up to its inside-schedule form."""
     await _setup_night_schedule(hass)
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -10265,13 +10281,13 @@ async def test_light_forms_follow_a_sensor_whose_entity_id_changed_while_open(
     assert result["type"] in (FlowResultType.CREATE_ENTRY, FlowResultType.ABORT)
     assert result.get("reason") in (None, "discovery_done")
     cfg = _subject_cfg(hass)
-    side = cfg.get(
+    settings_set = cfg.get(
         CONF_OUTSIDE_SCHEDULE_SETTINGS
         if form == "scheduled_create"
         else CONF_INSIDE_SCHEDULE_SETTINGS,
         cfg,
     )
-    assert side[CONF_OCCUPANCY_ENTITY] == "binary_sensor.hall_presence"
+    assert settings_set[CONF_OCCUPANCY_ENTITY] == "binary_sensor.hall_presence"
 
 
 class _SingleButton(RealButton):
@@ -10976,7 +10992,8 @@ async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
     ]
 
     if "group.around" in excluded:
-        # Named on the first page, the scheduled light's entity ID is known by now.
+        # Named on the first page, the Virtual Scheduled Light's entity ID is known
+        # by now.
         assert form == "scheduled_create"
     else:
         result = await _submit_subject_settings(
@@ -11183,7 +11200,7 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
 
 
 def _referencing_light(scheduled: bool, key: str, sensor: str) -> MockConfigEntry:
-    """A 60 s light, or a scheduled light's inside settings, that references the
+    """A 60 s light, or a Virtual Scheduled Light's inside settings, that references the
     sensor."""
     if not scheduled:
         return _light_entry("Hall", "hall", **{key: sensor})
@@ -11492,7 +11509,7 @@ async def test_discover_light_defaults_reject_match_schedule_without_follow(
 async def test_convert_to_scheduled_strips_the_match_choice(
     hass: HomeAssistant,
 ) -> None:
-    """The match choice every light form saves stays out of both settings sides."""
+    """The match choice every light form saves stays out of both settings sets."""
     source = _light_entry(
         "Kitchen",
         "kitchen",

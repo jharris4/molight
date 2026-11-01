@@ -2504,7 +2504,7 @@ async def _begin_scheduled_turn_on(
 
 
 async def _switch_settings(hass: HomeAssistant, *, inside: bool) -> None:
-    """Cross the settings schedule's boundary while a select call is parked."""
+    """Cross the schedule sensor's boundary while a select call is parked."""
     hass.states.async_set(_SCHEDULE, "on" if inside else "off")
     await _drain(hass)
     state = hass.states.get("light.scheduled_light")
@@ -3135,7 +3135,7 @@ class _ScenePreset(_PresetSelect):
 async def _standby_coming_on(
     hass: HomeAssistant, reported: str
 ) -> tuple[FadingLight, _PresetSelect]:
-    """A scheduled light whose window starts: its turn-on at standby waits
+    """A Virtual Scheduled Light whose window starts: its turn-on at standby waits
     for the select call. The preset's level is reported by a push of the
     strip's own, or under the select call by a light on another device."""
     if reported == "push":
@@ -3181,10 +3181,10 @@ async def _off_then_preset(hass: HomeAssistant, reported: str) -> FadingLight:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("reported", ["push", "select_call"])
-async def test_select_on_device_after_a_manual_off_keeps_standby_paused(
+async def test_select_on_device_after_a_manual_off_keeps_standby_suppressed(
     hass: HomeAssistant, freezer, reported: str
 ) -> None:
-    """The manual off paused standby until the next boundary. The preset
+    """The manual off turned standby off until the next boundary. The preset
     nobody asked for anymore lights the strip, which runs its timeout as any
     lit room, but is nobody's turn-on: the pause stands and the timeout ends
     in off, not at standby."""
@@ -3209,7 +3209,8 @@ async def test_turn_on_after_such_a_preset_still_rejoins_standby(
     hass: HomeAssistant, freezer, turned_on: str
 ) -> None:
     """A person turning the light on, or dimming it at the wall, once the
-    preset has lit it ends the pause as ever: the timeout ends at standby."""
+    preset has lit it ends the standby suppression as ever: the timeout ends at
+    standby."""
     light = await _off_then_preset(hass, "push")
 
     if turned_on == "at_the_wall":

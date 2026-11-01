@@ -245,7 +245,7 @@ class FadingLight(RealLight):
 
 
 class RealBinary(BinarySensorEntity):
-    """A registered real binary sensor (motion, door, schedule source)."""
+    """A registered real binary sensor (motion, door, a schedule's source)."""
 
     _attr_should_poll = False
 

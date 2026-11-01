@@ -156,7 +156,7 @@ async def test_maintain_rescues_countdown(hass: HomeAssistant, freezer) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Interplay with the regular occupancy entity
+# Interplay with the occupancy sensor
 # ---------------------------------------------------------------------------
 
 
@@ -557,7 +557,7 @@ async def test_countdown_with_absent_maintain_entity(
 async def test_maintain_only_false_clear_gets_normal_countdown(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With no regular occupancy sensor a false-flagged maintain clear still
+    """With no occupancy sensor a false-flagged maintain clear still
     earns the normal countdown: the off delay only cuts short occupancy-lit
     lights, and without an occupancy sensor no light is ever occupancy-lit."""
     entry = make_light_entry(maintain=MAINT, timeout=60)

@@ -3,7 +3,7 @@
 Occupancy normally takes the light over on its own rising edge. When it is
 already on while the light turns on (virtual/physical after a manual off, or
 suppressed earlier by bright/window), or when the gate suppressing it lifts
-(illuminance going dark, a gate-mode window opening) while the light is
+(illuminance going dark, a gate-mode window start) while the light is
 already on, the light must adopt it as OCCUPIED; otherwise a timer expires
 despite presence and the steady-on sensor produces no event that could ever
 rescue the light. Adoption is gated like a turn-on (bright or outside a
@@ -206,7 +206,7 @@ async def test_dark_without_occupancy_keeps_timer(hass: HomeAssistant, freezer) 
 async def test_gate_window_start_adopts_active_occupancy(
     hass: HomeAssistant, freezer, standing: str
 ) -> None:
-    """A gate-mode window opening over an on light adopts an occupied sensor or
+    """A gate-mode window start over an on light adopts an occupied sensor or
     an open open_close door."""
     await setup_entries(
         hass,
@@ -227,7 +227,7 @@ async def test_gate_window_start_adopts_active_occupancy(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # Window opens while the room is occupied: adopt, cancel the timer.
+    # Window starts while the room is occupied: adopt, cancel the timer.
     hass.states.async_set(SCHED, "on")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED

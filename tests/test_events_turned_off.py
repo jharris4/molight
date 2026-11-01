@@ -1,7 +1,7 @@
 """Tests for the turned_off event on a light's Events entity.
 
 It fires once per on-period end, with why: a person, the timer, a false
-detection's off delay, brightness, or a schedule end, including one held
+detection's off delay, brightness, or a schedule end, including one left pending
 by an auto-off hold or missed during a restart. A rest at standby is a
 turned_off with standby set.
 """
@@ -216,7 +216,7 @@ async def test_gate_window_end(hass) -> None:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_window_end_held_by_auto_off_hold_fires_at_release(hass) -> None:
-    """The off a hold deferred fires when the hold releases, as a schedule_end."""
+    """A schedule end off pending a hold fires when it releases, as a schedule_end."""
     records = await _setup(
         hass,
         make_light_entry(

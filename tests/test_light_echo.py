@@ -2072,7 +2072,7 @@ async def test_reply_inside_the_standby_call_never_reports_off(
 async def test_reply_inside_a_stage_call_reports_the_stage_level_only(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
-    """A stage's level is adopted before its command is sent, so a color
+    """A stage's level is mirrored before its command is sent, so a color
     mirrored from a reply inside the call is not reported at the old level."""
     member = InstantLight("real_1", kelvin=3000)
     await add_real(hass, member)

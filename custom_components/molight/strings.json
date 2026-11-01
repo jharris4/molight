@@ -72,7 +72,7 @@
           "assign_role": "Role"
         },
         "data_description": {
-          "assign_role": "Regular occupancy turns lights on and off; Maintain only holds an already-on light on while occupied."
+          "assign_role": "Occupancy turns lights on and off; Maintain only holds an already-on light on while occupied."
         }
       },
       "assign_illuminance": {
@@ -185,7 +185,7 @@
       },
       "discover_light_select": {
         "title": "Discover lights",
-        "description": "Select the lights to wrap in regular Virtual Lights; the next step lets you adjust the defaults applied to all of them, including occupancy, illuminance, and schedule references.",
+        "description": "Select the lights to wrap in regular Virtual Lights; the next step lets you adjust the defaults applied to all of them, including occupancy, illuminance, and schedule sensors.",
         "data": {
           "selected_entities": "Lights to add",
           "affix_prefix": "Prefix",
@@ -241,7 +241,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -466,8 +466,8 @@
               "combine": "Time vs. sun"
             },
             "data_description": {
-              "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-              "sun": "Anchor the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "time": "Fixed local time the window starts. Set a time, a sun event, or both.",
+              "sun": "Set the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
               "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
               "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the later of sunset and 21:00."
             }
@@ -482,8 +482,8 @@
               "combine": "Time vs. sun"
             },
             "data_description": {
-              "time": "Fixed local time the window closes.",
-              "sun": "Anchor the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "time": "Fixed local time the window ends.",
+              "sun": "Set the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
               "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
               "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the earlier of sunrise and 07:00."
             }
@@ -502,7 +502,7 @@
       },
       "combined_schedule": {
         "title": "Virtual Combined Schedule Sensor",
-        "description": "Combines schedules into one. Overlapping or back-to-back windows count as one continuous period.",
+        "description": "Combines schedules into one. Overlapping or back-to-back windows count as one window.",
         "data": {
           "name": "Name",
           "schedule_inputs": "Schedules",
@@ -537,7 +537,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -672,7 +672,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -764,7 +764,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1067,7 +1067,7 @@
       "color_temp_unsupported_pick": "{entity_id} does not support a white color temperature, and every discovered light gets its own entry with these settings. Clear the color temperature (set its Color mode field to None), or deselect it.",
       "color_unsupported_pick": "{entity_id} cannot show a color, and every discovered light gets its own entry with these settings. Clear the color fields (set their Color mode field to None), or deselect it.",
       "brightness_unsupported_pick": "{entity_id} is not dimmable, and every discovered light gets its own entry with these settings. Clear the brightness setting, or deselect it. (An effect brightness of 0 is fine, since a blink fully off works on any light.)",
-      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two sets of settings has its own sensors. Configure those through the light's own Configure button instead.",
+      "assign_lights_scheduled": "Virtual Scheduled Lights can't be assigned a shared sensor here, because each of their two settings sets has its own sensors. Configure those through the light's own Configure button instead.",
       "no_filter_matches": "Nothing matches these filters. Adjust them, or clear them to see every candidate.",
       "no_entities_selected": "Select at least one entity to add.",
       "discovery_picks_overlap": "{first} and {second} control the same light, and each pick gets its own regular Virtual Light, so the two would fight over it. Pick only one of them.",
@@ -1104,7 +1104,7 @@
       "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
       "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its Configure button.",
       "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or deleted, since you picked them. Edit any of them further via its Configure button.",
-      "no_lights": "There are no regular Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two sets of settings has its own sensors: set them in its Configure form, or create a regular Virtual Light first.",
+      "no_lights": "There are no regular Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two settings sets has its own sensors: set them in its Configure form, or create a regular Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
       "no_schedule_gated_lights": "There are no regular Virtual Lights with a gate-mode schedule to convert.",
@@ -1238,7 +1238,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1330,7 +1330,7 @@
           "light_timeout": "Turn-off timeout"
         },
         "data_description": {
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1539,8 +1539,8 @@
               "combine": "Time vs. sun"
             },
             "data_description": {
-              "time": "Fixed local time the window opens. Set a time, a sun event, or both.",
-              "sun": "Anchor the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "time": "Fixed local time the window starts. Set a time, a sun event, or both.",
+              "sun": "Set the window start to sunset or sunrise, either instead of a fixed time or alongside one.",
               "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
               "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the later of sunset and 21:00."
             }
@@ -1555,8 +1555,8 @@
               "combine": "Time vs. sun"
             },
             "data_description": {
-              "time": "Fixed local time the window closes.",
-              "sun": "Anchor the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
+              "time": "Fixed local time the window ends.",
+              "sun": "Set the window end to sunset or sunrise, either instead of a fixed time or alongside one.",
               "offset": "Minutes to shift the sun event; negative is before it (-15 = 15 minutes before).",
               "combine": "When both a time and a sun event are set, whichever this picks wins, e.g. the earlier of sunrise and 07:00."
             }
@@ -1565,7 +1565,7 @@
       },
       "combined_schedule": {
         "title": "Virtual Combined Schedule Sensor",
-        "description": "Combines schedules into one. Overlapping or back-to-back windows count as one continuous period.",
+        "description": "Combines schedules into one. Overlapping or back-to-back windows count as one window.",
         "data": {
           "name": "Name",
           "schedule_inputs": "Schedules",
@@ -1588,7 +1588,7 @@
         },
         "data_description": {
           "lights": "The real lights this virtual light turns on and off as one.",
-          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the referenced occupancy and maintain occupancy sensors (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
+          "light_timeout": "Seconds the lights stay on after the last activity, or after occupancy clears, before turning off. Must be at least the occupancy timeout of the occupancy sensor and maintain occupancy sensor (if specified). Leave blank for no timer: the lights stay on until turned off manually, by a false detection or by a schedule window end, and the effect and warn stages must be 0."
         },
         "sections": {
           "sensors": {
@@ -1913,8 +1913,8 @@
       "description": "Two virtual lights commanding one light fight over it. Give {light} to one of them in Configure, and add that virtual light to the other instead."
     },
     "occupancy_source_cycle": {
-      "title": "{entity} does not follow its source",
-      "description": "The source {source} is computed from {entity} itself, so following it would keep the sensor on by its own state. The sensor reads as clear until {entity} is removed from {source}, or another source is chosen in Configure."
+      "title": "{entity} reads as clear because its source includes it",
+      "description": "The source {source} is computed from {entity} itself, so the sensor would hold itself on. It reads as clear until {entity} is removed from {source}, or another source is chosen in Configure."
     },
     "schedule_source_cycle": {
       "title": "{entity} is unavailable because its source includes it",

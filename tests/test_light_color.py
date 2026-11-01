@@ -191,7 +191,7 @@ async def test_turn_on_forwards_color_temp(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_seed_adopts_member_color(hass: HomeAssistant) -> None:
+async def test_seed_mirrors_member_color(hass: HomeAssistant) -> None:
     """A member already on at startup hands the virtual light its color."""
     hass.states.async_set(
         REAL,
@@ -207,7 +207,7 @@ async def test_seed_adopts_member_color(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_member_turn_on_adopts_color(hass: HomeAssistant) -> None:
+async def test_member_turn_on_mirrors_color(hass: HomeAssistant) -> None:
     """A physical off→on on a member mirrors its color, like brightness."""
     hass.states.async_set(REAL, "off", HS_CAPS)
     await setup_entries(hass, make_light_entry())

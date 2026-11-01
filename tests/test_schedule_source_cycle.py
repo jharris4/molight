@@ -1,4 +1,4 @@
-"""A source-backed Virtual Schedule whose source is computed from the schedule.
+"""A binary sensor schedule whose source is computed from the schedule.
 
 A schedule cannot be its own source, but a group can contain it, directly or
 through a nested group or a combined schedule. Mirroring such a source feeds
@@ -180,7 +180,7 @@ async def test_a_source_group_changed_to_include_the_schedule_stops_it(
     topology: str,
     invert: bool,
 ) -> None:
-    """The schedule goes unavailable instead of following its own state."""
+    """The schedule goes unavailable instead of reading its own state."""
     lamp = RealLight("lamp")
     await add_real(hass, lamp)
     groups, real = await _groups(hass)

@@ -199,7 +199,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# "none" lets a previously chosen sun anchor be cleared in the options flow:
+# "none" lets a previously chosen sun event be cleared in the options flow:
 # a bare SelectSelector can't be un-set once it has a value.
 _SUN_OPTIONS = ["none", *SUN_EVENTS]
 _COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
@@ -338,7 +338,7 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_WARN_RGB_COLOR,
         CONF_WARN_TRANSITION,
     ),
-    # Only a scheduled light's inside-schedule form shows this section.
+    # Only a Virtual Scheduled Light's inside-schedule form shows this section.
     SECTION_STANDBY: (
         CONF_STANDBY_BRIGHTNESS,
         CONF_STANDBY_COLOR_MODE,
@@ -777,7 +777,7 @@ def _schedule_entity_is_allowed(
     *,
     legacy_entity: str | None = None,
 ) -> bool:
-    """Return whether a schedule reference is valid or grandfathered."""
+    """Return whether a schedule sensor is valid or grandfathered."""
     if not entity_id:
         return True
     entity_type = _molight_entity_type(hass, entity_id)
@@ -898,8 +898,8 @@ def _combined_cycle_candidates(
     """Entity IDs that would create a cycle if selected by the edited entry."""
     registry = er.async_get(hass)
     entity_type = _entry_settings(edited_entry)[CONF_ENTITY_TYPE]
-    # A plain schedule or occupancy sensor can lead back too, through its
-    # source.
+    # A Virtual Schedule Sensor or Virtual Occupancy Sensor can lead back too, through
+    # its source.
     entity_types = (
         _SCHEDULE_ENTITY_TYPES
         if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE
@@ -983,10 +983,10 @@ def _min_referencing_light_timeout(
 def _validate_light_timeout(
     hass: HomeAssistant, user_input: dict[str, Any]
 ) -> dict[str, str]:
-    """Check light_timeout >= any referenced occupancy entity's timeout.
+    """Check light_timeout >= any occupancy sensor's timeout.
 
     The maintain entity's latest_occupied_time feeds the countdown the same
-    way the regular occupancy entity's does, so both are checked. A blank
+    way the occupancy sensor's does, so both are checked. A blank
     timeout runs no timer, so it passes that check but allows no effect or
     warn stage: they only ever warn of a timer off.
     """
@@ -1029,7 +1029,7 @@ def _stale_light_settings(
 
     An occupancy timeout can be raised, or a keep-on group edited, while a later
     page of the light's form is open, since the unsaved light does not reference
-    it yet. Returns the failing scheduled-light side (None for a regular
+    it yet. Returns the failing settings set (None for a regular
     Virtual Light) and the errors.
     """
     if members is None:
@@ -1042,9 +1042,9 @@ def _stale_light_settings(
 
     entity_type = data.get(CONF_ENTITY_TYPE)
     if entity_type == ENTITY_TYPE_SCHEDULED_LIGHT:
-        for side in _SCHEDULED_LIGHT_SIDES:
-            if errors := _errors(data.get(side) or {}):
-                return side, errors
+        for settings_set in _SCHEDULED_LIGHT_SETTINGS_SETS:
+            if errors := _errors(data.get(settings_set) or {}):
+                return settings_set, errors
         return None, {}
     if entity_type == ENTITY_TYPE_LIGHT:
         return None, _errors(data)
@@ -1484,7 +1484,7 @@ def _light_setting_fields(
     Turn-on & turn-off behavior and the off-warning stages collapsed (defaults are
     fine to start with), the sensor references expanded since they are the point of
     a virtual light. Each mode dropdown sits next to its entity picker. The
-    standby section is for a scheduled light's inside-schedule settings.
+    standby section is for a Virtual Scheduled Light's inside-schedule settings.
     """
     sensor_fields: dict = {
         vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
@@ -2073,7 +2073,7 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     """Return True when a light's entry settings may convert in the given direction.
 
     Schedule-gated → scheduled needs a regular Virtual Light with a schedule in any gate
-    mode; scheduled → schedule-gated needs a scheduled light with a schedule.
+    mode; scheduled → schedule-gated needs a Virtual Scheduled Light with a schedule.
     """
     if not cfg.get(CONF_SCHEDULE_ENTITY):
         return False
@@ -2088,11 +2088,14 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_SCHEDULED_LIGHT
 
 
-_SCHEDULED_LIGHT_SIDES = (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS)
+_SCHEDULED_LIGHT_SETTINGS_SETS = (
+    CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_INSIDE_SCHEDULE_SETTINGS,
+)
 # Keys that live at the top level of a light entry (identity, members, the
-# schedule and its policy, the two sets of settings) rather than inside one;
-# conversion strips them when lifting flat entry settings into a set of settings
-# and when flattening one back out.
+# schedule with its schedule mode or At schedule end, the two settings sets)
+# rather than inside one; conversion strips them when lifting flat entry settings
+# into a settings set and when flattening one back out.
 _LIGHT_ENTRY_KEYS = frozenset(
     {
         CONF_ENTITY_TYPE,
@@ -2103,7 +2106,7 @@ _LIGHT_ENTRY_KEYS = frozenset(
         CONF_SCHEDULE_MODE,
         CONF_MATCH_SCHEDULE_AFTER_RESTART,
         CONF_SCHEDULE_END_ACTION,
-        *_SCHEDULED_LIGHT_SIDES,
+        *_SCHEDULED_LIGHT_SETTINGS_SETS,
     }
 )
 _SCHEDULED_LIGHT_STEP_IDS = {
@@ -2116,28 +2119,28 @@ class _ScheduledLightSettingsSteps:
     """The Virtual Scheduled Light's outside/inside settings forms.
 
     Shared by the config and options flows, which differ only in the shared
-    first form and in how the flow ends. Each side gets the regular Virtual
+    first form and in how the flow ends. Each settings set gets the regular Virtual
     Light settings form (minus the schedule fields) and, when it picks a
     turn-on selection entity, the same turn-on selection step.
 
-    Subclasses provide `_scheduled_light_defaults(side)` (what a side's form
+    Subclasses provide `_scheduled_light_defaults(settings_set)` (what its form
     starts from before anything has been entered for it) and an async
     `_finish_scheduled_light()`.
     """
 
     hass: HomeAssistant
-    # Set by both subclasses' shared first form, before either side form runs.
+    # Set by both subclasses' shared first form, before either settings set's form runs.
     _scheduled_light_shared: dict[str, Any] | None
 
     def _init_scheduled_light_steps(self) -> None:
-        """Reset the per-side settings stash and the pending selection side."""
+        """Reset the settings set stash and the one pending its selection step."""
         self._scheduled_light_settings: dict[str, dict[str, Any] | None] = (
-            dict.fromkeys(_SCHEDULED_LIGHT_SIDES)
+            dict.fromkeys(_SCHEDULED_LIGHT_SETTINGS_SETS)
         )
-        self._scheduled_light_pending_side: str | None = None
+        self._scheduled_light_pending_settings_set: str | None = None
 
-    def _scheduled_light_defaults(self, side: str) -> dict[str, Any] | None:
-        """Return what a side's form starts from before anything was entered."""
+    def _scheduled_light_defaults(self, settings_set: str) -> dict[str, Any] | None:
+        """Return what a settings set's form starts from before anything was entered."""
         raise NotImplementedError
 
     def _hold_exclusions(self) -> list[str]:
@@ -2145,27 +2148,29 @@ class _ScheduledLightSettingsSteps:
         return []
 
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
-        """Complete the flow once both sides are stored."""
+        """Complete the flow once both settings sets are stored."""
         raise NotImplementedError
 
-    def _scheduled_light_previous(self, side: str) -> dict[str, Any] | None:
-        """Return a side's settings so far: its stash, else its defaults."""
-        return self._scheduled_light_settings[side] or self._scheduled_light_defaults(
-            side
-        )
+    def _scheduled_light_previous(self, settings_set: str) -> dict[str, Any] | None:
+        """Return a settings set so far: its stash, else its defaults."""
+        return self._scheduled_light_settings[
+            settings_set
+        ] or self._scheduled_light_defaults(settings_set)
 
-    async def _scheduled_light_next(self, side: str) -> config_entries.FlowResult:
-        """Move on once a side is complete: outside → inside form → finish."""
-        if side == CONF_OUTSIDE_SCHEDULE_SETTINGS:
+    async def _scheduled_light_next(
+        self, settings_set: str
+    ) -> config_entries.FlowResult:
+        """Move on once a settings set is complete: outside → inside form → finish."""
+        if settings_set == CONF_OUTSIDE_SCHEDULE_SETTINGS:
             return await self.async_step_scheduled_light_inside()
         return await self._finish_scheduled_light()
 
     async def _scheduled_light_settings_step(
-        self, side: str, user_input: dict[str, Any] | None
+        self, settings_set: str, user_input: dict[str, Any] | None
     ) -> config_entries.FlowResult:
-        """Show or process one side's Virtual Light settings form."""
+        """Show or process one settings set's form."""
         errors: dict[str, str] = {}
-        previous = self._scheduled_light_previous(side)
+        previous = self._scheduled_light_previous(settings_set)
         if user_input is not None:
             flat = _current_entity_ids(self.hass, _flatten_light(user_input))
             errors = _validate_light_settings(
@@ -2184,28 +2189,37 @@ class _ScheduledLightSettingsSteps:
             if not errors:
                 _carry_turn_on_selection(flat, previous)
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
-                    self._scheduled_light_settings[side] = _clean_optional_values(flat)
-                    self._scheduled_light_pending_side = side
+                    self._scheduled_light_settings[settings_set] = (
+                        _clean_optional_values(flat)
+                    )
+                    self._scheduled_light_pending_settings_set = settings_set
                     return await self.async_step_scheduled_light_selection()
                 # No select entity: drop any stale option and option source entity.
                 _validate_turn_on_selection(self.hass, flat)
-                self._scheduled_light_settings[side] = _clean_optional_values(flat)
-                return await self._scheduled_light_next(side)
-        return self._show_scheduled_light_side_form(side, user_input, errors)
+                self._scheduled_light_settings[settings_set] = _clean_optional_values(
+                    flat
+                )
+                return await self._scheduled_light_next(settings_set)
+        return self._show_scheduled_light_settings_set_form(
+            settings_set, user_input, errors
+        )
 
-    def _show_scheduled_light_side_form(
-        self, side: str, user_input: dict[str, Any] | None, errors: dict[str, str]
+    def _show_scheduled_light_settings_set_form(
+        self,
+        settings_set: str,
+        user_input: dict[str, Any] | None,
+        errors: dict[str, str],
     ) -> config_entries.FlowResult:
-        """Render one side's settings form: the input, else its settings so far."""
-        previous = self._scheduled_light_previous(side)
+        """Render one settings set's form: the input, else its settings so far."""
+        previous = self._scheduled_light_previous(settings_set)
         return self.async_show_form(
-            step_id=_SCHEDULED_LIGHT_STEP_IDS[side],
+            step_id=_SCHEDULED_LIGHT_STEP_IDS[settings_set],
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema(
                     _light_setting_fields(
                         self.hass,
                         with_schedule=False,
-                        with_standby=side == CONF_INSIDE_SCHEDULE_SETTINGS,
+                        with_standby=settings_set == CONF_INSIDE_SCHEDULE_SETTINGS,
                         hold_exclusions=_picker_exclusions(
                             _hold_picker_exclusions(
                                 self.hass,
@@ -2242,9 +2256,9 @@ class _ScheduledLightSettingsSteps:
     async def async_step_scheduled_light_selection(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Choose the turn-on selection values for the pending side."""
-        side = self._scheduled_light_pending_side
-        flat = dict(self._scheduled_light_settings[side])
+        """Choose the turn-on selection values for the pending settings set."""
+        settings_set = self._scheduled_light_pending_settings_set
+        flat = dict(self._scheduled_light_settings[settings_set])
         errors: dict[str, str] = {}
         if user_input is not None:
             # This step owns both selection fields; an absent option source
@@ -2254,8 +2268,10 @@ class _ScheduledLightSettingsSteps:
             flat = _current_entity_ids(self.hass, flat)
             errors = _validate_turn_on_selection(self.hass, flat)
             if not errors:
-                self._scheduled_light_settings[side] = _clean_optional_values(flat)
-                return await self._scheduled_light_next(side)
+                self._scheduled_light_settings[settings_set] = _clean_optional_values(
+                    flat
+                )
+                return await self._scheduled_light_next(settings_set)
 
         select_entity = flat[CONF_TURN_ON_SELECT_ENTITY]
         suggested = {
@@ -2304,7 +2320,7 @@ class MoLightConfigFlow(
         self._light_pending: dict[str, Any] | None = None
         self._light_selection_values: dict[str, Any] = {}
         # Cross-step state for the Virtual Scheduled Light's shared form; the
-        # per-side settings stash lives in _ScheduledLightSettingsSteps.
+        # settings set stash lives in _ScheduledLightSettingsSteps.
         self._scheduled_light_shared: dict[str, Any] | None = None
         self._scheduled_light_shared_input: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
@@ -2538,11 +2554,15 @@ class MoLightConfigFlow(
                 reason="reference_removed",
                 description_placeholders={"entity_id": removed},
             )
-        side, errors = _stale_light_settings(self.hass, data, self._new_light_ids(data))
+        settings_set, errors = _stale_light_settings(
+            self.hass, data, self._new_light_ids(data)
+        )
         if errors:
             # An occupancy timeout or keep-on group changed while the menu was open.
-            if side is not None:
-                return self._show_scheduled_light_side_form(side, None, errors)
+            if settings_set is not None:
+                return self._show_scheduled_light_settings_set_form(
+                    settings_set, None, errors
+                )
             return self._show_light_form(pending["user_input"], errors)
         entity_type = pending["entity_type"]
         if entity_type in _VIRTUAL_LIGHT_TYPES and (
@@ -3176,7 +3196,7 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_scheduled_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map a schedule-gated regular Virtual Light into two sets of settings."""
+        """Map a schedule-gated regular Virtual Light into two settings sets."""
         inside = {
             key: value for key, value in cfg.items() if key not in _LIGHT_ENTRY_KEYS
         }
@@ -3209,7 +3229,7 @@ class MoLightConfigFlow(
 
     @staticmethod
     def _converted_regular_data(cfg: dict[str, Any]) -> dict[str, Any]:
-        """Map a scheduled light's inside settings back to a schedule-gated light.
+        """Map a Virtual Scheduled Light's inside settings to a schedule-gated light.
 
         A schedule-gated light has no standby, so the inside standby is dropped.
         """
@@ -3440,7 +3460,7 @@ class MoLightConfigFlow(
         misconfigured.
 
         Only regular Virtual Lights can be assigned this way: a Virtual
-        Scheduled Light has its own sensors in each set of settings, so there is no
+        Scheduled Light has its own sensors in each settings set, so there is no
         single reference to write. They are kept out of the picker and rejected
         on submit (a stale form can still offer one), rather than being
         accepted and silently dropped.
@@ -3838,7 +3858,7 @@ class MoLightConfigFlow(
     async def async_step_schedule_source(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a source-backed Virtual Schedule Sensor."""
+        """Configure a binary sensor schedule."""
         errors: dict[str, str] = {}
         if user_input is not None:
             user_input = _current_entity_ids(self.hass, user_input)
@@ -4166,9 +4186,9 @@ class MoLightConfigFlow(
             errors=errors,
         )
 
-    def _scheduled_light_defaults(self, side: str) -> dict[str, Any] | None:
+    def _scheduled_light_defaults(self, settings_set: str) -> dict[str, Any] | None:
         """On creation the inside form starts as a copy of the outside one."""
-        if side == CONF_INSIDE_SCHEDULE_SETTINGS:
+        if settings_set == CONF_INSIDE_SCHEDULE_SETTINGS:
             return self._scheduled_light_settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
         return None
 
@@ -4177,22 +4197,26 @@ class MoLightConfigFlow(
         return self._new_light_ids(self._scheduled_light_shared or {})
 
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
-        """Create the entry after both settings mappings are complete."""
+        """Create the entry after both settings sets are complete."""
         shared = dict(self._scheduled_light_shared)
         data = {
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             **shared,
             **self._scheduled_light_settings,
         }
-        for side in _SCHEDULED_LIGHT_SIDES:
-            if current_references(self.hass, data[side])[1]:
-                return self._show_scheduled_light_side_form(
-                    side, None, {"base": "reference_removed"}
+        for settings_set in _SCHEDULED_LIGHT_SETTINGS_SETS:
+            if current_references(self.hass, data[settings_set])[1]:
+                return self._show_scheduled_light_settings_set_form(
+                    settings_set, None, {"base": "reference_removed"}
                 )
-        side, errors = _stale_light_settings(self.hass, data, self._hold_exclusions())
+        settings_set, errors = _stale_light_settings(
+            self.hass, data, self._hold_exclusions()
+        )
         if errors:
             # An occupancy timeout or keep-on group changed while a later page was open.
-            return self._show_scheduled_light_side_form(side, None, errors)
+            return self._show_scheduled_light_settings_set_form(
+                settings_set, None, errors
+            )
         result, errors = await self._resolve_and_create(
             entity_type=ENTITY_TYPE_SCHEDULED_LIGHT,
             name=shared[CONF_NAME],
@@ -4620,7 +4644,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
     async def async_step_schedule_source(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Edit a source-backed Virtual Schedule Sensor."""
+        """Edit a binary sensor schedule."""
         errors: dict[str, str] = {}
         if user_input is not None:
             user_input = _current_entity_ids(self.hass, user_input)
@@ -4930,21 +4954,23 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             errors=errors,
         )
 
-    def _scheduled_light_defaults(self, side: str) -> dict[str, Any] | None:
-        """Editing starts each side from the entry settings."""
-        return self._cfg.get(side, {})
+    def _scheduled_light_defaults(self, settings_set: str) -> dict[str, Any] | None:
+        """Editing starts each settings set from the entry settings."""
+        return self._cfg.get(settings_set, {})
 
     async def _finish_scheduled_light(self) -> config_entries.FlowResult:
-        """Store both settings mappings as the entry's complete options."""
+        """Store both settings sets as the entry's complete options."""
         data = {**self._scheduled_light_shared, **self._scheduled_light_settings}
-        side, errors = _stale_light_settings(
+        settings_set, errors = _stale_light_settings(
             self.hass,
             {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT, **data},
             self._hold_exclusions(),
         )
         if errors:
             # An occupancy timeout or keep-on group changed while a later page was open.
-            return self._show_scheduled_light_side_form(side, None, errors)
+            return self._show_scheduled_light_settings_set_form(
+                settings_set, None, errors
+            )
         return self._finish(data)
 
     # ------------------------------------------------------------------

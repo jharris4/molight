@@ -123,8 +123,8 @@ async def test_fixed_overnight_window(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_sun_anchored_edge(hass: HomeAssistant, freezer) -> None:
-    """A sun-anchored edge resolves to the astral event, combined with the time."""
+async def test_sun_event_edge(hass: HomeAssistant, freezer) -> None:
+    """A sun event edge resolves to the astral event, combined with the time."""
     # Default test location/timezone; sunset is ~20:00 local in July, so the
     # 'earliest of sunset and 23:00' start resolves to sunset.
     day = date(2026, 7, 2)
@@ -184,7 +184,7 @@ async def test_sun_edge_with_offset(hass: HomeAssistant, freezer) -> None:
 
 @pytest.mark.asyncio
 async def test_polar_day_fixed_time_stands_alone(hass: HomeAssistant, freezer) -> None:
-    """A sun anchor whose event doesn't occur (polar day/night) resolves to
+    """A sun event that doesn't occur (polar day/night) resolves to
     nothing, leaving the edge's fixed time to stand alone."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 21:30:00+00:00")
@@ -216,7 +216,7 @@ async def test_polar_day_fixed_time_stands_alone(hass: HomeAssistant, freezer) -
 
 @pytest.mark.asyncio
 async def test_overlapping_windows(hass: HomeAssistant, freezer) -> None:
-    """Overlapping windows merge into one on-period: current_window_start is
+    """Overlapping windows merge into one schedule period: current_window_start is
     the merged start throughout, so Follow mode never sees a new window where
     one window ends inside another."""
     await hass.config.async_set_time_zone("UTC")
@@ -348,7 +348,7 @@ async def test_windows_chained_around_the_clock_keep_one_marker(
     hass: HomeAssistant, freezer
 ) -> None:
     """Windows that overlap around the clock never go off, so the merged
-    on-period keeps its first marker instead of one per evaluation."""
+    schedule period keeps its first marker instead of one per evaluation."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     await _setup(hass, _schedule_entry(_CHAINED))
@@ -427,7 +427,7 @@ async def test_time_window_schedule_ignores_a_marker_saved_by_a_source_definitio
     hass: HomeAssistant, freezer
 ) -> None:
     """A marker saved while the schedule mirrored a sensor dates that sensor's
-    on-period, not the window the schedule now follows."""
+    schedule period, not the window the schedule now follows."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 22:00:00+00:00")
     mock_restore_cache(
@@ -485,7 +485,7 @@ async def test_inverted_overlapping_windows_begin_after_merged_interval(
     assert state.attributes["current_window_start"] is None
     assert state.attributes["next_change"] == "2026-07-03T02:00:00+00:00"
 
-    # Only the end of the merged raw interval starts the inverted on-period.
+    # Only the end of the merged raw interval starts the inverted schedule period.
     t = datetime(2026, 7, 3, 2, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)
@@ -578,7 +578,7 @@ async def test_invalid_window_edges_never_turn_on(hass: HomeAssistant, freezer) 
 
 
 @pytest.mark.asyncio
-async def test_inverted_time_window_uses_effective_on_period(
+async def test_inverted_time_window_uses_effective_period(
     hass: HomeAssistant, freezer
 ) -> None:
     """Inversion turns the complement into the schedule's effective window."""
@@ -620,7 +620,7 @@ async def test_inverted_time_window_uses_effective_on_period(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_mirrors_valid_states_and_holds_across_outage(
+async def test_binary_sensor_schedule_mirrors_valid_states_and_holds_across_outage(
     hass: HomeAssistant,
 ) -> None:
     """A source outage is unavailable, not an effective off."""
@@ -666,7 +666,7 @@ async def test_source_schedule_mirrors_valid_states_and_holds_across_outage(
 
 
 @pytest.mark.asyncio
-async def test_inverted_source_schedule(hass: HomeAssistant) -> None:
+async def test_inverted_binary_sensor_schedule(hass: HomeAssistant) -> None:
     """Source inversion applies only to valid on/off values."""
     hass.states.async_set("binary_sensor.away", "off")
     entry = MockConfigEntry(
@@ -707,7 +707,7 @@ def _house_mode_schedule() -> MockConfigEntry:
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_restores_marker_from_a_save_without_extra_data(
+async def test_binary_sensor_schedule_restores_marker_from_a_save_without_extra_data(
     hass: HomeAssistant,
 ) -> None:
     """A state saved by an earlier version has its marker in the attributes.
@@ -746,7 +746,7 @@ async def test_source_schedule_restores_marker_from_a_save_without_extra_data(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_with_a_new_source_drops_the_saved_marker(
+async def test_binary_sensor_schedule_with_a_new_source_drops_the_saved_marker(
     hass: HomeAssistant, freezer
 ) -> None:
     """Choosing another source during an outage starts a new window on recovery."""
@@ -781,7 +781,7 @@ async def test_source_schedule_with_a_new_source_drops_the_saved_marker(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_saves_marker_while_unavailable(
+async def test_binary_sensor_schedule_saves_marker_while_unavailable(
     hass: HomeAssistant, freezer
 ) -> None:
     """The saved state has no attributes during an outage; the extra data does."""
@@ -809,7 +809,7 @@ async def test_source_schedule_saves_marker_while_unavailable(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("how", ["reload", "restart"])
 @pytest.mark.parametrize("back", ["on", "off"])
-async def test_source_schedule_keeps_marker_through_outage_and_restart(
+async def test_binary_sensor_schedule_keeps_marker_through_outage_and_restart(
     hass: HomeAssistant, freezer, how: str, back: str
 ) -> None:
     """A reload or restart during a source outage does not start a new window."""
@@ -842,10 +842,10 @@ async def test_source_schedule_keeps_marker_through_outage_and_restart(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_invert_edit_during_outage_starts_a_new_window(
+async def test_binary_sensor_schedule_invert_edit_during_outage_starts_a_new_window(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A marker saved for the plain window is not reused by the inverted one."""
+    """A marker saved for the uninverted window is not reused by the inverted one."""
     entity_id = "binary_sensor.house_mode_schedule"
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "on")
@@ -874,7 +874,7 @@ async def test_source_schedule_invert_edit_during_outage_starts_a_new_window(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_saved_off_starts_a_window_after_the_outage(
+async def test_binary_sensor_schedule_saved_off_starts_a_window_after_the_outage(
     hass: HomeAssistant, freezer
 ) -> None:
     """An outage that began outside the window leaves no marker to restore."""
@@ -934,7 +934,7 @@ async def test_follow_light_manual_off_survives_schedule_outage_and_restart(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_restores_marker_when_source_is_on(
+async def test_binary_sensor_schedule_restores_marker_when_source_is_on(
     hass: HomeAssistant,
 ) -> None:
     """An active source at startup keeps the restored effective-window marker."""
@@ -973,7 +973,7 @@ async def test_source_schedule_restores_marker_when_source_is_on(
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_does_not_restore_marker_from_previous_source(
+async def test_binary_sensor_schedule_does_not_restore_marker_from_previous_source(
     hass: HomeAssistant,
 ) -> None:
     """Changing the source starts a new effective window instead of reusing one."""
@@ -1165,7 +1165,7 @@ async def test_window_collapsed_by_the_spring_forward_gap_is_skipped(
 async def test_inverted_schedule_keeps_its_marker_over_a_skipped_window(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The gap-collapsed window is no boundary: the inverted on-period runs on."""
+    """The gap-collapsed window is no boundary: the inverted schedule period runs on."""
     await hass.config.async_set_time_zone("America/New_York")
     freezer.move_to("2026-03-07 17:00:00+00:00")
     entry = MockConfigEntry(
@@ -1225,7 +1225,7 @@ async def test_window_pushed_past_the_next_midnight_is_found_by_a_fresh_evaluati
 
 
 @pytest.mark.asyncio
-async def test_source_schedule_discards_malformed_restored_marker(
+async def test_binary_sensor_schedule_discards_malformed_restored_marker(
     hass: HomeAssistant,
 ) -> None:
     """A stored window marker that no longer parses is dropped, not a crash.
@@ -1788,7 +1788,7 @@ async def test_date_line_window_reports_the_same_days_boundaries(
 
 
 # ---------------------------------------------------------------------------
-# Polar periods (Tromso): transition nights and days with no sun event
+# Polar periods (Tromso): the days around one, and days with no sun event
 # ---------------------------------------------------------------------------
 
 
@@ -1819,7 +1819,7 @@ async def test_date_line_window_reports_the_same_days_boundaries(
         ((_SUNRISE, _SUNSET), "2026-11-22 11:30", "on"),
     ],
 )
-async def test_polar_transition_windows(
+async def test_windows_on_days_around_a_polar_period(
     hass: HomeAssistant, freezer, edges: tuple, when: str, expected: str
 ) -> None:
     """The nights and days next to a polar period are kept; a sun-only edge
@@ -1863,8 +1863,8 @@ def _inverted_entry(start: dict, end: dict) -> MockConfigEntry:
 async def test_inverted_sun_schedule_keeps_its_marker_through_a_polar_period(
     hass: HomeAssistant, freezer, edges: tuple, first: str, days: int, marker: str
 ) -> None:
-    """Days into a polar period the window end that began the on-period is
-    out of sight; the period runs on under the marker it began with."""
+    """Days into a polar period the window end that began the period is
+    out of sight; the schedule period runs on under the marker it began with."""
     tz = await set_home(hass, *TROMSO)
     start = _local(tz, first)
     freezer.move_to(start)
@@ -1888,13 +1888,13 @@ async def test_inverted_sun_schedule_dates_a_new_period_after_the_polar_period(
     hass: HomeAssistant, freezer
 ) -> None:
     """The first night after the midnight sun ends the long day; the next
-    day is a new on-period, dated from that night's sunrise."""
+    day is a new schedule period, dated from that night's sunrise."""
     tz = await set_home(hass, *TROMSO)
     freezer.move_to(_local(tz, "2026-07-20 12:00"))
     await _setup(hass, _inverted_entry(_SUNSET, _SUNRISE))
     state = hass.states.get("binary_sensor.night_schedule")
     assert state.state == "on"
-    # Nothing in sight to date the period from.
+    # Nothing in sight to date the schedule period from.
     assert state.attributes["current_window_start"] == "inverted"
 
     for day in range(21, 26):
@@ -2291,7 +2291,7 @@ async def test_saved_window_that_never_opens_is_logged_at_setup(
 
 
 # ---------------------------------------------------------------------------
-# A source-backed schedule unloaded while Home Assistant keeps running
+# A binary sensor schedule unloaded while Home Assistant keeps running
 # ---------------------------------------------------------------------------
 
 
@@ -2414,7 +2414,7 @@ async def test_schedule_back_from_an_unload_is_off_when_its_source_went_off(
 async def test_restart_keeps_the_saved_marker_over_a_source_spell_it_could_not_see(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Across a restart nothing followed the source: an off and on during the
+    """Across a restart nothing read the source: an off and on during the
     downtime is ambiguous, and the saved marker stands."""
     freezer.move_to("2026-07-02 12:00:00+00:00")
     source = RealBinary("house_mode", on=True)
@@ -2443,7 +2443,7 @@ async def test_restart_keeps_the_saved_marker_over_a_source_spell_it_could_not_s
 async def test_schedule_given_a_new_source_while_unloaded_dates_its_window_from_it(
     hass: HomeAssistant, freezer
 ) -> None:
-    """What was followed of the old source says nothing about a new one."""
+    """What was read of the old source says nothing about a new one."""
     freezer.move_to("2026-07-02 12:00:00+00:00")
     source, other = RealBinary("house_mode", on=True), RealBinary("other", on=True)
     await add_real(hass, source, other)
@@ -2470,7 +2470,7 @@ async def test_schedule_given_a_new_source_while_unloaded_dates_its_window_from_
 async def test_removing_an_unloaded_schedule_stops_following_its_source(
     hass: HomeAssistant,
 ) -> None:
-    """A disabled schedule follows its source until its entry is removed."""
+    """A disabled schedule watches its source until its entry is removed."""
     source = RealBinary("house_mode", on=True)
     await add_real(hass, source)
     schedule = _house_mode_schedule()

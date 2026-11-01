@@ -245,7 +245,7 @@ async def test_remove_entry_is_clean(hass: HomeAssistant, caplog, make_entry) ->
 
 @pytest.mark.asyncio
 @ENTITIES_FIRST
-async def test_remove_source_entry_clears_source_backed_schedule_reference(
+async def test_remove_source_entry_clears_binary_sensor_schedule_reference(
     hass: HomeAssistant, entities_first: bool
 ) -> None:
     """Removing a MoLight source leaves its schedule safely unconfigured."""
@@ -340,7 +340,7 @@ async def test_remove_entry_removes_references_from_surviving_entries(
     """Removing a sensor entry cleans its references out of surviving entries.
 
     A dangling reference silently degrades the entries that hold it, worst of all a
-    gate-mode schedule reference, which would read as a gate that never opens
+    gate-mode schedule sensor, which would read as a gate that never opens
     and block every automatic turn-on.
     """
     occupancy = _occupancy_entry()  # registers binary_sensor.rm_occupancy
@@ -412,7 +412,7 @@ async def test_remove_schedule_removes_it_from_combined_schedules(
 async def test_remove_entry_removes_scheduled_light_references(
     hass: HomeAssistant,
 ) -> None:
-    """Shared and per-side references are cleaned from a scheduled light."""
+    """Shared and settings set references are cleaned from a Virtual Scheduled Light."""
     occupancy = _occupancy_entry()
     illuminance = _illuminance_entry()
     schedule = _schedule_entry()
@@ -579,7 +579,7 @@ async def test_remove_entry_without_references_leaves_others_alone(
 async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
-    """A scheduled light missing a set of settings must not be rewritten just to
+    """A Virtual Scheduled Light missing a settings set must not be rewritten just to
     materialize that set as an empty dict; that would differ from its entry
     settings and force a reload of an entry referencing nothing removed."""
     occupancy = _occupancy_entry()
@@ -590,7 +590,7 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
             CONF_NAME: "Partial Scheduled",
             CONF_LIGHTS: ["light.real_1"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.some_schedule",
-            # Only one set of settings stored; the other is absent entirely.
+            # Only one settings set stored; the other is absent entirely.
             CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
         },
     )

@@ -105,13 +105,13 @@ KELVIN = 2222
 
 def _porch(
     *,
-    end_action: str | None = SCHEDULE_END_ACTION_TURN_OFF,
+    schedule_end_action: str | None = SCHEDULE_END_ACTION_TURN_OFF,
     inside: dict | None = None,
     outside: dict | None = None,
 ) -> MockConfigEntry:
     """The issue's porch: rests at 20 % / 2222 K, motion raises it to 100 %."""
     return make_scheduled_light_entry(
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside=outside or {CONF_LIGHT_TIMEOUT: 30},
         inside={
             CONF_LIGHT_TIMEOUT: 30,
@@ -614,7 +614,7 @@ async def test_manual_off_cancels_standby_until_the_next_boundary(
     hass: HomeAssistant, freezer
 ) -> None:
     """After a manual off, visits end in off until the window ends."""
-    await _setup_porch(hass, _porch(end_action=SCHEDULE_END_ACTION_KEEP))
+    await _setup_porch(hass, _porch(schedule_end_action=SCHEDULE_END_ACTION_KEEP))
     await hass.services.async_call("light", "turn_off", {"entity_id": VIRTUAL})
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -651,7 +651,7 @@ def _windows_schedule(name: str, *windows: tuple[str, str]) -> MockConfigEntry:
 
 async def _manual_off_at_standby(hass: HomeAssistant, *schedules) -> str:
     """Rest the porch at standby under real schedules, turn it off manually,
-    and return the settings schedule's window marker."""
+    and return the schedule sensor's window marker."""
     await setup_entries(hass, *schedules)
     hass.states.async_set(REAL, "off")
     hass.states.async_set(OCCUPANCY, "off")
@@ -674,7 +674,7 @@ async def test_a_window_that_touches_the_last_brings_standby_back(
     hass: HomeAssistant, freezer, windows: str, raised: bool
 ) -> None:
     """A window starting as the last one ends is a boundary, though the
-    schedule stays on, so a manual off cancels standby only until then."""
+    schedule stays on, so a manual off keeps standby off only until then."""
     freezer.move_to("2026-01-14 12:00:00-08:00")
     marker = await _manual_off_at_standby(
         hass,
@@ -1250,7 +1250,7 @@ async def test_schedule_end_turn_off_turns_standby_off(hass: HomeAssistant) -> N
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("end_action", "watched", "state"),
+    ("schedule_end_action", "watched", "state"),
     [
         (SCHEDULE_END_ACTION_TURN_OFF, True, STATE_IDLE),
         (SCHEDULE_END_ACTION_KEEP, True, STATE_OCCUPIED),
@@ -1260,13 +1260,15 @@ async def test_schedule_end_turn_off_turns_standby_off(hass: HomeAssistant) -> N
     ],
 )
 async def test_schedule_end_hands_over_a_light_raised_by_presence(
-    hass: HomeAssistant, freezer, end_action: str, watched: bool, state: str
+    hass: HomeAssistant, freezer, schedule_end_action: str, watched: bool, state: str
 ) -> None:
     """Presence outlasts the end only where the outside settings still see it."""
     outside = {CONF_LIGHT_TIMEOUT: 60}
     if watched:
         outside[CONF_OCCUPANCY_ENTITY] = OCCUPANCY
-    await _setup_porch(hass, _porch(end_action=end_action, outside=outside))
+    await _setup_porch(
+        hass, _porch(schedule_end_action=schedule_end_action, outside=outside)
+    )
     await _set(hass, OCCUPANCY, "on")
     assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
 
@@ -1285,7 +1287,10 @@ async def test_schedule_end_keep_gives_standby_the_outside_timeout(
     """Keep state starts the outside settings' timeout from the boundary."""
     await _setup_porch(
         hass,
-        _porch(end_action=SCHEDULE_END_ACTION_KEEP, outside={CONF_LIGHT_TIMEOUT: 300}),
+        _porch(
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+            outside={CONF_LIGHT_TIMEOUT: 300},
+        ),
     )
     await _set(hass, SCHEDULE, "off")
     state = hass.states.get(VIRTUAL)
@@ -1301,14 +1306,17 @@ async def test_schedule_end_keep_gives_standby_the_outside_timeout(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
+    "schedule_end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
 )
 async def test_schedule_end_with_a_blank_outside_timeout_leaves_standby_on(
-    hass: HomeAssistant, freezer, end_action: str
+    hass: HomeAssistant, freezer, schedule_end_action: str
 ) -> None:
     """Keep state and Switch state hand standby to settings with no timer."""
     await _setup_porch(
-        hass, _porch(end_action=end_action, outside={CONF_LIGHT_TIMEOUT: None})
+        hass,
+        _porch(
+            schedule_end_action=schedule_end_action, outside={CONF_LIGHT_TIMEOUT: None}
+        ),
     )
     calls = record_service_calls(hass)
     await _set(hass, SCHEDULE, "off")
@@ -1351,17 +1359,17 @@ async def _member_reports_off(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
+    "schedule_end_action", [SCHEDULE_END_ACTION_KEEP, SCHEDULE_END_ACTION_SWITCH]
 )
 @pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
 async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
-    hass: HomeAssistant, freezer, end_action: str, restart: bool
+    hass: HomeAssistant, freezer, schedule_end_action: str, restart: bool
 ) -> None:
     """The fresh outside timeout is an on-period that going dark resumes."""
     illuminance = "binary_sensor.yard_bright"
     hass.states.async_set(illuminance, "off")
     entry = _porch(
-        end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside={
             CONF_LIGHT_TIMEOUT: 60,
             CONF_ILLUMINANCE_ENTITY: illuminance,
@@ -1407,7 +1415,7 @@ async def test_schedule_end_timeout_from_standby_resumes_despite_an_old_visit(
     await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_KEEP,
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
             outside={
                 CONF_LIGHT_TIMEOUT: 60,
                 CONF_OCCUPANCY_ENTITY: yard,
@@ -1450,7 +1458,11 @@ async def test_hold_release_after_a_keep_end_starts_a_timeout_that_going_dark_re
     }
     await _setup_porch(
         hass,
-        _porch(end_action=SCHEDULE_END_ACTION_KEEP, inside=settings, outside=settings),
+        _porch(
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
+            inside=settings,
+            outside=settings,
+        ),
     )
     await _echo_standby(hass)
     await _set(hass, SCHEDULE, "off")
@@ -1531,7 +1543,7 @@ async def test_schedule_end_timeout_from_standby_survives_a_false_detection(
     await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_KEEP,
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
             outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
         ),
     )
@@ -1563,7 +1575,7 @@ async def test_schedule_end_switch_from_standby_keeps_a_history_countdown(
     await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_SWITCH,
+            schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
             outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
         ),
     )
@@ -1635,7 +1647,7 @@ async def test_schedule_end_keep_leaves_a_raised_light_to_its_presence(
     await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_KEEP,
+            schedule_end_action=SCHEDULE_END_ACTION_KEEP,
             outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCCUPANCY},
         ),
     )
@@ -1663,7 +1675,7 @@ async def test_schedule_end_switch_recalculates_standby_from_history(
     await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_SWITCH,
+            schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
             outside={CONF_LIGHT_TIMEOUT: 300, CONF_OCCUPANCY_ENTITY: outside_occupancy},
         ),
     )
@@ -1688,7 +1700,7 @@ async def test_schedule_end_switch_recalculates_a_standby_still_waiting(
     calls = await _setup_porch(
         hass,
         _porch(
-            end_action=SCHEDULE_END_ACTION_SWITCH,
+            schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
             inside=_SCENE,
             outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: outside_occupancy},
         ),
@@ -1711,7 +1723,7 @@ async def test_schedule_end_switch_recalculates_a_standby_still_waiting(
 
 @pytest.mark.asyncio
 async def test_held_schedule_end_off_waits_for_the_hold(hass: HomeAssistant) -> None:
-    """A held Turn off leaves standby lit and applies the off on release."""
+    """A pending Turn off end leaves standby lit and applies the off on release."""
     await _setup_porch(hass, _porch())
     await hass.services.async_call("switch", "turn_off", {"entity_id": AUTO_OFF_SWITCH})
     await settle(hass)
@@ -1766,7 +1778,7 @@ async def test_member_reporting_in_off_while_raised_is_sent_the_raise(
     hass: HomeAssistant, freezer, placeholder: dict
 ) -> None:
     """A member reporting in as off while occupancy has the light raised is
-    sent the raised level again; standby is not paused, so the light drops
+    sent the raised level again; standby is not suppressed, so the light drops
     back to standby once the room clears."""
     calls = await _setup_porch(hass, _porch())
     await _echo_standby(hass)
@@ -2195,7 +2207,7 @@ async def test_source_window_started_while_its_schedule_was_unloaded_is_a_bounda
     meanwhile: tuple[str, ...],
     suppressed: bool,
 ) -> None:
-    """A source-backed schedule unloaded while its source goes off and on
+    """A binary sensor schedule unloaded while its source goes off and on
     comes back on in a new window, which brings standby back after a manual
     off. A source that only went unavailable, or did nothing, leaves the off."""
     freezer.move_to("2026-03-02 22:00:00-08:00")
@@ -2456,7 +2468,7 @@ async def test_restart_while_bright_in_control_mode_turns_standby_off(
 async def test_restart_outside_the_window_drops_a_restored_standby(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A window that ended while down hands the light to the end action."""
+    """A window that ended while down hands the light to the At schedule end field."""
     mock_restore_cache(
         hass,
         [
@@ -2474,7 +2486,7 @@ async def test_restart_outside_the_window_drops_a_restored_standby(
     hass.states.async_set(REAL, "on", {"brightness": STANDBY})
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(OCCUPANCY, "off")
-    await setup_entries(hass, _porch(end_action=SCHEDULE_END_ACTION_KEEP))
+    await setup_entries(hass, _porch(schedule_end_action=SCHEDULE_END_ACTION_KEEP))
     await settle(hass)
 
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
@@ -2908,7 +2920,7 @@ async def test_what_the_inside_settings_come_on_at(
 async def test_manual_off_stands_through_the_midnight_sun(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A daytime (not sunset -> sunrise) settings schedule in Tromso is one
+    """A daytime (not sunset -> sunrise) schedule sensor in Tromso is one
     window for the whole midnight sun: a manual off keeps standby off, where
     the daily re-check used to read as a new window three days in."""
     tz = await set_home(hass, *TROMSO)
@@ -2956,7 +2968,7 @@ async def test_manual_off_stands_through_the_midnight_sun(
 async def test_manual_off_stands_through_a_time_zone_change(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The settings schedule stays on through a time zone correction: the
+    """The schedule sensor stays on through a time zone correction: the
     same settings window, so a manual off keeps standby off. Once the
     window ends on the new clock the light takes its outside settings."""
     await hass.config.async_set_time_zone("UTC")

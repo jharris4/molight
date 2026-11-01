@@ -51,7 +51,7 @@ COLD_ILLUMINANCE = "binary_sensor.e2e_cold_illuminance"
 VIRTUAL_SCHEDULE = "binary_sensor.e2e_schedule"
 INVERTED_SCHEDULE = "binary_sensor.e2e_inverted_schedule"
 END_SCHEDULE = "binary_sensor.e2e_end_schedule"
-END_ACTION_LIGHT = "light.e2e_end_action"
+SCHEDULE_END_ACTION_LIGHT = "light.e2e_end_action"
 GATE_MODE_LIGHT = "light.e2e_gate_mode"
 TRIGGER_OCCUPANCY = "binary_sensor.e2e_trigger_occupancy"
 COMBINED_OCCUPANCY = "binary_sensor.e2e_combined"
@@ -153,8 +153,8 @@ PARK_SCHEDULED_LIGHT = "light.e2e_park_scheduled"
 FADE_LIGHT = "light.e2e_fade"
 FADE_SCHEDULE = "binary_sensor.e2e_fade_schedule"
 FADE_SCHEDULED_LIGHT = "light.e2e_fade_scheduled"
-PROFILE_OUTSIDE = "outside_schedule"
-PROFILE_INSIDE = "inside_schedule"
+ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
+ACTIVE_SETTINGS_INSIDE = "inside_schedule"
 
 FIXTURES_SNAPSHOT = Path("/ha-config/e2e-fixtures-snapshot.json")
 AUTO_OFF_SNAPSHOT = Path("/ha-config/e2e-auto-off-snapshot.json")
@@ -163,7 +163,7 @@ FALSE_DETECTION_SNAPSHOT = Path("/ha-config/e2e-false-detection-snapshot.json")
 LATE_SOURCE_SNAPSHOT = Path("/ha-config/e2e-late-source-snapshot.json")
 FOLLOW_RESTART_SNAPSHOT = Path("/ha-config/e2e-follow-restart-snapshot.json")
 END_RESTART_SNAPSHOT = Path("/ha-config/e2e-end-restart-snapshot.json")
-OUTAGE_SNAPSHOT = Path("/ha-config/e2e-outage-snapshot.json")
+DOWNTIME_SNAPSHOT = Path("/ha-config/e2e-downtime-snapshot.json")
 RESTART_EFFECT_SNAPSHOT = Path("/ha-config/e2e-restart-effect-snapshot.json")
 HOLD_RESTART_SNAPSHOT = Path("/ha-config/e2e-hold-restart-snapshot.json")
 MAINTAIN_RESTART_SNAPSHOT = Path("/ha-config/e2e-maintain-restart-snapshot.json")
@@ -175,7 +175,7 @@ COMBINED_SCHEDULE_RESTART_SNAPSHOT = Path(
 CONFIG_ENTRIES_STORAGE = Path("/ha-config/.storage/core.config_entries")
 
 EMPTY_LIGHT_SECTIONS = {"sensors": {}, "behavior": {}, "warning": {}}
-# A scheduled light's inside-schedule form adds the standby section.
+# A Virtual Scheduled Light's inside-schedule form adds the standby section.
 EMPTY_INSIDE_LIGHT_SECTIONS = {**EMPTY_LIGHT_SECTIONS, "standby": {}}
 
 
@@ -637,7 +637,7 @@ def create_virtual_schedule(
     invert: bool = False,
     source: str = RAW_SCHEDULE,
 ) -> str:
-    """Create a source-backed MoLight Virtual Schedule through its API flow."""
+    """Create a binary sensor schedule through its API flow."""
     result = start_create(client, "schedule")
     expect_step(result, "schedule")
     result = client.continue_flow(result, {"schedule_definition": "binary_sensor"})
@@ -669,7 +669,7 @@ def wait_inverted_schedule(client: HomeAssistantClient, raw_state: str) -> None:
 
 
 def run_inverted_schedule_scenario(client: HomeAssistantClient) -> None:
-    """An inverted source-backed schedule is on exactly when its source is off."""
+    """An inverted binary sensor schedule is on exactly when its source is off."""
     entry_id = create_virtual_schedule(
         client, "E2E Inverted Schedule", "e2e_inverted_schedule", invert=True
     )
@@ -682,11 +682,11 @@ def run_inverted_schedule_scenario(client: HomeAssistantClient) -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_inverted_schedule(client, "off")
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
     client.remove_entry(entry_id)
     wait_entity_absent(client, INVERTED_SCHEDULE)
     wait_entry_removed(client, entry_id, "Temporary inverted schedule")
-    checkpoint("inverted source-backed schedule mirrors the opposite of its source")
+    checkpoint("inverted binary sensor schedule mirrors the opposite of its source")
 
 
 def create_virtual_occupancy(
@@ -789,7 +789,7 @@ def run_cold_illuminance_scenario(client: HomeAssistantClient) -> None:
 
 
 def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
-    """Build one set of settings with deliberately distinct illuminance/door modes."""
+    """Build one settings set with deliberately distinct illuminance/door modes."""
     return {
         **(EMPTY_INSIDE_LIGHT_SECTIONS if inside else EMPTY_LIGHT_SECTIONS),
         "light_timeout": 30,
@@ -809,7 +809,7 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
 
 
 def flat_light_settings(payload: dict[str, Any]) -> dict[str, Any]:
-    """Flatten a sectioned light form into the set of settings MoLight stores."""
+    """Flatten a sectioned light form into the settings set MoLight stores."""
     flat: dict[str, Any] = {}
     for key, value in payload.items():
         if isinstance(value, dict):
@@ -829,7 +829,7 @@ SCHEDULED_INSIDE_SETTINGS = {
 def submit_selection(
     client: HomeAssistantClient, result: dict[str, Any]
 ) -> dict[str, Any]:
-    """Finish the turn-on selection step of one set of settings."""
+    """Finish the turn-on selection step of one settings set."""
     expect_step(result, "scheduled_light_selection")
     return client.continue_flow(
         result,
@@ -841,7 +841,7 @@ def submit_selection(
 
 
 def create_scheduled_light(client: HomeAssistantClient) -> str:
-    """Create a scheduled light through the backend config flow."""
+    """Create a Virtual Scheduled Light through the backend config flow."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -862,7 +862,7 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
     result = submit_selection(
         client, client.continue_flow(result, light_settings(80, inside=True))
     )
-    return finish_creation(result, "Scheduled light")
+    return finish_creation(result, "Virtual Scheduled Light")
 
 
 def create_timeout_light(
@@ -1043,7 +1043,7 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
         options=True,
     )
     if result.get("type") != "create_entry":
-        raise AssertionError(f"Scheduled light options failed: {result}")
+        raise AssertionError(f"Virtual Scheduled Light options failed: {result}")
 
 
 def convert_light(
@@ -1065,16 +1065,19 @@ def convert_light(
         raise AssertionError(f"Light conversion failed: {result}")
 
 
-def wait_profile(client: HomeAssistantClient, profile: str) -> dict[str, Any]:
-    """Wait for a scheduled light to expose the selected settings."""
+def wait_active_settings(
+    client: HomeAssistantClient, settings_set: str
+) -> dict[str, Any]:
+    """Wait for a Virtual Scheduled Light to expose the selected settings."""
     return client.wait_state(
         VIRTUAL_LIGHT,
         lambda state: (
-            state["attributes"].get("active_settings") == profile
+            state["attributes"].get("active_settings") == settings_set
             and state["attributes"].get("active_settings_schedule") == VIRTUAL_SCHEDULE
             and state["attributes"].get("schedule_end_off_pending") is False
         ),
-        f"using the {profile} profile of {VIRTUAL_SCHEDULE}, no boundary off pending",
+        f"using the {settings_set} settings of {VIRTUAL_SCHEDULE}, "
+        "no schedule end off pending",
     )
 
 
@@ -1718,9 +1721,9 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
-    """Exercise each set of settings' own illuminance and door behavior live."""
+    """Exercise each settings set's own illuminance and door behavior live."""
     reset_trigger(client)
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
 
     # Outside settings: gate-mode illuminance suppresses the initial occupancy
     # turn-on and going dark admits it, but going bright again does not force
@@ -1746,7 +1749,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(30)
         ),
-        "on at the outside-profile brightness after going dark",
+        "on at the outside settings' brightness after going dark",
     )
     wait_machine_state(client, "occupied")
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -1757,7 +1760,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "on under the outside profile's gate-only illuminance mode",
+        "on under the outside settings' gate-only illuminance mode",
     )
 
     reset_trigger(client)
@@ -1768,7 +1771,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         VIRTUAL_LIGHT,
         lambda state: state["attributes"].get("molight_state") == "active",
-        "timer-driven while the outside-profile door remains open",
+        "timer-driven while the outside settings' door remains open",
     )
     first_open = client.state(VIRTUAL_LIGHT)["attributes"].get("last_on_door")
     client.set_state(RAW_DOOR, "off")
@@ -1788,7 +1791,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     # countdown. These contrasts prove the settings switch together.
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     client.set_state(RAW_ILLUMINANCE, 50)
     client.wait_state(
         VIRTUAL_ILLUMINANCE, lambda state: state["state"] == "on", "bright"
@@ -1799,7 +1802,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "off while inside-profile occupancy is bright",
+        "off while the inside settings' occupancy sensor is bright",
     )
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(
@@ -1810,7 +1813,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(80)
         ),
-        "on at the inside-profile brightness after going dark",
+        "on at the inside settings' brightness after going dark",
     )
     wait_machine_state(client, "occupied")
     # The hysteresis band (threshold 10, band 1) keeps the light from flapping:
@@ -1830,7 +1833,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "forced off by inside-profile control illuminance",
+        "forced off by the inside settings' control illuminance",
     )
     client.set_state(RAW_ILLUMINANCE, 9.5)
     assert_state_stays(
@@ -1864,7 +1867,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         VIRTUAL_LIGHT,
         lambda state: state["attributes"].get("molight_state") == "occupied",
-        "held while the inside-profile door remains open",
+        "held while the inside settings' door remains open",
     )
     client.set_state(RAW_MOTION, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
@@ -1883,7 +1886,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
 
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
 
 
 def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> None:
@@ -1891,7 +1894,9 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)  # inside: door_mode open_close, control
+    wait_active_settings(
+        client, ACTIVE_SETTINGS_INSIDE
+    )  # inside: door_mode open_close, control
     client.set_state(RAW_DOOR, "on")
     held = client.wait_state(
         VIRTUAL_LIGHT,
@@ -1951,7 +1956,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
     checkpoint("door and lux sensors briefly unavailable are not read as changes")
 
 
@@ -2284,8 +2289,10 @@ def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
     print("PASS: physical changes inside the command-context window were honored")
 
 
-def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str:
-    """Create a scheduled light whose inside settings are occupied, outside inert."""
+def create_schedule_end_action_light(
+    client: HomeAssistantClient, schedule_end_action: str
+) -> str:
+    """Create a Virtual Scheduled Light, inside settings occupied, outside inert."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -2294,7 +2301,7 @@ def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str
             "name": "E2E End Action",
             "lights": [RAW_MULTI_RGB],
             "schedule_entity": END_SCHEDULE,
-            "schedule_end_action": end_action,
+            "schedule_end_action": schedule_end_action,
             "advanced": {"entity_id": "e2e_end_action"},
         },
     )
@@ -2317,24 +2324,26 @@ def create_end_action_light(client: HomeAssistantClient, end_action: str) -> str
             "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
         },
     )
-    return finish_creation(result, f"End-action {end_action} light")
+    return finish_creation(result, f"At schedule end {schedule_end_action} light")
 
 
 def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
-    """Leave the schedule window with the light on under each end action."""
+    """Leave the schedule window with the light on under each At schedule end choice."""
     schedule_entry_id = create_virtual_schedule(
         client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
     )
     assert_entry_loaded(client, schedule_entry_id)
-    for end_action in ("turn_off", "switch", "keep"):
-        entry_id = create_end_action_light(client, end_action)
+    for schedule_end_action in ("turn_off", "switch", "keep"):
+        entry_id = create_schedule_end_action_light(client, schedule_end_action)
         assert_entry_loaded(client, entry_id)
         client.set_state(RAW_REMOVAL_MOTION, "on")
         client.wait_state(END_SCHEDULE, lambda state: state["state"] == "on", "on")
         client.wait_state(
-            END_ACTION_LIGHT,
-            lambda state: state["attributes"].get("active_settings") == PROFILE_INSIDE,
-            "using the inside profile",
+            SCHEDULE_END_ACTION_LIGHT,
+            lambda state: (
+                state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
+            ),
+            "using the inside settings",
         )
         set_timer_motion(client, True)
         client.wait_state(
@@ -2343,49 +2352,51 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
                 state["state"] == "on"
                 and state["attributes"].get("brightness") == pct(60)
             ),
-            "on at the inside profile's brightness",
+            "on at the inside settings' brightness",
         )
-        wait_machine_state(client, "occupied", END_ACTION_LIGHT)
+        wait_machine_state(client, "occupied", SCHEDULE_END_ACTION_LIGHT)
         # Leave the window during the inside settings' 30 s countdown, so keep
         # and switch are told apart by which timer the light runs on.
         set_timer_motion(client, False)
-        wait_machine_state(client, "countdown", END_ACTION_LIGHT)
+        wait_machine_state(client, "countdown", SCHEDULE_END_ACTION_LIGHT)
 
         ended = time.monotonic()
         client.set_state(RAW_REMOVAL_MOTION, "off")
         client.wait_state(END_SCHEDULE, lambda state: state["state"] == "off", "off")
         client.wait_state(
-            END_ACTION_LIGHT,
-            lambda state: state["attributes"].get("active_settings") == PROFILE_OUTSIDE,
-            "using the outside profile after the window ended",
+            SCHEDULE_END_ACTION_LIGHT,
+            lambda state: (
+                state["attributes"].get("active_settings") == ACTIVE_SETTINGS_OUTSIDE
+            ),
+            "using the outside settings after the window ended",
         )
-        if end_action == "turn_off":
+        if schedule_end_action == "turn_off":
             client.wait_state(
                 RAW_MULTI_RGB,
                 lambda state: (
                     state["state"] == "off"
                     and command_data(state).get("transition") == 1
                 ),
-                "off at the window end with the outgoing profile's fade",
+                "off at the window end with the outgoing settings' fade",
             )
-            wait_machine_state(client, "idle", END_ACTION_LIGHT)
-        elif end_action == "switch":
+            wait_machine_state(client, "idle", SCHEDULE_END_ACTION_LIGHT)
+        elif schedule_end_action == "switch":
             # Recalculated against the outside settings: their 4 s timeout, not
             # the inside countdown, now decides when the light goes off.
             assert_state_stays(
                 client,
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "on",
-                "on until the outside profile's timeout runs out",
+                "on until the outside settings' timeout runs out",
                 duration=max(0, ended + 3 - time.monotonic()),
             )
             client.wait_state(
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "off",
-                "off after the outside profile's timer",
+                "off after the outside settings' timer",
                 timeout=10,
             )
-            wait_machine_state(client, "idle", END_ACTION_LIGHT)
+            wait_machine_state(client, "idle", SCHEDULE_END_ACTION_LIGHT)
         else:
             assert_state_stays(
                 client,
@@ -2394,18 +2405,23 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
                 "on: keep preserves the inside countdown past the outside timeout",
                 duration=6,
             )
-            wait_machine_state(client, "countdown", END_ACTION_LIGHT)
+            wait_machine_state(client, "countdown", SCHEDULE_END_ACTION_LIGHT)
 
-        client.call_service("light", "turn_off", {"entity_id": END_ACTION_LIGHT})
+        client.call_service(
+            "light", "turn_off", {"entity_id": SCHEDULE_END_ACTION_LIGHT}
+        )
         client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
         client.remove_entry(entry_id)
-        wait_entity_absent(client, END_ACTION_LIGHT)
-        wait_entry_removed(client, entry_id, f"Temporary end-action {end_action} light")
+        wait_entity_absent(client, SCHEDULE_END_ACTION_LIGHT)
+        wait_entry_removed(
+            client, entry_id, f"Temporary At schedule end {schedule_end_action} light"
+        )
     client.remove_entry(schedule_entry_id)
     wait_entity_absent(client, END_SCHEDULE)
     wait_entry_removed(client, schedule_entry_id, "Temporary end schedule")
     print(
-        "PASS: schedule end actions turn_off, switch, and keep behaved at the boundary"
+        "PASS: At schedule end choices turn_off, switch, and keep behaved "
+        "at the boundary"
     )
 
 
@@ -2570,7 +2586,10 @@ def run_schedule_mode_scenarios(client: HomeAssistantClient) -> None:
     client.remove_entry(schedule_entry_id)
     wait_entity_absent(client, END_SCHEDULE)
     wait_entry_removed(client, schedule_entry_id, "Temporary end schedule")
-    print("PASS: follow, gate, gate_keep, and gate_switch behaved at both window edges")
+    print(
+        "PASS: follow, gate, gate_keep, and gate_switch behaved at both the window "
+        "start and window end"
+    )
 
 
 def set_trigger_motion(client: HomeAssistantClient, on: bool) -> None:
@@ -3507,27 +3526,33 @@ def assert_converted_to_regular(
         if key in cfg
     ]
     if leftovers:
-        raise AssertionError(f"Demoted light kept profile sections: {leftovers}")
+        raise AssertionError(f"Demoted light kept settings set sections: {leftovers}")
 
 
 def assert_converted_to_scheduled(
-    entry_id: str, schedule_entity: str, end_action: str, settings: dict[str, Any]
+    entry_id: str,
+    schedule_entity: str,
+    schedule_end_action: str,
+    settings: dict[str, Any],
 ) -> None:
     """Assert a promoted entry keeps old settings inside and strips inputs outside."""
     cfg = wait_stored_entry(
         entry_id,
         lambda cfg: cfg.get("entity_type") == "scheduled_light",
-        "a scheduled light",
+        "a Virtual Scheduled Light",
     )
     assert_subset(
         cfg,
-        {"schedule_entity": schedule_entity, "schedule_end_action": end_action},
+        {
+            "schedule_entity": schedule_entity,
+            "schedule_end_action": schedule_end_action,
+        },
         "Promoted light schedule settings",
     )
     assert_subset(
         cfg.get("inside_schedule_settings", {}),
         settings,
-        "Promoted inside profile",
+        "Promoted inside settings",
     )
     outside = cfg.get("outside_schedule_settings", {})
     retained = {
@@ -3535,11 +3560,11 @@ def assert_converted_to_scheduled(
         for key, value in settings.items()
         if key not in CONVERSION_INPUT_KEYS
     }
-    assert_subset(outside, retained, "Promoted outside profile")
+    assert_subset(outside, retained, "Promoted outside settings")
     inputs = [key for key in CONVERSION_INPUT_KEYS if key in outside]
     if inputs:
         raise AssertionError(
-            f"Promoted outside profile kept automatic inputs: {inputs}"
+            f"Promoted outside settings kept automatic inputs: {inputs}"
         )
 
 
@@ -3594,8 +3619,10 @@ def create_base_fixtures(client: HomeAssistantClient) -> dict[str, str]:
     }
     fixtures["light"] = create_scheduled_light(client)
     assert_entry_loaded(client, fixtures["light"])
-    wait_profile(client, PROFILE_OUTSIDE)
-    checkpoint("schedule, occupancy, illuminance, and scheduled-light fixtures created")
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
+    checkpoint(
+        "schedule, occupancy, illuminance, and Virtual Scheduled Light fixtures created"
+    )
     return fixtures
 
 
@@ -3624,7 +3651,9 @@ def run_primary() -> None:
     run_discovery_scenarios(client)
     run_assign_scenarios(client)
     run_illuminance_and_door_scenarios(client)
-    checkpoint("illuminance gate/control and door open/open-close behavior per profile")
+    checkpoint(
+        "illuminance gate/control and door open/open-close behavior per settings set"
+    )
     run_sensor_briefly_unavailable_scenarios(client)
 
     reset_trigger(client)
@@ -3697,12 +3726,12 @@ def run_primary() -> None:
 
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     trigger_and_assert(client, pct(80), "Night")
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
-    wait_profile(client, PROFILE_OUTSIDE)
-    checkpoint("profiles switch with the schedule source")
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
+    checkpoint("settings sets switch with the schedule's source")
 
     edit_scheduled_light(client, light_entry_id)
     assert_entry_loaded(client, light_entry_id)
@@ -3751,21 +3780,21 @@ def run_primary() -> None:
     assert_converted_to_scheduled(
         light_entry_id, VIRTUAL_SCHEDULE, "keep", SCHEDULED_INSIDE_SETTINGS
     )
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
     client.set_state(RAW_MOTION, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
     assert_state_stays(
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "off: promotion left the outside profile without an occupancy input",
+        "off: promotion left the outside settings without an occupancy input",
     )
 
     client.set_behavior(RAW_LIGHT, latency=0.5, report_steps=True, transition_steps=3)
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     before = client.state(VIRTUAL_LIGHT)["attributes"]
     trigger_and_assert(client, pct(80), "Night")
     assert_state_stays(
@@ -3788,11 +3817,12 @@ def run_primary() -> None:
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     trigger_and_assert(client, pct(80), "Night")
 
     checkpoint(
-        "promoted back to a scheduled light: settings stored, outside profile inert"
+        "promoted back to a Virtual Scheduled Light: settings stored, "
+        "outside settings inert"
     )
 
     removal_snapshot = prepare_removal_reference_cleanup(client)
@@ -3810,7 +3840,7 @@ def run_primary() -> None:
         VIRTUAL_LIGHT,
         lambda state: (
             state["state"] == "on"
-            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
         ),
         "restored inside the active schedule after a core restart",
         timeout=WAIT_TIMEOUT,
@@ -3834,7 +3864,8 @@ def run_primary() -> None:
         client, removal_snapshot, "a Home Assistant core restart"
     )
     checkpoint(
-        "core restart restored the scheduled light, multi light, remote, and cleanup"
+        "core restart restored the Virtual Scheduled Light, multi light, remote, "
+        "and cleanup"
     )
     save_fixtures(
         {"entries": fixtures, "removed_sensor": removal_snapshot["sensor_entry_id"]}
@@ -3849,7 +3880,7 @@ def run_browser_prepare() -> None:
     client.authenticate()
     client.finish_onboarding()
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "available")
-    # Off, so the smoke test knows which settings its scheduled light uses.
+    # Off, so the smoke test knows which settings its Virtual Scheduled Light uses.
     client.set_state(RAW_SCHEDULE, "off")
     create_virtual_schedule(client)
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
@@ -3885,9 +3916,9 @@ def run_container_restart_verification() -> None:
         VIRTUAL_LIGHT,
         lambda state: (
             state["state"] == "on"
-            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
         ),
-        "on with the inside profile",
+        "on with the inside settings",
     )
     client.wait_state(
         RAW_LIGHT,
@@ -3973,7 +4004,7 @@ def run_unavailable_light_recovery() -> None:
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     client.set_available(RAW_MOTION, False)
     client.set_available(RAW_SCHEDULE, False)
     client.wait_state(
@@ -4001,7 +4032,7 @@ def run_unavailable_sensors_motion_first() -> None:
         lambda state: state["state"] == "unavailable",
         "unavailable",
     )
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     assert_state_stays(
         client,
         RAW_LIGHT,
@@ -4023,7 +4054,7 @@ def run_unavailable_sensors_motion_first() -> None:
 
     client.set_available(RAW_SCHEDULE, True)
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_profile(client, PROFILE_INSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
     assert_state_stays(
         client,
         RAW_LIGHT,
@@ -4098,20 +4129,20 @@ def run_unavailable_sensors_schedule_first() -> None:
         VIRTUAL_LIGHT,
         lambda state: (
             state["state"] == "on"
-            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
         ),
-        "restored on with its last known profile",
+        "restored on with its last known active settings",
         timeout=WAIT_TIMEOUT,
     )
 
     client.set_available(RAW_SCHEDULE, True)
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
-    wait_profile(client, PROFILE_OUTSIDE)
+    wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
     assert_state_stays(
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "on across the keep-policy schedule boundary",
+        "on across the Keep state schedule boundary",
     )
 
     client.set_available(RAW_MOTION, True)
@@ -4127,7 +4158,10 @@ def run_unavailable_sensors_schedule_first() -> None:
     )
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_LIGHT})
     client.wait_state(RAW_LIGHT, lambda state: state["state"] == "off", "off")
-    print("PASS: schedule-first recovery preserved profile and keep-on behavior")
+    print(
+        "PASS: schedule-first recovery preserved the active settings and keep-on "
+        "behavior"
+    )
 
 
 def run_auto_off_prepare() -> None:
@@ -5079,10 +5113,10 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     )
 
 
-# Schedule edges that must fall while Home Assistant is down are placed this
+# Schedule boundaries that must fall while Home Assistant is down are placed this
 # far ahead: the prepare phase finishes, the host script stops the container
-# and the outage phase starts polling well inside that time.
-OUTAGE_EDGE_LEAD = timedelta(seconds=20)
+# and the downtime phase starts polling well inside that time.
+DOWNTIME_BOUNDARY_LEAD = timedelta(seconds=20)
 
 
 # How long a real light stays unloaded after startup in the unreadable-member
@@ -5100,34 +5134,37 @@ def expect_still_loading(client: HomeAssistantClient, entity_id: str) -> None:
         )
 
 
-def schedule_outage(first_edge: datetime, last_edge: datetime) -> None:
-    """Record the schedule edges the host must hold Home Assistant down across."""
-    OUTAGE_SNAPSHOT.write_text(
+def schedule_downtime(first_boundary: datetime, last_boundary: datetime) -> None:
+    """Record the schedule boundaries the host must hold Home Assistant down across."""
+    DOWNTIME_SNAPSHOT.write_text(
         json.dumps(
-            {"first_edge": first_edge.isoformat(), "last_edge": last_edge.isoformat()}
+            {
+                "first_boundary": first_boundary.isoformat(),
+                "last_boundary": last_boundary.isoformat(),
+            }
         )
     )
 
 
-def run_outage() -> None:
-    """Hold while Home Assistant is stopped until every recorded edge has passed.
+def run_downtime() -> None:
+    """Hold while Home Assistant is stopped until every schedule boundary has passed.
 
     The host script runs this between `compose stop` and `compose start`. It
-    proves the edges were missed: Home Assistant is already down before the
-    first edge and stays down until after the last one.
+    proves the schedule boundaries were missed: Home Assistant is already down before
+    the first boundary and stays down until after the last one.
     """
     client = HomeAssistantClient()
-    outage: dict[str, str] = json.loads(OUTAGE_SNAPSHOT.read_text())
-    first_edge = datetime.fromisoformat(outage["first_edge"])
-    last_edge = datetime.fromisoformat(outage["last_edge"])
-    until = last_edge + timedelta(seconds=1)
+    downtime: dict[str, str] = json.loads(DOWNTIME_SNAPSHOT.read_text())
+    first_boundary = datetime.fromisoformat(downtime["first_boundary"])
+    last_boundary = datetime.fromisoformat(downtime["last_boundary"])
+    until = last_boundary + timedelta(seconds=1)
     checked = datetime.now(UTC)
-    if checked >= first_edge:
+    if checked >= first_boundary:
         raise AssertionError(
-            f"The outage began late: checked at {checked.isoformat()}, after the "
-            f"first schedule edge at {first_edge.isoformat()}"
+            f"The downtime began late: checked at {checked.isoformat()}, after the "
+            f"first schedule boundary at {first_boundary.isoformat()}"
         )
-    outage["down_from"] = checked.isoformat()
+    downtime["down_from"] = checked.isoformat()
     while True:
         answer = client.answer()
         if answer is not None:
@@ -5140,35 +5177,37 @@ def run_outage() -> None:
         if checked >= until:
             break
         time.sleep(0.5)
-    outage["down_until"] = checked.isoformat()
-    OUTAGE_SNAPSHOT.write_text(json.dumps(outage))
+    downtime["down_until"] = checked.isoformat()
+    DOWNTIME_SNAPSHOT.write_text(json.dumps(downtime))
     print(
-        f"PASS: Home Assistant stayed down from {outage['down_from']} to "
-        f"{outage['down_until']}, across the edges at {outage['first_edge']} "
-        f"and {outage['last_edge']}"
+        f"PASS: Home Assistant stayed down from {downtime['down_from']} to "
+        f"{downtime['down_until']}, across the boundaries at "
+        f"{downtime['first_boundary']} "
+        f"and {downtime['last_boundary']}"
     )
 
 
-def expect_outage_held() -> None:
-    """Assert the outage phase held Home Assistant down across the edges."""
-    outage: dict[str, str] = json.loads(OUTAGE_SNAPSHOT.read_text())
-    if "down_until" not in outage:
+def expect_downtime_held() -> None:
+    """Assert the downtime phase held Home Assistant down across the boundaries."""
+    downtime: dict[str, str] = json.loads(DOWNTIME_SNAPSHOT.read_text())
+    if "down_until" not in downtime:
         raise AssertionError(
-            "The outage phase did not run, so the schedule edges at "
-            f"{outage['first_edge']} and {outage['last_edge']} were not missed "
+            "The downtime phase did not run, so the schedule boundaries at "
+            f"{downtime['first_boundary']} and {downtime['last_boundary']} "
+            "were not missed "
             "while Home Assistant was down"
         )
 
 
 def run_follow_restart_prepare() -> None:
-    """Create a follow-mode light whose time window opens while HA is down."""
+    """Create a follow-mode light whose time window starts while HA is down."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
     expect_fixtures_loaded(client)
     # The isolated HA runs in UTC (configuration.yaml).
     now = datetime.now(UTC).replace(microsecond=0)
-    window_start = now + OUTAGE_EDGE_LEAD
+    window_start = now + DOWNTIME_BOUNDARY_LEAD
     start = window_start.strftime("%H:%M:%S")
     end = (now + timedelta(seconds=240)).strftime("%H:%M:%S")
     result = start_create(client, "schedule")
@@ -5246,7 +5285,7 @@ def run_follow_restart_prepare() -> None:
     wait_entry_loaded(client, cycle_light_entry_id)
     client.wait_state(CYCLE_SCHEDULE, lambda state: state["state"] == "off", "off")
     client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
-    schedule_outage(window_start, cycle_end)
+    schedule_downtime(window_start, cycle_end)
     FOLLOW_RESTART_SNAPSHOT.write_text(
         json.dumps(
             {
@@ -5258,13 +5297,14 @@ def run_follow_restart_prepare() -> None:
         )
     )
     print(
-        "PASS: follow lights prepared; one window opens, one elapses during the outage"
+        "PASS: follow lights prepared; one window starts, one elapses during the "
+        "downtime"
     )
 
 
 def run_follow_restart_verify() -> None:
     """The start missed while HA was down is applied once; a manual off sticks."""
-    expect_outage_held()
+    expect_downtime_held()
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -5277,7 +5317,7 @@ def run_follow_restart_verify() -> None:
             state["state"] == "on"
             and state["attributes"].get("current_window_start") is not None
         ),
-        "inside the window that opened during the outage",
+        "inside the window that started during the downtime",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -5293,7 +5333,7 @@ def run_follow_restart_verify() -> None:
     )
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
 
-    # The window that opened and closed while HA was down leaves no trace.
+    # The window that started and ended while HA was down leaves no trace.
     wait_entry_loaded(client, snapshot["cycle_schedule_entry_id"])
     wait_entry_loaded(client, snapshot["cycle_light_entry_id"])
     client.wait_state(
@@ -5302,7 +5342,7 @@ def run_follow_restart_verify() -> None:
             state["state"] == "off"
             and state["attributes"].get("current_window_start") is None
         ),
-        "off: the whole window elapsed during the outage",
+        "off: the whole window elapsed during the downtime",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -5319,7 +5359,7 @@ def run_follow_restart_verify() -> None:
         client,
         RAW_CT,
         lambda state: state["state"] == "off",
-        "off: no catch-up for a window that both opened and closed while down",
+        "off: no catch-up for a window that both started and ended while down",
         duration=4,
     )
     for entry_id, entity_id in (
@@ -5387,17 +5427,17 @@ def run_follow_restart_verify_off() -> None:
     print("PASS: a restart inside the window did not re-apply the missed start")
 
 
-def create_two_profile_light(
+def create_two_settings_set_light(
     client: HomeAssistantClient,
     name: str,
     entity_id: str,
     member: str,
     schedule_entity: str,
-    end_action: str,
+    schedule_end_action: str,
     outside: dict[str, Any],
     inside: dict[str, Any],
 ) -> str:
-    """Create a scheduled light with explicit outside and inside settings."""
+    """Create a Virtual Scheduled Light with explicit outside and inside settings."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -5406,7 +5446,7 @@ def create_two_profile_light(
             "name": name,
             "lights": [member],
             "schedule_entity": schedule_entity,
-            "schedule_end_action": end_action,
+            "schedule_end_action": schedule_end_action,
             "advanced": {"entity_id": entity_id},
         },
     )
@@ -5417,24 +5457,28 @@ def create_two_profile_light(
     return finish_creation(result, name)
 
 
-def wait_end_light(client: HomeAssistantClient, entity_id: str, profile: str) -> None:
+def wait_end_light(
+    client: HomeAssistantClient, entity_id: str, settings_set: str
+) -> None:
     client.wait_state(
         entity_id,
-        lambda state: state["attributes"].get("active_settings") == profile,
-        f"using the {profile} profile",
+        lambda state: state["attributes"].get("active_settings") == settings_set,
+        f"using the {settings_set} settings",
     )
 
 
 def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
-    """Held turn_off boundaries and the switch action's forced-off/adopt branches."""
+    """A Turn off at schedule end pending a hold's release, and Switch state's
+    forced-off and adopt branches."""
     schedule_entry_id = create_virtual_schedule(
         client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
     )
     assert_entry_loaded(client, schedule_entry_id)
     set_end_schedule(client, False)
 
-    # turn_off while Auto-off is held: the boundary off waits for the release.
-    hold_entry_id = create_two_profile_light(
+    # turn_off while Auto-off is held: the schedule end off is pending until the
+    # release.
+    hold_entry_id = create_two_settings_set_light(
         client,
         "E2E End Hold",
         "e2e_end_hold",
@@ -5451,7 +5495,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, hold_entry_id)
     for discard_by_manual_off in (False, True):
         set_end_schedule(client, True)
-        wait_end_light(client, END_HOLD_LIGHT, PROFILE_INSIDE)
+        wait_end_light(client, END_HOLD_LIGHT, ACTIVE_SETTINGS_INSIDE)
         set_timer_motion(client, True)
         client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
         client.call_service("switch", "turn_off", {"entity_id": END_HOLD_SWITCH})
@@ -5464,11 +5508,11 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         client.wait_state(
             END_HOLD_LIGHT,
             lambda state: (
-                state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+                state["attributes"].get("active_settings") == ACTIVE_SETTINGS_OUTSIDE
                 and state["attributes"].get("schedule_end_off_pending") is True
                 and state["state"] == "on"
             ),
-            "outside with the boundary off pending behind the hold",
+            "outside with the schedule end off pending behind the hold",
         )
         set_timer_motion(client, False)
         assert_state_stays(
@@ -5484,7 +5528,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
                 lambda state: (
                     state["attributes"].get("schedule_end_off_pending") is False
                 ),
-                "pending boundary off discarded by the manual off",
+                "pending schedule end off discarded by the manual off",
             )
             client.call_service("switch", "turn_on", {"entity_id": END_HOLD_SWITCH})
             assert_state_stays(
@@ -5498,7 +5542,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             client.wait_state(
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "off",
-                "off: the held boundary off is applied on release",
+                "off: the pending schedule end off is applied on release",
             )
             client.wait_state(
                 END_HOLD_LIGHT,
@@ -5510,7 +5554,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, hold_entry_id, END_HOLD_LIGHT)
 
     # Standby: the inside settings rest at 20 % instead of turning off.
-    standby_entry_id = create_two_profile_light(
+    standby_entry_id = create_two_settings_set_light(
         client,
         "E2E End Standby",
         "e2e_end_standby",
@@ -5569,7 +5613,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
 
     # The next window starts at standby again, and turn_off ends it.
     set_end_schedule(client, False)
-    wait_end_light(client, END_STANDBY_LIGHT, PROFILE_OUTSIDE)
+    wait_end_light(client, END_STANDBY_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
     set_end_schedule(client, True)
     at_standby()
     set_end_schedule(client, False)
@@ -5591,7 +5635,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         },
         "End illuminance",
     )
-    switch_entry_id = create_two_profile_light(
+    switch_entry_id = create_two_settings_set_light(
         client,
         "E2E End Switch",
         "e2e_end_switch",
@@ -5624,17 +5668,17 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             "bright" if bright else "dark",
         )
         set_end_schedule(client, True)
-        wait_end_light(client, END_SWITCH_LIGHT, PROFILE_INSIDE)
+        wait_end_light(client, END_SWITCH_LIGHT, ACTIVE_SETTINGS_INSIDE)
         set_timer_motion(client, True)
         client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
         wait_machine_state(client, "occupied", END_SWITCH_LIGHT)
         set_end_schedule(client, False)
-        wait_end_light(client, END_SWITCH_LIGHT, PROFILE_OUTSIDE)
+        wait_end_light(client, END_SWITCH_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
         if bright:
             client.wait_state(
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "off",
-                "forced off: the outside profile is bright in control mode",
+                "forced off: the outside settings are bright in control mode",
             )
             wait_machine_state(client, "idle", END_SWITCH_LIGHT)
             set_timer_motion(client, False)
@@ -5659,19 +5703,21 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, illuminance_entry_id, END_ILLUMINANCE)
     remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
     print(
-        "PASS: held turn_off boundaries, standby, and switch forced-off/adopt branches"
+        "PASS: a Turn off at schedule end pending a hold's release, standby, and "
+        "Switch state's forced-off and adopt branches"
     )
 
 
 def run_end_restart_prepare() -> None:
-    """Leave an occupied scheduled light whose turn_off window ends while HA is down."""
+    """Leave an occupied Virtual Scheduled Light whose turn_off window ends while
+    HA is down."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
     expect_fixtures_loaded(client)
     now = datetime.now(UTC).replace(microsecond=0)
-    # Three lights are created and lit before the outage may begin.
-    window_end = now + 2 * OUTAGE_EDGE_LEAD
+    # Three lights are created and lit before the downtime may begin.
+    window_end = now + 2 * DOWNTIME_BOUNDARY_LEAD
     start = (now - timedelta(seconds=60)).strftime("%H:%M:%S")
     end = window_end.strftime("%H:%M:%S")
     result = start_create(client, "schedule")
@@ -5688,7 +5734,7 @@ def run_end_restart_prepare() -> None:
         },
     )
     schedule_entry_id = finish_creation(result, "End-restart schedule")
-    light_entry_id = create_two_profile_light(
+    light_entry_id = create_two_settings_set_light(
         client,
         "E2E End Restart",
         "e2e_end_restart",
@@ -5705,12 +5751,12 @@ def run_end_restart_prepare() -> None:
     wait_entry_loaded(client, schedule_entry_id)
     wait_entry_loaded(client, light_entry_id)
     client.wait_state(END_RESTART_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_end_light(client, END_RESTART_LIGHT, PROFILE_INSIDE)
+    wait_end_light(client, END_RESTART_LIGHT, ACTIVE_SETTINGS_INSIDE)
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     wait_machine_state(client, "occupied", END_RESTART_LIGHT)
     late = prepare_late_end_lights(client)
-    schedule_outage(window_end, window_end)
+    schedule_downtime(window_end, window_end)
     END_RESTART_SNAPSHOT.write_text(
         json.dumps(
             {
@@ -5720,12 +5766,15 @@ def run_end_restart_prepare() -> None:
             }
         )
     )
-    print("PASS: occupied scheduled light prepared; its window ends during the outage")
+    print(
+        "PASS: occupied Virtual Scheduled Light prepared; its window ends during the "
+        "downtime"
+    )
 
 
 def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
     """Light a turn_off light and a follow light whose members will load late."""
-    late_entry_id = create_two_profile_light(
+    late_entry_id = create_two_settings_set_light(
         client,
         "E2E End Late",
         "e2e_end_late",
@@ -5753,7 +5802,7 @@ def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
     )
     wait_entry_loaded(client, late_entry_id)
     wait_entry_loaded(client, follow_entry_id)
-    wait_end_light(client, END_LATE_LIGHT, PROFILE_INSIDE)
+    wait_end_light(client, END_LATE_LIGHT, ACTIVE_SETTINGS_INSIDE)
     client.call_service(
         "light", "turn_on", {"entity_id": END_LATE_LIGHT, "brightness": pct(50)}
     )
@@ -5792,7 +5841,7 @@ def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) 
         END_LATE_LIGHT,
         lambda state: (
             state["state"] == "off"
-            and state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_OUTSIDE
             and state["attributes"].get("molight_state") == "idle"
             and state["attributes"].get("schedule_end_off_pending") is True
         ),
@@ -5866,8 +5915,8 @@ def expect_late_end_applied(
 
 
 def run_end_restart_verify() -> None:
-    """A turn_off boundary missed during the outage is caught up exactly once."""
-    expect_outage_held()
+    """A turn_off boundary missed during the downtime is caught up exactly once."""
+    expect_downtime_held()
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -5886,11 +5935,11 @@ def run_end_restart_verify() -> None:
         END_RESTART_LIGHT,
         lambda state: (
             state["state"] == "off"
-            and state["attributes"].get("active_settings") == PROFILE_OUTSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_OUTSIDE
             and state["attributes"].get("schedule_end_off_pending") is False
             and state["attributes"].get("molight_state") == "idle"
         ),
-        "off on the outside profile: the missed end boundary was caught up",
+        "off on the outside settings: the missed window end was caught up",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
@@ -5903,7 +5952,7 @@ def run_end_restart_verify() -> None:
         "off: a light the boundary turned off stays off",
         duration=2,
     )
-    print("PASS: a turn_off boundary missed during an outage was caught up once")
+    print("PASS: a turn_off boundary missed during the downtime was caught up once")
     expect_late_end_applied(client, snapshot)
     for entry_id, entity_id in (
         (snapshot["light_entry_id"], END_RESTART_LIGHT),
@@ -5915,7 +5964,7 @@ def run_end_restart_verify() -> None:
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
     print(
-        "PASS: a schedule end missed during an outage turned off the members "
+        "PASS: a schedule end missed during the downtime turned off the members "
         "that loaded late and lit"
     )
 
@@ -6313,7 +6362,7 @@ def create_sun_schedule(
 
 
 def run_sun_window_scenario(client: HomeAssistantClient) -> None:
-    """Sun-anchored window edges agree with Home Assistant's own sun."""
+    """Sun event window edges agree with Home Assistant's own sun."""
     night_id = create_sun_schedule(
         client, "E2E Night", "e2e_night", {"sun": "sunset"}, {"sun": "sunrise"}
     )
@@ -6376,7 +6425,7 @@ def run_sun_window_scenario(client: HomeAssistantClient) -> None:
 
 
 def run_time_window_scenario(client: HomeAssistantClient) -> None:
-    """A fixed time window opens and closes on its own clock, reporting edges."""
+    """A fixed time window starts and ends on its own clock, reporting boundaries."""
     now = datetime.now(UTC).replace(microsecond=0)
     start_at = now + timedelta(seconds=15)
     end_at = now + timedelta(seconds=35)
@@ -6416,7 +6465,7 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
         timeout=30,
     )
     if datetime.now(UTC) < start_at - timedelta(seconds=1):
-        raise AssertionError("The window opened before its start time")
+        raise AssertionError("The window started before its start time")
     client.wait_state(
         TIME_WINDOW_SCHEDULE,
         lambda state: (
@@ -6429,10 +6478,10 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
         timeout=30,
     )
     if datetime.now(UTC) < end_at - timedelta(seconds=1):
-        raise AssertionError("The window closed before its end time")
+        raise AssertionError("The window ended before its end time")
     remove_entry_and_entity(client, entry_id, TIME_WINDOW_SCHEDULE)
     print(
-        "PASS: a fixed time window opened and closed on time with its edge attributes"
+        "PASS: a fixed time window started and ended on time with its edge attributes"
     )
 
 
@@ -6819,7 +6868,8 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(HOLD_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
 
-    # Held, then the gate window ends: the forced off waits for the release.
+    # Held, then the gate window ends: the schedule end off is pending until the
+    # release.
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_door_hold(client, HOLD_RULES_LIGHT, True)
@@ -7010,7 +7060,7 @@ def create_grace_occupancy(
 
 
 def set_source(client: HomeAssistantClient, raw: str, virtual: str, on: bool) -> None:
-    """Drive an occupancy source and wait for its virtual sensor to follow."""
+    """Drive an occupancy source and wait for its virtual sensor to read it."""
     state = "on" if on else "off"
     client.set_state(raw, state)
     client.wait_state(virtual, lambda current: current["state"] == state, state)
@@ -7358,7 +7408,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     schedule_entry_id = create_virtual_schedule(
         client, "E2E Ref Schedule", "e2e_ref_schedule", source=RAW_REMOVAL_MOTION
     )
-    scheduled_entry_id = create_two_profile_light(
+    scheduled_entry_id = create_two_settings_set_light(
         client,
         "E2E Ref Scheduled",
         "e2e_ref_scheduled",
@@ -7376,14 +7426,14 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, scheduled_entry_id)
     client.set_state(RAW_REMOVAL_MOTION, "on")
     client.wait_state(REF_SCHEDULE, lambda state: state["state"] == "on", "on")
-    wait_end_light(client, REF_SCHEDULED_LIGHT, PROFILE_INSIDE)
+    wait_end_light(client, REF_SCHEDULED_LIGHT, ACTIVE_SETTINGS_INSIDE)
 
     # Deleting the schedule: the light falls back to its outside settings, drops
     # the stored reference, and stays manually usable.
     client.remove_entry(schedule_entry_id)
     wait_entity_absent(client, REF_SCHEDULE)
     wait_entry_loaded(client, scheduled_entry_id)
-    wait_end_light(client, REF_SCHEDULED_LIGHT, PROFILE_OUTSIDE)
+    wait_end_light(client, REF_SCHEDULED_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
     wait_stored_entry(
         scheduled_entry_id,
         lambda cfg: not cfg.get("schedule_entity"),
@@ -8143,7 +8193,7 @@ def wait_on_off(
 
 
 def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
-    """Combined schedules follow any/all of their inputs, nest, and track edits."""
+    """Combined schedules read any/all of their inputs, nest, and track edits."""
     client.set_state(RAW_SCHEDULE, "off")
     client.set_state(RAW_REMOVAL_MOTION, "off")
     # An earlier scenario may leave this real light on; the gate light below
@@ -8223,7 +8273,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["attributes"].get("resolved_schedules") == [COMBO_A, COMBO_B]
         ),
-        "expanded through the nested Any to its two mirrors",
+        "expanded through the nested Any to its two binary sensor schedules",
     )
 
     client.set_state(RAW_SCHEDULE, "on")
@@ -8246,7 +8296,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_REMOVAL_MOTION, "on")
     wait_on_off(client, {COMBO_ALL: "on", COMBO_NESTED: "on"}, "both on")
     any_marker = client.state(COMBO_ANY)["attributes"]["current_window_start"]
-    checkpoint("any/all/inverted/nested follow their inputs and gate a light")
+    checkpoint("any/all/inverted/nested read their inputs and gate a light")
 
     # An unavailable input only matters when it could change the result, and
     # an outage is not a new window.
@@ -8358,7 +8408,7 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_SCHEDULE, "off")
     client.set_state(RAW_REMOVAL_MOTION, "off")
     print(
-        "PASS: combined schedules followed any/all/inverted/nested inputs, gated "
+        "PASS: combined schedules read any/all/inverted/nested inputs, gated "
         "a light, and tracked outages, an input edit, and an input deletion"
     )
 
@@ -9082,7 +9132,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, schedule_entry_id)
     client.set_state(RAW_REMOVAL_MOTION, "off")
     client.wait_state(FADE_SCHEDULE, lambda state: state["state"] == "off", "off")
-    scheduled_entry_id = create_two_profile_light(
+    scheduled_entry_id = create_two_settings_set_light(
         client,
         "E2E Fade Scheduled",
         "e2e_fade_scheduled",
@@ -9180,7 +9230,8 @@ def create_park_light(client: HomeAssistantClient) -> str:
 
 
 def create_park_scheduled_light(client: HomeAssistantClient) -> str:
-    """Create a scheduled light that selects a preset outside its schedule only."""
+    """Create a Virtual Scheduled Light that selects a preset only outside its
+    schedule."""
     result = start_create(client, "scheduled_light")
     expect_step(result, "scheduled_light")
     result = client.continue_flow(
@@ -9208,7 +9259,7 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
     result = client.continue_flow(
         result, {**EMPTY_INSIDE_LIGHT_SECTIONS, "light_timeout": 30}
     )
-    return finish_creation(result, "Park scheduled light")
+    return finish_creation(result, "Park Virtual Scheduled Light")
 
 
 def park_light_off(client: HomeAssistantClient, light: str, *members: str) -> None:
@@ -9446,7 +9497,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         "a level sent during a replaced re-send's select call outlasted its preset"
     )
 
-    # A scheduled light switches settings while the preset of the settings it
+    # A Virtual Scheduled Light switches settings while the preset of the settings it
     # left is still being applied: that select call keeps speaking for its
     # device, so the preset lighting the light is still no change at the wall.
     schedule_entry_id = create_virtual_schedule(
@@ -9457,14 +9508,14 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(PARK_SCHEDULE, lambda state: state["state"] == "off", "off")
     scheduled_entry_id = create_park_scheduled_light(client)
     assert_entry_loaded(client, scheduled_entry_id)
-    wait_end_light(client, PARK_SCHEDULED_LIGHT, PROFILE_OUTSIDE)
+    wait_end_light(client, PARK_SCHEDULED_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
     client.park_select(TARGET_SELECT, True)
     turn_on = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_SCHEDULED_LIGHT, "brightness": 200}
     )
     wait_parked_calls(client, 1)
     client.set_state(RAW_REMOVAL_MOTION, "on")
-    wait_end_light(client, PARK_SCHEDULED_LIGHT, PROFILE_INSIDE)
+    wait_end_light(client, PARK_SCHEDULED_LIGHT, ACTIVE_SETTINGS_INSIDE)
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 100})
     wait_member(client, RAW_MULTI_DIMMER, 100)
     assert_state_stays(
@@ -9487,7 +9538,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("brightness") == 200
             and state["attributes"].get("last_on_physical") is None
-            and state["attributes"].get("active_settings") == PROFILE_INSIDE
+            and state["attributes"].get("active_settings") == ACTIVE_SETTINGS_INSIDE
         ),
         "active at 200 under the inside settings, lit by the user's turn-on",
     )
@@ -9625,7 +9676,7 @@ def main() -> None:
         "false-detection-verify": run_false_detection_verify,
         "late-source-prepare": run_late_source_prepare,
         "late-source-verify": run_late_source_verify,
-        "outage": run_outage,
+        "downtime": run_downtime,
         "follow-restart-prepare": run_follow_restart_prepare,
         "follow-restart-verify": run_follow_restart_verify,
         "follow-restart-verify-off": run_follow_restart_verify_off,

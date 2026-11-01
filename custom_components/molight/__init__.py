@@ -66,7 +66,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 # Entry settings keys under which one MoLight entry may reference another entry's
 # entities. Cleaned up when the referenced entry is removed: a dangling
 # reference is worse than a missing one (a light whose gate-mode schedule
-# entity no longer exists would read the gate as permanently closed and
+# sensor no longer exists would read the gate as permanently closed and
 # silently stop automating).
 _REFERENCE_KEYS = (
     CONF_DOOR_ENTITY,
@@ -254,7 +254,7 @@ def current_references(
 
 
 def referenced_entity_ids(cfg: Mapping[str, Any]) -> Iterator[str]:
-    """Yield every entity ID cfg stores, in both settings mappings too."""
+    """Yield every entity ID cfg stores, in both settings sets too."""
     for settings in (
         cfg,
         cfg.get(CONF_OUTSIDE_SCHEDULE_SETTINGS),
@@ -277,12 +277,12 @@ def _remap_references(
 ) -> dict[str, Any]:
     """Return cfg with each mapped entity ID replaced, or dropped if mapped to None.
 
-    Covers the top level and both settings mappings of a scheduled light.
+    Covers the top level and both settings sets of a Virtual Scheduled Light.
     """
     remapped = _remap_settings(cfg, mapping, keys, list_keys)
-    for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
-        if isinstance(settings := remapped.get(side), dict):
-            remapped[side] = _remap_settings(settings, mapping, keys, list_keys)
+    for settings_set in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
+        if isinstance(settings := remapped.get(settings_set), dict):
+            remapped[settings_set] = _remap_settings(settings, mapping, keys, list_keys)
     return remapped
 
 

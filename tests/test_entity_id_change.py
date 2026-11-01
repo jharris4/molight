@@ -264,8 +264,11 @@ def test_reference_fixtures_cover_every_entity_id_key() -> None:
     used = set()
     for cfg in _REFERENCING_SETTINGS.values():
         used |= set(cfg)
-        for side in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
-            used |= set(cfg.get(side, ()))
+        for settings_set in (
+            CONF_OUTSIDE_SCHEDULE_SETTINGS,
+            CONF_INSIDE_SCHEDULE_SETTINGS,
+        ):
+            used |= set(cfg.get(settings_set, ()))
     assert set(_ENTITY_ID_KEYS) | set(_ENTITY_ID_LIST_KEYS) <= used
 
 
@@ -686,14 +689,14 @@ async def test_gate_schedule_with_changed_entity_id_still_gates(
 
 
 # ---------------------------------------------------------------------------
-# A Virtual Scheduled Light's settings schedule
+# A Virtual Scheduled Light's schedule sensor
 # ---------------------------------------------------------------------------
 
 
-async def test_settings_schedule_with_changed_entity_id_is_not_a_boundary(
+async def test_schedule_sensor_with_changed_entity_id_is_not_a_boundary(
     hass: HomeAssistant,
 ) -> None:
-    """A manual off inside the window still pauses standby after the entity ID change.
+    """A manual off inside the window keeps standby off after the entity ID change.
 
     What the light restored about its settings belongs to the schedule that
     selected them, and a schedule whose entity ID changed is still that schedule.
@@ -936,7 +939,7 @@ async def test_deleted_constituent_still_clears_the_combined_sensor(
 async def test_lux_source_with_changed_entity_id_keeps_the_reading(
     hass: HomeAssistant,
 ) -> None:
-    """An illuminance sensor follows its source and keeps reading bright."""
+    """An illuminance sensor reads its source and keeps reading bright."""
     lux = RealLux("lux", 500)
     await add_real(hass, lux)
     entry = MockConfigEntry(
@@ -1384,17 +1387,17 @@ async def test_scheduled_light_with_changed_entity_id_does_not_replay_an_applied
     light = make_scheduled_light_entry(
         schedule="binary_sensor.day", schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF
     )
-    source_schedule = schedule_entry(
+    binary_sensor_schedule = schedule_entry(
         **{
             CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
             CONF_SCHEDULE_SOURCE: "binary_sensor.workday",
         }
     )
-    await setup_entries(hass, source_schedule, light)
+    await setup_entries(hass, binary_sensor_schedule, light)
     await settle(hass)
     virtual = "light.scheduled_light"
     # Restart inside the schedule, so that is what the light restores.
-    await restart_entries(hass, source_schedule, light)
+    await restart_entries(hass, binary_sensor_schedule, light)
     await settle(hass)
     assert attrs(hass, virtual)["active_settings"] == "inside_schedule"
 
@@ -1523,7 +1526,7 @@ async def test_combined_sensor_with_changed_entity_id_keeps_its_history(
 async def test_schedule_with_changed_entity_id_keeps_its_window_marker(
     hass: HomeAssistant,
 ) -> None:
-    """A source-backed schedule does not date its window from the entity ID change.
+    """A binary sensor schedule does not date its window from the entity ID change.
 
     A moved marker would be a new window to the lights that follow it.
     """

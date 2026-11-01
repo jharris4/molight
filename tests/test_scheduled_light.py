@@ -89,7 +89,7 @@ VIRTUAL = "light.scheduled_light"
 async def test_schedule_selects_settings_for_automatic_turn_on(
     hass: HomeAssistant,
 ) -> None:
-    """Each schedule side supplies its own sensors and appearance."""
+    """Each settings set supplies its own sensors and appearance."""
     outside_occupancy = "binary_sensor.outside_occupancy"
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
@@ -164,7 +164,7 @@ async def test_schedule_change_rechecks_already_active_occupancy(
 
 @pytest.mark.asyncio
 async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
-    """The explicit end action turns off before leaving the inside settings."""
+    """At schedule end set to Turn off turns off before leaving the inside settings."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -278,7 +278,7 @@ async def test_schedule_end_off_leaves_forced_off_light_off(
 async def test_schedule_end_off_uses_outgoing_settings_transition(
     hass: HomeAssistant,
 ) -> None:
-    """The boundary off fades with the inside settings being left."""
+    """The schedule end off fades with the inside settings being left."""
     calls: list[dict] = []
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -310,7 +310,7 @@ async def test_schedule_end_off_uses_outgoing_settings_transition(
 async def test_schedule_end_defaults_to_preserving_state(
     hass: HomeAssistant,
 ) -> None:
-    """An absent action retains the pre-feature Scheduled Light behavior."""
+    """An absent action retains the pre-feature Virtual Scheduled Light behavior."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     await setup_entries(hass, make_scheduled_light_entry())
@@ -660,7 +660,7 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("end_action", "lit_by", "outside_visit", "resumed_for"),
+    ("schedule_end_action", "lit_by", "outside_visit", "resumed_for"),
     [
         # Keep leaves the inside countdown running: 300 s from the turn-on.
         pytest.param(SCHEDULE_END_ACTION_KEEP, "hand", None, 190, id="keep-countdown"),
@@ -674,12 +674,12 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
 async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
     hass: HomeAssistant,
     freezer,
-    end_action: str,
+    schedule_end_action: str,
     lit_by: str,
     outside_visit: int | None,
     resumed_for: int,
 ) -> None:
-    """Going dark resumes the countdown the end boundary would have left."""
+    """Going dark resumes the countdown the window end would have left."""
     inside_occupancy = "binary_sensor.inside_occupancy"
     outside_occupancy = "binary_sensor.outside_occupancy"
     illuminance = "binary_sensor.outside_illuminance"
@@ -695,7 +695,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
     if outside_visit is not None:
         outside[CONF_OCCUPANCY_ENTITY] = outside_occupancy
     entry = make_scheduled_light_entry(
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside=outside,
         inside={CONF_LIGHT_TIMEOUT: 300, CONF_OCCUPANCY_ENTITY: inside_occupancy},
     )
@@ -737,7 +737,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("end_action", "resumes"),
+    ("schedule_end_action", "resumes"),
     [
         (SCHEDULE_END_ACTION_TURN_OFF, False),
         (SCHEDULE_END_ACTION_KEEP, True),
@@ -746,7 +746,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 )
 @pytest.mark.parametrize("crossed", ["live", "while_down"])
 async def test_schedule_end_off_ends_an_on_period_brightness_had_cut_short(
-    hass: HomeAssistant, freezer, end_action: str, resumes: bool, crossed: str
+    hass: HomeAssistant, freezer, schedule_end_action: str, resumes: bool, crossed: str
 ) -> None:
     """A Turn off end crossed while going bright has the light off ends that
     on-period, so going dark does not resume it under the outside settings.
@@ -758,7 +758,7 @@ async def test_schedule_end_off_ends_an_on_period_brightness_had_cut_short(
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     entry = make_scheduled_light_entry(
-        schedule_end_action=end_action, outside=settings, inside=settings
+        schedule_end_action=schedule_end_action, outside=settings, inside=settings
     )
     hass.states.async_set(REAL, "off")
     if crossed == "live":
@@ -1037,7 +1037,8 @@ async def test_restart_missed_schedule_end_switch_replaces_inside_warning(
 async def test_schedule_end_off_waits_for_hold_release(
     hass: HomeAssistant,
 ) -> None:
-    """A keep-on entity from the newly active outside settings defers the off."""
+    """A keep-on entity from the newly active outside settings leaves the schedule end
+    off pending."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1062,10 +1063,10 @@ async def test_schedule_end_off_waits_for_hold_release(
 
 
 @pytest.mark.asyncio
-async def test_returning_inside_cancels_deferred_schedule_end_off(
+async def test_returning_inside_cancels_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """Reopening the schedule invalidates a held off from its prior boundary."""
+    """A new window start drops a schedule end off pending from its prior boundary."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1099,10 +1100,10 @@ async def test_returning_inside_cancels_deferred_schedule_end_off(
 
 
 @pytest.mark.asyncio
-async def test_auto_off_switch_defers_schedule_end_until_reenabled(
+async def test_auto_off_switch_keeps_schedule_end_off_pending_until_reenabled(
     hass: HomeAssistant,
 ) -> None:
-    """The shared companion switch holds and later applies a boundary off."""
+    """The shared companion switch holds and later applies a schedule end off."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1129,10 +1130,10 @@ async def test_auto_off_switch_defers_schedule_end_until_reenabled(
 
 
 @pytest.mark.asyncio
-async def test_manual_off_consumes_deferred_schedule_end_off(
+async def test_manual_off_consumes_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """Turning the light off while a boundary off is held discards that off."""
+    """Turning the light off while a schedule end off is pending discards it."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1169,7 +1170,7 @@ async def test_manual_off_consumes_deferred_schedule_end_off(
 
 
 @pytest.mark.asyncio
-async def test_manual_off_discards_deferred_schedule_end_off_across_restart(
+async def test_manual_off_discards_pending_schedule_end_off_across_restart(
     hass: HomeAssistant,
 ) -> None:
     """The boundary consumed by a manual off cannot be restored after a reload."""
@@ -1210,10 +1211,11 @@ async def test_manual_off_discards_deferred_schedule_end_off_across_restart(
 
 
 @pytest.mark.asyncio
-async def test_reload_keeps_deferred_schedule_end_off_held(
+async def test_reload_keeps_schedule_end_off_pending(
     hass: HomeAssistant,
 ) -> None:
-    """A reload with Auto-off switched off does not apply the waiting off."""
+    """A reload with Auto-off switched off does not apply the pending schedule end
+    off."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1346,7 +1348,7 @@ async def test_schedule_change_releases_old_occupancy_hold(
 async def test_schedule_change_releases_removed_keep_on_hold(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Removing the active side's keep-on entity starts its new timeout."""
+    """Removing the active settings' keep-on entity starts its new timeout."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
@@ -1428,7 +1430,7 @@ async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
     hass: HomeAssistant,
 ) -> None:
     """A newly selected gate-mode sensor reading bright only gates an off
-    light, so the new side's occupied sensor holds an on one."""
+    light, so the new settings' occupied sensor holds an on one."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
     hass.states.async_set(REAL, "on")
@@ -1458,7 +1460,7 @@ async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
 async def test_schedule_change_bright_sensor_leaves_off_light_off(
     hass: HomeAssistant,
 ) -> None:
-    """A newly selected bright sensor blocks the new side's occupied sensor."""
+    """A newly selected bright sensor blocks the new settings' occupied sensor."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
     hass.states.async_set(REAL, "off")
@@ -1518,7 +1520,7 @@ _WARNING_OUTSIDE = {
 async def test_schedule_change_hold_mid_warning_restores_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A keep-on entity from the new side aborts a running warning sequence."""
+    """A keep-on entity from the new settings aborts a running warning sequence."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -1552,7 +1554,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
 async def test_held_schedule_end_mid_warning_restores_then_turns_off(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A held turn_off boundary aborts warning before applying on release."""
+    """A pending Turn off end aborts warning before applying on release."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1586,7 +1588,7 @@ async def test_held_schedule_end_mid_warning_restores_then_turns_off(
 async def test_schedule_may_also_serve_as_a_keep_on_entity(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The settings schedule can double as a role entity on one side."""
+    """The schedule sensor can double as a role entity in one settings set."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
     entry = make_scheduled_light_entry(
@@ -1628,7 +1630,7 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
 async def test_schedule_change_hold_cancels_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A keep-on entity from the new side suspends a plain running timeout."""
+    """A keep-on entity from the new settings suspends a plain running timeout."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
@@ -1651,7 +1653,7 @@ async def test_schedule_change_hold_cancels_running_timer(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    # Releasing the hold under the new side starts a fresh full timeout.
+    # Releasing the hold under the new settings starts a fresh full timeout.
     hass.states.async_set(hold, "off")
     await settle(hass)
     freezer.tick(timedelta(seconds=9))
@@ -1668,7 +1670,7 @@ async def test_schedule_change_hold_cancels_running_timer(
 async def test_schedule_change_occupancy_mid_warning_adopts_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An occupied sensor from the new side rescues a light mid-warning."""
+    """An occupied sensor from the new settings rescues a light mid-warning."""
     occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -1688,7 +1690,7 @@ async def test_schedule_change_occupancy_mid_warning_adopts_light(
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
-    # Occupancy clearing starts the new side's own (short) timeout.
+    # Occupancy clearing starts the new settings' own (short) timeout.
     hass.states.async_set(occupancy, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_COUNTDOWN
@@ -1699,7 +1701,7 @@ async def test_schedule_change_occupancy_mid_warning_adopts_light(
 
 
 @pytest.mark.asyncio
-async def test_each_schedule_side_applies_its_turn_on_selection(
+async def test_each_settings_set_applies_its_turn_on_selection(
     hass: HomeAssistant,
 ) -> None:
     """Automatic turn-ons use the select option from the active settings."""
@@ -1746,7 +1748,7 @@ async def test_each_schedule_side_applies_its_turn_on_selection(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "end_action",
+    "schedule_end_action",
     [
         SCHEDULE_END_ACTION_TURN_OFF,
         SCHEDULE_END_ACTION_SWITCH,
@@ -1754,7 +1756,7 @@ async def test_each_schedule_side_applies_its_turn_on_selection(
     ],
 )
 async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
-    hass: HomeAssistant, freezer, end_action: str
+    hass: HomeAssistant, freezer, schedule_end_action: str
 ) -> None:
     """A turn-on the inside settings have not sent yet is judged as an on light."""
     select = _SlowSelect(hass)
@@ -1764,7 +1766,7 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(inside_occupancy, "off")
     entry = make_scheduled_light_entry(
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside={CONF_LIGHT_TIMEOUT: 60},
         inside={
             CONF_LIGHT_TIMEOUT: 600,
@@ -1785,14 +1787,16 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
 
     state = hass.states.get(VIRTUAL)
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
-    if end_action == SCHEDULE_END_ACTION_TURN_OFF:
+    if schedule_end_action == SCHEDULE_END_ACTION_TURN_OFF:
         assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
         return
     # The outside settings have no occupancy or maintain sensor, so their own
     # timeout runs: recalculated as a fresh one by switch, started for the lost
     # hold by keep.
     expected = (
-        STATE_ACTIVE if end_action == SCHEDULE_END_ACTION_SWITCH else STATE_COUNTDOWN
+        STATE_ACTIVE
+        if schedule_end_action == SCHEDULE_END_ACTION_SWITCH
+        else STATE_COUNTDOWN
     )
     assert (state.state, state.attributes["molight_state"]) == ("on", expected)
     freezer.tick(timedelta(seconds=61))
@@ -1803,7 +1807,7 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "end_action",
+    "schedule_end_action",
     [
         SCHEDULE_END_ACTION_TURN_OFF,
         SCHEDULE_END_ACTION_SWITCH,
@@ -1811,7 +1815,7 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     ],
 )
 async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selection(
-    hass: HomeAssistant, freezer, end_action: str
+    hass: HomeAssistant, freezer, schedule_end_action: str
 ) -> None:
     """A virtual turn-on not sent yet is judged as an on light too."""
     select = _SlowSelect(hass)
@@ -1822,7 +1826,7 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(outside_occupancy, "off", {"latest_occupied_time": visit})
     entry = make_scheduled_light_entry(
-        schedule_end_action=end_action,
+        schedule_end_action=schedule_end_action,
         outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: outside_occupancy},
         inside={
             CONF_LIGHT_TIMEOUT: 600,
@@ -1848,7 +1852,7 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
 
     state = hass.states.get(VIRTUAL)
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
-    if end_action == SCHEDULE_END_ACTION_KEEP:
+    if schedule_end_action == SCHEDULE_END_ACTION_KEEP:
         # Keep hands the turn-on over: it runs the outside timeout.
         assert (state.state, state.attributes["molight_state"]) == ("on", STATE_ACTIVE)
         assert state.attributes["brightness"] == 200
@@ -1866,7 +1870,7 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
 async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
     hass: HomeAssistant,
 ) -> None:
-    """A held Turn off end is kept for a virtual turn-on not sent yet, and
+    """A pending Turn off end is kept for a virtual turn-on not sent yet, and
     applies when the hold releases."""
     select = _SlowSelect(hass)
     hold = "input_boolean.keep_on"
@@ -1914,7 +1918,7 @@ async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
 async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
     hass: HomeAssistant, freezer, lit_by: str, released: str
 ) -> None:
-    """Releasing the hold applies a deferred Turn off end to a turn-on still
+    """Releasing the hold applies a pending Turn off end to a turn-on still
     waiting for its selection, as it does once the turn-on was sent."""
     select = _SlowSelect(hass)
     occupancy = "binary_sensor.inside_occupancy"
@@ -2019,10 +2023,10 @@ async def test_waiting_turn_on_cancelled_by_a_schedule_end_reports_off(
 
 
 @pytest.mark.asyncio
-async def test_options_reload_uses_current_schedule_side(
+async def test_options_reload_uses_current_settings_set(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A reload selects the current side and applies that side's new timeout."""
+    """A reload selects the current settings set and applies its new timeout."""
     hass.states.async_set(REAL, "on", {"brightness": 180})
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -2054,7 +2058,8 @@ async def test_options_reload_uses_current_schedule_side(
 async def test_rapid_schedule_changes_finish_with_latest_settings(
     hass: HomeAssistant,
 ) -> None:
-    """Queued actions from intermediate sides cannot win after the last edge."""
+    """Queued actions from intermediate settings sets cannot win after the last
+    boundary."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.outside_illuminance"
     hass.states.async_set(REAL, "off")
@@ -2075,7 +2080,8 @@ async def test_rapid_schedule_changes_finish_with_latest_settings(
     )
     await setup_entries(hass, entry)
 
-    # Do not settle between edges: their async light service calls overlap.
+    # Do not settle between schedule boundaries: their async light service calls
+    # overlap.
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -2092,7 +2098,8 @@ async def test_rapid_schedule_changes_finish_with_latest_settings(
 async def test_schedule_unavailable_keeps_last_selected_settings(
     hass: HomeAssistant, bad_state: str
 ) -> None:
-    """A bad schedule state keeps the last side active until a valid one returns."""
+    """A bad schedule state keeps the last settings set active until a valid one
+    returns."""
     outside_occupancy = "binary_sensor.outside_occupancy"
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
@@ -2140,18 +2147,18 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
 
 
 @pytest.mark.asyncio
-async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
+async def test_binary_sensor_schedule_drives_scheduled_light_end_to_end(
     hass: HomeAssistant,
 ) -> None:
     """A real source propagates through its schedule wrapper to the active settings."""
     source = "binary_sensor.house_mode"
-    schedule_entity = "binary_sensor.profile_schedule"
+    schedule_entity = "binary_sensor.settings_set_schedule"
     hass.states.async_set(source, "off")
     schedule = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULE,
-            CONF_NAME: "Profile Schedule",
+            CONF_NAME: "Settings Set Schedule",
             CONF_SCHEDULE_DEFINITION: SCHEDULE_DEFINITION_BINARY_SENSOR,
             CONF_SCHEDULE_SOURCE: source,
         },
@@ -2193,7 +2200,7 @@ async def test_source_backed_schedule_drives_scheduled_light_end_to_end(
 async def test_schedule_briefly_unavailable_does_not_restart_running_timeout(
     hass: HomeAssistant, freezer, bad_state: str
 ) -> None:
-    """Going unavailable and recovering on the same side leaves its timer alone."""
+    """Going unavailable and recovering in the same state leaves its timer alone."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -2262,7 +2269,8 @@ async def test_restart_valid_schedule_state_overrides_restore(
 async def test_restart_catches_up_missed_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """Restored inside settings plus an off schedule apply the missed edge."""
+    """Restored inside settings plus an off schedule apply the missed schedule
+    boundary."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
     mock_restore_cache(
@@ -2291,7 +2299,7 @@ async def test_restart_catches_up_missed_schedule_end_off(
 async def test_restart_missed_schedule_end_keep_leaves_light_on(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Under the default keep action a missed end swaps settings, light on."""
+    """Under the default Keep state a missed window end switches settings, light on."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
@@ -2494,7 +2502,7 @@ async def test_schedule_swap_preserves_already_pending_boundary(
 async def test_restart_with_held_pending_off_reports_maintained_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A held pending boundary seeds OCCUPIED under a maintain hold, then applies."""
+    """A pending schedule end off seeds OCCUPIED under a maintain hold, then applies."""
     hold = "input_boolean.keep_on"
     maintain = "binary_sensor.maintain"
     hass.states.async_set(REAL, "on")
@@ -2580,7 +2588,7 @@ async def test_restart_clears_pending_off_when_physical_light_is_already_off(
 async def test_restart_held_pending_off_restores_old_warning_before_release(
     hass: HomeAssistant,
 ) -> None:
-    """A held pending off undoes its old warning presentation before waiting."""
+    """A pending schedule end off undoes its old warning presentation before waiting."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on", {"brightness": 255})
     hass.states.async_set(SCHEDULE, "off")
@@ -2671,7 +2679,7 @@ async def test_restart_across_a_boundary_ends_a_manual_off_over_presence(
     hass: HomeAssistant, was_inside: bool, schedule: str, marker: str | None, lit: bool
 ) -> None:
     """A manual off made during someone's visit holds across a restart only
-    while no settings boundary has passed, as it would without the restart."""
+    while no schedule boundary has passed, as it would without the restart."""
     occupancy = "binary_sensor.occupancy"
     now = datetime.now(UTC)
     hass.states.async_set(REAL, "off")
@@ -2748,7 +2756,7 @@ async def test_reload_with_different_schedule_does_not_catch_up_boundary(
 async def test_restored_pending_off_is_dropped_when_action_is_keep(
     hass: HomeAssistant,
 ) -> None:
-    """A boundary off deferred under turn_off dies with a reload to keep."""
+    """A schedule end off pending under turn_off dies with a reload to keep."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
     mock_restore_cache(
@@ -2773,10 +2781,11 @@ async def test_restored_pending_off_is_dropped_when_action_is_keep(
 
 
 @pytest.mark.asyncio
-async def test_options_reload_to_keep_drops_deferred_schedule_end_off(
+async def test_options_reload_to_keep_drops_pending_schedule_end_off(
     hass: HomeAssistant,
 ) -> None:
-    """Changing the end action to keep releases a boundary held by a keep-on."""
+    """Changing the At schedule end field to keep releases a pending off held by a
+    keep-on."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
@@ -2844,7 +2853,7 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
     bad_state: str | None,
     restored: str,
 ) -> None:
-    """An unusable schedule keeps the restored set of settings after a restart."""
+    """An unusable schedule keeps the restored settings set after a restart."""
     hass.states.async_set(REAL, "off")
     if bad_state is not None:
         hass.states.async_set(SCHEDULE, bad_state)
@@ -2874,10 +2883,10 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_restart_unavailable_does_not_apply_other_side_sensors(
+async def test_restart_unavailable_does_not_apply_other_settings_set_sensors(
     hass: HomeAssistant,
 ) -> None:
-    """Restoration selects a side before startup sensor rules are evaluated."""
+    """Restoration selects a settings set before startup sensor rules are evaluated."""
     outside_occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "unavailable")
@@ -2930,12 +2939,14 @@ async def test_boundary_keeps_door_hold_while_briefly_unavailable(
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "off")
-    side = {
+    settings_set = {
         CONF_LIGHT_TIMEOUT: 60,
         CONF_DOOR_ENTITY: door,
         CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
     }
-    entry = make_scheduled_light_entry(outside=dict(side), inside=dict(side))
+    entry = make_scheduled_light_entry(
+        outside=dict(settings_set), inside=dict(settings_set)
+    )
     await setup_entries(hass, entry)
 
     hass.states.async_set(door, "on")
@@ -2964,10 +2975,10 @@ async def test_boundary_does_not_carry_one_door_hold_onto_another_door(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door_a, "off")
     hass.states.async_set(door_b, "unavailable")
-    side = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     entry = make_scheduled_light_entry(
-        outside=side | {CONF_DOOR_ENTITY: door_a},
-        inside=side | {CONF_DOOR_ENTITY: door_b},
+        outside=settings_set | {CONF_DOOR_ENTITY: door_a},
+        inside=settings_set | {CONF_DOOR_ENTITY: door_b},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(door_a, "on")
@@ -2985,17 +2996,18 @@ async def test_boundary_and_a_door_unavailable_for_a_minute(
     hass: HomeAssistant, freezer, inside_door: str
 ) -> None:
     """The same door's outage runs on across the boundary and counts it closed
-    60 s after it began; another door, open on the new side, keeps holding."""
+    60 s after it began; another door, open on the new settings, keeps holding."""
     door = "binary_sensor.outside_door"
     other = "binary_sensor.inside_door"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "off")
     hass.states.async_set(other, "on")
-    side = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     entry = make_scheduled_light_entry(
-        outside=side | {CONF_DOOR_ENTITY: door},
-        inside=side | {CONF_DOOR_ENTITY: door if inside_door == "same" else other},
+        outside=settings_set | {CONF_DOOR_ENTITY: door},
+        inside=settings_set
+        | {CONF_DOOR_ENTITY: door if inside_door == "same" else other},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(door, "on")
@@ -3016,10 +3028,11 @@ async def test_boundary_and_a_door_unavailable_for_a_minute(
 
 
 @pytest.mark.asyncio
-async def test_boundary_off_defers_to_unavailable_keep_on_hold(
+async def test_schedule_end_off_stays_pending_for_unavailable_keep_on_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A keep-on hold briefly unavailable at the window end still defers the off."""
+    """A keep-on hold briefly unavailable at the window end still leaves the schedule
+    end off pending."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
@@ -3040,7 +3053,7 @@ async def test_boundary_off_defers_to_unavailable_keep_on_hold(
     assert state.state == "on"
     assert state.attributes[ATTR_SCHEDULE_END_OFF_PENDING] is True
 
-    # The recovered hold clearing applies the deferred off.
+    # The recovered hold clearing applies the pending off.
     hass.states.async_set(hold, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -3178,12 +3191,14 @@ async def test_settings_switch_keeps_the_last_known_illuminance_through_outage(
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(illuminance, "on")  # bright
-    profile = {
+    settings_set = {
         CONF_LIGHT_TIMEOUT: 60,
         CONF_ILLUMINANCE_ENTITY: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
-    entry = make_scheduled_light_entry(outside=dict(profile), inside=dict(profile))
+    entry = make_scheduled_light_entry(
+        outside=dict(settings_set), inside=dict(settings_set)
+    )
     await setup_entries(hass, entry)
 
     # Bright never blocks a virtual on.
@@ -3221,8 +3236,10 @@ async def test_settings_switch_keeps_the_hold_of_an_unreadable_sensor(
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(presence, "off")
-    profile = {CONF_LIGHT_TIMEOUT: 60, role: presence}
-    entry = make_scheduled_light_entry(outside=dict(profile), inside=dict(profile))
+    settings_set = {CONF_LIGHT_TIMEOUT: 60, role: presence}
+    entry = make_scheduled_light_entry(
+        outside=dict(settings_set), inside=dict(settings_set)
+    )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
@@ -3257,9 +3274,9 @@ async def _manual_off_then_boundary(
         {"current_window_start": "w1"},
     )
     hass.states.async_set(_OCCUPANCY, "unavailable")
-    profile = {CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: _OCCUPANCY}
-    inside = {**profile, CONF_STANDBY_BRIGHTNESS: 20} if standby else profile
-    entry = make_scheduled_light_entry(outside=profile, inside=inside)
+    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: _OCCUPANCY}
+    inside = {**settings_set, CONF_STANDBY_BRIGHTNESS: 20} if standby else settings_set
+    entry = make_scheduled_light_entry(outside=settings_set, inside=inside)
     await setup_entries(hass, entry)
     freezer.tick(timedelta(seconds=1))
     await hass.services.async_call(
@@ -3348,7 +3365,7 @@ async def test_boundary_missed_while_down_ends_a_manual_off_for_later_restarts(
 async def test_leaving_settings_with_standby_ends_their_manual_off(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
-    """The end boundary ends a standby window's manual off for the outside
+    """The window end ends a standby window's manual off for the outside
     settings too, which have no standby to scope it."""
     entry = await _manual_off_then_boundary(hass, freezer, "end", standby=True)
     if how == "restart":
@@ -3393,10 +3410,10 @@ async def test_new_manual_off_after_a_boundary_stands_across_a_restart(
         ("2026-03-20 20:00", ACTIVE_SETTINGS_INSIDE, 51),
     ],
 )
-async def test_settings_schedule_with_a_sunset_past_its_fixed_end_stays_outside(
+async def test_schedule_sensor_with_a_sunset_past_its_fixed_end_stays_outside(
     hass: HomeAssistant, freezer, when: str, active: str, brightness: int
 ) -> None:
-    """A sunset -> 21:00 settings schedule has no window on a June day, so
+    """A sunset -> 21:00 schedule sensor has no window on a June day, so
     the light keeps its outside settings instead of the inside ones all day."""
     tz = await set_home(hass, *TORONTO)
     freezer.move_to(datetime.fromisoformat(when).replace(tzinfo=tz))
@@ -3434,10 +3451,10 @@ async def test_settings_schedule_with_a_sunset_past_its_fixed_end_stays_outside(
 
 
 @pytest.mark.asyncio
-async def test_keep_state_boundary_into_a_blank_side_releases_a_held_light(
+async def test_keep_state_boundary_into_a_blank_settings_set_releases_a_held_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light the inside sensor held passes to a blank outside side: on, no timer."""
+    """A light the inside sensor held passes to blank outside settings: on, no timer."""
     occupancy = "binary_sensor.boundary_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -3469,7 +3486,7 @@ async def test_keep_state_boundary_into_a_blank_side_releases_a_held_light(
 
 
 @pytest.mark.asyncio
-async def test_switch_state_into_a_blank_side_with_presence_history_runs_no_timer(
+async def test_switch_state_into_a_blank_settings_set_with_presence_runs_no_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """Switch state recalculates from the outside history: no timeout, no timer."""

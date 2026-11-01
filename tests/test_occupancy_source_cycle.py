@@ -1,10 +1,10 @@
 """A Virtual Occupancy Sensor whose source is computed from the sensor.
 
 An occupancy sensor cannot be its own source, but a group can contain it,
-directly or through a nested group or a combined occupancy sensor. Following
+directly or through a nested group or a combined occupancy sensor. Reading
 such a source holds the sensor on by its own state, and the lights that reference
 it with it. The forms reject one, and a group changed afterwards is a source
-the sensor stops following.
+the sensor stops reading.
 """
 
 from __future__ import annotations
@@ -52,7 +52,9 @@ if TYPE_CHECKING:
 SEEN = "binary_sensor.seen"
 ROOM = "binary_sensor.room"
 TOPOLOGIES = ["direct", "nested", "combined"]
-WARNING = f"Occupancy sensor {SEEN} does not follow its source"
+WARNING = (
+    f"Occupancy sensor {SEEN} reads as clear because its source {GROUP} includes it"
+)
 
 
 def _occupancy(
@@ -108,7 +110,7 @@ async def _wait(hass: HomeAssistant, freezer, minutes: int) -> None:
 @pytest.mark.parametrize("occupied", [False, True])
 @pytest.mark.parametrize("unavailable_timeout", [None, 0])
 @pytest.mark.allow_warning_log
-async def test_a_source_group_changed_to_include_the_sensor_is_not_followed(
+async def test_a_source_group_changed_to_include_the_sensor_is_not_read(
     hass: HomeAssistant,
     freezer,
     caplog: pytest.LogCaptureFixture,
@@ -151,7 +153,7 @@ async def test_a_source_group_changed_to_include_the_sensor_is_not_followed(
     assert hass.states.get(GROUP).state == "off"
     assert not lamp.is_on
 
-    # Reloading the sensor's entry does not start it following again.
+    # Reloading the sensor's entry does not start it reading again.
     real.set(True)
     await settle(hass)
     assert await hass.config_entries.async_reload(seen.entry_id)
@@ -170,7 +172,7 @@ async def test_a_source_group_changed_to_include_the_sensor_is_not_followed(
 
 
 @pytest.mark.asyncio
-async def test_a_source_group_of_other_sensors_is_followed(
+async def test_a_source_group_of_other_sensors_is_read(
     hass: HomeAssistant, freezer, caplog: pytest.LogCaptureFixture
 ) -> None:
     """An independent group, with another occupancy sensor in it, is a source."""
@@ -193,7 +195,7 @@ async def test_a_source_group_of_other_sensors_is_followed(
         assert hass.states.get(SEEN).state == "off"
     await _wait(hass, freezer, 2)
     assert hass.states.get(SEEN).state == "off"
-    assert "does not follow" not in caplog.text
+    assert "reads as clear" not in caplog.text
 
 
 async def _edit_source(hass: HomeAssistant, entry: MockConfigEntry, source: str):

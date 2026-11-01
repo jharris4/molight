@@ -523,7 +523,7 @@ async def test_follow_window_start_during_effect_restores_lights(
 async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The schedule entity recovering mid-window while the light reached the
+    """The schedule sensor recovering mid-window while the light reached the
     warn stage re-adopts the light as SCHEDULED and undoes the warn dim."""
     entry = make_light_entry(
         schedule=SCHED,

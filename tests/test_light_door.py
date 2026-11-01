@@ -442,7 +442,7 @@ async def test_open_close_dark_return_re_holds_open_door(
 async def test_gate_window_start_reevaluates_open_door(
     hass: HomeAssistant, door_mode: str, expect_on: bool
 ) -> None:
-    """A standing-open open_close door lights the room when the window opens.
+    """A standing-open open_close door lights the room when the window starts.
 
     An open-mode door is a momentary trigger with no standing state, so the
     window start does not re-fire it.
@@ -460,7 +460,7 @@ async def test_gate_window_start_reevaluates_open_door(
     await settle(hass)
     assert _state(hass).state == "off"
 
-    hass.states.async_set(SCHED, "on")  # window opens, door still open
+    hass.states.async_set(SCHED, "on")  # window starts, door still open
     await settle(hass)
     state = _state(hass)
     assert (state.state == "on") is expect_on

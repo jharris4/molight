@@ -1036,7 +1036,7 @@ async def test_restart_during_warn_without_snapshot_keeps_warn_brightness(
     hass: HomeAssistant,
 ) -> None:
     """A restore from before pre_warn_brightness existed (attribute absent)
-    falls back to adopting the physical brightness as-is."""
+    falls back to mirroring the members' brightness as is."""
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"brightness": 255})])
     hass.states.async_set(REAL, "on", {"brightness": 255})
     await setup_entries(hass, make_light_entry(warn_timeout=30, warn_brightness=100))
@@ -1086,7 +1086,7 @@ async def test_restart_mid_warning_without_warning_active_uses_the_snapshot(
 ) -> None:
     """A state written before warning_active existed is judged the old way, by
     whether a snapshot was taken, so an upgrade landing mid-warning still
-    restores the pre-warning brightness instead of adopting the warn stage's."""
+    restores the pre-warning brightness instead of mirroring the warn stage's."""
     mock_restore_cache(
         hass,
         [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 180})],

@@ -83,7 +83,7 @@ def _time_schedule(name: str, start: str | dict, end: str | dict) -> MockConfigE
     )
 
 
-def _mirror_schedule(
+def _binary_sensor_schedule(
     name: str, source: str, *, invert: bool = False
 ) -> MockConfigEntry:
     return MockConfigEntry(
@@ -270,7 +270,7 @@ async def test_back_to_back_windows_are_one_period(
     hass: HomeAssistant, freezer
 ) -> None:
     """Where one input ends as another starts there is no brief off and the
-    marker stays the start of the whole period."""
+    marker stays the start of the whole schedule period."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     await _setup(
@@ -299,7 +299,7 @@ async def test_back_to_back_windows_are_one_period(
 async def test_all_is_on_only_where_inputs_overlap(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With "all", the on-period is the overlap and starts where it begins."""
+    """With "all", the schedule period is the overlap and starts where it begins."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")
     await _setup(
@@ -328,7 +328,7 @@ async def test_all_is_on_only_where_inputs_overlap(
 
 @pytest.mark.asyncio
 async def test_inverted_combination(hass: HomeAssistant, freezer) -> None:
-    """Invert output turns the gaps between inputs into the on-periods."""
+    """Invert output turns the gaps between inputs into the schedule periods."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 19:00:00+00:00")
     await _setup(
@@ -374,7 +374,8 @@ async def test_always_on_marker_is_stable_across_days(
 
 @pytest.mark.asyncio
 async def test_disabled_input_is_unknown(hass: HomeAssistant, freezer) -> None:
-    """A disabled input counts as unknown, like a mirror whose state is gone."""
+    """A disabled input counts as unknown, like a binary sensor schedule whose state is
+    gone."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     morning = _time_schedule("Morning", "06:00", "08:00")
@@ -393,7 +394,7 @@ async def test_disabled_input_is_unknown(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["time", "mirror", "combined"])
+@pytest.mark.parametrize("kind", ["time", "binary_sensor", "combined"])
 async def test_disabled_input_entity_is_unknown(
     hass: HomeAssistant, freezer, kind: str
 ) -> None:
@@ -404,7 +405,7 @@ async def test_disabled_input_entity_is_unknown(
     hass.states.async_set("binary_sensor.door", "on")
     entries = {
         "time": [_time_schedule("Morning", "06:00", "08:00")],
-        "mirror": [_mirror_schedule("Morning", "binary_sensor.door")],
+        "binary_sensor": [_binary_sensor_schedule("Morning", "binary_sensor.door")],
         "combined": [
             _time_schedule("Early", "06:00", "08:00"),
             _combined("Morning", ["binary_sensor.early"]),
@@ -469,7 +470,7 @@ def _input_and_combination(
     morning = (
         _time_schedule("Morning", "06:00", "08:00")
         if definition == "time"
-        else _mirror_schedule("Morning", "binary_sensor.door")
+        else _binary_sensor_schedule("Morning", "binary_sensor.door")
     )
     if not nested:
         return morning, [_combined("Bedside", ["binary_sensor.morning"])]
@@ -587,7 +588,7 @@ async def test_no_inputs_is_off(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_nested_combined_expands_to_plain_schedules(
+async def test_nested_combined_expands_to_virtual_schedule_sensors(
     hass: HomeAssistant, freezer
 ) -> None:
     """(Morning OR Evening) AND Daytime, built by nesting combined schedules."""
@@ -640,7 +641,7 @@ async def test_unavailable_input_only_matters_when_it_could_change_the_result(
     await _setup(
         hass,
         _time_schedule("Evening", "20:00", "23:00"),
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Any", ["binary_sensor.evening", "binary_sensor.house"]),
         _combined(
             "All",
@@ -663,14 +664,14 @@ async def test_unavailable_input_only_matters_when_it_could_change_the_result(
     assert hass.states.get("binary_sensor.all").state == "off"
 
     # House recovers on. Nothing shows the combination was ever off, so the
-    # outage stays inside the same on-period.
+    # outage stays inside the same schedule period.
     hass.states.async_set("binary_sensor.house_mode", "on")
     await settle(hass)
     any_state = hass.states.get("binary_sensor.any")
     assert any_state.state == "on"
     assert any_state.attributes["current_window_start"] == "2026-07-02T20:00:00+00:00"
 
-    # Once "any" is known off, House's next on-period is a new one.
+    # Once "any" is known off, House's next schedule period is a new one.
     hass.states.async_set("binary_sensor.house_mode", "off")
     await settle(hass)
     assert hass.states.get("binary_sensor.any").state == "off"
@@ -686,8 +687,8 @@ async def test_unavailable_input_only_matters_when_it_could_change_the_result(
 async def test_inputs_reached_twice_never_glitch(hass: HomeAssistant, freezer) -> None:
     """A sensor reached through two routes never shows a half-updated result.
 
-    Each combination below is always on. Two mirrors of one sensor change as
-    separate updates, and a nested combined schedule would lag its input if
+    Each combination below is always on. Two binary sensor schedules of one sensor
+    change as separate updates, and a nested combined schedule would lag its input if
     it were read by state.
     """
     await hass.config.async_set_time_zone("UTC")
@@ -695,8 +696,8 @@ async def test_inputs_reached_twice_never_glitch(hass: HomeAssistant, freezer) -
     hass.states.async_set("binary_sensor.house_mode", "off")
     await _setup(
         hass,
-        _mirror_schedule("Home", "binary_sensor.house_mode"),
-        _mirror_schedule("Away", "binary_sensor.house_mode", invert=True),
+        _binary_sensor_schedule("Home", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("Away", "binary_sensor.house_mode", invert=True),
         _combined("Mirrors", ["binary_sensor.home", "binary_sensor.away"]),
         _combined("Not Home", ["binary_sensor.home"], invert=True),
         _combined("Nested", ["binary_sensor.home", "binary_sensor.not_home"]),
@@ -741,7 +742,7 @@ async def test_inputs_shared_by_nested_layers_are_evaluated_once(
     entries = [
         _time_schedule("Morning", "06:00", "12:00"),
         evening,
-        _mirror_schedule("Pulse", "binary_sensor.pulse_source"),
+        _binary_sensor_schedule("Pulse", "binary_sensor.pulse_source"),
     ]
     layers: dict[str, tuple[list[str], bool, bool]] = {}
     below = ["binary_sensor.morning", "binary_sensor.evening"]
@@ -784,7 +785,7 @@ async def test_inputs_shared_by_nested_layers_are_evaluated_once(
     hass.states.async_set("binary_sensor.pulse_source", "on")
     await settle(hass)
     _check(morning=True, evening=False, pulse=True)
-    # Every layer refreshes once and reads each time schedule once.
+    # Every layer refreshes once and reads each time-window schedule once.
     assert evaluations == 2 * _LAYERS
 
     expanded = 0
@@ -799,7 +800,7 @@ async def test_inputs_shared_by_nested_layers_are_evaluated_once(
     top = entries[-1]
     assert await hass.config_entries.async_reload(top.entry_id)
     await settle(hass)
-    # The layers below and the three plain schedules, each once.
+    # The layers below and the three Virtual Schedule Sensors, each once.
     assert expanded == _LAYERS - 1 + 3
     _check(morning=True, evening=False, pulse=True)
 
@@ -824,7 +825,7 @@ async def test_inputs_shared_by_nested_layers_are_evaluated_once(
 async def test_marker_holds_while_inputs_hand_over(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The on-period's start doesn't move when the input that began it turns off
+    """The schedule period's start doesn't move when the input that began it turns off
     while another keeps the combination on, even though that input's earlier
     history is then unknown."""
     await hass.config.async_set_time_zone("UTC")
@@ -833,7 +834,7 @@ async def test_marker_holds_while_inputs_hand_over(
     await _setup(
         hass,
         _time_schedule("Late Morning", "10:00", "12:00"),
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Either", ["binary_sensor.late_morning", "binary_sensor.house"]),
     )
     await _move_to(hass, freezer, "2026-07-02 09:00:00+00:00")
@@ -858,8 +859,9 @@ async def test_marker_holds_while_inputs_hand_over(
 async def test_restart_keeps_marker_when_start_came_from_last_changed(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A mirror's off-since time resets on restart, so an on-period that began
-    there keeps its restored marker instead of re-triggering Follow mode."""
+    """A binary sensor schedule's off-since time resets on restart, so a schedule
+    period that began there keeps its restored marker instead of re-triggering
+    Follow mode."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "off")
@@ -870,7 +872,7 @@ async def test_restart_keeps_marker_when_start_came_from_last_changed(
     )
     await _setup(
         hass,
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Out", ["binary_sensor.house"], invert=True),
     )
     state = hass.states.get("binary_sensor.out")
@@ -892,7 +894,7 @@ async def test_restart_rederives_an_unparsable_marker(
     )
     await _setup(
         hass,
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Out", ["binary_sensor.house"], invert=True),
     )
     since = hass.states.get("binary_sensor.house").last_changed
@@ -905,13 +907,14 @@ async def test_restart_rederives_an_unparsable_marker(
 async def test_start_from_last_changed_is_used_without_a_restored_period(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With no on-period to continue, the mirror's off-since time is the start."""
+    """With no schedule period to continue, the binary sensor schedule's off-since
+    time is the start."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "off")
     await _setup(
         hass,
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Out", ["binary_sensor.house"], invert=True),
     )
     since = hass.states.get("binary_sensor.house").last_changed
@@ -960,15 +963,15 @@ async def test_handed_over_marker_survives_outage_and_restart(
     combined = _combined("Either", ["binary_sensor.mirror_a", "binary_sensor.mirror_b"])
     await _setup(
         hass,
-        _mirror_schedule("Mirror A", "binary_sensor.src_a"),
-        _mirror_schedule("Mirror B", "binary_sensor.src_b"),
+        _binary_sensor_schedule("Mirror A", "binary_sensor.src_a"),
+        _binary_sensor_schedule("Mirror B", "binary_sensor.src_b"),
         combined,
     )
     marker = "2026-07-02T07:00:00+00:00"
     state = hass.states.get("binary_sensor.either")
     assert state.attributes["current_window_start"] == marker
 
-    # B takes over from A: still the period that began at 07:00.
+    # B takes over from A: still the schedule period that began at 07:00.
     await _move_to(hass, freezer, "2026-07-02 08:00:00+00:00")
     hass.states.async_set("binary_sensor.src_b", "on")
     await settle(hass)
@@ -1004,7 +1007,9 @@ async def test_startup_holds_state_saved_during_an_outage(
     freezer.move_to("2026-07-02 09:00:00+00:00")
     hass.states.async_set("binary_sensor.house_mode", "on")
     combined = _combined("Bedside", ["binary_sensor.house"])
-    await _setup(hass, _mirror_schedule("House", "binary_sensor.house_mode"), combined)
+    await _setup(
+        hass, _binary_sensor_schedule("House", "binary_sensor.house_mode"), combined
+    )
     marker = hass.states.get("binary_sensor.bedside").attributes["current_window_start"]
     hass.states.async_set("binary_sensor.house_mode", "unavailable")
     await settle(hass)
@@ -1036,7 +1041,7 @@ async def test_startup_holds_restored_state_until_inputs_report(
     # House's source hasn't loaded, so House is unavailable.
     await _setup(
         hass,
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         _combined("Bedside", ["binary_sensor.house"]),
     )
     assert hass.states.get("binary_sensor.house").state == "unavailable"
@@ -1091,7 +1096,7 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
     await _setup(
         hass,
         _time_schedule("Morning", "06:00", "08:00"),
-        _mirror_schedule("House", "binary_sensor.house_mode"),
+        _binary_sensor_schedule("House", "binary_sensor.house_mode"),
         combined,
     )
     assert hass.states.get("binary_sensor.bedside").state == "on"
@@ -1337,7 +1342,7 @@ async def test_deleting_one_input_of_an_all_combination_widens_it(
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-04 19:00:00+00:00")  # a Saturday
     hass.states.async_set("binary_sensor.workday_sensor", "off")
-    workday = _mirror_schedule("Workday", "binary_sensor.workday_sensor")
+    workday = _binary_sensor_schedule("Workday", "binary_sensor.workday_sensor")
     combined = _combined(
         "Work Evenings",
         ["binary_sensor.evening", "binary_sensor.workday"],
@@ -1397,7 +1402,7 @@ async def test_deleting_an_input_already_gone_from_the_registry(
 
 
 @pytest.mark.asyncio
-async def test_sun_anchored_input(hass: HomeAssistant, freezer) -> None:
+async def test_sun_event_input(hass: HomeAssistant, freezer) -> None:
     """A sun-based input's window comes from its entry settings, sun event included."""
     day = date(2026, 7, 2)
     sunset = get_astral_event_date(hass, "sunset", day)
@@ -1563,7 +1568,7 @@ async def test_sun_input_past_its_fixed_end_adds_no_window(
         hass,
         _time_schedule("Bedside Morning", "06:30", "08:00"),
         _time_schedule("Bedside Evening", {"sun": "sunset"}, "23:00"),
-        _mirror_schedule("Workday", "binary_sensor.workday"),
+        _binary_sensor_schedule("Workday", "binary_sensor.workday"),
         _combined(
             "Bedside Schedule",
             ["binary_sensor.bedside_morning", "binary_sensor.bedside_evening"],
@@ -1594,7 +1599,7 @@ async def test_sun_input_past_its_fixed_end_adds_no_window(
         ({"sun": "sunrise"}, {"sun": "sunset"}, "2026-06-21 12:00", "off"),
     ],
 )
-async def test_polar_transition_windows_in_a_combination(
+async def test_windows_on_days_around_a_polar_period_in_a_combination(
     hass: HomeAssistant, freezer, start: str | dict, end: dict, when: str, expected: str
 ) -> None:
     """A time-window input keeps the nights next to a polar period."""
@@ -1683,7 +1688,7 @@ async def test_input_pairs_a_fixed_time_with_the_same_days_sun_event_in_samoa(
 async def test_inverted_sun_window_keeps_one_marker_through_the_midnight_sun(
     hass: HomeAssistant, freezer, combined: MockConfigEntry, entity_id: str
 ) -> None:
-    """Daytime in Tromso is one on-period from the last sunrise on 05-18,
+    """Daytime in Tromso is one schedule period from the last sunrise on 05-18,
     however many days the sun then stays up."""
     await set_home(hass, *TROMSO)
     freezer.move_to("2026-05-18 12:00:00+02:00")
@@ -1767,14 +1772,14 @@ async def test_time_zone_change_inside_the_combined_window_keeps_its_marker(
 ) -> None:
     """08:00 -> 22:00 is under way at 12:00 UTC and in Toronto (08:00). The
     combination stays on: one window, through the old boundary, a
-    source-backed input changing, and a restart."""
+    binary sensor input changing, and a restart."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("binary_sensor.guests", "off")
     await settle(hass)
     entries = (
         _time_schedule("Day", "08:00", "22:00"),
-        _mirror_schedule("Guests Here", "binary_sensor.guests"),
+        _binary_sensor_schedule("Guests Here", "binary_sensor.guests"),
         _combined("Lit", ["binary_sensor.day", "binary_sensor.guests_here"]),
         _combined("Nested", ["binary_sensor.lit"], operator=SCHEDULE_OPERATOR_ALL),
     )
@@ -1831,7 +1836,7 @@ async def test_time_zone_change_while_an_input_is_out_keeps_the_marker(
     await _setup(
         hass,
         _time_schedule("Day", "08:00", "22:00"),
-        _mirror_schedule("Guests Here", "binary_sensor.guests"),
+        _binary_sensor_schedule("Guests Here", "binary_sensor.guests"),
         _combined(
             "Lit",
             ["binary_sensor.day", "binary_sensor.guests_here"],
@@ -1913,7 +1918,7 @@ async def test_follow_light_manual_off_stands_through_a_time_zone_change(
 
 
 # ---------------------------------------------------------------------------
-# A source-backed input is dated from its window marker, not its last change
+# A binary sensor input is dated from its window marker, not its last change
 # ---------------------------------------------------------------------------
 
 
@@ -1923,12 +1928,12 @@ async def test_follow_light_manual_off_stands_through_a_time_zone_change(
     [("on", False), ("off", True)],
     ids=["plain", "inverted"],
 )
-async def test_combined_period_starts_when_a_source_backed_input_started(
+async def test_combined_period_starts_when_a_binary_sensor_input_started(
     hass: HomeAssistant, freezer, source_state: str, invert: bool
 ) -> None:
-    """A mirror set up two hours into its source's on-period dates its window
-    from the source, while its own state is new. The combination, and one
-    nested on it, start with the window, not with the mirror's state."""
+    """A binary sensor schedule set up two hours after its source changed dates its
+    window from the source, while its own state is new. The combination, and one
+    nested on it, start with the window, not with the binary sensor schedule's state."""
     started = datetime(2026, 7, 2, 18, 0, tzinfo=dt_util.UTC)
     freezer.move_to(started)
     hass.states.async_set("binary_sensor.away", source_state)
@@ -1936,7 +1941,7 @@ async def test_combined_period_starts_when_a_source_backed_input_started(
     freezer.move_to(started + timedelta(hours=2))
     await _setup(
         hass,
-        _mirror_schedule("Away Mode", "binary_sensor.away", invert=invert),
+        _binary_sensor_schedule("Away Mode", "binary_sensor.away", invert=invert),
         _combined("Away Combined", ["binary_sensor.away_mode"]),
         _combined(
             "Away Nested",
@@ -2045,7 +2050,7 @@ async def test_solar_boundary_timer_is_armed_at_the_boundary_across_clock_change
     await _setup(hass, *entries)
 
     before = hass.states.get(entity_id)
-    # A plain schedule reports a sun edge in UTC.
+    # A Virtual Schedule Sensor reports a sun edge in UTC.
     boundary = dt_util.as_local(
         datetime.fromisoformat(before.attributes["next_change"])
     )
@@ -2143,7 +2148,13 @@ async def _flip_twice(hass: HomeAssistant, freezer, entity_id: str, settled: boo
 @pytest.mark.parametrize("settled", [False, True], ids=["together", "apart"])
 @pytest.mark.parametrize(
     "layout",
-    ["single", "inverted_mirror", "nested", "inverted_output", "all_with_window"],
+    [
+        "single",
+        "inverted_binary_sensor",
+        "nested",
+        "inverted_output",
+        "all_with_window",
+    ],
 )
 @pytest.mark.asyncio
 async def test_source_window_that_ends_and_restarts_at_once_is_a_new_window(
@@ -2155,11 +2166,13 @@ async def test_source_window_that_ends_and_restarts_at_once_is_a_new_window(
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     # The source value under which the combination is on.
-    source_on = "off" if layout in ("inverted_mirror", "inverted_output") else "on"
+    source_on = (
+        "off" if layout in ("inverted_binary_sensor", "inverted_output") else "on"
+    )
     hass.states.async_set("binary_sensor.src", source_on)
     entries = [
-        _mirror_schedule(
-            "Mirror", "binary_sensor.src", invert=layout == "inverted_mirror"
+        _binary_sensor_schedule(
+            "Mirror", "binary_sensor.src", invert=layout == "inverted_binary_sensor"
         )
     ]
     if layout == "nested":
@@ -2197,7 +2210,7 @@ async def test_source_window_that_ends_and_restarts_at_once_is_a_new_window(
 
 
 @pytest.mark.parametrize(
-    "case", ["other_input_on", "handoff", "outage", "complementary_mirrors"]
+    "case", ["other_input_on", "handoff", "outage", "complementary_schedules"]
 )
 @pytest.mark.asyncio
 async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
@@ -2205,16 +2218,16 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
 ) -> None:
     """Changes that reach the combination together and never have it known
     off keep its window: another input on throughout, one input handing over
-    to another, a source outage, and two mirrors of one sensor."""
+    to another, a source outage, and two binary sensor schedules of one sensor."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("binary_sensor.src", "on")
     hass.states.async_set("binary_sensor.spare", "off")
     await _setup(
         hass,
-        _mirror_schedule("Mirror", "binary_sensor.src"),
-        _mirror_schedule("Other", "binary_sensor.spare"),
-        _mirror_schedule("Opposite", "binary_sensor.src", invert=True),
+        _binary_sensor_schedule("Mirror", "binary_sensor.src"),
+        _binary_sensor_schedule("Other", "binary_sensor.spare"),
+        _binary_sensor_schedule("Opposite", "binary_sensor.src", invert=True),
         _time_schedule("Day", "06:00", "22:00"),
         _combined(
             "Out",
@@ -2222,7 +2235,7 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
                 "other_input_on": ["binary_sensor.mirror", "binary_sensor.day"],
                 "handoff": ["binary_sensor.mirror", "binary_sensor.other"],
                 "outage": ["binary_sensor.mirror"],
-                "complementary_mirrors": [
+                "complementary_schedules": [
                     "binary_sensor.mirror",
                     "binary_sensor.opposite",
                 ],
@@ -2288,7 +2301,7 @@ async def test_combination_back_from_an_unload_knows_the_window_started_meanwhil
     meanwhile: tuple[str, ...],
     new_window: bool,
 ) -> None:
-    """A combination disabled or unloaded while a source-backed input goes
+    """A combination disabled or unloaded while a binary sensor input goes
     off and on comes back with the new window; one whose inputs kept it on,
     or only went unavailable, keeps its window."""
     await hass.config.async_set_time_zone("UTC")
@@ -2298,7 +2311,7 @@ async def test_combination_back_from_an_unload_knows_the_window_started_meanwhil
     )
     inputs = ["binary_sensor.mirror"]
     entries = [
-        _mirror_schedule("Mirror", "binary_sensor.src"),
+        _binary_sensor_schedule("Mirror", "binary_sensor.src"),
         _time_schedule("Day", "06:00", "22:00"),
     ]
     if layout == "nested":
@@ -2355,8 +2368,8 @@ async def test_an_off_between_two_sources_survives_later_changes_of_one(
     out = _combined("Out", ["binary_sensor.a", "binary_sensor.b"])
     await _setup(
         hass,
-        _mirror_schedule("A", "binary_sensor.src_a"),
-        _mirror_schedule("B", "binary_sensor.src_b"),
+        _binary_sensor_schedule("A", "binary_sensor.src_a"),
+        _binary_sensor_schedule("B", "binary_sensor.src_b"),
         out,
     )
     before = hass.states.get("binary_sensor.out")
@@ -2377,8 +2390,8 @@ async def test_an_off_between_two_sources_survives_later_changes_of_one(
     for source, value in [*changes, ("a", "off"), ("a", "on")]:
         freezer.tick(timedelta(milliseconds=10))
         if how == "together":
-            # The schedules themselves: Home Assistant 2026.1 updates a mirror
-            # only once the loop turns, dating a whole burst alike.
+            # The schedules themselves: Home Assistant 2026.1 updates a binary sensor
+            # schedule only once the loop turns, dating a whole burst alike.
             hass.states.async_set(f"binary_sensor.{source}", value)
         else:
             hass.states.async_set(f"binary_sensor.src_{source}", value)
@@ -2412,7 +2425,7 @@ async def test_an_unloaded_combination_keeps_only_the_latest_spells(
     freezer.move_to("2026-07-02 12:00:00+00:00")
     hass.states.async_set("binary_sensor.src", "on")
     out = _combined("Out", ["binary_sensor.mirror"])
-    await _setup(hass, _mirror_schedule("Mirror", "binary_sensor.src"), out)
+    await _setup(hass, _binary_sensor_schedule("Mirror", "binary_sensor.src"), out)
     assert await hass.config_entries.async_unload(out.entry_id)
     await settle(hass)
 

@@ -22,11 +22,11 @@ compose() {
     docker compose --file "$COMPOSE_FILE" "$@"
 }
 
-# Hold Home Assistant down until the schedule edges the last prepare phase
+# Hold Home Assistant down until the schedule boundaries the last prepare phase
 # recorded have passed, so the verify phase sees them missed, not fired live.
-outage() {
+downtime() {
     compose stop homeassistant
-    compose run --rm --no-deps runner python runner.py outage
+    compose run --rm --no-deps runner python runner.py downtime
     compose start homeassistant
 }
 
@@ -72,15 +72,15 @@ compose restart homeassistant
 compose run --rm runner python runner.py late-source-verify follow-restart-prepare
 
 echo "Stopping across a follow-mode window start and a whole window..."
-outage
+downtime
 compose run --rm runner python runner.py follow-restart-verify
 
 echo "Restarting again inside the follow window..."
 compose restart homeassistant
 compose run --rm runner python runner.py follow-restart-verify-off end-restart-prepare
 
-echo "Stopping across a scheduled light's turn_off window end..."
-outage
+echo "Stopping across a Virtual Scheduled Light's turn_off window end..."
+downtime
 compose run --rm runner python runner.py end-restart-verify maintain-restart-prepare
 
 echo "Restarting with a light held by its maintain sensor..."
@@ -98,7 +98,7 @@ compose run --rm runner python runner.py combined-restart-verify combined-schedu
 echo "Restarting with a combined schedule whose mirrored input and member light load late..."
 compose restart homeassistant
 compose run --rm runner python runner.py combined-schedule-restart-verify
-# The first start, nine restarts and two outages.
+# The first start, nine restarts and two downtimes.
 check_ha_logs 12
 
 echo "MoLight E2E restart scenarios passed."

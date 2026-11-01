@@ -89,7 +89,7 @@ async function fillTimeout(page, seconds) {
   await timeoutField(page).fill(String(seconds));
 }
 
-// The options flow prefills each profile from the entry settings.
+// The options flow prefills each settings set from the entry settings.
 async function expectTimeout(page, seconds) {
   await expect(timeoutField(page)).toHaveValue(String(seconds));
 }
@@ -195,7 +195,7 @@ async function entityState(page, entityId) {
   }, entityId);
 }
 
-test("create, edit, and round-trip-convert a scheduled light", async ({ page }) => {
+test("create, edit, and round-trip-convert a Virtual Scheduled Light", async ({ page }) => {
   await login(page);
   await createScheduledLight(page);
   await editScheduledLight(page);
@@ -218,7 +218,7 @@ test("create, edit, and round-trip-convert a scheduled light", async ({ page }) 
   const state = await entityState(page, LIGHT_ENTITY_ID);
   expect(state.entity_id).toBe(LIGHT_ENTITY_ID);
   expect(state.attributes.friendly_name).toBe(EDITED_LIGHT_NAME);
-  // Converting to a schedule-gated light keeps the inside profile, and converting back
+  // Converting to a schedule-gated light keeps the inside settings, and converting back
   // copies it into both.
   await expectStoredTimeouts(page, EDITED_LIGHT_NAME, 63, 63);
 });
@@ -313,7 +313,7 @@ test("discover sensors and lights in bulk", async ({ page }) => {
   await submit(page);
   await closeAbort(page, /Created 1 virtual MoLight entit/);
 
-  // Lights: every unwrapped light is offered; the scheduled light's member is not.
+  // Lights: every unwrapped light is offered; the Virtual Scheduled Light's member is not.
   await openAddFlow(page);
   await clickFlowChoice(page, "Discover lights");
   await expectFlowTitle(page, "Discover lights");
@@ -379,7 +379,7 @@ test("a light with a turn-on selection gets the selection step", async ({ page }
   expect(state.attributes.friendly_name).toBe("Browser Selected");
 });
 
-// Opens the scheduled light's inside-schedule form and its Standby section.
+// Opens the Virtual Scheduled Light's inside-schedule form and its Standby section.
 async function openStandby(page, name) {
   const card = await entryCard(page, name);
   await card.getByRole("button", { name: /configure/i }).click();

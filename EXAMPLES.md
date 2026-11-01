@@ -16,7 +16,7 @@ The examples build on each other:
 2. [Simple occupancy](#example-2-simple-occupancy-case): one motion sensor
 3. [Living room](#example-3-living-room-the-whole-toolbox): occupancy + maintain + illuminance + a warning blink + a turn-on selection
 4. [Porch light](#example-4-porch-light-schedule-follow-mode): a schedule window
-5. [Home-only lighting](#example-5-home-only-lighting-source-backed-inverted-schedule): an inverted schedule derived from an away-mode binary sensor
+5. [Home-only lighting](#example-5-home-only-lighting-inverted-binary-sensor-schedule): an inverted schedule derived from an away-mode binary sensor
 6. [Stairs night light](#example-6-stairs-night-light-gate-and-keep-state): a schedule that gates motion without cutting a timer short
 7. [Storage room light](#example-7-storage-room-light-door-sensor): a door/contact sensor
 8. [Upstairs hallway night light](#example-8-upstairs-hallway-night-light-virtual-scheduled-light): different settings inside and outside a schedule
@@ -168,9 +168,9 @@ Schedule mode:   Follow    # on at window start, off at window end
 
 ---
 
-### Example 5: Home-only lighting (source-backed inverted schedule)
+### Example 5: Home-only lighting (inverted binary sensor schedule)
 
-Suppose a template or integration provides `binary_sensor.away_mode`: it is `on` while the house is away and `off` while someone is home. To let occupancy automate a light only while the house is home, promote that sensor into MoLight's schedule picker and invert it.
+Suppose a template or integration provides `binary_sensor.away_mode`: it is `on` while the house is away and `off` while someone is home. To let occupancy automate a light only while the house is home, show that sensor in MoLight's schedule picker and invert it.
 
 **1. Virtual Schedule Sensor**. First choose **Binary sensor: mirror an existing sensor** as the schedule definition, then enter:
 
@@ -256,7 +256,7 @@ Open the door and the light stays on the whole time it's open, with no timeout w
 
 ### Example 8: Upstairs hallway night light (Virtual Scheduled Light)
 
-Motion lights the upstairs hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both sets of settings; the schedule sensor decides which set is active. It also needs a Virtual Occupancy Sensor wrapping the upstairs motion sensor, set up like Example 2's. Then it's a schedule sensor and the light's three forms in a row:
+Motion lights the upstairs hallway at full brightness during the day and evening, but at night it should come on dim and go off quickly. One **Virtual Scheduled Light** holds both settings sets; the schedule sensor decides which settings set is active. It also needs a Virtual Occupancy Sensor wrapping the upstairs motion sensor, set up like Example 2's. Then it's a schedule sensor and the light's three forms in a row:
 
 **1. Virtual Schedule Sensor** (the "night" window)
 
@@ -300,7 +300,7 @@ At 23:00 the schedule turns on and the light silently switches to the inside set
 - With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
 - Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
 - Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
-- The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which set is in force; **Configure** walks the same three forms again to edit either side.
+- The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which settings set is active; **Configure** walks the same three forms again to edit either settings set.
 
 ---
 
@@ -423,11 +423,11 @@ Standby:                                         # collapsed section; expand it
   Standby color temperature: 2200
 ```
 
-With no occupancy sensor on the outside side, motion does nothing in the daytime. Things worth knowing:
+With no occupancy sensor in the outside settings, motion does nothing in the daytime. Things worth knowing:
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
 - Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
-- To remove standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form rejects a standby color without a brightness.
+- For no standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form rejects a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---

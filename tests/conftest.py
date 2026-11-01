@@ -103,8 +103,9 @@ def virtual_light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
         for key, value in entry.data.items()
         if key not in (CONF_ENTITY_TYPE, CONF_NAME, CONF_LIGHTS)
     }
-    # Deliberately make the inactive side unlike the active one. This ensures
-    # the shared behavior tests fail if a scheduled light loads the wrong map.
+    # Deliberately make the inactive settings set unlike the active one. This ensures
+    # the shared behavior tests fail if a Virtual Scheduled Light loads the wrong
+    # settings set.
     inactive_settings = {CONF_LIGHT_TIMEOUT: 9999}
     return MockConfigEntry(
         domain=DOMAIN,
@@ -263,7 +264,7 @@ def make_scheduled_light_entry(
     outside: dict | None = None,
     inside: dict | None = None,
 ) -> MockConfigEntry:
-    """Build a Virtual Scheduled Light entry with two flat settings mappings."""
+    """Build a Virtual Scheduled Light entry with two flat settings sets."""
     default_settings = {CONF_LIGHT_TIMEOUT: 60}
     data = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,

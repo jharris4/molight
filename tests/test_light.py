@@ -749,7 +749,7 @@ async def test_real_brightness_reflects_in_virtual_light(
 
 
 @pytest.mark.asyncio
-async def test_startup_adopts_physical_brightness(
+async def test_startup_mirrors_member_brightness(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A real light already on at startup seeds the virtual light's brightness."""

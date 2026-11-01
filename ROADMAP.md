@@ -99,7 +99,7 @@ Worth building if a user asks, not before.
 Requests that existing blocks answer:
 
 - Vacancy-only control (turn off after people leave, never turn on): a maintain occupancy sensor alone.
-- Away or sleep gating: a source-backed Virtual Schedule Sensor, inverted, in a gate mode
+- Away or sleep gating: an inverted binary sensor schedule in a gate mode
   (EXAMPLES.md, example 5); to keep the time window too, join both in a Virtual Combined Schedule
   Sensor set to All.
 - Only when dark and inside a schedule window, on a regular Virtual Light: a Virtual Combined Schedule

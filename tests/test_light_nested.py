@@ -849,10 +849,10 @@ async def test_off_of_an_inner_light_that_is_off_leaves_a_lit_outer_light(
 
 
 @pytest.mark.asyncio
-async def test_inner_light_lit_by_its_sensor_keeps_the_outer_standby_paused(
+async def test_inner_light_lit_by_its_sensor_keeps_the_outer_standby_suppressed(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A manual off pauses the outer light's standby. The inner light's own
+    """A manual off keeps the outer light's standby off. The inner light's own
     sensor then lights it, which is nobody's turn-on of the outer light: its
     timeout ends in off, not at standby."""
     hass.states.async_set(INNER_OCC, "off")

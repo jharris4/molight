@@ -153,7 +153,7 @@ async def test_options_reload_while_occupied_stays_occupied(
 async def test_options_reload_removing_occupancy_while_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Deleting the occupancy reference while OCCUPIED demotes the lit light
+    """Deleting the occupancy sensor while OCCUPIED demotes the lit light
     to a plain ACTIVE timer instead of holding it on forever."""
     entry = make_light_entry(occupancy=OCC)
     hass.states.async_set(OCC, "off")

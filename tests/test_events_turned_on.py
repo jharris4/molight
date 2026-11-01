@@ -306,7 +306,7 @@ async def test_follow_window_start(hass) -> None:
 async def test_presence_outside_a_gate_window_is_blocked_then_lit_at_its_start(
     hass,
 ) -> None:
-    """Occupancy refused by a gate window lights the room when it opens."""
+    """Occupancy refused by a gate window lights the room when it starts."""
     records = await _setup(
         hass,
         make_light_entry(

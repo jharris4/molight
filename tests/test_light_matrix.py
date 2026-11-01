@@ -1541,7 +1541,7 @@ async def test_state_preserving_gate_adopts_open_door_after_virtual_turn_on(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("how", ["virtual", "wall", "startup", "maintain_clear"])
-async def test_hard_gate_light_on_outside_its_window_ignores_an_open_door(
+async def test_gate_and_turn_off_light_on_outside_its_window_ignores_an_open_door(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
     """Under gate, a light on outside the window is not held by a door that
@@ -1621,7 +1621,7 @@ async def test_gate_window_start_turns_on_at_auto_on_brightness(
     await setup_entries(hass, entry)
     assert _state(hass).state == "off"
 
-    hass.states.async_set(SCHED, "on")  # window opens with occupancy standing
+    hass.states.async_set(SCHED, "on")  # window starts with occupancy standing
     await settle(hass)
 
     state = _state(hass)

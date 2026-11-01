@@ -54,7 +54,7 @@ echo "Restarting with the physical light unavailable..."
 compose restart homeassistant
 compose run --rm runner python runner.py unavailable-light-recover
 
-echo "Restarting with occupancy and schedule sources unavailable..."
+echo "Restarting with the occupancy source and the schedule's source unavailable..."
 compose restart homeassistant
 compose run --rm runner python runner.py unavailable-sensors-motion-first
 

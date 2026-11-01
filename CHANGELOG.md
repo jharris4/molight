@@ -213,7 +213,7 @@ replying late.
 ## [1.6.0] - 2026-08-23
 
 A release focused on scheduling: the new **Virtual Scheduled Light** switches
-between two complete settings profiles as a schedule opens and closes, and
+between two complete settings sets as a schedule window starts and ends, and
 regular Virtual Lights gain two more schedule-end behaviors. Plus a round of
 restart, occupancy, sensor and slow-bulb edge-case fixes.
 
@@ -241,7 +241,7 @@ longer needs a custom repository.
 - **Turn-on selection**: drive a `select` entity (a preset, theme, or mode)
   whenever the light turns on; an option source entity can supply the
   option.
-- **Source-backed and inverted schedules**: a Virtual Schedule Sensor can
+- **Binary sensor and inverted schedules**: a Virtual Schedule Sensor can
   mirror any existing binary sensor, and either definition can be inverted.
 - **Two new schedule gate modes**: *Gate and switch state* and *Gate and keep
   state* choose what the window's end does to an already-on light.
@@ -388,7 +388,7 @@ Initial release.
   distinct trigger and maintain roles.
 - **Virtual Illuminance Sensor**: turns a lux reading into a steady bright/dark
   signal, with hysteresis.
-- **Virtual Schedule Sensor**: a reusable schedule signal from a fixed-time
+- **Virtual Schedule Sensor**: a reusable schedule from a fixed-time
   and/or sun-based window, with sun offsets.
 - **Virtual Light**: controls N real lights from an occupancy-, illuminance- and
   schedule-aware state machine (including the illuminance control-vs-gate and

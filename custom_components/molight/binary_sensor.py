@@ -318,7 +318,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     ) -> None:
         state = self.hass.states.get(self._source_sensor)
         if self._source_includes_self():
-            # Nothing to follow, and no outage that ends by itself to carry.
+            # Nothing to read, and no outage that ends by itself to carry.
             self._attr_is_on = False
         elif (
             restored_on
@@ -352,7 +352,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     def _source_includes_self(self) -> bool:
         """Whether the source is computed from this sensor, as a group can be.
 
-        The forms reject one, but a group can change afterwards. Following it
+        The forms reject one, but a group can change afterwards. Reading it
         would keep this sensor on by its own state, so it counts as a source
         that cannot be read. What it is computed from is watched: it can come
         to include this sensor while the source itself reports nothing new.
@@ -369,9 +369,8 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
                 )
         if cyclic and not self._source_cycle:
             _LOGGER.warning(
-                "Occupancy sensor %s does not follow its source %s, which "
-                "includes the sensor itself; remove it there or pick another "
-                "source",
+                "Occupancy sensor %s reads as clear because its source %s "
+                "includes it; remove it there or pick another source",
                 self.entity_id,
                 self._source_sensor,
             )
@@ -403,7 +402,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         """Apply the source starting or ceasing to include this sensor.
 
         Returns True when it did either, or still includes it: its report is
-        then not followed.
+        then not read.
         """
         was_cyclic = self._source_cycle
         if self._source_includes_self():
@@ -821,7 +820,7 @@ class VirtualCombinedOccupancySensor(
         }
 
     def _watch_late_inputs(self) -> None:
-        """Follow the inputs the late maintain sensors still wait for."""
+        """Watch the inputs the late maintain sensors still wait for."""
         if self._late_unsub is not None:
             self._late_unsub()
             self._late_unsub = None
@@ -1284,20 +1283,20 @@ def _time_clock(at: time) -> int:
     return at.hour * 3600 + at.minute * 60 + at.second
 
 
-def _sun_clock(anchor: tuple[str, int]) -> int:
-    return _SUN_CLOCK[anchor[0]] + anchor[1] * 60
+def _sun_clock(sun_event: tuple[str, int]) -> int:
+    return _SUN_CLOCK[sun_event[0]] + sun_event[1] * 60
 
 
-def _fixed_days_after(at: time, anchor: tuple[str, int] | None) -> int:
+def _fixed_days_after(at: time, sun_event: tuple[str, int] | None) -> int:
     """Return which day a fixed time paired with a sun event falls on.
 
     Counted in days after the event's day: the occurrence nearest the event's
     place on the clock, so the later of sunset + 4 h and 00:00 is the midnight
     that follows. A tie stays on the event's day.
     """
-    if anchor is None:
+    if sun_event is None:
         return 0
-    days, rest = divmod(_sun_clock(anchor) - _time_clock(at) + _HALF_DAY, _DAY)
+    days, rest = divmod(_sun_clock(sun_event) - _time_clock(at) + _HALF_DAY, _DAY)
     return days - 1 if rest == 0 and days > 0 else days
 
 
@@ -1316,23 +1315,23 @@ def _resolve_edge(hass: HomeAssistant, edge: dict | None, day: date) -> datetime
     """Resolve an edge spec to a concrete datetime on the given day."""
     if not isinstance(edge, dict):
         return None
-    at, anchor = _edge_time(edge), _edge_sun(edge)
+    at, sun_event = _edge_time(edge), _edge_sun(edge)
 
     fixed: datetime | None = None
     if at is not None:
         fixed = datetime.combine(
-            day + timedelta(days=_fixed_days_after(at, anchor)),
+            day + timedelta(days=_fixed_days_after(at, sun_event)),
             at,
             tzinfo=dt_util.DEFAULT_TIME_ZONE,
         )
 
     sun: datetime | None = None
-    if anchor is not None:
+    if sun_event is not None:
         # None on polar days when the event doesn't occur; the fixed
         # time (if any) then stands alone.
-        sun = _sun_event(hass, anchor[0], day)
+        sun = _sun_event(hass, sun_event[0], day)
         if sun is not None:
-            sun += timedelta(minutes=anchor[1])
+            sun += timedelta(minutes=sun_event[1])
 
     candidates = [d for d in (fixed, sun) if d is not None]
     if not candidates:
@@ -1350,13 +1349,13 @@ def _edge_clock(edge: dict | None) -> tuple[str, int] | None:
     """
     if not isinstance(edge, dict):
         return None
-    at, anchor = _edge_time(edge), _edge_sun(edge)
-    if anchor is None:
+    at, sun_event = _edge_time(edge), _edge_sun(edge)
+    if sun_event is None:
         return None if at is None else ("time", _time_clock(at))
-    sun = _sun_clock(anchor)
+    sun = _sun_clock(sun_event)
     if at is None:
-        return (anchor[0], sun)
-    fixed = _time_clock(at) + _fixed_days_after(at, anchor) * _DAY
+        return (sun_event[0], sun)
+    fixed = _time_clock(at) + _fixed_days_after(at, sun_event) * _DAY
     return ("both", max(fixed, sun) if _picks_latest(edge) else min(fixed, sun))
 
 
@@ -1470,10 +1469,10 @@ async def _restored_schedule_data(entity: RestoreEntity) -> dict:
     }
 
 
-def _mirrored(
+def _value_and_marker(
     is_on: bool, marker: datetime | None, source: State | None, invert: bool
 ) -> tuple[bool, datetime | None]:
-    """Return a mirror's value and window marker once its source reports.
+    """Return a binary sensor schedule's value and marker once its source reports.
 
     Both are kept through an outage of the source, which is no boundary.
     """
@@ -1485,8 +1484,8 @@ def _mirrored(
 
 
 @dataclass
-class _MirrorWatch:
-    """A mirror's value and marker, followed while its entry is not loaded."""
+class _SourceWatch:
+    """Watches a binary sensor schedule's source while its entry is not loaded."""
 
     source: str
     invert: bool
@@ -1532,8 +1531,9 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
         self._attr_is_on = False
         self._attr_available = self._definition != SCHEDULE_DEFINITION_BINARY_SENSOR
         self._current_window_start: datetime | str | None = None
-        # What the windows date the on-period from. The marker stays behind
-        # it when a time zone or location change moves them under it.
+        # A schedule period is one unbroken stretch of on. This is what the windows
+        # date it from; the marker stays behind it when a time zone or location
+        # change moves them under it.
         self._period_start: datetime | str | None = None
         self._next_change: datetime | None = None
         self._unsub_next_change = None
@@ -1547,7 +1547,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
         """Evaluate the schedule and arm the next-change timer."""
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_next_change_timer)
-        watch: _MirrorWatch | None = self.hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(
+        watch: _SourceWatch | None = self.hass.data.get(DATA_SCHEDULE_WATCH, {}).pop(
             self._entry_id, None
         )
         if watch is not None:
@@ -1558,7 +1558,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
                 and watch.source == self._source
                 and watch.invert == self._invert
             ):
-                # Unloaded with Home Assistant running: the source was followed
+                # Unloaded with Home Assistant running: the source was read
                 # all along, so a window that started meanwhile is known.
                 restored_start = watch.marker if watch.is_on else None
             else:
@@ -1585,7 +1585,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
                 self.hass.states.get(self._source) if self._source else None
             )
         else:
-            # A saved marker is kept while its on-period runs on, so a
+            # A saved marker is kept while its schedule period runs on, so a
             # restart inside the window does not date the window anew.
             saved = await _restored_schedule_data(self)
             restored_start = (
@@ -1685,13 +1685,13 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 
     @callback
     def _watch_source(self) -> None:
-        """Keep following the source once this entity is removed.
+        """Keep watching the source once this entity is removed.
 
         A disabled or reloading entry would otherwise come back with the
         marker it left with, over a window its source started meanwhile.
         """
         marker = self._current_window_start
-        watch = _MirrorWatch(
+        watch = _SourceWatch(
             self._source or "",
             self._invert,
             bool(self._attr_is_on),
@@ -1700,7 +1700,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 
         @callback
         def _on_change(event: Event[EventStateChangedData]) -> None:
-            watch.is_on, watch.marker = _mirrored(
+            watch.is_on, watch.marker = _value_and_marker(
                 watch.is_on, watch.marker, event.data["new_state"], watch.invert
             )
 
@@ -1723,7 +1723,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
             return
 
         marker = self._current_window_start
-        self._attr_is_on, self._current_window_start = _mirrored(
+        self._attr_is_on, self._current_window_start = _value_and_marker(
             bool(self._attr_is_on),
             marker if isinstance(marker, datetime) else None,
             source,
@@ -1789,7 +1789,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
         Windows are resolved for the days around today, so overnight windows,
         sun offsets that push a window past the next midnight and day-to-day
         sun drift are handled correctly. Overlapping windows merge into one
-        on-period, so Follow mode never sees a new window start partway
+        schedule period, so Follow mode never sees a new window start partway
         through it.
         """
         merged = _merged_window_intervals(self.hass, self._windows, now, _DAY_OFFSETS)
@@ -1804,7 +1804,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     def _continued_marker(
         self, active_start: datetime, now: datetime
     ) -> datetime | None:
-        """Return the current marker if its on-period has run on into this window.
+        """Return the current marker if its schedule period has run on into this window.
 
         Windows chained around the clock show each evaluation a later merged
         start, and a moved marker would re-trigger Follow mode. The merged
@@ -1880,7 +1880,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 _NEG_INF = float("-inf")
 # Spells each source keeps between refreshes; only the oldest are dropped.
 _MAX_SPELLS = 100
-# current_window_start for an on-period with no known start: stable, so Follow
+# current_window_start for a schedule period with no known start: stable, so Follow
 # mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
 
@@ -1974,8 +1974,8 @@ class _Timeline:
         return self.segments[index][0] if index < len(self.segments) else None
 
 
-def _mirror_since(state: State) -> datetime:
-    """Return when a sensor-mirroring schedule's on or off state began."""
+def _state_since(state: State) -> datetime:
+    """Return when this on or off state of a binary sensor schedule began."""
     if state.state == "on":
         # The schedule restores this across restarts, unlike last_changed.
         return (
@@ -2015,7 +2015,7 @@ class _SourceChanges:
         spells = self.passed_through.setdefault(entity_id, deque(maxlen=_MAX_SPELLS))
         spells.append(
             (
-                _mirror_since(old).timestamp(),
+                _state_since(old).timestamp(),
                 event.time_fired.timestamp(),
                 old.state == "on",
             )
@@ -2035,9 +2035,9 @@ class _ScheduleNode:
 
 
 class _ScheduleTree:
-    """Expands a combined schedule down to its plain MoLight schedules.
+    """Expands a combined schedule down to its Virtual Schedule Sensors.
 
-    Time-window schedules are read from their entry settings and sensor-mirroring
+    Time-window schedules are read from their entry settings and binary sensor
     schedules from their state, so the result never depends on another
     combined schedule's state or on the order entities start up.
     """
@@ -2049,7 +2049,7 @@ class _ScheduleTree:
         # Each input entity, and whether its registry entry is disabled (None: none).
         self.entities: dict[str, bool | None] = {}
         self.source_entities: set[str] = set()
-        self.plain_schedules: set[str] = set()
+        self.virtual_schedule_sensors: set[str] = set()
         # An input reached by several routes is one shared node, evaluated once.
         self.nodes: dict[str, _ScheduleNode] = {}
         # Inputs that led back into the chain being expanded.
@@ -2120,7 +2120,7 @@ class _ScheduleTree:
             return self.combined(entry.entry_id, cfg, path)
         if entity_type != ENTITY_TYPE_SCHEDULE:
             return _ScheduleNode("unknown")
-        self.plain_schedules.add(entity_id)
+        self.virtual_schedule_sensors.add(entity_id)
         definition = cfg.get(CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME)
         if definition == SCHEDULE_DEFINITION_BINARY_SENSOR:
             # Its state already applies its own invert and outage handling.
@@ -2137,7 +2137,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
     """Binary sensor combining MoLight schedules with any/all logic.
 
     The result is unknown (unavailable) only when an unavailable input could
-    change it. current_window_start is the start of the combined on-period,
+    change it. current_window_start is the start of the combined schedule period,
     so overlapping or back-to-back inputs read as one window to Follow mode.
     """
 
@@ -2152,13 +2152,13 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         self._attr_unique_id = entry.entry_id
         self._attr_is_on = False
         self._root = _ScheduleNode("combined")
-        self._plain_schedules: list[str] = []
+        self._virtual_schedule_sensors: list[str] = []
         self._input_settings: dict[str, dict] = {}
         self._input_disabled: dict[str, ConfigEntryDisabler | None] = {}
         self._input_entities: dict[str, bool | None] = {}
         self._reload_scheduled = False
         self._current_window_start: str | None = None
-        # As in VirtualScheduleSensor: where the inputs date the on-period from.
+        # As in VirtualScheduleSensor: where the inputs date the schedule period from.
         self._period_start: str | None = None
         self._windows_moved = False
         self._next_change: datetime | None = None
@@ -2176,7 +2176,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
 
         tree = _ScheduleTree(self.hass)
         self._root = tree.combined(self._entry_id, self._cfg)
-        self._plain_schedules = sorted(tree.plain_schedules)
+        self._virtual_schedule_sensors = sorted(tree.virtual_schedule_sensors)
         self._input_settings = {
             entry_id: cfg
             for entry_id, cfg in tree.settings.items()
@@ -2388,11 +2388,11 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         return timeline.inverted() if node.invert else timeline
 
     def _source_timeline(self, entity_id: str | None) -> _Timeline:
-        """Return a sensor-mirroring schedule's value since its last change."""
+        """Return a binary sensor schedule's value since its last change."""
         state = self.hass.states.get(entity_id) if entity_id else None
         if state is None or state.state not in ("on", "off"):
             return _Timeline.constant(None)
-        since = _mirror_since(state).timestamp()
+        since = _state_since(state).timestamp()
         segments: list[tuple[float, bool | None]] = [(since, state.state == "on")]
         for start, end, value in reversed(
             self._seen.passed_through.get(entity_id or "", ())
@@ -2426,7 +2426,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
             self._attr_available = not self._startup_done and self._restored
         else:
             self._attr_available = True
-            # Windows that moved are no new window to a period that stays on.
+            # Windows that moved are no new window to a schedule period that stays on.
             moved, self._windows_moved = self._windows_moved, False
             keep_marker = moved and self._attr_is_on and self._current_window_start
             if value and (moved or not self._continues_period(timeline, ts)):
@@ -2462,11 +2462,11 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         self.async_write_ha_state()
 
     def _continues_period(self, timeline: _Timeline, ts: float) -> bool:
-        """Return whether the marked on-period may still be under way.
+        """Return whether the marked schedule period may still be under way.
 
         Only a known off since the marker ends it. Inputs' history is partly
-        unknown (a mirror's value before its last change, anything before a
-        restart), and a moved marker would re-trigger Follow mode.
+        unknown (a binary sensor schedule's value before its last change, anything
+        before a restart), and a moved marker would re-trigger Follow mode.
         """
         marker = self._period_start
         if not (self._attr_is_on and marker):
@@ -2503,5 +2503,5 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
                 CONF_SCHEDULE_OPERATOR, DEFAULT_SCHEDULE_OPERATOR
             ),
             "inverted": bool(self._cfg.get(CONF_SCHEDULE_INVERT, False)),
-            "resolved_schedules": self._plain_schedules,
+            "resolved_schedules": self._virtual_schedule_sensors,
         }

@@ -164,11 +164,11 @@ DEFAULT_SCHEDULE_OPERATOR = SCHEDULE_OPERATOR_ANY
 # --- regular Virtual Light and Virtual Scheduled Light ---
 CONF_LIGHTS = "lights"  # list of real light entity_ids
 # A Virtual Scheduled Light keeps its shared identity/member lights/schedule at the
-# entry's top level and stores two complete Virtual Light settings mappings.
+# entry's top level and stores two complete Virtual Light settings sets.
 # The schedule's binary state selects outside (off) vs inside (on).
 CONF_OUTSIDE_SCHEDULE_SETTINGS = "outside_schedule_settings"
 CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
-# State attribute naming the settings mapping a Virtual Scheduled Light is
+# State attribute naming the settings set a Virtual Scheduled Light is
 # currently using; also what it restores from while the schedule is unusable.
 ATTR_ACTIVE_SETTINGS = "active_settings"
 ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
@@ -192,8 +192,8 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
 # A Virtual Scheduled Light's inside-schedule settings can rest at a standby
-# level instead of turning off: an off light comes on at it when those
-# settings take over, and an expired timer drops back to it rather than off.
+# level instead of turning off: an off light comes on at it on switching to those
+# settings, and an expired timer drops back to it rather than off.
 # The brightness (percent, 1-100) enables standby; the optional color is one
 # of a color temperature or an [r, g, b], like the auto-on color.
 CONF_STANDBY_BRIGHTNESS = "standby_brightness"
@@ -204,10 +204,10 @@ STANDBY_KEYS = (
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
 )
-# State attribute: a manual off cancels standby until the next schedule
+# State attribute: a manual off keeps standby off until the next schedule
 # boundary. Restored so a restart inside the same window keeps it.
 ATTR_STANDBY_SUPPRESSED = "standby_suppressed"
-# State attribute: a settings boundary ended the last manual off. Restored
+# State attribute: a schedule boundary ended the last manual off. Restored
 # so a restart does not bring that off back.
 ATTR_MANUAL_OFF_CLEARED = "manual_off_cleared"
 # Optional select entity and option applied immediately before MoLight turns an
@@ -330,7 +330,8 @@ DATA_SCHEDULE_WATCH = DOMAIN + "_schedule_watch"
 # hass.data key of the sources a Discover flow is wrapping right now.
 DATA_DISCOVERY_RESERVED = DOMAIN + "_discovery_reserved"
 # The platforms actually forwarded, so unload matches setup even if the
-# entity type changed in between (a light/scheduled-light conversion).
+# entity type changed in between (converting a regular Virtual Light to a
+# Virtual Scheduled Light or back).
 DATA_PLATFORMS = "platforms"
 SIGNAL_AUTO_OFF_TOGGLED = DOMAIN + "_auto_off_toggled_{}"
 
@@ -390,14 +391,14 @@ ILLUMINANCE_MODE_GATE = "gate"
 ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE]
 DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
-# How a referenced schedule entity affects the light:
+# How the schedule sensor affects the light:
 #   follow:       lights turn on at window start and off at window end (porch lights)
 #   gate:         occupancy may only turn lights on inside the window; the
 #                 window end forces the lights off (the original behavior)
 #   gate_switch:  the same turn-on gate, but the window end reconciles an
 #                 already-on light from current sensor state and history
 #   gate_keep:    the same turn-on gate, but the window end leaves an
-#                 already-on light under its current state-machine policy
+#                 already-on light in its current state
 CONF_SCHEDULE_MODE = "schedule_mode"
 SCHEDULE_MODE_FOLLOW = "follow"
 SCHEDULE_MODE_GATE = "gate"
@@ -426,13 +427,13 @@ MATCH_SCHEDULE_AFTER_RESTART_CHOICES = [
 ]
 DEFAULT_MATCH_SCHEDULE_AFTER_RESTART = MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND
 
-# A Virtual Scheduled Light's shared schedule selects its inside/outside
-# settings. Its end action chooses whether the on -> off boundary turns an on
-# light off, recalculates it from the outside settings, or preserves its running
-# state/timer while the outside settings take over.
+# A Virtual Scheduled Light's schedule sensor selects its inside/outside
+# settings. The At schedule end field chooses whether the on -> off boundary
+# turns an on light off, recalculates it from the outside settings, or preserves
+# its running state/timer while switching to the outside settings.
 CONF_SCHEDULE_END_ACTION = "schedule_end_action"
 ATTR_SCHEDULE_END_OFF_PENDING = "schedule_end_off_pending"
-# The schedule entity active_settings was last derived from; a missed
+# The schedule sensor active_settings was last derived from; a missed
 # boundary is only caught up at startup when it is still the same schedule.
 ATTR_ACTIVE_SETTINGS_SCHEDULE = "active_settings_schedule"
 # That schedule's window marker while its inside settings are active, so a
