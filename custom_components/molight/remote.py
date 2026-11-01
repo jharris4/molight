@@ -2,7 +2,7 @@
 
 A Virtual Remote config entry's runtime lives here rather than in an entity
 (its only entity is the diagnostic Last Action sensor, see sensor.py). It
-subscribes to the state changes of the `event` entities Home Assistant
+watches the state changes of the `event` entities Home Assistant
 exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
 ...) and turns each configured (button, click) pair into one service call on
 the target lights, sending each execution on SIGNAL_REMOTE_ACTION.
@@ -246,8 +246,8 @@ def _fired_since(state: State, since: datetime) -> bool:
 def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE:
     """Set up a Virtual Remote entry; returns its teardown callback.
 
-    Subscribing is deferred until Home Assistant has fully started, exactly
-    like the virtual light's sensor subscriptions: at startup event entities
+    Watching is deferred until Home Assistant has fully started, exactly
+    like the virtual light watching its sensors: at startup event entities
     are restored carrying their last pre-shutdown event, which must never be
     replayed as a fresh press.
     """

@@ -346,7 +346,8 @@ async def test_bright_while_occupied_resumes_once_dark_and_empty(
 async def test_hold_release_while_bright_pauses_until_dark(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A release into daylight turns the light off; dark brings it back, no timer."""
+    """A hold release into daylight turns the light off; dark brings it back, no
+    timer."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(HOLD, "off")
     await setup_entries(

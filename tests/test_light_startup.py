@@ -1600,7 +1600,7 @@ async def test_late_setup_keeps_a_held_gate_end_under_the_saved_auto_off_hold(
 async def test_late_setup_keeps_standby_on_while_bright_under_the_saved_hold(
     hass: HomeAssistant,
 ) -> None:
-    """Brightness in Control mode does not turn a held standby light off."""
+    """Going bright in Control mode does not turn a held standby light off."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(ILLUM, "off")

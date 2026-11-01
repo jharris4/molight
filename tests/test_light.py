@@ -232,7 +232,7 @@ async def test_occupancy_suppressed_when_bright(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 
-    # It gets dark while occupancy is still active → light comes on.
+    # It goes dark while still occupied → light comes on.
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
 
@@ -402,7 +402,7 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
     await hass.async_block_till_done()
     assert hass.states.get("light.kitchen_light").attributes.get("brightness") is None
 
-    # T0+20: it gets bright; lights forced off.
+    # T0+20: it goes bright; lights forced off.
     freezer.tick(timedelta(seconds=20))
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
@@ -496,7 +496,7 @@ async def test_illuminance_dark_resumes_remaining_time(
     await hass.async_block_till_done()
     assert hass.states.get("light.kitchen_light").state == "on"
 
-    # T0+20: it gets bright; lights forced off.
+    # T0+20: it goes bright; lights forced off.
     freezer.tick(timedelta(seconds=20))
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
@@ -934,7 +934,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "off"
 
-    # The user physically turns a light on; then it gets dark again.
+    # The user physically turns a light on; then it goes dark again.
     hass.states.async_set("light.fd_real", "on")
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"
@@ -1305,7 +1305,7 @@ async def test_gate_mode_blocks_occupancy_outside_window(
     await _settle(hass)
     assert hass.states.get("light.schedule_gated_light").state == "off"
 
-    # Window starts: occupancy is still active, so lights come on now.
+    # Window starts: still occupied, so lights come on now.
     t = datetime(2026, 7, 2, 21, 0, 2, tzinfo=UTC)
     freezer.move_to(t)
     async_fire_time_changed(hass, t)

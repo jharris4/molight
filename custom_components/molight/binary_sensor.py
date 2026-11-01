@@ -7,7 +7,7 @@ Provides five sensor types, all created via the config flow:
   VirtualCombinedOccupancySensor:  combines VirtualOccupancySensors using
                                    trigger/maintain logic; latest_occupied_time
                                    is the max across all constituents
-  VirtualIlluminanceSensor:        compares a real illuminance sensor to a threshold
+  VirtualIlluminanceSensor:        compares a lux sensor to a threshold
   VirtualScheduleSensor:           evaluates time windows or mirrors a binary sensor
   VirtualCombinedScheduleSensor:   combines schedules with any/all logic
 """
@@ -129,12 +129,12 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # How long after an input loads a combined occupancy sensor waits for the
-# maintain sensor reading it to show the presence it loaded with (seconds).
+# maintain sensor reading it to report that it loaded occupied (seconds).
 _LATE_SETTLE = 2
 
 
 def _real_state_change(event: Event[EventStateChangedData]) -> bool:
-    """Return True when the event is an actual state transition.
+    """Return True when the event is an actual state change.
 
     Filters out entities going unavailable/unknown (being briefly unavailable
     is no occupancy or darkness change) and attribute-only updates (many
@@ -194,7 +194,7 @@ async def async_setup_entry(
 
 
 # ---------------------------------------------------------------------------
-# Virtual Occupancy Binary Sensor (simple)
+# Virtual Occupancy Sensor (simple)
 # ---------------------------------------------------------------------------
 
 
@@ -215,7 +215,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     false-detection off delay.
 
     Clear-on-unavailable (when clear_on_unavailable_timeout > 0): a source
-    that stays unavailable/unknown while occupancy is active would otherwise
+    that stays unavailable/unknown while occupied would otherwise
     hold occupancy (and any lights it lit) on forever. Instead, the person
     is assumed present right up to the dropout: latest_occupied_time advances
     to that moment immediately, and if the source hasn't recovered after the
@@ -256,7 +256,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._last_clear_false: bool = False
         self._last_clear_unavailable: bool = False
         self._unavailable_unsub: CALLBACK_TYPE | None = None
-        # When the outage whose clear is pending began; kept through unload.
+        # When the dropout began; kept through unload.
         self._dropout: datetime | None = None
         # Whether the source is computed from this sensor, as a group can be.
         self._source_cycle = False
@@ -266,7 +266,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._inputs_unsub: CALLBACK_TYPE | None = None
 
     async def async_added_to_hass(self) -> None:
-        """Restore state and subscribe to the source sensor."""
+        """Restore state and watch the source sensor."""
         await super().async_added_to_hass()
         self._gone = GoneJudge(self.hass)
         self.async_on_remove(self._gone.cancel_all)
@@ -583,7 +583,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
 
 
 # ---------------------------------------------------------------------------
-# Virtual Combined Occupancy Binary Sensor
+# Virtual Combined Occupancy Sensor
 # ---------------------------------------------------------------------------
 
 
@@ -631,7 +631,7 @@ class VirtualCombinedOccupancySensor(
         self._false_count: int = 0
         self._last_clear_false: bool = False
         # A restored "on" that no constituent confirmed at seed time: a
-        # maintain sensor showing presence as the rest of startup unfolds
+        # maintain sensor reading occupied as the rest of startup unfolds
         # may still carry it across (see _seed_state).
         self._restored_carry = False
         self._startup_done = True
@@ -647,7 +647,7 @@ class VirtualCombinedOccupancySensor(
         self._reloading: dict[str, CALLBACK_TYPE] = {}
 
     async def async_added_to_hass(self) -> None:
-        """Restore state and subscribe to all constituent sensors."""
+        """Restore state and watch all constituent sensors."""
         await super().async_added_to_hass()
         self._gone = GoneJudge(self.hass)
         self.async_on_remove(self._gone.cancel_all)
@@ -711,7 +711,7 @@ class VirtualCombinedOccupancySensor(
             # Intentional startup exception to "maintain sensors never start
             # occupancy": the restored state is direct evidence occupancy was
             # already triggered before the restart, so a maintain sensor
-            # still showing presence carries it across. (An on-duration
+            # still reading occupied carries it across. (An on-duration
             # heuristic can't do this job: constituents rewrite their state
             # at startup, resetting last_changed, and it would wrongly start
             # occupancy on a mid-run options reload.)
@@ -721,7 +721,7 @@ class VirtualCombinedOccupancySensor(
             # concurrently, so a maintain sensor may still be HA's restored
             # placeholder here (or, for a virtual sensor whose own source has
             # not loaded, a provisional "off"). Let a maintain sensor that
-            # shows presence before startup finishes, or on its first sighting
+            # reads occupied before startup finishes, or on its first sighting
             # after it, carry the restored visit instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
             # lights that reference it adopt with a full timer and re-evaluate.
@@ -810,7 +810,7 @@ class VirtualCombinedOccupancySensor(
     def _unread_inputs(self, entity_id: str) -> set[str]:
         """Return what a sensor is computed from, at any depth, with no reading.
 
-        Its "off" is then provisional: presence it shows once that input
+        Its "off" is then provisional: reading occupied once that input
         loads may be the restored visit.
         """
         return {
@@ -875,7 +875,7 @@ class VirtualCombinedOccupancySensor(
             )
             return
         new_state = event.data["new_state"]
-        # A maintain sensor showing presence while startup is still under
+        # A maintain sensor reading occupied while startup is still under
         # way, on its first sighting after that, or with a start it did not
         # witness because its own source loaded late (it reports
         # last_on_time: None) carries a restored "on" across (see
@@ -1031,7 +1031,7 @@ class VirtualCombinedOccupancySensor(
         """Return when the visit began, by the trigger sensors showing it.
 
         The earliest of their own stamps, and unknown if any of them could
-        not date its start: a late-loading source replaying presence is not
+        not date its start: a late-loading source that loads occupied is not
         a detection made now. One without a stamp was seen to start now.
         """
         starts: list[datetime] = []
@@ -1119,7 +1119,7 @@ class VirtualCombinedOccupancySensor(
 
 
 # ---------------------------------------------------------------------------
-# Virtual Illuminance Binary Sensor
+# Virtual Illuminance Sensor
 # ---------------------------------------------------------------------------
 
 
@@ -1157,12 +1157,12 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
         self._attr_available = False
 
     async def async_added_to_hass(self) -> None:
-        """Restore state and subscribe to the illuminance source."""
+        """Restore state and watch the illuminance source."""
         await super().async_added_to_hass()
         self._gone = GoneJudge(self.hass)
         self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
-        # A held reading and its side of the hysteresis band belong to their
+        # A last known value and its side of the hysteresis band belong to their
         # source. A save that predates the source record is trusted.
         extra = await self.async_get_last_extra_data()
         saved_source = extra.as_dict().get("source") if extra is not None else None
@@ -1220,7 +1220,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
 
     @callback
     def _on_source_gone(self, _hass: HomeAssistant | None = None) -> None:
-        """Drop the held reading of a source that can never report again."""
+        """Drop the last known value of a source that can never report again."""
         if not self._attr_available or not entity_gone(self.hass, self._source_entity):
             return
         self._attr_available = False
@@ -1235,7 +1235,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
         if not math.isfinite(value):
             return  # nan or inf is no reading either
         if not self._attr_available:
-            # A first sighting: there is no held state to apply the
+            # A first sighting: there is no last known value to apply the
             # hysteresis band to, so judge the bare threshold.
             self._attr_available = True
             self._attr_is_on = value >= self._threshold
@@ -1248,7 +1248,7 @@ class VirtualIlluminanceSensor(BinarySensorEntity, EntityIdFollowingRestoreEntit
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save which source the held reading belongs to."""
+        """Save which source the last known value belongs to."""
         return RestoredExtraData({"source": self._source_entity})
 
 
@@ -1496,7 +1496,7 @@ class _MirrorWatch:
 
 
 # ---------------------------------------------------------------------------
-# Virtual Schedule Binary Sensor
+# Virtual Schedule Sensor
 # ---------------------------------------------------------------------------
 
 
@@ -1711,7 +1711,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 
     @callback
     def _refresh_source(self, source: State | None) -> None:
-        """Apply a source state, preserving the last value while unavailable."""
+        """Apply a source state, keeping the last known value while unavailable."""
         self._next_change = None
         if (
             source is None
@@ -1874,7 +1874,7 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 
 
 # ---------------------------------------------------------------------------
-# Virtual Combined Schedule Binary Sensor
+# Virtual Combined Schedule Sensor
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
@@ -2420,8 +2420,9 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
         value = timeline.value_at(ts)
 
         if value is None:
-            # Keep the last value and marker so a recovery reads as unchanged; while HA
-            # starts, hold the restored state as inputs may not have reported yet.
+            # Keep the last known value and marker so a recovery reads as
+            # unchanged; while HA starts, hold the restored state as inputs may
+            # not have reported yet.
             self._attr_available = not self._startup_done and self._restored
         else:
             self._attr_available = True

@@ -191,7 +191,7 @@ async def test_occupancy_clear_held_by_maintain(hass: HomeAssistant, freezer) ->
 
 @pytest.mark.asyncio
 async def test_maintain_clear_held_by_occupancy(hass: HomeAssistant) -> None:
-    """Maintain clearing while regular occupancy is still on stays OCCUPIED."""
+    """Maintain clearing while the occupancy sensor is still occupied stays OCCUPIED."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT)
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, entry)

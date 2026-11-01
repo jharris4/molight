@@ -1,10 +1,11 @@
 """Entities a virtual light uses that are deleted or disabled while it runs.
 
 Such an entity leaves the state machine and can never report again. Startup
-counts a missing keep-on entity as not holding, a missing door as closed,
-missing presence as clear and a missing real light as not there; the same
+counts a missing keep-on entity as not holding, a missing door as closed, a
+missing occupancy or maintain sensor as clear and a missing real light as
+not there; the same
 has to hold when the entity goes missing at runtime, or it would keep its
-last value until the next restart.
+last known value until the next restart.
 """
 
 from __future__ import annotations
@@ -236,7 +237,7 @@ async def test_first_schedule_reading_while_open_door_awaits_its_reload(
 
 @pytest.mark.parametrize("how", GONE)
 @pytest.mark.parametrize("role", ["occupancy", "maintain"])
-async def test_presence_sensor_that_goes_missing_counts_as_clear(
+async def test_sensor_that_goes_missing_counts_as_clear(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str, role: str
 ) -> None:
     """An occupancy or maintain sensor that left while on stops holding the light.
@@ -290,7 +291,7 @@ async def test_door_back_open_after_going_missing_is_a_first_sighting(
     assert hass.states.get(VIRTUAL).state == ("on" if lit else "off")
 
 
-async def test_presence_that_remains_keeps_holding_when_another_goes_missing(
+async def test_sensor_that_remains_keeps_holding_when_another_goes_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
     """Only the missing sensor stops counting: the maintain sensor still holds."""
@@ -562,7 +563,7 @@ async def test_disabled_real_light_is_owed_nothing_after_a_restart(
 async def test_occupancy_sensor_that_comes_back_lights_an_off_light(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """Presence shown by a sensor enabled again is new to a light that went off."""
+    """An occupied sensor enabled again is new to a light that went off."""
     member = RealLight("real_1")
     await add_real(hass, member)
     hass.states.async_set(INPUT, "on")
@@ -958,7 +959,7 @@ async def test_illuminance_source_that_goes_missing_lights_an_occupied_room(
 async def test_illuminance_source_that_goes_missing_resumes_a_bright_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """An on-period brightness cut short resumes for the time it had left."""
+    """An on-period that going bright cut short resumes for the time it had left."""
     source = await provide_lux(hass, "deleted", 0)
     hass.states.async_set(OCC, "off")
     hass.states.async_set(MEMBER, "off")

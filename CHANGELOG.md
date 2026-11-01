@@ -119,10 +119,10 @@ Virtual Remote buttons.
 - **Doors**: a door sensor in *Open & close* door mode that stays
   `unavailable` for 60 seconds, such as one with a dead battery, counts as
   closed instead of holding the light on until a restart.
-- **Illuminance**: with the illuminance mode set to *Gate only*, brightness
-  only stops an off light turning on. When the sensor saw the lamp, the light
+- **Illuminance**: with the illuminance mode set to *Gate only*, a bright
+  reading only stops an off light turning on. When the sensor saw the lamp, the light
   turned off over people still moving and came back once the room read dark.
-  Going dark after brightness turned a light off brings it back for the rest
+  Going dark after going bright turned a light off brings it back for the rest
   of its countdown.
 - **Schedules**: changing a follow-mode light's schedule no longer turns it
   off. The sun-event window fix is under Upgrade notes.
@@ -171,7 +171,7 @@ replying late.
 - False detections: a combined sensor keeps its visit's genuine detection
   across a reload and inherits its constituents' `latest_occupied_time`, and a
   light turned on manually or by a door keeps its full timeout.
-- A maintain sensor clearing or a door closing while brightness or a gate-mode
+- A maintain sensor clearing or a door closing while a bright reading or a gate-mode
   schedule window blocks occupancy starts the countdown instead of leaving the
   light on with no timer.
 - Slow and chatty bulbs: late replies, mid-fade colors and clamped color
@@ -184,7 +184,7 @@ replying late.
   turn-on with no brightness or color reports what the light came on at, and a
   turn-on waiting on a slow select is dropped when the light is turned off,
   its schedule ends or its entry is unloaded.
-- Illuminance going dark resumes only an on-period that brightness cut short;
+- Illuminance going dark resumes only an on-period that going bright cut short;
   the new `bright_forced_off` attribute carries this across a restart.
 - Editing a light's options while its Auto-off switch is off no longer applies
   the turn-off it was holding; disabling the switch while off releases it.
@@ -271,7 +271,7 @@ longer needs a custom repository.
 - Restarts: occupancy already in progress at startup is no longer misread as a
   false detection, and maintained occupancy carries across regardless of which
   entry loads first.
-- Combined occupancy clears instead of holding forever when its last active
+- Combined occupancy clears instead of holding forever when its last occupied
   constituent disappears, including when that constituent is deleted.
 - A door or illuminance sensor that drops to unavailable and recovers unchanged
   no longer registers as a real change.

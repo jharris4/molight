@@ -426,10 +426,10 @@ async def test_schedule_end_switch_uses_remaining_outside_occupancy_timeout(
 
 
 @pytest.mark.asyncio
-async def test_schedule_end_switch_without_presence_sensor_uses_full_timeout(
+async def test_schedule_end_switch_without_occupancy_or_maintain_uses_full_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """No incoming presence sensor gives the outside settings a full timeout."""
+    """Outside settings with no occupancy or maintain sensor get a full timeout."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -748,7 +748,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
 async def test_schedule_end_off_ends_an_on_period_brightness_had_cut_short(
     hass: HomeAssistant, freezer, end_action: str, resumes: bool, crossed: str
 ) -> None:
-    """A Turn off end crossed while brightness has the light off ends that
+    """A Turn off end crossed while going bright has the light off ends that
     on-period, so going dark does not resume it under the outside settings.
     Keep state and Switch state carry it past the end."""
     illuminance = "binary_sensor.illuminance"
@@ -1428,7 +1428,7 @@ async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
     hass: HomeAssistant,
 ) -> None:
     """A newly selected gate-mode sensor reading bright only gates an off
-    light, so the new side's active occupancy holds an on one."""
+    light, so the new side's occupied sensor holds an on one."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
     hass.states.async_set(REAL, "on")
@@ -1458,7 +1458,7 @@ async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
 async def test_schedule_change_bright_sensor_leaves_off_light_off(
     hass: HomeAssistant,
 ) -> None:
-    """A newly selected bright sensor blocks the new side's active occupancy."""
+    """A newly selected bright sensor blocks the new side's occupied sensor."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
     hass.states.async_set(REAL, "off")
@@ -1482,7 +1482,7 @@ async def test_schedule_change_bright_sensor_leaves_off_light_off(
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_INSIDE
     assert state.state == "off"
 
-    # Going dark under the new settings lets the still-active occupancy fire.
+    # Going dark under the new settings lets the still occupied sensor fire.
     hass.states.async_set(illuminance, "off")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
@@ -1668,7 +1668,7 @@ async def test_schedule_change_hold_cancels_running_timer(
 async def test_schedule_change_occupancy_mid_warning_adopts_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Active occupancy from the new side rescues a light mid-warning."""
+    """An occupied sensor from the new side rescues a light mid-warning."""
     occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -1788,8 +1788,9 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     if end_action == SCHEDULE_END_ACTION_TURN_OFF:
         assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
         return
-    # The outside settings have no presence sensor, so their own timeout runs:
-    # recalculated as a fresh one by switch, started for the lost hold by keep.
+    # The outside settings have no occupancy or maintain sensor, so their own
+    # timeout runs: recalculated as a fresh one by switch, started for the lost
+    # hold by keep.
     expected = (
         STATE_ACTIVE if end_action == SCHEDULE_END_ACTION_SWITCH else STATE_COUNTDOWN
     )
@@ -2118,7 +2119,7 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
         == ACTIVE_SETTINGS_INSIDE
     )
 
-    # The inactive outside sensor is still subscribed, but must be ignored.
+    # The inactive outside sensor is still watched, but must be ignored.
     hass.states.async_set(outside_occupancy, "on")
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -2954,8 +2955,9 @@ async def test_boundary_keeps_door_hold_while_briefly_unavailable(
 async def test_boundary_does_not_carry_one_door_hold_onto_another_door(
     hass: HomeAssistant,
 ) -> None:
-    """Only the same door keeps its cached open while briefly unavailable at the
-    boundary; a different door reading unavailable counts as closed."""
+    """Only the same door keeps its last known value (open) while briefly
+    unavailable at the boundary; a different door reading unavailable counts as
+    closed."""
     door_a = "binary_sensor.outside_door"
     door_b = "binary_sensor.inside_door"
     hass.states.async_set(REAL, "off")
@@ -3162,10 +3164,10 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
 
 
 @pytest.mark.asyncio
-async def test_settings_switch_preserves_illuminance_cache_through_outage(
+async def test_settings_switch_keeps_the_last_known_illuminance_through_outage(
     hass: HomeAssistant,
 ) -> None:
-    """A boundary crossed during an illuminance outage keeps the cached level.
+    """A boundary crossed during an illuminance outage keeps the last known value.
 
     The boundary is judged against it, as with a readable sensor. Recomputing
     from the unavailable sensor would forget "bright", and its recovery to
@@ -3210,10 +3212,11 @@ async def test_settings_switch_preserves_illuminance_cache_through_outage(
 @pytest.mark.parametrize(
     "role", [CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY]
 )
-async def test_settings_switch_keeps_the_hold_of_unreadable_presence(
+async def test_settings_switch_keeps_the_hold_of_an_unreadable_sensor(
     hass: HomeAssistant, role: str
 ) -> None:
-    """A boundary crossed while a holding presence sensor is out keeps its hold."""
+    """A boundary crossed while a holding occupancy or maintain sensor is out
+    keeps its hold."""
     presence = "binary_sensor.shared_presence"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")

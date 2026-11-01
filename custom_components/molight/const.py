@@ -72,9 +72,9 @@ AFFIX_TARGET_ENTITY_ID = "entity_id"
 AFFIX_TARGET_NAME = "name"
 AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 
-# Bulk-assign config-flow steps: assign one virtual sensor to many regular
-# Virtual Lights at once. The chosen sensor and (for occupancy) its role are
-# picked first; the second step lists all regular Virtual Lights, pre-selecting
+# The "Assign a sensor to several lights" steps: assign one virtual sensor to
+# many regular Virtual Lights at once. The chosen sensor and (for occupancy) its
+# role are picked first; the second step lists all regular Virtual Lights, pre-selecting
 # those that already reference the sensor. The submitted set is the source of truth:
 # deselecting a pre-selected light removes the reference.
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
@@ -86,7 +86,7 @@ ASSIGN_ROLE_REGULAR = "regular"
 ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
-# --- Virtual Occupancy Binary Sensor (simple: one real sensor) ---
+# --- Virtual Occupancy Sensor (simple: one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
@@ -99,21 +99,21 @@ DEFAULT_OCCUPANCY_TIMEOUT = 120
 CONF_FALSE_DETECTION_GRACE = "false_detection_grace"
 DEFAULT_FALSE_DETECTION_GRACE = 3
 # When the source sensor is unavailable/unknown for this many seconds while
-# occupancy is active, treat it as occupancy having cleared (the room may
+# occupied, treat it as occupancy having cleared (the room may
 # still be occupied, so the clear is flagged via last_clear_unavailable and
 # never classified as a false detection). latest_occupied_time is advanced
-# to the dropout moment immediately. 0 disables; occupancy then holds its
-# last value for as long as the source is unavailable.
+# to the dropout moment immediately. 0 disables; occupancy then keeps its
+# last known value for as long as the source is unavailable.
 CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT = "clear_on_unavailable_timeout"
 DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT = 60
 
-# --- Virtual Combined Occupancy Binary Sensor ---
+# --- Virtual Combined Occupancy Sensor ---
 # trigger_sensors: any one going ON starts occupancy
 CONF_TRIGGER_SENSORS = "trigger_sensors"
 # maintain_sensors: keep occupancy alive once started, but cannot start it
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
-# --- Virtual Illuminance Binary Sensor ---
+# --- Virtual Illuminance Sensor ---
 CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"  # entity_id of a real sensor
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 DEFAULT_ILLUMINANCE_THRESHOLD = 10.0
@@ -123,7 +123,7 @@ DEFAULT_ILLUMINANCE_THRESHOLD = 10.0
 CONF_ILLUMINANCE_HYSTERESIS = "illuminance_hysteresis"
 DEFAULT_ILLUMINANCE_HYSTERESIS = 0.0
 
-# --- Virtual Schedule Binary Sensor ---
+# --- Virtual Schedule Sensor ---
 # A schedule is either calculated from time windows or mirrors a source binary
 # sensor. Existing entries predate the discriminator and are therefore treated
 # as time-window schedules when this key is absent.
@@ -151,7 +151,7 @@ COMBINE_LATEST = "latest"
 COMBINE_EARLIEST = "earliest"
 SUN_EVENTS = ["sunset", "sunrise"]
 
-# --- Virtual Combined Schedule Binary Sensor ---
+# --- Virtual Combined Schedule Sensor ---
 # Combines MoLight schedules with any/all logic; nested combined schedules are
 # expanded down to plain ones rather than read by state.
 CONF_SCHEDULE_INPUTS = "schedule_inputs"
@@ -364,7 +364,7 @@ REASON_WRAPPED = "wrapped"  # a wrapped virtual light acting by itself
 REASON_OCCUPANCY = "occupancy"
 REASON_DOOR = "door"
 REASON_ILLUMINANCE = "illuminance"  # going dark with presence
-REASON_RESUME = "resume"  # going dark resumed an on-period brightness cut short
+REASON_RESUME = "resume"  # going dark resumed an on-period that going bright cut short
 REASON_SCHEDULE_START = "schedule_start"
 REASON_STARTUP = "startup"  # a restart found the light off where it rests at standby
 REASON_TIMER = "timer"
@@ -378,8 +378,8 @@ STAGE_EFFECT = "effect"
 STAGE_WARN = "warn"
 STAGE_CANCELLED = "cancelled"
 
-# How a referenced illuminance entity affects the light:
-#   control:  dark gates turn-ons AND turning bright forces the lights off
+# How the light's illuminance sensor affects it:
+#   control:  dark gates turn-ons AND going bright forces the lights off
 #   gate:     dark gates turn-ons only; bright never turns the lights off.
 #             Use when the lux sensor can see the virtual light's member
 #             lights, which would otherwise oscillate (lights on → bright →
@@ -584,10 +584,10 @@ REMOTE_ACTION_VALUE_KEYS = {
     ),
 }
 
-# --- Virtual Light state machine states ---
+# --- virtual light state machine states ---
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied)
-STATE_OCCUPIED = "occupied"  # lights on, occupancy active, no countdown
+STATE_OCCUPIED = "occupied"  # lights on, occupied, no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
 STATE_STANDBY = "standby"  # lights at the standby level, no timer

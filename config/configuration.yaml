@@ -118,7 +118,7 @@ input_button:
   button_double:
     name: "Test Button Double Press"
 
-# Input number: backing state for illuminance sensor
+# Input number: backing state for the lux sensor
 input_number:
   illuminance_living_room:
     name: "Living Room Illuminance"
@@ -751,7 +751,7 @@ template:
         device_class: door
         state: "{{ is_state('input_boolean.door_front', 'on') }}"
 
-  # Illuminance sensor (sensor.test_*)
+  # Lux sensor (sensor.test_*)
   - sensor:
       - name: "Test Living Room Illuminance"
         unique_id: test_illuminance_living_room

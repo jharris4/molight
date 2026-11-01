@@ -305,7 +305,7 @@ async def test_physical_off_during_warn_goes_idle(hass: HomeAssistant, freezer) 
 
 @pytest.mark.asyncio
 async def test_bright_forces_off_during_warn(hass: HomeAssistant, freezer) -> None:
-    """Illuminance turning bright (control mode) wins over the warn grace."""
+    """Illuminance going bright (control mode) wins over the warn grace."""
     entry = make_light_entry(
         illuminance=ILLUM,
         illuminance_mode=ILLUMINANCE_MODE_CONTROL,

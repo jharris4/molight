@@ -659,16 +659,16 @@ async def test_occupancy_edit_during_dropout_keeps_the_clear_deadline(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "flap", [("unavailable", "unknown"), ("unknown", "unavailable")]
+    "invalid", [("unavailable", "unknown"), ("unknown", "unavailable")]
 )
 @pytest.mark.parametrize(
     ("new_timeout", "clears_after"), [(60, 60), (90, 90), (45, 45), (35, 40)]
 )
 @pytest.mark.parametrize("via", ["edit", "reload"])
-async def test_occupancy_edit_during_a_dropout_flap_keeps_the_first_deadline(
+async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_deadline(
     hass: HomeAssistant,
     freezer,
-    flap: tuple[str, str],
+    invalid: tuple[str, str],
     new_timeout: int,
     clears_after: int,
     via: str,
@@ -679,11 +679,11 @@ async def test_occupancy_edit_during_a_dropout_flap_keeps_the_first_deadline(
     await setup_entries(hass, entry)
     hass.states.async_set("binary_sensor.motion_1", "on")
     await settle(hass)
-    hass.states.async_set("binary_sensor.motion_1", flap[0])
+    hass.states.async_set("binary_sensor.motion_1", invalid[0])
     await settle(hass)
     dropout = datetime.now(UTC)
     freezer.tick(timedelta(seconds=30))
-    hass.states.async_set("binary_sensor.motion_1", flap[1])
+    hass.states.async_set("binary_sensor.motion_1", invalid[1])
     await settle(hass)
     freezer.tick(timedelta(seconds=10))
     if via == "edit":
@@ -922,7 +922,7 @@ async def test_second_dropout_event_does_not_rearm_clear_timer(
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await hass.async_block_till_done()
 
-    # 30s in, the source flaps to unknown; the countdown is already armed.
+    # 30s in, the source reports unknown; the countdown is already armed.
     freezer.tick(timedelta(seconds=30))
     hass.states.async_set("binary_sensor.motion_1", "unknown")
     await hass.async_block_till_done()
@@ -1036,7 +1036,7 @@ async def test_illuminance_hysteresis_holds_state_in_band(
 async def test_illuminance_edit_rejudges_a_held_reading_against_the_new_band(
     hass: HomeAssistant,
 ) -> None:
-    """An edit keeps the held state for a reading still in band, else flips it."""
+    """An edit keeps the last known value for a reading still in band, else flips it."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1085,7 +1085,7 @@ async def test_illuminance_source_swap_drops_the_old_sources_reading(
 ) -> None:
     """A sensor switched to a source with no reading is unavailable, not bright.
 
-    Holding the last value is for an outage of the same source. The new
+    Keeping the last known value is for an outage of the same source. The new
     source's first reading is then judged on the bare threshold.
     """
     hass.states.async_set("sensor.old_lux", "100")
@@ -1130,7 +1130,7 @@ async def test_illuminance_source_swap_judges_the_new_source_on_its_own(
 async def test_illuminance_keeps_its_reading_through_an_outage_of_the_same_source(
     hass: HomeAssistant, restart: bool
 ) -> None:
-    """A reload or restart with the same source down still holds the last value."""
+    """With the same source down, a reload or restart keeps the last known value."""
     hass.states.async_set("sensor.old_lux", "100")
     entry = _lux_entry()
     await setup_entries(hass, entry)
@@ -1241,7 +1241,7 @@ async def test_illuminance_source_that_goes_missing_drops_its_reading(
     await restart_entries(hass, entry)
     assert hass.states.get("binary_sensor.swapped_lux").state == "unavailable"
 
-    # 12 lx is inside the band, where a held dark would have stayed off.
+    # 12 lx is inside the band, where a last known dark would have stayed off.
     hass.states.async_set(LUX, "12")
     await hass.async_block_till_done()
     assert hass.states.get("binary_sensor.swapped_lux").state == "on"
@@ -1318,7 +1318,7 @@ async def test_light_gated_by_a_sensor_whose_source_went_missing_comes_on(
 async def test_illuminance_first_reading_in_band_uses_bare_threshold(
     hass: HomeAssistant,
 ) -> None:
-    """A first sighting has no held state, so the band must not apply."""
+    """A first sighting has no last known value, so the band must not apply."""
     for name, source, reading, expected in (
         ("Band Bright", "sensor.lux_a", "11", "on"),
         ("Band Dark", "sensor.lux_b", "9", "off"),
@@ -1414,7 +1414,7 @@ async def test_combined_seeds_on_from_trigger_at_startup(hass: HomeAssistant) ->
 async def test_combined_seeds_on_from_restored_state_and_maintain(
     hass: HomeAssistant,
 ) -> None:
-    """A restored 'on' plus a maintain sensor still showing presence seeds on."""
+    """A restored 'on' plus a maintain sensor still reading occupied seeds on."""
     mock_restore_cache(hass, [State("binary_sensor.seed_combined", "on")])
     hass.states.async_set("binary_sensor.m2", "on")
     entry = _raw_combined_entry()
@@ -2379,10 +2379,10 @@ async def test_combined_reload_grace_survives_another_constituent_clearing(
 
 
 @pytest.mark.asyncio
-async def test_combined_unloaded_idle_constituent_gets_no_grace(
+async def test_combined_unloaded_clear_constituent_gets_no_grace(
     hass: HomeAssistant,
 ) -> None:
-    """Only a constituent that was on is held: an idle one cannot keep the room."""
+    """Only a constituent that was on is held: a clear one cannot keep the room."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -2918,7 +2918,7 @@ async def test_illuminance_sensor_bright(
 async def test_illuminance_holds_state_on_unparsable_reading(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry
 ) -> None:
-    """A non-numeric source reading holds the last known state."""
+    """A non-numeric source reading keeps the last known value."""
     illuminance_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(illuminance_entry.entry_id)
     await hass.async_block_till_done()
@@ -2941,7 +2941,7 @@ async def test_illuminance_holds_state_on_unparsable_reading(
 async def test_illuminance_non_finite_first_reading_is_no_reading(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry, reading: str
 ) -> None:
-    """nan or inf as a first reading asserts neither darkness nor brightness."""
+    """nan or inf as a first reading asserts neither dark nor bright."""
     hass.states.async_set("sensor.lux_1", reading)
     await setup_entries(hass, illuminance_entry)
     assert hass.states.get("binary_sensor.test_illuminance").state == "unavailable"
@@ -2957,7 +2957,7 @@ async def test_illuminance_non_finite_first_reading_is_no_reading(
 async def test_illuminance_non_finite_reading_holds_state(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry, reading: str, held: str
 ) -> None:
-    """A later nan or inf holds the last known state, like an unparsable one."""
+    """A later nan or inf keeps the last known value, like an unparsable one."""
     await setup_entries(hass, illuminance_entry)
     hass.states.async_set("sensor.lux_1", held)
     await hass.async_block_till_done()
@@ -3137,11 +3137,11 @@ async def test_occupancy_source_swap_drops_the_old_sources_anchor(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("new_source", ["unavailable", "unknown", "missing"])
 @pytest.mark.parametrize("unavailable_timeout", [0, 60])
-async def test_occupancy_source_swap_leaves_the_old_sources_presence_behind(
+async def test_occupancy_source_swap_does_not_carry_over_an_occupied_old_source(
     hass: HomeAssistant, freezer, new_source: str, unavailable_timeout: int
 ) -> None:
     """Switching an occupied sensor to a source with no reading yet does not
-    carry the old source's presence as a dropout of the new one."""
+    carry an occupied old source over as a dropout of the new one."""
     hass.set_state(CoreState.running)
     hass.states.async_set("binary_sensor.motion_1", "off")
     if new_source != "missing":
@@ -3546,14 +3546,14 @@ async def test_combined_constituent_added_mid_visit_brings_only_history(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("nested", [False, True])
 @pytest.mark.parametrize("survivor", [CONF_TRIGGER_SENSORS, CONF_MAINTAIN_SENSORS])
-@pytest.mark.parametrize("gone", ["unloaded", "removed", "idle"])
-async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
+@pytest.mark.parametrize("gone", ["unloaded", "removed", "clear"])
+async def test_combined_keeps_an_occupied_constituent_that_dropped_out(
     hass: HomeAssistant, freezer, nested: bool, survivor: str, gone: str
 ) -> None:
-    """A constituent that disappears while showing presence was present up
+    """A constituent that disappears while occupied saw someone up
     to then, even though another keeps the sensor on: the survivor's false
     clear ends a genuine visit and the light counts down from the dropout.
-    One that was idle when it disappeared adds nothing."""
+    One that was clear when it disappeared adds nothing."""
     lamp, motion_a, motion_b = RealLight("lamp"), RealBinary("a"), RealBinary("b")
     await add_real(hass, lamp, motion_a, motion_b)
 
@@ -3606,7 +3606,7 @@ async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
     async_fire_time_changed(hass)
     motion_b.set(True)
     await settle(hass)
-    if gone == "idle":
+    if gone == "clear":
         # A false detection of its own, over before it disappears.
         motion_a.set(False)
         motion_b.set(False)
@@ -3637,7 +3637,7 @@ async def test_combined_keeps_the_presence_of_a_constituent_that_dropped_out(
     await settle(hass)
     state = hass.states.get(entity_id)
     assert state.state == "off"
-    present = gone != "idle"
+    present = gone != "clear"
     assert state.attributes["last_clear_false_detection"] is not present
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)

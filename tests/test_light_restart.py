@@ -148,7 +148,7 @@ async def test_restart_with_lights_off_stays_idle(hass: HomeAssistant) -> None:
 async def test_restart_occupied_and_dark_lights_the_room(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy already active (and dark) at startup turns the lights on."""
+    """Already occupied (and dark) at startup turns the lights on."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(ILLUM, "off")
     hass.states.async_set(REAL, "off")
@@ -325,7 +325,7 @@ async def _manual_off_while_present(hass: HomeAssistant, freezer, entry) -> date
 async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
-    """Occupancy still on at a restart only lights a light turned off manually
+    """A sensor still occupied at a restart only lights a light turned off manually
     when the sensor dates its visit after that off. A real sensor, or a
     Combined Occupancy Sensor (no last_on_time), can't tell, so it stays off."""
     hass.states.async_set(OCC, "on")
@@ -521,7 +521,7 @@ async def test_restart_lights_a_light_turned_on_again_after_its_manual_off(
     hass: HomeAssistant, freezer, turn_on: str
 ) -> None:
     """A turn-on after the manual off ends it: presence that began before the
-    off lights the room when it is dark at startup, after a brightness off."""
+    off lights the room when it is dark at startup, after going bright turned it off."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(ILLUM, "off")
     hass.states.async_set(DOOR, "off")
@@ -614,8 +614,9 @@ async def test_restart_applies_missed_window_end(hass: HomeAssistant) -> None:
 async def test_restart_outside_a_gate_window_keeps_a_bright_off_for_the_dark_edge(
     hass: HomeAssistant, freezer, mode: str
 ) -> None:
-    """A gate window that ended while HA was down ends no on-period brightness
-    cut short, so the room going dark after the restart still resumes it."""
+    """A gate window that ended while HA was down ends no on-period that
+    going bright cut short, so the room going dark after the restart still
+    resumes it."""
     ends = datetime.now(UTC) + timedelta(seconds=30)
     mock_restore_cache(
         hass,
@@ -1318,7 +1319,8 @@ async def test_options_reload_matches_the_schedule_too(hass: HomeAssistant) -> N
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_match_choice_is_ignored_outside_follow_mode(hass: HomeAssistant) -> None:
-    """A choice the bulk schedule assign left on a schedule-gated light does nothing."""
+    """A choice that a schedule sensor assignment left on a schedule-gated light is
+    ignored."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "on")
     calls = record_service_calls(hass)

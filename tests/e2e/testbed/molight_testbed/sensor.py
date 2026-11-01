@@ -16,7 +16,7 @@ from .entity import TestbedEntity
 
 
 class TestbedIlluminanceSensor(TestbedEntity, SensorEntity):
-    """A persistent simulated illuminance sensor."""
+    """A persistent simulated lux sensor."""
 
     _attr_device_class = SensorDeviceClass.ILLUMINANCE
     _attr_native_unit_of_measurement = LIGHT_LUX

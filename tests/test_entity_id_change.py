@@ -963,7 +963,7 @@ async def test_lux_source_with_changed_entity_id_keeps_the_reading(
 async def test_entity_id_change_keeps_an_illuminance_sensors_side_of_the_band(
     hass: HomeAssistant, changed: str
 ) -> None:
-    """A source whose entity ID changed is the same source: its held reading stays.
+    """A source whose entity ID changed is the same source: its last known value stays.
 
     At 8 lx inside a 7 to 13 lx band the sensor is bright only because it
     was; a changed source would start over and read dark.

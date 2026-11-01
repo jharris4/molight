@@ -736,7 +736,8 @@ async def test_touching_windows_combined_into_one_keep_a_manual_off(
 async def test_manual_off_while_bright_cancels_the_raise_it_interrupted(
     hass: HomeAssistant,
 ) -> None:
-    """A manual off of a light brightness had off stays off when it gets dark."""
+    """A manual off of a light that going bright turned off stays off when it
+    goes dark."""
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(illuminance, "off")
     await _setup_porch(
@@ -1082,7 +1083,7 @@ async def test_illuminance_gate_blocks_the_raise_but_not_standby(
     await _set(hass, OCCUPANCY, "on")
     _assert_standby(hass)
 
-    # Darkness lifts the gate over presence that is already there.
+    # Going dark lifts the gate over presence that is already there.
     await _set(hass, illuminance, "off")
     assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
     assert _attrs(hass)["brightness"] == BOOST
@@ -1433,7 +1434,7 @@ async def test_schedule_end_timeout_from_standby_resumes_despite_an_old_visit(
 
 
 @pytest.mark.asyncio
-async def test_hold_release_after_a_keep_end_starts_a_timeout_darkness_resumes(
+async def test_hold_release_after_a_keep_end_starts_a_timeout_that_going_dark_resumes(
     hass: HomeAssistant, freezer
 ) -> None:
     """A hold outlasting the boundary's timeout releases into a fresh one."""
@@ -1588,7 +1589,7 @@ async def test_schedule_end_switch_from_standby_keeps_a_history_countdown(
 async def test_dark_edge_raise_from_standby_is_occupancy_lit_only_by_motion(
     hass: HomeAssistant, freezer, raiser: str
 ) -> None:
-    """Darkness raising standby over motion gets the false-detection off delay
+    """Going dark raising standby over motion gets the false-detection off delay
     after a false detection; over an open door it is a person's, and counts down
     in full."""
     door = "binary_sensor.front_door"
@@ -1951,7 +1952,7 @@ async def _manual_off_while_occupied(hass: HomeAssistant, entry) -> datetime:
 async def test_restart_keeps_a_manual_off_over_presence_it_already_had(
     hass: HomeAssistant, freezer, started: str, raised: bool
 ) -> None:
-    """Occupancy still on at a restart only raises a light turned off manually
+    """A sensor still occupied at a restart only raises a light turned off manually
     when its visit started after that off; when the sensor can't tell, the
     light stays off."""
     entry = _porch()

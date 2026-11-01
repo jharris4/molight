@@ -7,7 +7,7 @@
         "menu_options": {
           "create": "Create a single entity",
           "discover_occupancy": "Discover occupancy sensors",
-          "discover_illuminance": "Discover illuminance sensors",
+          "discover_illuminance": "Discover lux sensors",
           "discover_light": "Discover lights",
           "assign_sensor": "Assign a sensor to several lights",
           "convert_lights": "Convert virtual lights"
@@ -83,7 +83,7 @@
           "illuminance_mode": "Illuminance mode"
         },
         "data_description": {
-          "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate."
+          "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate."
         }
       },
       "assign_schedule": {
@@ -141,8 +141,8 @@
         }
       },
       "discover_illuminance": {
-        "title": "Discover illuminance sensors",
-        "description": "Optionally narrow the illuminance (lux) sensors offered on the next step. Leave the filters empty to see them all. Sensors already wrapped by MoLight, and disabled ones, are never offered.",
+        "title": "Discover lux sensors",
+        "description": "Optionally narrow the lux sensors offered on the next step. Leave the filters empty to see them all. Sensors already wrapped by MoLight, and disabled ones, are never offered.",
         "data": {
           "filter_areas": "Areas",
           "filter_labels": "Labels",
@@ -155,8 +155,8 @@
         }
       },
       "discover_illuminance_select": {
-        "title": "Discover illuminance sensors",
-        "description": "Select the illuminance (lux) sensors to wrap in virtual illuminance sensors; the next step lets you adjust the defaults applied to all of them.",
+        "title": "Discover lux sensors",
+        "description": "Select the lux sensors to wrap in Virtual Illuminance Sensors; the next step lets you adjust the defaults applied to all of them.",
         "data": {
           "selected_entities": "Sensors to add",
           "affix_prefix": "Prefix",
@@ -217,7 +217,7 @@
             },
             "data_description": {
               "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
-              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value)."
             }
           }
         }
@@ -263,9 +263,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -295,7 +295,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -355,7 +355,7 @@
             },
             "data_description": {
               "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
-              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value).",
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value).",
               "entity_id": "Optional. Leave blank to derive it from the name. A typed domain prefix is tolerated (light.kitchen → kitchen). Fixed once created; change it later in Home Assistant's entity settings."
             }
           }
@@ -396,7 +396,7 @@
           "illuminance_hysteresis": "Hysteresis"
         },
         "data_description": {
-          "illuminance_sensor": "The real illuminance (lux) sensor to wrap.",
+          "illuminance_sensor": "The real lux sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
           "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         },
@@ -559,9 +559,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -591,7 +591,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -691,9 +691,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -783,9 +783,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1257,9 +1257,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1349,9 +1349,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1465,7 +1465,7 @@
             },
             "data_description": {
               "false_detection_grace": "If the sensor stays on no longer than its occupancy timeout plus this many seconds, it saw only one brief movement, almost certainly a false detection (a fly, a heat blip). Lights it turned on then turn off after their false-detection off delay. 0 disables.",
-              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupancy is active, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then holds its last value)."
+              "clear_on_unavailable_timeout": "If the source stays unavailable this many seconds while occupied, occupancy clears so a dead sensor can't hold lights on forever. 0 disables (occupancy then keeps its last known value)."
             }
           }
         }
@@ -1493,7 +1493,7 @@
           "illuminance_hysteresis": "Hysteresis"
         },
         "data_description": {
-          "illuminance_sensor": "The real illuminance (lux) sensor to wrap.",
+          "illuminance_sensor": "The real lux sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
           "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         }
@@ -1610,9 +1610,9 @@
             "data_description": {
               "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
-              "maintain_occupancy_entity": "Optional. Holds an already-on light on while it shows presence, however the light was lit, but never turns it on.",
+              "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: turning bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -1642,7 +1642,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, turning bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {

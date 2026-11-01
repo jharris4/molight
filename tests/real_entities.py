@@ -287,7 +287,7 @@ class RealToggle(SwitchEntity):
 
 
 class RealLux(SensorEntity):
-    """A registered real illuminance sensor."""
+    """A registered real lux sensor."""
 
     _attr_should_poll = False
 

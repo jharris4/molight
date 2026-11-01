@@ -3355,7 +3355,7 @@ async def test_occupancy_options_ignore_a_blank_timeout_light(
 async def test_assign_occupancy_keeps_a_blank_timeout_light(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Bulk assign never skips a light with no timer for a short timeout."""
+    """Sensor assignment never skips a light with no timer for a short timeout."""
     light = _light_entry("Closet", "closet", timeout=None)
     await setup_entries(hass, occupancy_entry, light)
 
@@ -4637,12 +4637,12 @@ async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bulk-assign a virtual sensor to many regular Virtual Lights
+# Assign one virtual sensor to several regular Virtual Lights
 # ---------------------------------------------------------------------------
 
 
 async def _reach_assign_kind(hass: HomeAssistant, kind_step: str) -> dict:
-    """Init the flow and advance to a bulk-assign sensor form (sensor + mode)."""
+    """Init the flow and advance to the sensor assignment's form (sensor + mode)."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -4677,7 +4677,7 @@ def _light_entry(
 async def test_assign_occupancy_adds_and_removes(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Bulk-assign pre-selects lights that reference the sensor; the submitted set
+    """Sensor assignment pre-selects lights that reference the sensor; the submitted set
     is authoritative."""
     # Occupancy sensor (30s occupancy timeout fixture) registers
     # binary_sensor.test_occupancy.
@@ -10506,7 +10506,7 @@ _ASSIGN_KINDS = {
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["removed", "entity_id_changed"])
 @pytest.mark.parametrize("kind", list(_ASSIGN_KINDS))
-async def test_bulk_assign_checks_the_sensor_again_when_lights_are_picked(
+async def test_sensor_assignment_checks_the_sensor_again_when_lights_are_picked(
     hass: HomeAssistant, request: pytest.FixtureRequest, kind: str, change: str
 ) -> None:
     """A sensor deleted after it was picked is not written; one whose entity ID

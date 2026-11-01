@@ -3,7 +3,7 @@
 Each entity the light watches (real lights, occupancy, illuminance,
 schedule) can drop to unavailable/unknown at any time, e.g. a Zigbee
 device falling off the mesh or an integration reloading. Being briefly
-unavailable is never a state change, and recovery transitions must behave like
+unavailable is never a state change, and recovery state changes must behave like
 fresh events.
 """
 
@@ -2651,15 +2651,15 @@ async def test_bright_control_ends_an_on_period_held_through_a_reload(
 
 
 MOTION = "binary_sensor.motion"
-PRESENCE = "binary_sensor.presence"
+VIRTUAL_OCC = "binary_sensor.virtual_occupancy"
 
 
-def _presence_entry() -> MockConfigEntry:
+def _virtual_occupancy_entry() -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
-            CONF_NAME: "Presence",
+            CONF_NAME: "Virtual Occupancy",
             CONF_OCCUPANCY_SENSOR: MOTION,
             CONF_OCCUPANCY_TIMEOUT: 0,
             CONF_FALSE_DETECTION_GRACE: 0,
@@ -2670,7 +2670,7 @@ def _presence_entry() -> MockConfigEntry:
 async def _held_room_loses_sensor(
     hass: HomeAssistant, role: str, how: str
 ) -> MockConfigEntry:
-    """Light a room held by both presence roles, then make one unreadable.
+    """Light a room held by occupancy and maintain sensors, then make one unreadable.
 
     The door is open and a keep-on entity holds too. Returns the entry of
     the unreadable sensor, a real Virtual Occupancy Sensor.
@@ -2680,22 +2680,22 @@ async def _held_room_loses_sensor(
     hass.states.async_set(DOOR, "on")
     hass.states.async_set(HOLD, "on")
     hass.states.async_set(REAL, "off")
-    presence = _presence_entry()
-    roles = {"occupancy": OCC, "maintain": OCC, role: PRESENCE}
+    sensor = _virtual_occupancy_entry()
+    roles = {"occupancy": OCC, "maintain": OCC, role: VIRTUAL_OCC}
     light = make_light_entry(
         **roles, door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, hold_entities=[HOLD]
     )
-    await setup_entries(hass, presence, light)
+    await setup_entries(hass, sensor, light)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     if how == "reload":
-        assert await hass.config_entries.async_unload(presence.entry_id)
+        assert await hass.config_entries.async_unload(sensor.entry_id)
     else:
-        hass.states.async_set(PRESENCE, how)
+        hass.states.async_set(VIRTUAL_OCC, how)
     await settle(hass)
-    assert hass.states.get(PRESENCE).state in ("unavailable", "unknown")
-    return presence
+    assert hass.states.get(VIRTUAL_OCC).state in ("unavailable", "unknown")
+    return sensor
 
 
 async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
@@ -2713,16 +2713,16 @@ async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
 @pytest.mark.parametrize("role", ["occupancy", "maintain"])
 @pytest.mark.parametrize("how", ["reload", "unavailable", "unknown"])
 @pytest.mark.parametrize("back", ["on", "off"])
-async def test_unreadable_presence_keeps_its_hold_while_other_holds_release(
+async def test_unreadable_sensor_keeps_its_hold_while_other_holds_release(
     hass: HomeAssistant, freezer, role: str, how: str, back: str
 ) -> None:
-    """A presence sensor that reloads or goes unavailable keeps the hold it had.
+    """An occupancy or maintain sensor that reloads or goes unavailable keeps its hold.
 
-    The other presence role clearing, the door closing and a keep-on entity
+    The other of the two sensors clearing, the door closing and a keep-on entity
     releasing meanwhile start no countdown; what the sensor reports when it
     returns decides.
     """
-    presence = await _held_room_loses_sensor(hass, role, how)
+    sensor = await _held_room_loses_sensor(hass, role, how)
     await _release_other_holds(hass, freezer)
     state = _state(hass)
     assert state.state == "on"
@@ -2730,11 +2730,11 @@ async def test_unreadable_presence_keeps_its_hold_while_other_holds_release(
 
     if how == "reload":
         hass.states.async_set(MOTION, back)
-        assert await hass.config_entries.async_setup(presence.entry_id)
+        assert await hass.config_entries.async_setup(sensor.entry_id)
     else:
-        hass.states.async_set(PRESENCE, back)
+        hass.states.async_set(VIRTUAL_OCC, back)
     await settle(hass)
-    assert hass.states.get(PRESENCE).state == back
+    assert hass.states.get(VIRTUAL_OCC).state == back
     state = _state(hass)
     assert state.state == "on"
     assert state.attributes["molight_state"] == (
@@ -2744,16 +2744,16 @@ async def test_unreadable_presence_keeps_its_hold_while_other_holds_release(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["occupancy", "maintain"])
-async def test_presence_removed_mid_reload_releases_its_hold(
+async def test_sensor_removed_mid_reload_releases_its_hold(
     hass: HomeAssistant, freezer, role: str
 ) -> None:
     """A sensor deleted while unloaded is no outage: the light gets a timeout."""
-    presence = await _held_room_loses_sensor(hass, role, "reload")
+    sensor = await _held_room_loses_sensor(hass, role, "reload")
     hass.states.async_set(REAL, "on")  # the light reloads, and adopts it
     await _release_other_holds(hass, freezer)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    assert await hass.config_entries.async_remove(presence.entry_id)
+    assert await hass.config_entries.async_remove(sensor.entry_id)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
     freezer.tick(timedelta(seconds=61))
@@ -2849,7 +2849,7 @@ async def test_gate_outage_keeps_the_hold_of_an_occupied_room(
 ) -> None:
     """Other holds releasing while an active gate is unreadable start no timer.
 
-    Occupancy stays on throughout: the outage is not the window ending, and
+    The sensor stays occupied throughout: the outage is not the window ending, and
     the window that returns finds the room still lit.
     """
     schedule = await _occupied_room_loses_gate(hass, mode, how)
@@ -2918,21 +2918,21 @@ async def _visit_sensor(hass: HomeAssistant, kind: str) -> tuple[str, list]:
     hass.states.async_set(MOTION, "off")
     if kind == "raw":
         return MOTION, []
-    presence = _presence_entry()
+    sensor = _virtual_occupancy_entry()
     if kind == "simple":
-        await setup_entries(hass, presence)
-        return PRESENCE, [presence]
+        await setup_entries(hass, sensor)
+        return VIRTUAL_OCC, [sensor]
     room = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_COMBINED_OCCUPANCY,
             CONF_NAME: "Room",
-            CONF_TRIGGER_SENSORS: [PRESENCE],
+            CONF_TRIGGER_SENSORS: [VIRTUAL_OCC],
             CONF_MAINTAIN_SENSORS: [],
         },
     )
-    await setup_entries(hass, presence, room)
-    return ROOM, [room] if kind == "combined" else [presence, room]
+    await setup_entries(hass, sensor, room)
+    return ROOM, [room] if kind == "combined" else [sensor, room]
 
 
 async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
@@ -3063,7 +3063,7 @@ async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -
     elif how == "restart":
         await restart_entries(hass, light)
     else:
-        await change_entity_id(hass, PRESENCE, "binary_sensor.presence_2")
+        await change_entity_id(hass, VIRTUAL_OCC, "binary_sensor.virtual_occupancy_2")
     await settle(hass)
 
 

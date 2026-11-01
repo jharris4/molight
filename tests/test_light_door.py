@@ -8,7 +8,7 @@ occupancy. door_mode then decides what the door state does afterwards:
                 otherwise ignored (a momentary trigger, closing does nothing).
   open_close:   the open door holds the light on (OCCUPIED, no timer) while it
                 stays open; closing starts the countdown, deferring to any
-                active occupancy/keep-on hold.
+                occupied occupancy/maintain sensor or keep-on hold.
 
 The watched entities are plain states set via hass.states.async_set; the
 light only reads their state, so these stay independent of the real
@@ -275,7 +275,7 @@ async def test_open_close_holds_while_open(hass: HomeAssistant, freezer) -> None
 
 @pytest.mark.asyncio
 async def test_open_close_close_defers_to_occupancy(hass: HomeAssistant) -> None:
-    """Closing the door keeps the light on while occupancy is still active."""
+    """Closing the door keeps the light on while still occupied."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, occupancy=OCC)
     await setup_entries(hass, entry)
 

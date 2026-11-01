@@ -348,7 +348,7 @@ def virtual_light_entries(
     """Map each virtual light's entity_id to its config entry.
 
     Only entries that have actually registered a light entity appear: the
-    entity_id is what the bulk-assign light picker stores, and what a light's
+    entity_id is what the sensor assignment's light picker stores, and what a light's
     sensor references are keyed against.
     """
     registry = er.async_get(hass)

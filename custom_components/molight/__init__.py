@@ -421,8 +421,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if state is not None and state.attributes.get(ATTR_RESTORED):
             hass.states.async_remove(entity_id)
     # Some HA versions dispatch tracked state changes one loop iteration
-    # later; yield once so the removed entities' dropout reaches the entries
-    # that watched them before the reloads below unsubscribe those listeners.
+    # later; yield once so the removed entities' unavailable state reaches the
+    # entries that watched them before the reloads below unsubscribe those
+    # listeners.
     await asyncio.sleep(0)
 
     for other in hass.config_entries.async_entries(DOMAIN):

@@ -1118,7 +1118,7 @@ async def test_press_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
 async def test_unload_stops_listening(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Unloading the remote entry tears down its button subscription."""
+    """Unloading the remote entry stops watching its buttons."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     hass.states.async_set("light.living_room", "off")
     _seed(hass, "event.pico_on", PICO_TYPES)
@@ -1197,7 +1197,7 @@ async def test_first_press_of_a_brand_new_button_fires(
     """A freshly paired button (state "unknown", never fired an event) has
     nothing stale to replay; its very first press must execute.
 
-    Regression: the guard used to swallow any transition out of "unknown",
+    Regression: the guard used to swallow any state change out of "unknown",
     so the first press of every new button did nothing.
     """
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
@@ -1211,10 +1211,10 @@ async def test_first_press_of_a_brand_new_button_fires(
 
 
 @pytest.mark.asyncio
-async def test_remote_added_before_startup_defers_subscription(
+async def test_remote_added_before_startup_defers_watching(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A remote set up before HA has started only subscribes at STARTED;
+    """A remote set up before HA has started only starts watching at STARTED;
     events replayed during startup must never fire a binding."""
     hass.set_state(CoreState.not_running)
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
@@ -1222,7 +1222,7 @@ async def test_remote_added_before_startup_defers_subscription(
     _seed(hass, "event.pico_on", PICO_TYPES)
     await setup_entries(hass, light_entry, remote)
 
-    # Startup noise: a state change before STARTED is not even subscribed to.
+    # Startup noise: a state change before STARTED is not even watched.
     _fire(hass, "event.pico_on", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "off"

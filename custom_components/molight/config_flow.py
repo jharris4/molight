@@ -2309,7 +2309,7 @@ class MoLightConfigFlow(
         self._scheduled_light_shared_input: dict[str, Any] | None = None
         self._init_scheduled_light_steps()
         self._schedule_definition = SCHEDULE_DEFINITION_TIME
-        # Stashed sensor/role/mode between the two bulk-assign steps.
+        # Stashed sensor/role/mode between the two sensor assignment steps.
         self._assign: dict[str, Any] = {}
         # Direction and selected entry ids awaiting a bulk-conversion review.
         self._conversion: dict[str, Any] = {}
@@ -2933,7 +2933,7 @@ class MoLightConfigFlow(
     async def async_step_discover_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Filter the discoverable illuminance sensors."""
+        """Filter the discoverable lux sensors."""
         return await self._async_discovery_filter(
             step_id="discover_illuminance",
             domain="sensor",
@@ -2946,7 +2946,7 @@ class MoLightConfigFlow(
     async def async_step_discover_illuminance_select(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Pick which discovered illuminance sensors to wrap."""
+        """Pick which discovered lux sensors to wrap."""
         return await self._async_discovery_select(
             step_id="discover_illuminance_select",
             defaults_step=self.async_step_discover_illuminance_defaults,
@@ -2956,7 +2956,7 @@ class MoLightConfigFlow(
     async def async_step_discover_illuminance_defaults(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Adjust the defaults applied to every discovered illuminance sensor."""
+        """Adjust the defaults applied to every discovered lux sensor."""
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_illuminance_band(user_input)
@@ -3301,7 +3301,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Bulk-assign a virtual sensor to many regular Virtual Lights at once
+    # Assign one virtual sensor to several regular Virtual Lights at once
     # ------------------------------------------------------------------
 
     async def async_step_assign_sensor(
@@ -3689,7 +3689,7 @@ class MoLightConfigFlow(
     async def async_step_illuminance(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a Virtual Illuminance Binary Sensor."""
+        """Configure a Virtual Illuminance Sensor."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -3734,7 +3734,7 @@ class MoLightConfigFlow(
     async def async_step_schedule(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Choose how a Virtual Schedule Binary Sensor is defined."""
+        """Choose how a Virtual Schedule Sensor is defined."""
         if self._prefill and CONF_SCHEDULE_DEFINITION in self._prefill:
             self._schedule_definition = self._prefill[CONF_SCHEDULE_DEFINITION]
             return await (
@@ -3768,7 +3768,7 @@ class MoLightConfigFlow(
     async def async_step_schedule_time(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a time-window Virtual Schedule Binary Sensor.
+        """Configure a time-window Virtual Schedule Sensor.
 
         Each window edge combines an optional fixed time with an optional sun
         event (e.g. start at the later of sunset and 21:00). The HA frontend
@@ -3838,7 +3838,7 @@ class MoLightConfigFlow(
     async def async_step_schedule_source(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure a source-backed Virtual Schedule Binary Sensor."""
+        """Configure a source-backed Virtual Schedule Sensor."""
         errors: dict[str, str] = {}
         if user_input is not None:
             user_input = _current_entity_ids(self.hass, user_input)

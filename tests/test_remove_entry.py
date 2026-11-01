@@ -285,7 +285,7 @@ def _startup_listeners(hass: HomeAssistant) -> int:
         (_light_entry, []),
         (_scheduled_light_entry, []),
         (_remote_entry, []),
-        # Only a restored "on" without a maintain sensor showing presence defers.
+        # Only a restored "on" without a maintain sensor reading occupied defers.
         (_combined_occupancy_entry, [State("binary_sensor.rm_combined", "on")]),
         (_combined_schedule_entry, []),
     ],

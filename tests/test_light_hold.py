@@ -355,7 +355,7 @@ async def test_occupancy_clear_while_held_then_release(
 async def test_release_while_occupied_stays_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Releasing the hold under active occupancy keeps OCCUPIED, no timer."""
+    """Releasing the hold while occupied keeps OCCUPIED, no timer."""
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
@@ -462,7 +462,7 @@ async def test_release_into_brightness_while_maintained_resumes_until_they_left(
 async def test_bright_sensor_that_is_also_a_hold_keeps_the_light_on(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A sensor that is both the illuminance input and a keep-on entity holds
+    """A sensor that is both the light's illuminance sensor and a keep-on entity holds
     the light as it goes bright, and going dark releases it into a timer."""
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(
@@ -1107,7 +1107,7 @@ async def test_load_warns_about_keep_on_entities_the_form_now_rejects(
         "media_player.tv",
         HOLD,
     ]
-    # At startup every entry has loaded before the lights subscribe.
+    # At startup every entry has loaded before the lights start watching.
     await setup_entries(
         hass, outer, make_light_entry(lights=[REAL], hold_entities=holds)
     )

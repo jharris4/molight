@@ -1664,7 +1664,7 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", HOLD_LIGHT)
 
-    # Release while occupied: active occupancy keeps the light on.
+    # Release while occupied: being occupied keeps the light on.
     set_hold(client, True)
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
@@ -1676,7 +1676,7 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "occupied"
         ),
-        "occupied after the release while occupancy is active",
+        "occupied after the release while occupied",
         duration=5,
     )
     set_timer_motion(client, False)
@@ -1723,7 +1723,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     wait_profile(client, PROFILE_OUTSIDE)
 
     # Outside settings: gate-mode illuminance suppresses the initial occupancy
-    # turn-on and going dark admits it, but returning bright does not force
+    # turn-on and going dark admits it, but going bright again does not force
     # an already-on light off.
     client.set_state(RAW_ILLUMINANCE, 50)
     client.wait_state(
@@ -1746,7 +1746,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(30)
         ),
-        "on at the outside-profile brightness after becoming dark",
+        "on at the outside-profile brightness after going dark",
     )
     wait_machine_state(client, "occupied")
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -1784,7 +1784,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     reset_trigger(client)
 
     # Inside settings: control-mode illuminance forces an occupied light off
-    # when it becomes bright, and open_close holds until closing starts the
+    # when it goes bright, and open_close holds until closing starts the
     # countdown. These contrasts prove the settings switch together.
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
@@ -1810,7 +1810,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(80)
         ),
-        "on at the inside-profile brightness after becoming dark",
+        "on at the inside-profile brightness after going dark",
     )
     wait_machine_state(client, "occupied")
     # The hysteresis band (threshold 10, band 1) keeps the light from flapping:
@@ -1846,14 +1846,14 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "on: going dark while occupancy is active turns the light on again",
+        "on: going dark while occupied turns the light on again",
     )
     wait_machine_state(client, "occupied")
     client.set_state(RAW_ILLUMINANCE, 50)
     client.wait_state(
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "forced off again by brightness",
+        "forced off again by going bright",
     )
 
     reset_trigger(client)
@@ -1873,7 +1873,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         VIRTUAL_LIGHT,
         lambda state: state["attributes"].get("molight_state") == "occupied",
-        "occupied: closing the door defers to active occupancy",
+        "occupied: closing the door defers to the occupied sensor",
     )
     client.set_state(RAW_MOTION, "off")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "off", "off")
@@ -1887,7 +1887,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> None:
-    """A door or lux source briefly unavailable and back unchanged is no event."""
+    """A door or lux sensor briefly unavailable and back unchanged is no event."""
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
@@ -1929,7 +1929,8 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
         client,
         VIRTUAL_ILLUMINANCE,
         lambda state: state["state"] == "off",
-        "dark: the illuminance sensor holds its last reading while its source is out",
+        "dark: the illuminance sensor keeps its last known value while its source "
+        "is out",
     )
     client.set_available(RAW_ILLUMINANCE, True)
     client.wait_state(
@@ -1942,7 +1943,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
             state["attributes"].get("last_on_illuminance") == last_on_illuminance
             and state["attributes"].get("molight_state") == machine_state
         ),
-        "unchanged: the lux source, briefly unavailable, was not read as a "
+        "unchanged: the lux sensor, briefly unavailable, was not read as a "
         "fresh dark edge",
     )
 
@@ -1951,7 +1952,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
     client.set_state(RAW_SCHEDULE, "off")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
     wait_profile(client, PROFILE_OUTSIDE)
-    checkpoint("door and lux sources briefly unavailable are not read as changes")
+    checkpoint("door and lux sensors briefly unavailable are not read as changes")
 
 
 def wait_timer_stage(
@@ -3549,7 +3550,7 @@ def assert_state_stays(
     description: str,
     duration: float = 1.5,
 ) -> None:
-    """Assert an entity continuously avoids an unwanted delayed transition."""
+    """Assert an entity continuously avoids an unwanted delayed state change."""
     deadline = time.monotonic() + duration
     last: dict[str, Any] | None = None
     last_error: Exception | None = None
@@ -4967,7 +4968,9 @@ def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
     )
     set_dusk_lux(client, True)
     client.wait_state(
-        RAW_MULTI_RGB, lambda state: state["state"] == "off", "forced off by brightness"
+        RAW_MULTI_RGB,
+        lambda state: state["state"] == "off",
+        "forced off by going bright",
     )
     wait_machine_state(client, "idle", DUSK_LIGHT)
     assert_state_stays(
@@ -7558,7 +7561,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
     set_timer_motion(client, False)
 
     # Inside the window and dark: a manual off wins over occupancy, and a virtual
-    # turn-on while occupancy is still active goes straight to occupied.
+    # turn-on while still occupied goes straight to occupied.
     set_end_schedule(client, True)
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(MANUAL_ILLUMINANCE, lambda state: state["state"] == "off", "dark")
@@ -7572,7 +7575,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off: a manual off wins over active occupancy",
+        "off: a manual off wins over an occupied sensor",
     )
     client.call_service("light", "turn_on", {"entity_id": MANUAL_LIGHT})
     client.wait_state(
@@ -7581,7 +7584,7 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "occupied"
         ),
-        "occupied: a virtual turn-on while occupancy is active is adopted",
+        "occupied: a virtual turn-on while occupied is adopted",
     )
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", MANUAL_LIGHT)
@@ -8045,7 +8048,7 @@ def run_combined_restart_prepare() -> None:
 
 
 def run_combined_restart_verify() -> None:
-    """Restored on with a maintain sensor still showing presence seeds on."""
+    """Restored on with a maintain sensor still reading occupied seeds on."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -8063,7 +8066,7 @@ def run_combined_restart_verify() -> None:
     client.wait_state(
         COMBINED_BOOT,
         lambda state: state["state"] == "on",
-        "on after startup: restored on and the late maintain sensor shows presence",
+        "on after startup: restored on and the late maintain sensor reads occupied",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(

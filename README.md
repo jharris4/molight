@@ -10,7 +10,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 |---|---|
 | [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor) | Wraps one motion/presence sensor; estimates when the person *actually left* |
 | [Virtual Combined Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-combined-occupancy-sensor) | Merges several occupancy sensors: trigger sensors start occupancy, maintain sensors only extend it |
-| [Virtual Illuminance Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) | Turns a lux reading into a steady bright/dark signal, with optional hysteresis so it doesn't flap around the threshold |
+| [Virtual Illuminance Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) | Turns a lux sensor's reading into a steady bright/dark signal, with optional hysteresis so it doesn't flap around the threshold |
 | [Virtual Schedule Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-schedule-sensor) | Reusable schedule signal from a time and/or sun-event window (overnight windows and sun offsets included) or another binary sensor, optionally inverted |
 | [Virtual Combined Schedule Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-combined-schedule-sensor) | Combines schedules with any/all logic, optionally inverted, e.g. a morning and an evening window for one lamp |
 | [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
@@ -24,7 +24,7 @@ Each of these is a *virtual entity*: it stands in front of real devices (sensors
 - Lights turn off a configurable time after the person *actually left*: countdowns anchor to each sensor's occupancy timeout, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 - Occupancy takes over manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified: a light that only a blip lit goes off after a short false-detection off delay, and a light the user turned on is never cut short (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).
 - A light's own [maintain sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on, however the light was lit, even manually.
-- Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); getting bright can force lights off (or not, for lux sensors that can see the virtual light's member lights).
+- Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); going bright can force lights off (or not, for lux sensors that can see the virtual light's member lights).
 - A schedule can own a light or gate it (see [Schedule modes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes)). **Follow** gives porch-light behavior (on at schedule window start, off at window end) while respecting manual changes mid-window; the three **Gate** modes let motion and the door turn the light on only inside the window, and differ in what the window's end does to a light that is still on.
 - A [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) swaps a whole set of settings inside and outside a schedule, optionally resting at a dim [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) level instead of turning off.
 - A [door sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#door-sensor) lights a pantry, closet or garage when the door opens, or holds it while the door stands open. A garage door opener or gate works as the door too.
@@ -111,7 +111,7 @@ The field only appears when creating. Renaming later works through each entry's 
 The three **Discover** actions scan your existing entities and create a virtual wrapper for each pick:
 
 - **Discover occupancy sensors**: every `binary_sensor` with device class `occupancy`, `motion`, or `presence`.
-- **Discover illuminance sensors**: every `sensor` with device class `illuminance`.
+- **Discover lux sensors**: every `sensor` with device class `illuminance`.
 - **Discover lights**: every `light` entity.
 
 Each starts with an optional discovery filter: pick **areas** and/or **labels** to narrow the scan (an entity matches through its own assignment or its device's; with both filters set, an entity must match an area *and* carry a label), and choose whether the checklist starts with everything **pre-selected** (bulk-add, the default) or empty (handy when you only want a few). Leave the filters blank to see everything.
@@ -177,7 +177,7 @@ To see why a light did what it did, read these [attributes](https://github.com/j
 - `molight_state` on the virtual light: its [state-machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine) state.
 - `last_on_physical`, `last_on_virtual`, `last_on_occupancy`, `last_on_illuminance` and `last_on_door` on the virtual light: when each source last turned it on.
 - `auto_off_held` on the virtual light: whether the Auto-off switch or a keep-on entity is holding automatic turn-offs.
-- `schedule_window_start`, `bright_forced_off` with `bright_resume_until` and, on a Virtual Scheduled Light, `active_settings`: the follow-mode window marker, whether brightness forced the light off and until when going dark resumes it, and which settings are live.
+- `schedule_window_start`, `bright_forced_off` with `bright_resume_until` and, on a Virtual Scheduled Light, `active_settings`: the follow-mode window marker, whether going bright forced the light off and until when going dark resumes it, and which settings are live.
 - `latest_occupied_time`, `last_clear_false_detection` and `last_clear_unavailable` on an occupancy sensor: when the person was last seen, and whether the last clear was a false detection or an unavailable source.
 - `resolved_schedules` on a Virtual Combined Schedule Sensor: the plain schedules it was built from.
 - A Virtual Remote's **Last Action** sensor: the last binding it ran, and the button and click that fired it.
