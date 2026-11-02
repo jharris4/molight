@@ -835,7 +835,7 @@ async def test_new_on_period_replaces_an_owed_switch_end(hass: HomeAssistant) ->
 
 
 # ---------------------------------------------------------------------------
-# A warning snapshot
+# A pre-warning snapshot
 # ---------------------------------------------------------------------------
 
 WARN = 51  # 20 %
@@ -923,7 +923,7 @@ async def test_warning_restart_with_the_member_off_stays_off(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boot", UNKNOWN)
 @pytest.mark.parametrize("color", [False, True], ids=["brightness", "color"])
-async def test_warning_snapshot_is_owed_to_a_member_that_loads_late(
+async def test_pre_warning_snapshot_is_owed_to_a_member_that_loads_late(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str, color: bool
 ) -> None:
     """An unreadable member keeps the snapshot until it reports lit."""
@@ -944,7 +944,7 @@ async def test_warning_snapshot_is_owed_to_a_member_that_loads_late(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boot", UNKNOWN)
-async def test_warning_snapshot_is_dropped_when_the_unreadable_member_is_off(
+async def test_pre_warning_snapshot_is_dropped_when_the_unreadable_member_is_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
 ) -> None:
     """An unreadable member reporting off completes the auto-off like any other."""
@@ -1062,7 +1062,7 @@ async def test_virtual_turn_on_while_a_member_is_unreadable_sets_what_it_is_sent
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("how", ["restart", "crash"])
-async def test_owed_warning_snapshot_survives_a_second_restart(
+async def test_owed_pre_warning_snapshot_survives_a_second_restart(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
 ) -> None:
     """The snapshot is still restored when HA restarts again before the

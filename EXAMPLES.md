@@ -14,7 +14,7 @@ The examples build on each other:
 
 1. [Just a turn-off timer](#example-1-just-a-turn-off-timer-the-simplest-case): no sensors at all
 2. [Simple occupancy](#example-2-simple-occupancy-case): one motion sensor
-3. [Living room](#example-3-living-room-the-whole-toolbox): occupancy + maintain + illuminance + a warning blink + a turn-on selection
+3. [Living room](#example-3-living-room-the-whole-toolbox): occupancy + maintain + illuminance + an off warning sequence + a turn-on selection
 4. [Porch light](#example-4-porch-light-schedule-follow-mode): a schedule window
 5. [Home-only lighting](#example-5-home-only-lighting-inverted-binary-sensor-schedule): an inverted schedule derived from an away-mode binary sensor
 6. [Stairs night light](#example-6-stairs-night-light-gate-and-keep-state): a schedule that gates motion without cutting a timer short
@@ -78,7 +78,7 @@ Walk in → lights on. Room empties → 60s countdown anchored to when you *actu
 
 ### Example 3: Living room (the whole toolbox)
 
-Motion for triggering, an mmWave sensor to *hold* while you sit still, only when it's dark, and a warning blink before it drops you into darkness.
+Motion for triggering, an mmWave sensor to *hold* while you sit still, only when it's dark, and an off warning sequence before it drops you into darkness.
 
 **1. Virtual Occupancy Sensor**: the *trigger* (regular PIR)
 
@@ -122,13 +122,13 @@ Turn-on selection entity: select.living_wled_preset
 # The next two fields are asked on a second step after submitting this form:
 Option source entity:      input_select.living_theme  # changed by calendar/automations
 Fixed/fallback option:     Warm White Solid           # picked from WLED's offered options
-Effect warning duration: 3        # 3s "about to turn off" cue...
+Effect duration:         3        # 3s "about to turn off" effect stage...
 Effect brightness:       0        # ...a blink fully off
-Warning grace period:    20       # then 20s at current brightness to re-trigger
-Warning color:           255, 0, 0   # red: bulbs that can show color turn red for it
+Warn duration:           20       # then 20s at current brightness to re-trigger
+Warn color:              255, 0, 0   # red: bulbs that can show color turn red for it
 ```
 
-Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then 20s grace to wave and cancel, shown in red on any color-capable bulb for an unmissable cue (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
+Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then a 20s warn stage to wave and cancel, shown in red on any color-capable bulb (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
 
 Each time MoLight turns the light on, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
@@ -299,7 +299,7 @@ At 23:00 the schedule turns on and the light silently switches to the inside set
 
 - With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
 - Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
-- Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, warning blink, fades, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
+- Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, off warning sequence, transitions, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which settings set is active; **Configure** walks the same three forms again to edit either settings set.
 
 ---
@@ -324,7 +324,7 @@ Preset 1        → Single-click buttons:  event.closet_pico_stop   # the middle
                   Brightness:            60
 ```
 
-The on button turns the light on at 100%; each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a pending off-warning and restart the turn-off timer, exactly like a dashboard tap.
+The on button turns the light on at 100%; each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a running off warning sequence and restart the turn-off timer, exactly like a dashboard tap.
 
 ---
 
@@ -344,7 +344,7 @@ Brightness up   → Single-click buttons:  event.living_room_buttons_button_1
 Brightness down → Single-click buttons:  event.living_room_buttons_button_2
 ```
 
-Single vs. double is read from each button's own event types (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Caséta buttons from lutron-caseta-events, `single_press` vs. `double_press` on HomeKit buttons), so there's nothing to configure, and binding a click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its double-click window passes, so single clicks respond with ~half a second of latency.
+Single vs. double is read from each button's own event types (`multi_press_1` vs. `multi_press_2` on Matter multi-press buttons, `press` vs. `multi_tap` on Caséta buttons from lutron-caseta-events, `single_press` vs. `double_press` on HomeKit buttons), so there's nothing to configure, and binding a click to a button that can't do one is rejected with an error. One caveat inherent to multi-press hardware: the remote only confirms a *single* click after its multi-press wait ends, so single clicks respond with ~half a second of latency.
 
 ---
 

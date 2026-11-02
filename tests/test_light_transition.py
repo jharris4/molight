@@ -2,7 +2,7 @@
 
 The four optional transition settings shape the service calls the light makes
 itself: auto_on/auto_off fade automatic turn-ons/offs, effect/warn fade the
-warning stages. Virtual turn-ons and offs never carry a
+effect and warn stages. Virtual turn-ons and offs never carry a
 *configured* transition.
 
 A caller-supplied transition is separate: it is forwarded to the members, which
@@ -178,7 +178,7 @@ async def test_effect_blink_off_uses_effect_transition(
     hass: HomeAssistant, freezer
 ) -> None:
     """An effect brightness of 0 blinks the real lights off via turn_off; that
-    call still fades with the effect transition."""
+    call still uses the effect transition."""
     entry = make_light_entry(
         effect_timeout=10, effect_brightness=0, warn_timeout=0, effect_transition=1
     )
@@ -272,10 +272,10 @@ async def test_caller_transition_forwarded_on_turn_off(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_caller_transition_used_instead_of_configured_auto_fade(
+async def test_caller_transition_used_instead_of_configured_auto_transition(
     hass: HomeAssistant,
 ) -> None:
-    """The virtual path still ignores auto_on_transition; the caller's own fade
+    """The virtual path still ignores auto_on_transition; the caller's own transition
     is what gets sent."""
     entry = make_light_entry(auto_on_transition=2.5)
     await setup_entries(hass, entry)
@@ -294,7 +294,7 @@ async def test_caller_transition_carries_the_pre_warning_restore(
     hass: HomeAssistant, freezer
 ) -> None:
     """A turn-on mid-warning restores the pre-warning brightness over the
-    caller's fade rather than snapping to it."""
+    caller's transition rather than snapping to it."""
     entry = make_light_entry(effect_timeout=10, effect_brightness=50)
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -322,7 +322,7 @@ async def test_caller_transition_carries_the_pre_warning_restore(
 async def test_transition_offered_while_a_member_is_unreadable(
     hass: HomeAssistant,
 ) -> None:
-    """Fail open: an unreadable member must not cost the caller a fade."""
+    """Fail open: an unreadable member must not cost the caller a transition."""
     entry = make_light_entry()
     await setup_entries(hass, entry)
 
@@ -400,7 +400,7 @@ async def test_transition_offered_during_startup(
 
     At startup _seed_state (and with it _update_capabilities) waits for
     EVENT_HOMEASSISTANT_STARTED, but the entity exists and takes service
-    calls before that: a startup scene's fade must not be stripped.
+    calls before that: a startup scene's transition must not be stripped.
     """
     hass.set_state(CoreState.starting)
     hass.states.async_set(REAL, "off", {"supported_features": 0})

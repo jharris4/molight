@@ -770,7 +770,7 @@ async def test_follow_window_ignores_door(hass: HomeAssistant) -> None:
 
 
 # ---------------------------------------------------------------------------
-# interactions with other holds and the warning sequence
+# interactions with other holds and the off warning sequence
 # ---------------------------------------------------------------------------
 
 
@@ -801,7 +801,7 @@ async def test_open_mode_occupancy_holds_after_trigger(
 
 @pytest.mark.asyncio
 async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> None:
-    """Re-opening mid effect/warn undoes the warning stage like any re-trigger."""
+    """Re-opening mid-warning undoes the warning like any re-trigger."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN, effect_timeout=10, effect_brightness=0
     )
@@ -923,7 +923,7 @@ async def test_door_open_applies_auto_on_brightness_and_transition(
     hass: HomeAssistant,
 ) -> None:
     """A door-triggered turn-on is automatic: it carries the configured
-    auto-on brightness and fade, exactly like an occupancy turn-on."""
+    auto-on brightness and transition, exactly like an occupancy turn-on."""
     entry = make_light_entry(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN,
@@ -1004,7 +1004,7 @@ async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> No
 async def test_open_close_close_mid_warning_lets_it_finish(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Closing the door mid effect/warn lets the sequence wind down to off.
+    """Closing the door mid-warning lets the sequence wind down to off.
 
     A door standing open under a bright gate never held the light (the open
     was gated away), so its close must not restart the countdown either;

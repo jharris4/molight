@@ -253,7 +253,7 @@ async def test_a_group_changed_to_include_the_light_that_wraps_its_owner(
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_a_warning_stage_does_not_enter_a_new_cycle(
+async def test_a_warn_stage_does_not_enter_a_new_cycle(
     hass: HomeAssistant, monkeypatch, freezer
 ) -> None:
     """A stage the timer reaches is sent without a command, and checks too."""

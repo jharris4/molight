@@ -224,7 +224,7 @@ async def test_options_reload_during_countdown_restarts_with_new_timeout(
 async def test_options_reload_while_warn_adopts_active(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A reload landing during the warn grace re-adopts the lit lights as
+    """A reload landing during the warn stage re-adopts the lit lights as
     ACTIVE (the warning is forgotten) and the new timeout applies."""
     entry = make_light_entry(timeout=60, warn_timeout=30, warn_brightness=100)
     hass.states.async_set(REAL, "on", {"brightness": 200})

@@ -211,7 +211,7 @@ _AUTO_ON_BRIGHTNESS_SELECTOR = selector.NumberSelector(
     )
 )
 
-# Effect/warn warning-sequence stage durations (0 disables a stage).
+# Off warning sequence stage durations (0 disables a stage).
 _STAGE_TIMEOUT_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, max=3600, step=1, unit_of_measurement="s", mode="box"
@@ -223,15 +223,15 @@ _EFFECT_BRIGHTNESS_SELECTOR = selector.NumberSelector(
         min=0, max=100, step=1, unit_of_measurement="%", mode="box"
     )
 )
-# Optional fade times for the light's own service calls (blank/0 = none).
+# Optional transitions for the light's own service calls (blank/0 = none).
 _TRANSITION_SELECTOR = selector.NumberSelector(
     selector.NumberSelectorConfig(
         min=0, max=300, step=0.1, unit_of_measurement="s", mode="box"
     )
 )
-# Optional colors for automatic turn-ons and the warning stages. A color is
-# forwarded to every member light in one call; HA filters/converts it per
-# real light, so brightness-only members simply ignore it.
+# Optional colors for automatic turn-ons and the effect and warn stages. A
+# color is forwarded to every member light in one call; HA filters/converts
+# it per real light, so brightness-only members simply ignore it.
 _COLOR_TEMP_SELECTOR = selector.ColorTempSelector(
     selector.ColorTempSelectorConfig(
         unit=selector.ColorTempSelectorUnit.KELVIN, min=2000, max=6500
@@ -1152,21 +1152,21 @@ def _validate_occupancy_source(
 
 
 def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
-    """Check each stage fade fits inside its stage: transition <= timeout.
+    """Check each stage transition fits inside its stage: transition <= duration.
 
-    A disabled stage has timeout 0, so setting a fade for it fails the same
-    rule rather than being silently ignored. Timeouts are whole seconds, as
+    A disabled stage has duration 0, so setting a transition for it fails the same
+    rule rather than being silently ignored. Durations are whole seconds, as
     the light runs them. The offending fields live inside a collapsed
     section, where the frontend can't anchor a field error, so the first
     violation is reported as a base error.
     """
-    for transition_key, timeout_key, error in (
+    for transition_key, duration_key, error in (
         (CONF_EFFECT_TRANSITION, CONF_EFFECT_TIMEOUT, "effect_transition_too_long"),
         (CONF_WARN_TRANSITION, CONF_WARN_TIMEOUT, "warn_transition_too_long"),
     ):
         transition = user_input.get(transition_key)
         if transition is not None and float(transition) > int(
-            user_input.get(timeout_key) or 0
+            user_input.get(duration_key) or 0
         ):
             return {"base": error}
     return {}
@@ -1227,8 +1227,8 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     the conflict errors only fire when the field was left blank. An effect
     color needs a visible effect stage (effect_brightness > 0; a blink fully
     off has no color to show), and a stage brightness/color on a disabled
-    stage (timeout 0) is rejected rather than silently ignored, mirroring the
-    stage-fade rule. Reported as base errors: the fields live inside
+    stage (duration 0) is rejected rather than silently ignored, mirroring the
+    stage-transition rule. Reported as base errors: the fields live inside
     collapsed sections, where the frontend can't anchor a field error.
     """
     for temp_key, rgb_key, error in (
@@ -1250,10 +1250,10 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     )
     if effect_color and not int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0):
         return {"base": "effect_color_requires_brightness"}
-    # Stage timeouts are whole seconds, as the light runs them.
+    # Stage durations are whole seconds, as the light runs them.
     if effect_color and not int(user_input.get(CONF_EFFECT_TIMEOUT) or 0):
         return {"base": "effect_color_requires_timeout"}
-    # 0 is the default and the blink-fully-off cue, so only a positive value
+    # 0 is the default and blinks the lights fully off, so only a positive value
     # on a disabled stage is a mistake.
     if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not int(
         user_input.get(CONF_EFFECT_TIMEOUT) or 0
@@ -1271,19 +1271,19 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
 def _validate_transition_support(
     hass: HomeAssistant, user_input: dict[str, Any], lights: Sequence[str]
 ) -> dict[str, str]:
-    """Reject a configured fade that none of the chosen lights could apply.
+    """Reject a configured transition that none of the chosen lights could apply.
 
     Like the double-click check in _validate_remote, only a positive "none of
     them can" rejects; an unjudgeable light is allowed through. Base error: the
-    fade fields sit inside collapsed sections.
+    transition fields sit inside collapsed sections.
     """
-    fades = (
+    transitions = (
         CONF_AUTO_ON_TRANSITION,
         CONF_AUTO_OFF_TRANSITION,
         CONF_EFFECT_TRANSITION,
         CONF_WARN_TRANSITION,
     )
-    if not any(user_input.get(key) for key in fades):
+    if not any(user_input.get(key) for key in transitions):
         return {}
     if lights_support_transition(hass, lights) is False:
         return {"base": "transition_unsupported"}
@@ -1296,8 +1296,8 @@ def _validate_brightness_support(
     """Reject a configured brightness none of the chosen lights could apply.
 
     An effect brightness of 0 is exempt: a blink fully off is sent as turn_off,
-    which every light can do; it is the one warning cue that still works
-    without dimming.
+    which every light can do; it is the one visible warning that
+    still works without dimming.
     """
     keys = (
         CONF_AUTO_ON_BRIGHTNESS,
@@ -1320,7 +1320,7 @@ def _validate_color_support(
 
     Color temperature and RGB are separate capabilities (a tunable-white bulb
     has one and not the other), so they are judged separately. Same rule as the
-    fade check: only a positive "none of them can" rejects, and a mixed group
+    transition check: only a positive "none of them can" rejects, and a mixed group
     passes on the strength of one capable member, which is the documented case.
     """
     temp_keys = (
@@ -1481,7 +1481,7 @@ def _light_setting_fields(
     """Sectioned settings of a virtual light.
 
     Only the turn-off timeout stays top-level; everything else is grouped:
-    Turn-on & turn-off behavior and the off-warning stages collapsed (defaults are
+    Turn-on & turn-off behavior and the off warning sequence collapsed (defaults are
     fine to start with), the sensor references expanded since they are the point of
     a virtual light. Each mode dropdown sits next to its entity picker. The
     standby section is for a Virtual Scheduled Light's inside-schedule settings.
@@ -3020,7 +3020,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered light.
 
-        The same light_timeout/stage-transition checks the manual light form
+        The same light_timeout and stage-transition checks the manual light form
         enforces apply here, since one setting set is shared by every pick.
         """
         errors: dict[str, str] = {}
@@ -4793,7 +4793,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         """Render the light's options form: the input, else the entry settings."""
         cfg = self._cfg
         # Entry settings are applied as suggested values (not defaults) so the
-        # optional fields (sensor references, brightness/fade overrides) can
+        # optional fields (sensor references, brightness/transition overrides) can
         # be cleared back to "not set" once given a value.
         schema = vol.Schema(
             {

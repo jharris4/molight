@@ -192,7 +192,7 @@ def _assert_standby(hass: HomeAssistant) -> None:
 async def test_schedule_start_turns_an_off_light_on_at_standby(
     hass: HomeAssistant, current: str
 ) -> None:
-    """The start boundary lights the porch at standby with the auto-on fade."""
+    """The start boundary lights the porch at standby with the auto-on transition."""
     select = "select.scene"
     hass.states.async_set(select, current, {"options": ["Day", "Night"]})
     selected: list[str] = []
@@ -291,8 +291,10 @@ async def test_occupancy_without_an_auto_on_brightness_holds_standby_as_it_is(
 
 
 @pytest.mark.asyncio
-async def test_warning_stages_lead_into_standby(hass: HomeAssistant, freezer) -> None:
-    """Effect and warn still run, and their last step is standby."""
+async def test_effect_and_warn_stages_lead_into_standby(
+    hass: HomeAssistant, freezer
+) -> None:
+    """The effect and warn stages still run, and their last step is standby."""
     calls = await _setup_porch(
         hass,
         _porch(
@@ -402,7 +404,7 @@ async def test_turn_on_without_a_level_and_no_auto_on_level_keeps_standby_level(
 async def test_standby_without_a_color_restores_the_pre_warning_color(
     hass: HomeAssistant, freezer, stage: dict
 ) -> None:
-    """A colored warning stage must not become the resting appearance."""
+    """A colored effect or warn stage must not become the resting appearance."""
     hass.states.async_set(REAL, "off", {"supported_color_modes": ["color_temp"]})
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off")
@@ -1234,7 +1236,7 @@ async def test_hold_freezes_the_raised_level_and_release_times_back_to_standby(
 
 @pytest.mark.asyncio
 async def test_schedule_end_turn_off_turns_standby_off(hass: HomeAssistant) -> None:
-    """Turn off ends standby with the inside settings' off fade."""
+    """Turn off ends standby with the inside settings' auto-off transition."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_OFF_TRANSITION: 4}))
     _assert_standby(hass)
 

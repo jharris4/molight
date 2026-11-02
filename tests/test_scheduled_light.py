@@ -543,7 +543,7 @@ async def test_schedule_end_switch_adopts_active_outside_presence_source(
 async def test_schedule_end_switch_uses_outside_warning_settings(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An already-due switched deadline enters the incoming warning policy."""
+    """An already-due switched deadline runs the incoming off warning sequence."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -1520,7 +1520,7 @@ _WARNING_OUTSIDE = {
 async def test_schedule_change_hold_mid_warning_restores_light(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A keep-on entity from the new settings aborts a running warning sequence."""
+    """A keep-on entity from the new settings cancels a running off warning sequence."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
@@ -1543,7 +1543,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
-    # Held: the interrupted grace period never expires the light.
+    # Held: the interrupted warn stage never expires the light.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1554,7 +1554,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
 async def test_held_schedule_end_mid_warning_restores_then_turns_off(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A pending Turn off end aborts warning before applying on release."""
+    """A pending Turn off end cancels the warning before applying on release."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -2588,7 +2588,7 @@ async def test_restart_clears_pending_off_when_physical_light_is_already_off(
 async def test_restart_held_pending_off_restores_old_warning_before_release(
     hass: HomeAssistant,
 ) -> None:
-    """A pending schedule end off undoes its old warning presentation before waiting."""
+    """A pending schedule end off cancels its old warning before waiting."""
     hold = "input_boolean.keep_on"
     hass.states.async_set(REAL, "on", {"brightness": 255})
     hass.states.async_set(SCHEDULE, "off")

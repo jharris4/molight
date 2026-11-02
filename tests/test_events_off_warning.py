@@ -1,6 +1,6 @@
 """Tests for the off_warning event on a light's Events entity.
 
-Each stage of the warning sequence fires with the seconds left and the
+Each stage of the off warning sequence fires with the seconds left and the
 stage's look; a re-trigger that ends the sequence early fires cancelled,
 with the look the lights show after it.
 """

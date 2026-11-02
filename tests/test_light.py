@@ -1415,7 +1415,7 @@ async def test_light_restore_keeps_valid_timestamps(
 
 
 # ---------------------------------------------------------------------------
-# Effect / warn warning sequence before auto-off
+# Off warning sequence before auto-off
 # ---------------------------------------------------------------------------
 
 
@@ -1429,7 +1429,7 @@ def _warn_light_entry(
     hold_entities: list[str] | None = None,
     timeout: int = 60,
 ) -> MockConfigEntry:
-    """A virtual light configured with an effect/warn warning sequence."""
+    """A virtual light configured with an off warning sequence."""
     data: dict = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: "Test Light",
@@ -1475,8 +1475,8 @@ def _real_calls(calls: list[dict], service: str) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
-    """At auto-off the light blinks off (effect), holds a grace period (warn),
-    then turns off, instead of turning off immediately."""
+    """At auto-off the light blinks off (effect stage), holds the warn brightness
+    (warn stage), then turns off, instead of turning off immediately."""
     entry = _warn_light_entry(
         effect_timeout=10, effect_brightness=0, warn_timeout=15, warn_brightness=100
     )
@@ -1500,7 +1500,7 @@ async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["molight_state"] == STATE_EFFECT
     assert _real_calls(calls, "turn_off"), "effect stage should blink lights off"
 
-    # Effect duration elapses → WARN grace period at the warn brightness (100%).
+    # Effect duration elapses → warn stage at the warn brightness (100%).
     freezer.tick(timedelta(seconds=11))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -1565,14 +1565,14 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
     await _settle(hass)
     assert _mstate(hass) == STATE_WARN
 
-    # User dims the real light during the warn window.
+    # User dims the real light during the warn stage.
     hass.states.async_set("light.living_room", "on", {"brightness": 80})
     await _settle(hass)
     state = hass.states.get("light.test_light")
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 80
 
-    # The full timer restarted: still active well past the old warn window.
+    # The full timer restarted: still active well past the old warn stage.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -1585,7 +1585,7 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
 
 
 @pytest.mark.asyncio
-async def test_virtual_on_during_effect_resumes(hass: HomeAssistant, freezer) -> None:
+async def test_virtual_on_during_effect_restores(hass: HomeAssistant, freezer) -> None:
     """A virtual turn-on during the effect blink cancels the warning and returns
     the light to ACTIVE."""
     entry = _warn_light_entry(effect_timeout=10, effect_brightness=0, warn_timeout=10)
@@ -1638,7 +1638,7 @@ async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> 
     await _settle(hass)
     assert _mstate(hass) == STATE_WARN
 
-    # Motion returns during the warn window → back to OCCUPIED, still on.
+    # Motion returns during the warn stage → back to OCCUPIED, still on.
     calls = _record_service_calls(hass)
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
@@ -1649,8 +1649,8 @@ async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> 
 
 
 @pytest.mark.asyncio
-async def test_hold_during_warn_aborts(hass: HomeAssistant, freezer) -> None:
-    """Auto-off becoming held during the warn stage aborts the warning, restores
+async def test_hold_during_warn_cancels(hass: HomeAssistant, freezer) -> None:
+    """Auto-off becoming held during the warn stage cancels the warning, restores
     the brightness, and keeps the light on with no timer."""
     entry = _warn_light_entry(
         warn_timeout=30, warn_brightness=100, hold_entities=["binary_sensor.keep_on"]

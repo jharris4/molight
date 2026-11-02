@@ -1,4 +1,4 @@
-"""Effect/warn warning-sequence tests for virtual lights.
+"""Off warning sequence tests for virtual lights.
 
 test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and
@@ -95,7 +95,7 @@ async def _turn_on_virtual(hass: HomeAssistant, brightness: int | None = None) -
 
 
 # ---------------------------------------------------------------------------
-# Attribute invariance: the warning stages drive the real lights themselves
+# Attribute invariance: the effect and warn stages drive the real lights themselves
 # and must never register as physical activity
 # ---------------------------------------------------------------------------
 
@@ -305,7 +305,7 @@ async def test_physical_off_during_warn_goes_idle(hass: HomeAssistant, freezer) 
 
 @pytest.mark.asyncio
 async def test_bright_forces_off_during_warn(hass: HomeAssistant, freezer) -> None:
-    """Illuminance going bright (control mode) wins over the warn grace."""
+    """Illuminance going bright (control mode) wins over the warn stage."""
     entry = make_light_entry(
         illuminance=ILLUM,
         illuminance_mode=ILLUMINANCE_MODE_CONTROL,
@@ -390,9 +390,9 @@ async def test_occupancy_retrigger_during_effect_restores_brightness(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
     assert state.attributes["brightness"] == 200
-    resume = _real_calls(calls, "turn_on")
-    assert resume
-    assert resume[-1]["service_data"]["brightness"] == 200
+    restore = _real_calls(calls, "turn_on")
+    assert restore
+    assert restore[-1]["service_data"]["brightness"] == 200
 
 
 @pytest.mark.asyncio
@@ -437,7 +437,7 @@ async def test_virtual_on_during_warn_restores_pre_warn_brightness(
 
 
 @pytest.mark.asyncio
-async def test_maintain_on_during_warn_resumes_and_occupies(
+async def test_maintain_on_during_warn_restores_and_occupies(
     hass: HomeAssistant, freezer
 ) -> None:
     """The maintain entity turning on mid-warn adopts the light as OCCUPIED
@@ -507,9 +507,9 @@ async def test_follow_window_start_during_effect_restores_lights(
     assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["schedule_window_start"] == MARKER
     assert state.attributes["brightness"] == 200
-    resume = _real_calls(calls, "turn_on")
-    assert resume, "window start must turn the blinked-off real lights on again"
-    assert resume[-1]["service_data"]["brightness"] == 200
+    restore = _real_calls(calls, "turn_on")
+    assert restore, "window start must turn the blinked-off real lights on again"
+    assert restore[-1]["service_data"]["brightness"] == 200
 
     # SCHEDULED runs no timer; the stage timer must be gone.
     freezer.tick(timedelta(seconds=120))
@@ -576,7 +576,7 @@ async def test_physical_dim_during_warning_honors_new_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A physical dim mid-warning cancels the sequence and restarts the full
-    timer, but keeps the dim's own brightness; the pre-warn snapshot is not
+    timer, but keeps the dim's own brightness; the pre-warning snapshot is not
     restored over the user's explicit choice."""
     entry = make_light_entry(effect_timeout=10, effect_brightness=50, warn_timeout=15)
     await setup_entries(hass, entry)

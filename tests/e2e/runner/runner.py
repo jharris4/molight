@@ -868,7 +868,7 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
 def create_timeout_light(
     client: HomeAssistantClient, light_timeout: int = 4, stage: int = 1
 ) -> str:
-    """Create one short-lived light for a real timeout/warning sequence."""
+    """Create one short-lived light for a real timeout and off warning sequence."""
     return create_entry(
         client,
         "light",
@@ -912,7 +912,7 @@ def create_auto_off_light(client: HomeAssistantClient) -> str:
 
 
 def create_restart_warning_light(client: HomeAssistantClient) -> str:
-    """Create a light whose live warning stage spans a container restart."""
+    """Create a light whose live warn stage spans a container restart."""
     return create_entry(
         client,
         "light",
@@ -1130,7 +1130,7 @@ def trigger_and_assert(
             and state["attributes"].get("brightness") == brightness
             and command_data(state).get("transition") == 1
         ),
-        f"on at brightness {brightness} with the automatic fade",
+        f"on at brightness {brightness} with the auto-on transition",
     )
     client.wait_state(
         TARGET_SELECT,
@@ -1287,7 +1287,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         result = submit_create(client, "remote", {**remote, **bindings})
         expect_rejection(client, result, code)
     checkpoint(
-        "forms reject unusable color/brightness/fade, wide hysteresis, short "
+        "forms reject unusable color/brightness/transition, wide hysteresis, short "
         "timeouts, entity ID clashes, non-schedule pickers, and bad remote bindings"
     )
 
@@ -1963,7 +1963,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
 def wait_timer_stage(
     client: HomeAssistantClient, stage: str, target_brightness: int
 ) -> None:
-    """Observe one warning stage on both the virtual and physical lights."""
+    """Observe one effect or warn stage on both the virtual and physical lights."""
     client.wait_state(
         VIRTUAL_TIMER_LIGHT,
         lambda state: (
@@ -2008,7 +2008,9 @@ def run_timeout_warning_scenario(
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     final = wait_machine_state(client, "idle", VIRTUAL_TIMER_LIGHT)
     if final["attributes"].get("warning_active") is not False:
-        raise AssertionError(f"Warning flag remained set after final turn-off: {final}")
+        raise AssertionError(
+            f"warning_active remained set after final turn-off: {final}"
+        )
 
     set_timer_motion(client, True)
     client.wait_state(
@@ -2026,7 +2028,9 @@ def run_timeout_warning_scenario(
         restored["attributes"].get("warning_active") is not False
         or restored["attributes"].get("pre_warn_brightness") is not None
     ):
-        raise AssertionError(f"Retrigger did not clear warning state: {restored}")
+        raise AssertionError(
+            f"Retrigger did not clear warning_active and the snapshot: {restored}"
+        )
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: (
@@ -2049,7 +2053,10 @@ def run_timeout_warning_scenario(
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     client.remove_entry(timer_entry_id)
     wait_entry_removed(client, timer_entry_id, "Temporary timer-light")
-    print(f"PASS: countdown, warning stages, final off, and retrigger cancel ({bulb})")
+    print(
+        f"PASS: countdown, effect and warn stages, final off, and retrigger cancel "
+        f"({bulb})"
+    )
 
 
 def create_physical_light(client: HomeAssistantClient) -> str:
@@ -2126,7 +2133,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
             state["attributes"].get("brightness") == pct(20)
             and list(state["attributes"].get("rgb_color") or []) == [255, 0, 0]
         ),
-        "showing the warning brightness and color",
+        "showing the warn brightness and color",
     )
     # Outlast the original deadline, and the five seconds during which HA keeps
     # MoLight's command context on the member's state writes (a physical change
@@ -2168,7 +2175,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "off" and command_data(state).get("transition") == 1
         ),
-        "off with the automatic-off fade",
+        "off with the auto-off transition",
         timeout=25,  # the restarted 10 s timer plus the 8 s warning
     )
     wait_machine_state(client, "idle", PHYSICAL_LIGHT)
@@ -2262,13 +2269,13 @@ def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: state["attributes"].get("brightness") == pct(20),
-        "showing the warning brightness",
+        "showing the warn brightness",
     )
     assert_state_stays(
         client,
         RAW_MULTI_RGB,
         lambda state: state["attributes"].get("brightness") == pct(20),
-        "at the warning brightness",
+        "at the warn brightness",
         duration=1,
     )
     client.set_state(RAW_MULTI_RGB, "on", {"brightness": 120})
@@ -2377,7 +2384,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
                     state["state"] == "off"
                     and command_data(state).get("transition") == 1
                 ),
-                "off at the window end with the outgoing settings' fade",
+                "off at the window end with the outgoing settings' transition",
             )
             wait_machine_state(client, "idle", SCHEDULE_END_ACTION_LIGHT)
         elif schedule_end_action == "switch":
@@ -4250,7 +4257,7 @@ def run_auto_off_restart() -> None:
 
 
 def run_restart_warning_prepare() -> None:
-    """Enter a live warning stage and leave it active for a container restart."""
+    """Enter a live warn stage and leave it active for a container restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4288,18 +4295,18 @@ def run_restart_warning_prepare() -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(20)
         ),
-        f"showing warning brightness {pct(20)}",
+        f"showing the warn brightness {pct(20)}",
     )
     if warning["state"] != "on":
-        raise AssertionError(f"Warning-stage virtual light was not on: {warning}")
+        raise AssertionError(f"Warn-stage virtual light was not on: {warning}")
 
     RESTART_WARNING_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
-    print("PASS: live warning stage prepared for a container restart")
+    print("PASS: live warn stage prepared for a container restart")
 
 
 def run_restart_warning_verify() -> None:
-    """Verify a restarted warning safely resumes and completes without turning
-    on again."""
+    """Verify a restart during a warning restores the pre-warning brightness,
+    and a fresh warning completes without turning on again."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -4314,7 +4321,7 @@ def run_restart_warning_verify() -> None:
             and state["attributes"].get("warning_active") is False
             and state["attributes"].get("pre_warn_brightness") is None
         ),
-        "restored active with warning state cleared",
+        "restored active with warning_active and the snapshot cleared",
         timeout=WAIT_TIMEOUT,
     )
     client.wait_state(
@@ -4758,7 +4765,8 @@ def wait_member_stage(
     rgb: list[int] | None,
     transition: float | None,
 ) -> None:
-    """Wait for a stage on the virtual light and its presentation on the member."""
+    """Wait for an effect or warn stage on the virtual light and its look on the
+    member."""
     wait_machine_state(client, stage, EFFECT_LIGHT)
     client.wait_state(
         RAW_MULTI_RGB,
@@ -4775,12 +4783,12 @@ def wait_member_stage(
                 and command_data(state).get("transition") == transition
             )
         ),
-        f"showing the {stage} stage ({brightness}, {rgb}, fade {transition})",
+        f"showing the {stage} stage ({brightness}, {rgb}, transition {transition})",
     )
 
 
 def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
-    """Effect color and fades, a colorless warn undoing them, a blink-off effect."""
+    """Effect color and transition, a colorless warn stage undoing them, a blink-off."""
     entry_id = create_effect_light(
         client,
         {
@@ -4861,7 +4869,9 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", EFFECT_LIGHT)
     remove_entry_and_entity(client, entry_id, EFFECT_LIGHT)
-    print("PASS: effect color and fades, colorless warn undo, and blink-off effect")
+    print(
+        "PASS: effect color and transitions, colorless warn undo, and blink-off effect"
+    )
 
 
 def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
@@ -6801,7 +6811,7 @@ def set_door_hold(client: HomeAssistantClient, light: str, on: bool) -> None:
 
 
 def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
-    """Release under a forced-off rule turns off now; a hold mid-warning aborts it."""
+    """Release under a forced-off rule turns off now; a hold mid-warning cancels it."""
     schedule_entry_id = create_virtual_schedule(
         client, "E2E End Schedule", "e2e_end_schedule", source=RAW_REMOVAL_MOTION
     )
@@ -6893,7 +6903,7 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, illuminance_entry_id, HOLD_ILLUMINANCE)
     remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
 
-    # A hold engaged mid-warning aborts it and restores the pre-warning look.
+    # A hold engaged mid-warning cancels it and restores the pre-warning look.
     warn_entry_id = create_entry(
         client,
         "light",
@@ -6919,7 +6929,7 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["attributes"].get("brightness") == pct(20),
-        "dimmed to the warning brightness",
+        "dimmed to the warn brightness",
         timeout=15,
     )
     set_door_hold(client, HOLD_WARN_LIGHT, True)
@@ -6953,7 +6963,7 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
     wait_machine_state(client, "idle", HOLD_WARN_LIGHT)
     remove_entry_and_entity(client, warn_entry_id, HOLD_WARN_LIGHT)
     print(
-        "PASS: hold release applies ended-window/bright offs; a hold aborts a warning"
+        "PASS: hold release applies ended-window/bright offs; a hold cancels a warning"
     )
 
 
@@ -8873,7 +8883,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
-    """The countdown/warning sequence on an instant and on a slow two-part bulb."""
+    """The countdown and off warning sequence on an instant and a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
@@ -9077,7 +9087,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
     stamps = watch_long_fade(client, FADE_LIGHT, stamps, "warn", pct(20), magenta)
     checkpoint("7 s effect and warn fades kept the warning running")
 
-    # A turn-on restores the pre-warning look over the caller's own fade.
+    # A turn-on restores the pre-warning look over the caller's own transition.
     client.call_service(
         "light", "turn_on", {"entity_id": FADE_LIGHT, "transition": LONG_FADE}
     )

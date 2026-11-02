@@ -911,7 +911,7 @@ async def test_config_flow_virtual_light(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "Living Room"
     assert result["data"][CONF_HOLD_ENTITIES] == ["input_boolean.guest_mode"]
-    # Unsubmitted effect/warn stages default to disabled.
+    # Unsubmitted effect and warn stages default to disabled.
     assert result["data"][CONF_EFFECT_TIMEOUT] == 0
     assert result["data"][CONF_WARN_TIMEOUT] == 0
     assert CONF_WARN_BRIGHTNESS not in result["data"]
@@ -2437,7 +2437,7 @@ async def test_light_options_selection_not_prefilled_after_select_entity_change(
 
 @pytest.mark.asyncio
 async def test_light_flow_stores_effect_warn_options(hass: HomeAssistant) -> None:
-    """Effect/warn warning fields round-trip through the create flow."""
+    """Off warning sequence fields round-trip through the create flow."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -2541,11 +2541,11 @@ async def test_light_flow_stores_transitions(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_light_flow_rejects_stage_transition_above_timeout(
+async def test_light_flow_rejects_stage_transition_above_duration(
     hass: HomeAssistant,
 ) -> None:
-    """A stage transition longer than its stage timeout is rejected, including
-    a transition on a disabled (timeout 0) stage."""
+    """A stage transition longer than its stage duration is rejected, including
+    a transition on a disabled (duration 0) stage."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -2561,7 +2561,7 @@ async def test_light_flow_rejects_stage_transition_above_timeout(
             SECTION_WARNING: {
                 CONF_EFFECT_TIMEOUT: 10,
                 CONF_EFFECT_TRANSITION: 11,
-                # warn disabled, so any warn fade is invalid too
+                # warn disabled, so any warn transition is invalid too
                 CONF_WARN_TIMEOUT: 0,
                 CONF_WARN_TRANSITION: 5,
             },
@@ -2867,8 +2867,8 @@ async def test_light_flow_rejects_effect_color_without_brightness(
 async def test_light_flow_rejects_stage_values_on_disabled_stage(
     hass: HomeAssistant, warning_section: dict, expected_error: str
 ) -> None:
-    """A stage brightness/color with the stage's timeout at 0 is rejected
-    rather than silently ignored, mirroring the stage-fade rule."""
+    """A stage brightness/color with the stage's duration at 0 is rejected
+    rather than silently ignored, mirroring the stage-transition rule."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -2992,7 +2992,7 @@ async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
 async def test_light_options_validate_and_clear_transitions(
     hass: HomeAssistant,
 ) -> None:
-    """The options flow enforces transition <= stage timeout, and omitting a
+    """The options flow enforces transition <= stage duration, and omitting a
     previously set transition clears it."""
     light = MockConfigEntry(
         domain=DOMAIN,
@@ -3036,7 +3036,7 @@ async def test_light_options_validate_and_clear_transitions(
             CONF_LIGHT_TIMEOUT: 60,
             SECTION_WARNING: {CONF_WARN_TIMEOUT: 20},
             SECTION_BEHAVIOR: {CONF_AUTO_OFF_TRANSITION: 4},
-            # warn/auto-on transitions intentionally omitted; cleared.
+            # warn and auto-on transitions intentionally omitted; cleared.
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -3205,7 +3205,7 @@ async def test_light_flow_saves_a_blank_timeout(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage_key", [CONF_EFFECT_TIMEOUT, CONF_WARN_TIMEOUT])
-async def test_light_flow_rejects_a_blank_timeout_with_a_warning_stage(
+async def test_light_flow_rejects_a_blank_timeout_with_an_effect_or_warn_stage(
     hass: HomeAssistant, stage_key: str
 ) -> None:
     """No timer means no automatic off to warn of."""
@@ -6489,10 +6489,10 @@ async def test_assign_noop_leaves_entry_untouched(
 
 
 # ---------------------------------------------------------------------------
-# A fade none of the chosen lights could apply
+# A transition none of the chosen lights could apply
 #
 # Mirrors the double-click check: only a positive "none of them can" rejects.
-# A light with no state yet can't be judged, so the fade is allowed through.
+# A light with no state yet can't be judged, so the transition is allowed through.
 # ---------------------------------------------------------------------------
 
 PLUG = "light.plug"  # positively cannot fade
@@ -6510,7 +6510,7 @@ def _can_fade(hass: HomeAssistant, entity_id: str = DIMMER) -> None:
 
 
 async def _submit_light_create(hass: HomeAssistant, lights: list[str]) -> dict:
-    """Submit the create form with a 2s auto-on fade on the given lights."""
+    """Submit the create form with a 2s auto-on transition on the given lights."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -6528,8 +6528,10 @@ async def _submit_light_create(hass: HomeAssistant, lights: list[str]) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_light_flow_rejects_fade_no_light_can_apply(hass: HomeAssistant) -> None:
-    """A fade on lights that all positively report no transition support is
+async def test_light_flow_rejects_transition_no_light_can_apply(
+    hass: HomeAssistant,
+) -> None:
+    """A transition on lights that all positively report no transition support is
     rejected rather than silently ignored."""
     _no_fade(hass)
     result = await _submit_light_create(hass, [PLUG])
@@ -6537,7 +6539,7 @@ async def test_light_flow_rejects_fade_no_light_can_apply(hass: HomeAssistant) -
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "transition_unsupported"}
 
-    # Clearing the fade lets the same lights through.
+    # Clearing the transition lets the same lights through.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -6551,7 +6553,7 @@ async def test_light_flow_rejects_fade_no_light_can_apply(hass: HomeAssistant) -
 
 
 @pytest.mark.asyncio
-async def test_light_flow_allows_fade_when_a_light_can_apply_it(
+async def test_light_flow_allows_transition_when_a_light_can_apply_it(
     hass: HomeAssistant,
 ) -> None:
     """One capable light is enough; mixed groups are the documented case."""
@@ -6564,10 +6566,10 @@ async def test_light_flow_allows_fade_when_a_light_can_apply_it(
 
 
 @pytest.mark.asyncio
-async def test_light_flow_allows_fade_when_lights_cannot_be_judged(
+async def test_light_flow_allows_transition_when_lights_cannot_be_judged(
     hass: HomeAssistant,
 ) -> None:
-    """A light that isn't in the state machine yet can't be judged, so the fade
+    """A light that isn't in the state machine yet can't be judged, so the transition
     is allowed and simply does nothing until it proves itself."""
     result = await _submit_light_create(hass, ["light.not_created_yet"])
 
@@ -6575,10 +6577,10 @@ async def test_light_flow_allows_fade_when_lights_cannot_be_judged(
 
 
 @pytest.mark.asyncio
-async def test_light_flow_allows_fade_when_any_light_is_unjudgeable(
+async def test_light_flow_allows_transition_when_any_light_is_unjudgeable(
     hass: HomeAssistant,
 ) -> None:
-    """An unjudgeable member keeps the whole set unjudgeable, so the fade is
+    """An unjudgeable member keeps the whole set unjudgeable, so the transition is
     allowed: the known member being incapable is not proof about the rest."""
     _no_fade(hass)
     result = await _submit_light_create(hass, [PLUG, "light.not_created_yet"])
@@ -6587,7 +6589,7 @@ async def test_light_flow_allows_fade_when_any_light_is_unjudgeable(
 
 
 @pytest.mark.asyncio
-async def test_light_options_reject_fade_no_light_can_apply(
+async def test_light_options_reject_transition_no_light_can_apply(
     hass: HomeAssistant,
 ) -> None:
     """The same guard applies when editing an existing light."""
@@ -6619,7 +6621,7 @@ async def test_light_options_reject_fade_no_light_can_apply(
 
 
 @pytest.mark.asyncio
-async def test_settings_set_form_rejects_fade_no_light_can_apply(
+async def test_settings_set_form_rejects_transition_no_light_can_apply(
     hass: HomeAssistant,
 ) -> None:
     """A settings set's form carries no light picker; the guard reads
@@ -6656,7 +6658,7 @@ async def test_settings_set_form_rejects_fade_no_light_can_apply(
 
 
 @pytest.mark.asyncio
-async def test_discover_light_defaults_reject_fade_no_light_can_apply(
+async def test_discover_light_defaults_reject_transition_no_light_can_apply(
     hass: HomeAssistant,
 ) -> None:
     """Discovery applies one settings set to every pick, so the guard reads the
@@ -6679,7 +6681,7 @@ async def test_discover_light_defaults_reject_fade_no_light_can_apply(
 
 
 @pytest.mark.asyncio
-async def test_discover_light_defaults_reject_fade_one_pick_cannot_apply(
+async def test_discover_light_defaults_reject_transition_one_pick_cannot_apply(
     hass: HomeAssistant,
 ) -> None:
     """Every pick becomes its own regular Virtual Light entry, so one capable pick must
@@ -6835,8 +6837,10 @@ async def test_light_flow_allows_color_when_lights_cannot_be_judged(
 
 
 @pytest.mark.asyncio
-async def test_light_flow_rejects_warning_stage_color(hass: HomeAssistant) -> None:
-    """The warning-stage colors are covered too, not just the auto-on one."""
+async def test_light_flow_rejects_warn_stage_color(
+    hass: HomeAssistant,
+) -> None:
+    """The warn stage color is covered too, not just the auto-on one."""
     _modes(hass, WHITE, ["brightness"])
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -6945,7 +6949,7 @@ async def test_light_flow_allows_blink_fully_off_on_onoff_lights(
     hass: HomeAssistant,
 ) -> None:
     """An effect brightness of 0 is a blink fully off, sent as turn_off, the
-    one warning cue that works without dimming, so it must not be rejected."""
+    one visible warning that works without dimming, so it must not be rejected."""
     _modes(hass, PLAIN, ["onoff"])
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -7131,7 +7135,7 @@ async def test_light_flow_rejects_effect_brightness_on_disabled_stage(
 async def test_light_flow_allows_zero_effect_brightness_on_disabled_stage(
     hass: HomeAssistant,
 ) -> None:
-    """0 is the default and the blink-fully-off cue, so it is never a mistake."""
+    """0 is the default and blinks the lights fully off, so it is never a mistake."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -10055,7 +10059,7 @@ async def test_every_form_strips_the_name(
 
 
 # ---------------------------------------------------------------------------
-# Stage timeouts: whole seconds, as the light runs them
+# Stage durations: whole seconds, as the light runs them
 # ---------------------------------------------------------------------------
 
 
@@ -10099,12 +10103,12 @@ async def test_every_form_strips_the_name(
         ({CONF_EFFECT_TIMEOUT: 2.5, CONF_EFFECT_TRANSITION: 2}, None),
     ],
     ids=[
-        "effect_fade",
-        "warn_fade",
+        "effect_transition",
+        "warn_transition",
         "effect_brightness",
         "effect_color",
         "warn_values",
-        "fade_within_whole_seconds",
+        "transition_within_whole_seconds",
     ],
 )
 async def test_stage_rules_use_the_whole_seconds_the_light_runs(

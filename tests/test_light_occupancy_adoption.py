@@ -242,10 +242,10 @@ async def test_gate_window_start_adopts_active_occupancy(
 
 
 @pytest.mark.asyncio
-async def test_dark_mid_warning_adopts_occupancy_and_resumes(
+async def test_dark_mid_warning_adopts_occupancy_and_restores(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Dark arriving mid effect/warn while occupied undoes the warning
+    """Dark arriving mid-warning while occupied undoes the warning
     (control mode, where a bright reading gates occupancy over an on light)."""
     await setup_entries(
         hass,
@@ -261,7 +261,7 @@ async def test_dark_mid_warning_adopts_occupancy_and_resumes(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # Timer expiry starts the warning sequence (still bright, still ACTIVE-gated).
+    # Timer expiry starts the off warning sequence (still bright, still ACTIVE-gated).
     await _tick(hass, freezer, 61)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 

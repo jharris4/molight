@@ -66,7 +66,7 @@ echo "Restarting with auto-off disabled..."
 compose restart homeassistant
 compose run --rm runner python runner.py auto-off-restart restart-warning-prepare
 
-echo "Restarting during a live warning stage..."
+echo "Restarting during a live warn stage..."
 compose restart homeassistant
 compose run --rm runner python runner.py restart-warning-verify
 # The first start, six container restarts and the core restart in primary.

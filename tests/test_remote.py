@@ -634,7 +634,7 @@ async def test_brightness_step_up_and_down(
 
 # Stage settings for a brightness step mid-warning: (light kwargs, the stage
 # state, the level the light reports during it).
-WARNING_STAGES = {
+STAGES = {
     "warn": ({"warn_timeout": 30, "warn_brightness": 10}, STATE_WARN, 26),
     "effect": ({"effect_timeout": 10, "effect_brightness": 30}, STATE_EFFECT, 76),
     "blink_effect": (
@@ -656,7 +656,7 @@ async def _step_mid_warning(
 ) -> list[dict]:
     """Bring light.matrix_light into a stage from `before`, press `button`, and
     return the remote's service calls."""
-    light_kwargs, stage_state, stage_level = WARNING_STAGES[stage]
+    light_kwargs, stage_state, stage_level = STAGES[stage]
     hass.states.async_set("light.real_1", "off")
     remote = _remote_entry(
         **{
@@ -700,7 +700,7 @@ async def _step_mid_warning(
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
-@pytest.mark.parametrize("stage", list(WARNING_STAGES))
+@pytest.mark.parametrize("stage", list(STAGES))
 @pytest.mark.parametrize(
     ("button", "before", "dim_step", "expected_pct", "expected_brightness"),
     [
@@ -711,7 +711,7 @@ async def _step_mid_warning(
     ],
     ids=["up", "down", "up-clamped-100", "down-clamped-1"],
 )
-async def test_brightness_step_mid_warning_steps_from_pre_warning_level(
+async def test_brightness_step_mid_warning_steps_from_pre_warning_brightness(
     hass: HomeAssistant,
     freezer,
     stage: str,
@@ -768,7 +768,7 @@ class _HeldSelect:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("stage", list(WARNING_STAGES))
+@pytest.mark.parametrize("stage", list(STAGES))
 @pytest.mark.parametrize(
     ("presses", "expected_pct"),
     [
@@ -789,7 +789,7 @@ async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
     expected_pct: int,
     order: str,
 ) -> None:
-    """The first press mid-warning steps from the pre-warning level; one made
+    """The first press mid-warning steps from the pre-warning brightness; one made
     while that press still waits for its turn-on selection builds on it, in
     whichever order the select calls finish."""
     from tests.real_entities import RealLight, add_real  # noqa: PLC0415
@@ -805,7 +805,7 @@ async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
         lights=["light.living_room"],
         turn_on_select_entity="select.scene",
         turn_on_select_option="Night",
-        **WARNING_STAGES[stage][0],
+        **STAGES[stage][0],
     )
     remote = _remote_entry(
         **{

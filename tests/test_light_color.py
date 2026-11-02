@@ -4,7 +4,7 @@ The virtual light derives its color capabilities from the real lights it
 wraps (HS when any member can show a color, COLOR_TEMP when any member
 supports it, brightness-only when none do), forwards color commands to all
 members in one call, mirrors the first on member's color, and threads color
-through the auto-on and effect/warn machinery exactly like brightness.
+through the auto-on and off warning sequence machinery exactly like brightness.
 """
 
 from __future__ import annotations
@@ -363,7 +363,7 @@ async def test_auto_on_color_is_reported_once_an_unreadable_member_replies(
 
 
 # ---------------------------------------------------------------------------
-# Effect / warn stage colors
+# Effect and warn stage colors
 # ---------------------------------------------------------------------------
 
 
@@ -450,7 +450,7 @@ async def test_plain_warn_stage_undoes_effect_recolor(
 @pytest.mark.asyncio
 async def test_stage_color_temps_sent_as_kelvin(hass: HomeAssistant, freezer) -> None:
     """The effect and warn stages take a color temperature instead of an rgb
-    color: the temp-only-bulb warning cue."""
+    color, for temp-only bulbs."""
     hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
     await setup_entries(
         hass,
@@ -639,7 +639,9 @@ async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_pre_warn_snapshot_keeps_color_temp(hass: HomeAssistant, freezer) -> None:
+async def test_pre_warning_snapshot_keeps_color_temp(
+    hass: HomeAssistant, freezer
+) -> None:
     """A color-temp light entering the warning snapshots its kelvin, and a
     re-trigger with no color of its own restores it."""
     hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
@@ -803,7 +805,7 @@ async def test_onoff_light_effect_blink_off_still_works(
     hass: HomeAssistant, freezer
 ) -> None:
     """The effect stage's blink fully off goes through turn_off, so it is the
-    one warning cue that works on members with no brightness at all."""
+    one visible warning that works on members with no brightness at all."""
     hass.states.async_set(REAL, "off", ONOFF_CAPS)
     await setup_entries(
         hass,
@@ -909,7 +911,7 @@ async def test_reported_standby_color_temp_stays_in_the_offered_range(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("kelvin", "reported"), KELVINS)
-async def test_pre_warn_snapshot_keeps_the_reported_color_temp(
+async def test_pre_warning_snapshot_keeps_the_reported_color_temp(
     hass: HomeAssistant, freezer, kelvin: int, reported: int
 ) -> None:
     """The warning remembers, and a re-trigger restores, the kelvin the light

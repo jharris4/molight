@@ -950,7 +950,7 @@ async def test_restart_schedule_state_missing_falls_through(
 
 
 # ---------------------------------------------------------------------------
-# Effect / warn warning sequence at startup
+# Off warning sequence at startup
 # ---------------------------------------------------------------------------
 
 
@@ -960,7 +960,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
 ) -> None:
     """A restart during the effect blink-off finds the real lights off and
     seeds IDLE: the auto-off effectively completed early; the restored
-    pre-warn snapshot must not turn the light on again."""
+    pre-warning snapshot must not turn the light on again."""
     mock_restore_cache(
         hass,
         [
@@ -995,7 +995,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
 async def test_restart_during_warn_restores_pre_warn_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A restart during the warn grace re-adopts the lit lights as ACTIVE at
+    """A restart during the warn stage re-adopts the lit lights as ACTIVE at
     the restored pre-warning brightness (not the warn-stage brightness), with
     a fresh full timer that later runs a new warning."""
     mock_restore_cache(

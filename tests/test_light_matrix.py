@@ -649,7 +649,7 @@ async def test_dark_edge_resumes_the_timeout_of_a_light_adopted_at_startup(
 async def test_dark_edge_after_a_bright_off_during_the_warning_resumes_nothing(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A warning stage is no countdown: the on-period was already over."""
+    """An effect or warn stage is no countdown: the on-period was already over."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)

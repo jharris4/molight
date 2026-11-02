@@ -227,15 +227,15 @@ CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
 # of the normal countdown. Lights turned on manually are never affected.
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 DEFAULT_FALSE_OFF_DELAY = 5
-# Effect/warn warning sequence before an automatic turn-off. When the auto-off
+# Off warning sequence before an automatic turn-off. When the auto-off
 # timer expires the light can flag the impending off before turning off:
-#   EFFECT: a brief attention cue (a blink/dip to effect_brightness), shown
+#   EFFECT: the effect stage (a blink/dip to effect_brightness), shown
 #           for effect_timeout seconds. effect_brightness is a percent 0-100
 #           where 0 blinks the real lights fully off.
-#   WARN:   a grace period at warn_brightness for warn_timeout seconds, then
+#   WARN:   the warn stage, at warn_brightness for warn_timeout seconds, then
 #           the lights turn off. warn_brightness is an optional percent 1-100;
 #           absent = keep whatever brightness was in effect before the warning.
-# Each stage is skipped when its timeout is 0 (both default 0 = feature off,
+# Each stage is skipped when its duration is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
 # either stage (occupancy, virtual/physical on, a dim, ...) cancels it and
 # behaves as if the pre-off timer were still running, restoring the brightness.
@@ -246,21 +246,20 @@ DEFAULT_EFFECT_BRIGHTNESS = 0
 CONF_WARN_TIMEOUT = "warn_timeout"
 DEFAULT_WARN_TIMEOUT = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
-# Optional colors for the warning stages, e.g. a red warn stage is a much
-# clearer "lights about to go off" cue than a dim. Like the auto-on color,
-# each stage takes a color temperature (Kelvin) OR an [r, g, b] color
-# (mutually exclusive keys, enforced by the config/options flows), so
-# temp-only bulbs get a warning cue too. Color-capable members show the
-# color; brightness-only members just show the stage brightness. An effect
-# color requires effect_brightness > 0 (a blink fully off has no color to
-# show; enforced by the config/options flows). Any re-trigger restores the
-# pre-warning brightness AND color.
+# Optional colors for the effect and warn stages, e.g. a red warn stage is
+# much harder to miss than a dim. Like the auto-on color, each stage takes a
+# color temperature (Kelvin) OR an [r, g, b] color (mutually exclusive keys,
+# enforced by the config/options flows), so temp-only bulbs can show a color
+# too. Color-capable members show the color; brightness-only members just show
+# the stage brightness. An effect color requires effect_brightness > 0 (a blink
+# fully off has no color to show; enforced by the config/options flows). Any
+# re-trigger restores the pre-warning brightness AND color.
 CONF_EFFECT_COLOR_TEMP = "effect_color_temp"
 CONF_EFFECT_RGB_COLOR = "effect_rgb_color"
 CONF_WARN_COLOR_TEMP = "warn_color_temp"
 CONF_WARN_RGB_COLOR = "warn_rgb_color"
-# Optional fade times (seconds) sent as the transition of the service calls
-# the virtual light makes itself. Absent/0 = no transition attribute is sent
+# Optional transition settings (seconds), sent with the service calls the
+# virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
 #   auto_on_transition:   automatic turn-ons only (occupancy, a door opening,
 #                         illuminance going dark, a window start); virtual and
@@ -270,9 +269,9 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 #                         off is untouched.
 #   effect_transition:    fade into the effect stage's brightness.
 #   warn_transition:      fade into the warn stage's brightness.
-# A stage fade must fit inside its stage: effect_transition <= effect_timeout
+# A stage transition must fit inside its stage: effect_transition <= effect_timeout
 # and warn_transition <= warn_timeout (enforced by the config/options flows,
-# which also rejects a fade on a disabled stage since its timeout is 0).
+# which also rejects a transition on a disabled stage since its duration is 0).
 CONF_AUTO_ON_TRANSITION = "auto_on_transition"
 CONF_AUTO_OFF_TRANSITION = "auto_off_transition"
 CONF_EFFECT_TRANSITION = "effect_transition"
@@ -483,7 +482,7 @@ RELOAD_GRACE = 10
 # `event` entities Home Assistant creates per physical button; every binding
 # is a (button, click) -> action pair, stored as the flat keys below. Each
 # press is a light service call, so a bound press on a virtual light
-# gets full manual-control semantics (never gated, cancels a warning
+# gets full manual-control semantics (never gated, cancels an off warning
 # sequence, restarts the timer).
 #
 # Which event_type string means a single vs. a double click differs per
@@ -592,5 +591,5 @@ STATE_OCCUPIED = "occupied"  # lights on, occupied, no countdown
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
 STATE_STANDBY = "standby"  # lights at the standby level, no timer
-STATE_EFFECT = "effect"  # auto-off imminent, brief effect/blink stage
-STATE_WARN = "warn"  # auto-off imminent, grace period before lights-off
+STATE_EFFECT = "effect"  # auto-off imminent, effect stage
+STATE_WARN = "warn"  # auto-off imminent, warn stage before lights-off

@@ -575,7 +575,7 @@ async def test_late_kelvin_reply_is_judged_against_the_member_range(
 async def test_effect_kelvin_fade_reply_keeps_the_sequence(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A bulb reporting mid-fade during the effect's transition does not
+    """A bulb reporting mid-fade during the effect stage's transition does not
     re-trigger the light."""
     entry = make_light_entry(
         name="Test Light",
@@ -1225,7 +1225,7 @@ async def _into_warn(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reply_context", ["effect", "warn", "own"])
-async def test_late_effect_dim_reply_does_not_abort_warn(
+async def test_late_effect_dim_reply_does_not_cancel_warn(
     hass: HomeAssistant, freezer, reply_context: str
 ) -> None:
     """The effect dim reported after the warn command is still the effect's echo.
@@ -1262,7 +1262,7 @@ async def test_late_effect_dim_reply_does_not_abort_warn(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reply_context", ["effect", "warn"])
-async def test_late_effect_blink_off_reply_does_not_abort_warn(
+async def test_late_effect_blink_off_reply_does_not_cancel_warn(
     hass: HomeAssistant, freezer, reply_context: str
 ) -> None:
     """A blink-off reported after the warn command is not a human turn-off,
@@ -1284,7 +1284,7 @@ async def test_late_effect_blink_off_reply_does_not_abort_warn(
 async def test_in_order_stage_replies_keep_the_sequence(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Each stage answered before the next begins runs through to the warn."""
+    """Each stage answered before the next begins runs through to the warn stage."""
     entry = make_light_entry(
         name="Test Light",
         lights=[MEMBER],
@@ -2318,7 +2318,7 @@ async def test_standby_fade_is_not_a_change_at_the_wall(
 async def test_caller_fade_is_not_a_change_at_the_wall(
     hass: HomeAssistant, freezer, fade: int, service: str
 ) -> None:
-    """A fade the caller asked for is the caller's command all the way."""
+    """A transition the caller asked for is the caller's command all the way."""
     member = await _fading_light(hass, make_light_entry())
     data = {"brightness": 50} if service == "turn_on" else {}
     seen = _reports_of(hass, INSTANT)
@@ -2347,7 +2347,7 @@ async def test_caller_fade_is_not_a_change_at_the_wall(
 async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """A turn-on during the warning restores the old level over its own fade."""
+    """A turn-on during the warning restores the old level over its own transition."""
     member = await _fading_light(
         hass, make_light_entry(warn_timeout=30, warn_brightness=20)
     )
@@ -2400,7 +2400,7 @@ async def test_stage_color_fade_is_not_a_recolor_at_the_wall(
 async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """Seven seconds into a 10 s fade to the warning level, the member's
+    """Seven seconds into a 10 s fade to the warn brightness, the member's
     reports carry no context of ours; one that is no step of the fade is
     still a person's."""
     member = await _fading_light(
@@ -2444,7 +2444,7 @@ async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
         assert attrs["molight_state"] == STATE_ACTIVE
     if change == "recolor":
         assert tuple(attrs["hs_color"]) == GREEN
-        assert attrs["brightness"] == 200  # the pre-warning level, restored
+        assert attrs["brightness"] == 200  # the pre-warning brightness, restored
     if change in ("brighter", "command"):
         assert attrs["brightness"] == member.brightness
 
@@ -2504,10 +2504,10 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
 # A bulb that reports power first at the level it remembered
 #
 # Such a bulb says it is on at the level it was last on at, then brightens
-# from dark in steps. When the turn-on carried a fade, that first report is
+# from dark in steps. When the turn-on carried a transition, that first report is
 # neither the command's answer nor the echo anchor for the step after it, for the
 # fade's length from that report; after that, or when the turn-on carried no
-# fade, a lower level is a dim at the wall as before.
+# transition, a lower level is a dim at the wall as before.
 # ---------------------------------------------------------------------------
 
 REMEMBERED = [204, 100]  # at the 80% target the tests send, and off it
@@ -2568,7 +2568,7 @@ async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
 async def test_virtual_fade_power_first_at_remembered_level_is_not_a_dim(
     hass: HomeAssistant, freezer, remembered: int
 ) -> None:
-    """A caller's fade to a level, answered power first at the old one."""
+    """A caller's transition to a level, answered power first at the old one."""
     member = await _remembering_light(hass, make_light_entry(), remembered=remembered)
     seen = _reports_of(hass, INSTANT)
 
@@ -2838,10 +2838,10 @@ async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_power_first_then_a_step_without_a_fade_is_a_dim(
+async def test_power_first_then_a_step_without_a_transition_is_a_dim(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A turn-on that carried no fade has no steps to expect: a lower level
+    """A turn-on that carried no transition has no steps to expect: a lower level
     after the first report is a dim at the wall, as before."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)

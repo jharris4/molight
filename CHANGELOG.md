@@ -198,8 +198,8 @@ replying late.
 ### Added
 
 - The effect and warn stages accept a **white color temperature** as their
-  color, not just an RGB color, so temperature-only bulbs can have a pre-off
-  color cue too.
+  color, not just an RGB color, so temperature-only bulbs can show a color
+  during them too.
 
 ### Fixed
 
@@ -247,7 +247,7 @@ longer needs a custom repository.
   state* choose what the window's end does to an already-on light.
 - **Transition pass-through**: a `transition` in a virtual light's
   `turn_on`/`turn_off` is forwarded to the real lights.
-- A `warning_active` attribute reporting an in-progress pre-off warning,
+- A `warning_active` attribute reporting a running off warning sequence,
   restored across restarts.
 - Discovery now reports how many entries it actually created.
 
@@ -255,8 +255,8 @@ longer needs a custom repository.
 
 - Light schedule pickers offer only MoLight schedule sensors.
 - The forms reject settings none of the chosen lights could apply (colors,
-  fades, brightness), an unreachable illuminance hysteresis, and stage values
-  on a disabled warning stage.
+  transitions, brightness), an unreachable illuminance hysteresis, and settings
+  on a disabled effect or warn stage.
 - A Virtual Illuminance Sensor starts `unavailable` rather than asserting
   darkness before its source has ever reported.
 - Every form field now carries a description; advanced sensor settings are
@@ -277,7 +277,7 @@ longer needs a custom repository.
   no longer registers as a real change.
 - A long-empty or never-lit room stays dark at dusk instead of turning on with
   nothing to resume.
-- A physical dim during the pre-off warning restores the color the warning
+- A physical dim during the off warning sequence restores the color the warning
   replaced.
 - Schedules switch in the right order on the night the clocks change.
 - Options flows: clearing a combined sensor's maintain list now sticks, a
@@ -311,7 +311,7 @@ longer needs a custom repository.
 
 ### Added
 
-- Color support for virtual lights, including automatic-on, effect and warning
+- Color support for virtual lights, including automatic-on, effect and warn
   colors.
 - Door sensor support: with the door mode set to *Open & close*, a door can
   turn a light on and hold it.
@@ -349,9 +349,10 @@ longer needs a custom repository.
 
 ### Added
 
-- Effect/warn warning before an automatic turn-off: blink or dim, with
-  configurable warning and grace durations, instead of sudden darkness.
-- Transition (fade) options for the on, off, effect and warning stages.
+- Off warning sequence before an automatic turn-off: blink or dim, with
+  configurable effect and warn durations, instead of sudden darkness.
+- Transition options for automatic turn-ons, automatic turn-offs and the effect
+  and warn stages.
 - Automatic-on brightness; leaving it blank keeps the light's existing
   brightness.
 
