@@ -1256,7 +1256,7 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
     assert entry_settings(saved)[role] == [old]
 
 
-async def test_timeout_guard_and_removal_follow_a_sensor_whose_entity_id_changed(
+async def test_timeout_check_and_removal_follow_a_sensor_whose_entity_id_changed(
     hass: HomeAssistant,
 ) -> None:
     """The light still constrains its sensor's occupancy timeout, and removing the

@@ -261,7 +261,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -557,7 +557,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -689,7 +689,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -781,7 +781,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -1109,7 +1109,7 @@
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
       "no_schedule_gated_lights": "There are no regular Virtual Lights with a gate-mode schedule to convert.",
       "no_scheduled_lights": "There are no Virtual Scheduled Lights with a schedule to convert.",
-      "conversion_targets_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
+      "conversion_lights_changed": "The selected lights changed while this flow was open, so nothing was converted. Review the current entries and try again.",
       "conversion_done": "Converted {count} virtual light(s) in place. Their entity IDs and references were preserved.",
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Start again to choose another."
     }
@@ -1255,7 +1255,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -1347,7 +1347,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
@@ -1608,7 +1608,7 @@
               "hold_entities": "Keep-on entities"
             },
             "data_description": {
-              "occupancy_entity": "Optional. A MoLight occupancy sensor (simple or combined): turns the lights on when the room is occupied and holds them until it clears.",
+              "occupancy_entity": "Optional. A Virtual Occupancy Sensor or Virtual Combined Occupancy Sensor: turns the lights on when the room is occupied and holds them until it clears.",
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",

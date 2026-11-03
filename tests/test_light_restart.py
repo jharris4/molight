@@ -384,7 +384,7 @@ async def test_restart_keeps_a_manual_off_over_presence_that_loads_late(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("topology", ["plain", "combined", "nested"])
+@pytest.mark.parametrize("topology", ["virtual", "combined", "nested"])
 @pytest.mark.parametrize("new_visit", [False, True])
 async def test_manual_off_stands_over_combined_presence_that_loads_late(
     hass: HomeAssistant, freezer, topology: str, new_visit: bool
@@ -419,13 +419,13 @@ async def test_manual_off_stands_over_combined_presence_that_loads_late(
             domain=DOMAIN,
             data={
                 CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
-                CONF_NAME: "Plain",
+                CONF_NAME: "Virtual",
                 CONF_OCCUPANCY_SENSOR: "binary_sensor.late_motion",
                 CONF_OCCUPANCY_TIMEOUT: 1,
                 CONF_FALSE_DETECTION_GRACE: 0,
             },
         ),
-        combined("Combined", "binary_sensor.plain"),
+        combined("Combined", "binary_sensor.virtual"),
         combined("Nested", "binary_sensor.combined"),
         make_light_entry(lights=[lamp.entity_id], timeout=60, occupancy=sensor),
     ]

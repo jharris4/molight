@@ -10,7 +10,7 @@ Wraps a single real binary sensor (motion, presence, or occupancy). `on` mirrors
 
 | Field | Description |
 |---|---|
-| **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy entities are excluded; wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-sensor) |
+| **Source sensor** | The real `binary_sensor` to wrap (device class `occupancy`, `motion`, or `presence`). MoLight's own occupancy sensors are excluded; wrap the real sensor, or combine virtual ones with a [combined sensor](#virtual-combined-occupancy-sensor) |
 | **Occupancy timeout** | Seconds. Default `120`, range 1 to 3600. The source's own hold time; **set this to match the real sensor** (see the note below). When it clears, `latest_occupied_time` is back-dated to `clear time - timeout` |
 | **False-detection grace** | Seconds. `0` disables, default `3`, range 0 to 60. A visit whose on-duration is at most `timeout + grace` contained exactly one instantaneous detection: the sensor never re-triggered during its hold time, so it was almost certainly a fly/heat blip. Such visits don't advance `latest_occupied_time`, are counted in `false_detection_count`, and flag the clear via `last_clear_false_detection` so lights can turn off after their false-detection off delay |
 | **Clear after unavailable** | Seconds. `0` disables, default `60`, range 0 to 3600. If the source goes `unavailable`/`unknown` while occupied, `latest_occupied_time` advances to the dropout moment immediately, and if the source hasn't recovered after this many seconds the occupancy clears, flagged via `last_clear_unavailable`. Never classified as a false detection, since the room may still be occupied, so dependent lights run their turn-off timer. A recovery cancels the pending clear |
@@ -32,16 +32,16 @@ A companion **`<name> Events` entity** fires `false_detection`, with `on_duratio
 
 ## Virtual Combined Occupancy Sensor
 
-Combines multiple MoLight occupancy sensors into one. Constituents are usually simple Virtual Occupancy Sensors, but other combined sensors can be nested too; the flows reject self-references and cycles, and a sensor can't hold both roles at once.
+Combines multiple MoLight occupancy sensors into one. Constituents are usually Virtual Occupancy Sensors, but other combined sensors can be nested too; the flows reject self-references and cycles, and a sensor can't hold both roles at once.
 
 | Field | Description |
 |---|---|
 | **Trigger sensors** | Any one going `on` starts occupancy |
 | **Maintain sensors** *(optional)* | Keep occupancy alive once started, but cannot start it alone |
 
-`latest_occupied_time` is the max across all constituents, so each constituent's occupancy timeout is respected. A combined visit during which no constituent advanced `latest_occupied_time` was made up entirely of false detections and is flagged/counted the same way as on the simple sensor.
+`latest_occupied_time` is the max across all constituents, so each constituent's occupancy timeout is respected. A combined visit during which no constituent advanced `latest_occupied_time` was made up entirely of false detections and is flagged/counted the same way as on a Virtual Occupancy Sensor.
 
-If the last constituent still `on` drops out of the state machine (it goes `unavailable`, or the entity is deleted), occupancy clears immediately rather than holding forever. This is the combined-sensor counterpart of the simple sensor's *clear after unavailable* timeout. As there, the person is assumed present up to the dropout: `latest_occupied_time` advances to that moment so dependent lights run their turn-off timer, and the clear is never classified as a false detection.
+If the last constituent still `on` drops out of the state machine (it goes `unavailable`, or the entity is deleted), occupancy clears immediately rather than holding forever. This is the combined-sensor counterpart of the Virtual Occupancy Sensor's *clear after unavailable* timeout. As there, the person is assumed present up to the dropout: `latest_occupied_time` advances to that moment so dependent lights run their turn-off timer, and the clear is never classified as a false detection.
 
 Restarts, reloads and edits:
 
@@ -174,7 +174,7 @@ At the top level:
 
 | Field | Description |
 |---|---|
-| **Occupancy sensor** *(optional)* | A MoLight occupancy sensor (simple or combined) |
+| **Occupancy sensor** *(optional)* | A MoLight occupancy sensor: a Virtual Occupancy Sensor or a Virtual Combined Occupancy Sensor |
 | **What turns the light on for occupancy** | Default **MoLight** (`molight`). **Its own system** (`own_system`): the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs everything else. **Its own system, then MoLight** (`own_system_then_molight`): as **Its own system**, and MoLight turns the light on when it is still off a second later (see [Occupancy turn-on by the light's own system](#occupancy-turn-on-by-the-lights-own-system)) |
 | **Maintain occupancy sensor** *(optional)* | Keeps an already-on light on while occupied but never turns it on (see [Maintain occupancy sensor](#maintain-occupancy-sensor)) |
 | **Illuminance sensor** *(optional)* | A MoLight Virtual Illuminance Sensor |
@@ -603,7 +603,7 @@ Attributes and restarts:
 - **Which settings a restart uses:** a valid schedule state wins. On a first start with no readable state, outside-schedule settings are used. While that same schedule is unavailable or unknown, its last restored choice is kept; after changing to an unavailable schedule, outside-schedule settings are used until it reports a valid state.
 - **A deleted schedule entry:** the reference is removed, outside-schedule settings are used, and the light remains manually usable until a new schedule is chosen in **Configure**.
 
-A Virtual Scheduled Light does not include a separate follow mode. Create it through the normal **Add entry** flow or promote an existing schedule-gated light through **Convert virtual lights**. Bulk discovery and **Assign a sensor to several lights** do not directly create or modify Virtual Scheduled Lights.
+A Virtual Scheduled Light does not include a separate follow mode. Create it through the normal **Add entry** flow or convert an existing schedule-gated light through **Convert virtual lights**. Bulk discovery and **Assign a sensor to several lights** do not directly create or modify Virtual Scheduled Lights.
 
 ### Standby
 
@@ -626,7 +626,7 @@ To turn standby off again, clear the standby brightness and set the **Standby co
   - A standby with no color of its own puts back the color the light had before a colored effect or warn stage.
   - A false detection drops back to standby after the short false-detection off delay.
 - **Manual control:** the configured standby level is the only level the light stays at.
-  - A manual off turns standby off until the next schedule boundary, so occupancy then ends its visits in off. A window that starts as the last one ends is a boundary too, as is midnight for an all-day (00:00 → 00:00) schedule, though the schedule stays `on`, and so is a window that started while the schedule was `unavailable`; a Virtual Combined Schedule joins touching windows into one, so its join is not.
+  - A manual off turns standby off until the next schedule boundary, so occupancy then ends its visits in off. A window that starts as the last one ends is a boundary too, as is midnight for an all-day (00:00 → 00:00) schedule, though the schedule stays `on`, and so is a window that started while the schedule was `unavailable`; a Virtual Combined Schedule Sensor joins touching windows into one, so its join is not.
   - A manual turn-on rejoins standby, also while someone's presence has it raised, as does a physical dim or recolor of the raised light, and a restart keeps that.
   - Dimming or recoloring a light at standby starts the turn-off timer, which returns it to standby.
   - Turning a light at standby on without a brightness, as a voice assistant, a Virtual Remote's **Turn on** or a script often does, raises it to the auto-on brightness and color as presence would (keeping a color the turn-on names), and the turn-off timer then drops it back to standby.
@@ -695,7 +695,7 @@ Deleting a virtual light removes it from every remote's target list, like any ot
 - The `light_timeout >= occupancy_timeout` constraint is validated in both directions: creating/editing a light checks its occupancy sensor and maintain occupancy sensor (including through a combined sensor), and raising a sensor's occupancy timeout checks every light that depends on it.
 - Settings no chosen light could apply are rejected at the form rather than stored and silently ignored: a transition when none of the lights can fade, a color temperature or a color when none can show one, a brightness when none of them dim (an effect brightness of `0` is exempt, since a blink fully off is sent as a plain turn-off, which every light can do). One capable light is enough (mixed groups are the point), and a light that hasn't reported its capabilities yet is never taken as proof, so the check can't reject a setting on incomplete information.
 - Reference graphs stay sane by construction:
-  - an occupancy sensor can't wrap another MoLight occupancy entity;
+  - an occupancy sensor can't wrap another MoLight occupancy sensor;
   - a combined sensor can't reference itself or form a cycle through other combined sensors, and a constituent can't be both a trigger and a maintain sensor;
   - a schedule's source can't be a group that leads back to the schedule;
   - a virtual light can't include itself or a virtual light or Home Assistant light group that includes it;

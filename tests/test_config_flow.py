@@ -315,10 +315,10 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_occupancy_source_picker_excludes_molight_occupancy_entities(
+async def test_occupancy_source_picker_excludes_molight_occupancy_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Simple and combined MoLight occupancy entities cannot be wrapped again."""
+    """Neither kind of MoLight occupancy sensor can be wrapped again."""
     combined = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -992,10 +992,10 @@ async def test_light_flows_reject_non_schedule_molight_sensor(
 
 
 @pytest.mark.asyncio
-async def test_light_options_grandfather_existing_non_schedule_sensor(
+async def test_light_options_keep_existing_non_schedule_sensor(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """An old broad-picker selection remains visible and may be kept."""
+    """A legacy sensor remains visible and may be kept."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1061,7 +1061,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
     occupancy_entry: MockConfigEntry,
     illuminance_entry: MockConfigEntry,
 ) -> None:
-    """Grandfathering applies only to the exact stored legacy entity."""
+    """Only the exact stored legacy entity may be kept."""
     regular = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -3599,8 +3599,8 @@ async def test_light_flow_survives_cyclic_combined_sensors(
 
     The options flow's entity picker lets combined sensors include other
     combined sensors, so a cycle is reachable; resolving the effective
-    timeout must skip the back-reference and still find the simple
-    constituent's timeout (30s from the fixture).
+    timeout must skip the back-reference and still find the Virtual Occupancy
+    Sensor constituent's timeout (30s from the fixture).
     """
     combined_a = MockConfigEntry(
         domain=DOMAIN,
@@ -3631,7 +3631,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
     )
 
-    # The 30s simple constituent is still found through the cycle.
+    # The 30s Virtual Occupancy Sensor constituent is still found through the cycle.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -5453,7 +5453,7 @@ async def test_combined_options_allow_shared_acyclic_dependency(
 async def test_combined_options_reject_overlapping_roles(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Options cannot assign one occupancy entity to both constituent roles."""
+    """Options cannot assign one occupancy sensor to both constituent roles."""
     combined = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -6010,10 +6010,11 @@ async def test_convert_to_regular_aborts_without_scheduled_lights(
 
 
 @pytest.mark.asyncio
-async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
+async def test_bulk_conversion_is_atomic_when_selected_light_becomes_ineligible(
     hass: HomeAssistant,
 ) -> None:
-    """A stale target aborts before any of the selected entries are rewritten."""
+    """A selected light that became ineligible aborts before any of the selected
+    entries are rewritten."""
     kitchen = _light_entry(
         "Kitchen",
         "kitchen",
@@ -6047,7 +6048,7 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
     )
 
     assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "conversion_targets_changed"
+    assert result["reason"] == "conversion_lights_changed"
     assert dict(kitchen.data) == kitchen_data
     assert dict(kitchen.options) == kitchen_options
     assert entry_settings(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
@@ -6055,10 +6056,11 @@ async def test_bulk_conversion_is_atomic_when_target_becomes_ineligible(
 
 
 @pytest.mark.asyncio
-async def test_bulk_conversion_is_atomic_when_target_is_removed(
+async def test_bulk_conversion_is_atomic_when_selected_light_is_removed(
     hass: HomeAssistant,
 ) -> None:
-    """A removed target aborts before any surviving entry is rewritten."""
+    """A selected light that was removed aborts before any surviving entry is
+    rewritten."""
     kitchen = _light_entry(
         "Kitchen",
         "kitchen",
@@ -6088,7 +6090,7 @@ async def test_bulk_conversion_is_atomic_when_target_is_removed(
     )
 
     assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "conversion_targets_changed"
+    assert result["reason"] == "conversion_lights_changed"
     assert dict(kitchen.data) == kitchen_data
     assert dict(kitchen.options) == kitchen_options
     assert entry_settings(kitchen)[CONF_ENTITY_TYPE] == ENTITY_TYPE_LIGHT
@@ -10264,7 +10266,7 @@ async def test_light_forms_do_not_save_a_sensor_deleted_while_open(
 async def test_light_forms_follow_a_sensor_whose_entity_id_changed_while_open(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str
 ) -> None:
-    """The former entity ID validates, timeout guard included, and saves as
+    """The former entity ID validates, timeout check included, and saves as
     the new one."""
     hass.states.async_set(SUBJECT_MEMBER, "off", {"supported_color_modes": ["onoff"]})
     await _setup_night_schedule(hass)
@@ -11200,7 +11202,7 @@ async def test_remote_preset_needs_a_brightness_of_at_least_one_percent(
 
 
 # ---------------------------------------------------------------------------
-# The light_timeout >= occupancy_timeout guard, from the sensor's side
+# The light_timeout >= occupancy_timeout check, from the sensor's side
 # ---------------------------------------------------------------------------
 
 
@@ -11304,7 +11306,7 @@ async def test_occupancy_options_check_lights_through_nested_combined_sensors(
 async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, role: str
 ) -> None:
-    """The guard is light_timeout >= occupancy_timeout, so equal is enough."""
+    """The check is light_timeout >= occupancy_timeout, so equal is enough."""
     equal = _light_entry("Closet", "closet", timeout=30)  # the sensor's 30 s
     await setup_entries(hass, occupancy_entry, equal)
 

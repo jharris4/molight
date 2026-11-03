@@ -3372,7 +3372,7 @@ async def test_occupancy_does_not_date_a_clear_from_a_restart(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("topology", ["plain", "combined", "nested"])
+@pytest.mark.parametrize("topology", ["virtual", "combined", "nested"])
 @pytest.mark.parametrize(
     ("occupied_for", "false"), [(120, False), (2, True)], ids=["genuine", "false"]
 )
@@ -3388,7 +3388,7 @@ async def test_light_timer_after_a_clear_missed_during_an_occupancy_reload(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
-            CONF_NAME: "Plain",
+            CONF_NAME: "Virtual",
             CONF_OCCUPANCY_SENSOR: motion.entity_id,
             CONF_OCCUPANCY_TIMEOUT: 1,
             CONF_FALSE_DETECTION_GRACE: 3,
@@ -3414,7 +3414,7 @@ async def test_light_timer_after_a_clear_missed_during_an_occupancy_reload(
     await setup_entries(
         hass,
         occupancy,
-        combined("Combined", "binary_sensor.plain"),
+        combined("Combined", "binary_sensor.virtual"),
         combined("Nested", "binary_sensor.combined"),
         light,
     )

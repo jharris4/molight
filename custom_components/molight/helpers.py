@@ -62,7 +62,7 @@ def entry_settings(entry: ConfigEntry) -> dict:
     fully replace the original data; merging the two would resurrect
     optional fields the user cleared (e.g. removing a light's occupancy
     reference). entity_type is authoritative in data (and is changed only by
-    the explicit light-conversion flow), never by ordinary options edits.
+    the explicit Convert virtual lights flow), never by ordinary options edits.
     """
     cfg = dict(entry.options) if entry.options else dict(entry.data)
     cfg[CONF_ENTITY_TYPE] = entry.data[CONF_ENTITY_TYPE]

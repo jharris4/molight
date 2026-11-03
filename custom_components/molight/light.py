@@ -556,7 +556,7 @@ def _opt_color(cfg: dict[str, Any], temp_key: str, rgb_key: str) -> dict | None:
     return _opt_rgb_color(cfg.get(rgb_key))
 
 
-# Single-entity settings references that a light watches. A Virtual Scheduled Light
+# Single-entity sensor references that a light watches. A Virtual Scheduled Light
 # watches both settings sets' references; events from the inactive one simply
 # match no role in _handle_state_change.
 _WATCHED_REFERENCE_KEYS = (
@@ -1053,7 +1053,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._restored_standby = False
         # Every settings mapping this light may run under (both settings sets of a
         # Virtual Scheduled Light, or a regular Virtual Light's entry settings), so
-        # the entity references of all of them can be watched up front.
+        # the sensor references and keep-on entities of all of them can be watched
+        # up front.
         self._settings_sets: tuple[dict[str, Any], ...] = (
             (self._outside_schedule_settings, self._inside_schedule_settings)
             if self._is_scheduled_light

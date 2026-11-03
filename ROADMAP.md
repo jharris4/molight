@@ -71,7 +71,7 @@ Ships alone.
   stops adapting. Verify the failure with a test before designing.
 - **Cost.** It changes what a physical change does, so it ships alone with its own tests.
 
-### 4. Occupancy timeout check
+### 4. Occupancy timeout Repairs check
 
 - **Problem.** The README says everything downstream depends on the occupancy timeout and that
   MoLight cannot read it. Set too high, a short visit is classified as a false detection and is

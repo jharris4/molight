@@ -72,7 +72,7 @@ Occupancy sensor:  binary_sensor.hallway_occupancy
 
 Walk in → lights on. Room empties → 60s turn-off timer anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on manually and it still turns off after the room empties, but a false blip never cuts short a manual on.
 
-> Note the guard: **Turn-off timeout (60) must be at least the occupancy timeout (30)**. MoLight enforces this both ways.
+> Note the check: **Turn-off timeout (60) must be at least the occupancy timeout (30)**. MoLight enforces this both ways.
 
 ---
 

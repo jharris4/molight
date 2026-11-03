@@ -194,7 +194,7 @@ async def async_setup_entry(
 
 
 # ---------------------------------------------------------------------------
-# Virtual Occupancy Sensor (simple)
+# Virtual Occupancy Sensor
 # ---------------------------------------------------------------------------
 
 
@@ -995,7 +995,7 @@ class VirtualCombinedOccupancySensor(
 
         A constituent leaving the state machine (its entry unloaded, the
         entity removed) must not hold the combined sensor on forever. Like
-        a clear by the simple sensor's Clear after unavailable field, never
+        a clear by a Virtual Occupancy Sensor's Clear after unavailable field, never
         classified as a false detection (the room may still be occupied), and the
         person is assumed present right up to the dropout, so latest_occupied_time
         advances to that moment: lights that reference it run their turn-off

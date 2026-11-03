@@ -2922,7 +2922,7 @@ async def _visit_sensor(hass: HomeAssistant, kind: str) -> tuple[str, list]:
     if kind == "raw":
         return MOTION, []
     sensor = _virtual_occupancy_entry()
-    if kind == "simple":
+    if kind == "virtual":
         await setup_entries(hass, sensor)
         return VIRTUAL_OCC, [sensor]
     room = MockConfigEntry(
@@ -2956,7 +2956,7 @@ async def _reload_sensor(hass: HomeAssistant, entries: list) -> None:
     "mode",
     [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
-@pytest.mark.parametrize("kind", ["raw", "simple", "combined", "nested"])
+@pytest.mark.parametrize("kind", ["raw", "virtual", "combined", "nested"])
 @pytest.mark.parametrize("fresh", [False, True])
 async def test_gate_recovery_tells_a_reloaded_visit_from_a_new_one(
     hass: HomeAssistant, freezer, mode: str, kind: str, fresh: bool
@@ -3081,9 +3081,9 @@ async def _reseed_light(hass: HomeAssistant, light: MockConfigEntry, how: str) -
     [
         ("raw", "reload"),
         ("raw", "restart"),
-        ("simple", "reload"),
-        ("simple", "restart"),
-        ("simple", "entity_id_change"),
+        ("virtual", "reload"),
+        ("virtual", "restart"),
+        ("virtual", "entity_id_change"),
         ("combined", "reload"),
         ("combined", "restart"),
     ],

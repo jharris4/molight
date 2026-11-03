@@ -59,7 +59,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 - **Create a single entity**: pick a type and fill in its form.
 - **Discover**: scan existing entities and bulk-create virtual ones, with one menu item per discoverable type (see [Bulk discovery](#bulk-discovery)).
 - **Assign a sensor to several lights**: assign one sensor to many lights at once (see [Bulk assignment](#bulk-assignment)).
-- **Convert virtual lights**: turn regular Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode into Virtual Scheduled Lights with separate inside- and outside-schedule settings, or turn Virtual Scheduled Lights back into regular Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
+- **Convert virtual lights**: convert regular Virtual Lights whose [Schedule mode](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes) is a Gate mode to Virtual Scheduled Lights with separate inside- and outside-schedule settings, or convert Virtual Scheduled Lights back to regular Virtual Lights with one set of settings (see [Light conversion](#light-conversion)).
 
 The usual order:
 

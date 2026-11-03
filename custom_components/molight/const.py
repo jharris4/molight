@@ -86,7 +86,7 @@ ASSIGN_ROLE_REGULAR = "regular"
 ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
-# --- Virtual Occupancy Sensor (simple: one real sensor) ---
+# --- Virtual Occupancy Sensor (one real sensor) ---
 CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"

@@ -192,7 +192,7 @@ LIGHT_ENTRY_KEYS = (
     "schedule_end_action",
     "entity_id",
 )
-# Inputs conversion strips from the outside settings when promoting a light.
+# Inputs conversion to scheduled strips from the outside settings.
 CONVERSION_INPUT_KEYS = (
     "occupancy_entity",
     "maintain_occupancy_entity",
@@ -696,7 +696,7 @@ def create_virtual_occupancy(
     entity_id: str = "e2e_occupancy",
     timeout: int = 1,
 ) -> str:
-    """Create a MoLight occupancy sensor wrapping a simulated motion sensor."""
+    """Create a Virtual Occupancy Sensor wrapping a simulated motion sensor."""
     return create_entry(
         client,
         "occupancy",
@@ -1441,7 +1441,7 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_assign_scenarios(client: HomeAssistantClient) -> None:
-    """Bulk assignment assigns, removes, and skips lights per the timeout guard."""
+    """Bulk assignment assigns, removes, and skips lights per the timeout check."""
     light_a = create_entry(
         client,
         "light",
@@ -1502,7 +1502,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_b,
         lambda cfg: not cfg.get("occupancy_entity"),
-        "skipped (timeout guard)",
+        "skipped (timeout check)",
     )
     summary = assign(
         "assign_occupancy",
@@ -1513,7 +1513,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         raise AssertionError(f"Occupancy removal summary unexpected: {summary}")
     wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "removed")
 
-    # The maintain role fills its own key, under the same timeout guard.
+    # The maintain role fills its own key, under the same timeout check.
     summary = assign(
         "assign_occupancy",
         {
@@ -1537,7 +1537,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_b,
         lambda cfg: not cfg.get("maintain_occupancy_entity"),
-        "left without a maintain sensor (timeout guard)",
+        "left without a maintain sensor (timeout check)",
     )
     summary = assign(
         "assign_occupancy",
@@ -1593,7 +1593,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         remove_entry_and_entity(client, entry_id, entity_id)
     checkpoint(
         "bulk assignment assigns both occupancy roles, removes, skips by the timeout "
-        "guard, sets modes"
+        "check, sets modes"
     )
 
 
@@ -3514,7 +3514,7 @@ def assert_subset(actual: dict[str, Any], expected: dict[str, Any], what: str) -
 def assert_converted_to_regular(
     entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
 ) -> None:
-    """Assert a demoted entry stores the inside settings as a schedule-gated light."""
+    """Assert a converted entry stores the inside settings as a schedule-gated light."""
     cfg = wait_stored_entry(
         entry_id,
         lambda cfg: cfg.get("entity_type") == "light",
@@ -3527,7 +3527,7 @@ def assert_converted_to_regular(
             "schedule_entity": schedule_entity,
             "schedule_mode": schedule_mode,
         },
-        "Demoted light settings",
+        "Converted light settings",
     )
     leftovers = [
         key
@@ -3535,7 +3535,7 @@ def assert_converted_to_regular(
         if key in cfg
     ]
     if leftovers:
-        raise AssertionError(f"Demoted light kept settings set sections: {leftovers}")
+        raise AssertionError(f"Converted light kept settings set sections: {leftovers}")
 
 
 def assert_converted_to_scheduled(
@@ -3544,7 +3544,7 @@ def assert_converted_to_scheduled(
     schedule_end_action: str,
     settings: dict[str, Any],
 ) -> None:
-    """Assert a promoted entry keeps old settings inside and strips inputs outside."""
+    """Assert a converted entry keeps old settings inside and strips inputs outside."""
     cfg = wait_stored_entry(
         entry_id,
         lambda cfg: cfg.get("entity_type") == "scheduled_light",
@@ -3556,12 +3556,12 @@ def assert_converted_to_scheduled(
             "schedule_entity": schedule_entity,
             "schedule_end_action": schedule_end_action,
         },
-        "Promoted light schedule settings",
+        "Converted light schedule settings",
     )
     assert_subset(
         cfg.get("inside_schedule_settings", {}),
         settings,
-        "Promoted inside settings",
+        "Converted inside settings",
     )
     outside = cfg.get("outside_schedule_settings", {})
     retained = {
@@ -3569,11 +3569,11 @@ def assert_converted_to_scheduled(
         for key, value in settings.items()
         if key not in CONVERSION_INPUT_KEYS
     }
-    assert_subset(outside, retained, "Promoted outside settings")
+    assert_subset(outside, retained, "Converted outside settings")
     inputs = [key for key in CONVERSION_INPUT_KEYS if key in outside]
     if inputs:
         raise AssertionError(
-            f"Promoted outside settings kept automatic inputs: {inputs}"
+            f"Converted outside settings kept automatic inputs: {inputs}"
         )
 
 
@@ -3770,7 +3770,7 @@ def run_primary() -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "off outside the window: the demoted light kept its schedule gate",
+        "off outside the window: the converted light kept its schedule gate",
     )
     reset_trigger(client)
     client.set_state(RAW_SCHEDULE, "on")
@@ -3781,7 +3781,7 @@ def run_primary() -> None:
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "off", "off")
 
     checkpoint(
-        "demoted to a gate_keep light: settings stored, gated outside, lit inside"
+        "converted to a gate_keep light: settings stored, gated outside, lit inside"
     )
 
     convert_light(client, "convert_to_scheduled", "confirm_convert_to_scheduled")
@@ -3796,7 +3796,7 @@ def run_primary() -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "off: promotion left the outside settings without an occupancy input",
+        "off: conversion left the outside settings without an occupancy input",
     )
 
     client.set_behavior(RAW_LIGHT, latency=0.5, report_steps=True, transition_steps=3)
@@ -3830,7 +3830,7 @@ def run_primary() -> None:
     trigger_and_assert(client, pct(80), "Night")
 
     checkpoint(
-        "promoted back to a Virtual Scheduled Light: settings stored, "
+        "converted back to a Virtual Scheduled Light: settings stored, "
         "outside settings inert"
     )
 
@@ -8025,7 +8025,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
         expect_rejection(client, result, "combined_occupancy_cycle", options=True)
 
     # A genuine visit propagates through both levels; an all-false visit is
-    # flagged on the combined sensors just like on the simple one.
+    # flagged on the combined sensors just like on the Virtual Occupancy Sensor.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(NEST_INNER, lambda state: state["state"] == "on", "on")
     client.wait_state(NEST_OUTER, lambda state: state["state"] == "on", "on")

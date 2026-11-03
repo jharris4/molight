@@ -593,9 +593,9 @@ def _schedule_edge_fields() -> dict:
     }
 
 
-# Pickers for a virtual light's optional entity references. The occupancy,
-# maintain, illuminance and schedule sensors are MoLight virtual sensors
-# (integration=DOMAIN). Schedule sensors have no suitable device_class, so
+# Pickers for a virtual light's optional sensor references and keep-on entities.
+# The occupancy, maintain, illuminance and schedule sensors are MoLight virtual
+# sensors (integration=DOMAIN). Schedule sensors have no suitable device_class, so
 # their picker is built dynamically below from MoLight schedule config entries.
 # The door sensor is a plain real contact sensor or cover, so its picker is
 # not restricted to MoLight, only to door-ish device classes.
@@ -648,9 +648,9 @@ def _registry_entry(hass: HomeAssistant, entity_id: str) -> er.RegistryEntry | N
 def _effective_occupancy_timeout(
     hass: HomeAssistant, entity_id: str, _seen: set[str] | None = None
 ) -> int | None:
-    """Resolve the occupancy timeout (seconds) behind a MoLight occupancy entity.
+    """Resolve the occupancy timeout (seconds) behind a MoLight occupancy sensor.
 
-    For a simple occupancy sensor this is its configured timeout; for a
+    For a Virtual Occupancy Sensor this is its configured timeout; for a
     combined sensor it is the max across all constituent sensors (the
     timer anchor is the constituent that clears last). Combined
     sensors can reference each other, and while the flows reject cycles a
@@ -777,7 +777,7 @@ def _schedule_entity_is_allowed(
     *,
     legacy_entity: str | None = None,
 ) -> bool:
-    """Return whether a schedule sensor is valid or grandfathered."""
+    """Return whether a schedule sensor is valid or legacy."""
     if not entity_id:
         return True
     entity_type = _molight_entity_type(hass, entity_id)
@@ -1138,7 +1138,7 @@ def _validate_combined_occupancy_roles(user_input: dict[str, Any]) -> dict[str, 
 def _validate_occupancy_source(
     hass: HomeAssistant, user_input: dict[str, Any], own: Sequence[str] = ()
 ) -> dict[str, str]:
-    """Reject a MoLight occupancy entity, or a source computed from the sensor.
+    """Reject a MoLight occupancy sensor, or a source computed from the edited sensor.
 
     own names the edited sensor's entities, which a group in the source can
     contain.
@@ -3181,7 +3181,7 @@ class MoLightConfigFlow(
     async def async_step_convert_to_scheduled(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Select schedule-gated regular Virtual Lights to promote."""
+        """Select schedule-gated regular Virtual Lights to convert."""
         return await self._async_conversion_select(
             to_scheduled=True, user_input=user_input
         )
@@ -3189,7 +3189,7 @@ class MoLightConfigFlow(
     async def async_step_convert_to_regular(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Select Virtual Scheduled Lights to return to schedule-gated lights."""
+        """Select Virtual Scheduled Lights to convert to schedule-gated lights."""
         return await self._async_conversion_select(
             to_scheduled=False, user_input=user_input
         )
@@ -3279,11 +3279,11 @@ class MoLightConfigFlow(
                 for entry_id in self._conversion["entry_ids"]:
                     entry = self.hass.config_entries.async_get_entry(entry_id)
                     if entry is None:
-                        return self.async_abort(reason="conversion_targets_changed")
+                        return self.async_abort(reason="conversion_lights_changed")
                     cfg = _entry_settings(entry)
                     to_scheduled = self._conversion["to_scheduled"]
                     if not _conversion_eligible(cfg, to_scheduled=to_scheduled):
-                        return self.async_abort(reason="conversion_targets_changed")
+                        return self.async_abort(reason="conversion_lights_changed")
                     data = (
                         self._converted_scheduled_data(cfg)
                         if to_scheduled
@@ -3352,7 +3352,7 @@ class MoLightConfigFlow(
                 ),
                 "mode_key": None,
                 "mode": None,
-                # Occupancy feeds the turn-off timer, so the light_timeout guard
+                # Occupancy feeds the turn-off timer, so the light_timeout check
                 # applies to each light the same way the light form enforces it.
                 "check_timeout": True,
             }
@@ -3582,7 +3582,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Occupancy (simple: one sensor, one timeout)
+    # Occupancy (one sensor, one timeout)
     # ------------------------------------------------------------------
 
     async def async_step_occupancy(
