@@ -222,7 +222,7 @@ async def test_maintain_clear_timer_anchors_to_latest_occupied_time(
     hass.states.async_set(MAINT, "on")
     await settle(hass)
 
-    # Well past the virtual turn-on's own timeout, so only the history counts.
+    # Well past the virtual turn-on's own timeout, so only latest_occupied_time counts.
     freezer.tick(timedelta(seconds=90))
     lot = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
     hass.states.async_set(MAINT, "off", {"latest_occupied_time": lot})
@@ -280,7 +280,7 @@ async def test_no_off_delay_when_maintain_clear_genuine(
     hass: HomeAssistant, freezer
 ) -> None:
     """A false occupancy clear followed by a genuine maintain clear runs the
-    turn-off timer: the maintain sensor saw real presence."""
+    turn-off timer: the maintain sensor saw a genuine detection."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, entry)

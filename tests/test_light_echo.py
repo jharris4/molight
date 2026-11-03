@@ -913,13 +913,13 @@ async def test_late_matching_turn_off_naming_its_author_is_physical(
     await _virtual(hass, "turn_on", brightness=153)
     await _write(hass, "on", contexts[-1], brightness=153)
     await _virtual(hass, "turn_off")
-    stamped = _attrs(hass)["last_off_manual"]
+    recorded = _attrs(hass)["last_off_manual"]
     freezer.tick(timedelta(seconds=age))  # ages our command too
 
     await _write(hass, "off", _named(author))
 
     assert _attrs(hass)["molight_state"] == STATE_IDLE
-    assert (_attrs(hass)["last_off_manual"] != stamped) is physical
+    assert (_attrs(hass)["last_off_manual"] != recorded) is physical
 
 
 @pytest.mark.asyncio
@@ -980,7 +980,7 @@ class _LostFirstLight(RealLight):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("delay", [2, 20, 31])
-async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timeout(
+async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timer(
     hass: HomeAssistant, freezer, hass_admin_user, delay: int
 ) -> None:
     """A real light misses our turn-on, and a user turns it on from its own
@@ -1782,7 +1782,7 @@ async def test_stage_color_fade_across_the_wheel_keeps_the_sequence(
 async def test_far_apart_effect_and_warn_colors_still_turn_the_light_off(
     hass: HomeAssistant, freezer, blend: str
 ) -> None:
-    """Blue then yellow: neither stage's fade restarts the timeout, which
+    """Blue then yellow: neither stage's fade restarts the timer, which
     would otherwise repeat on every sequence and keep the light on."""
     member = await _lit_red(
         hass,
@@ -2152,7 +2152,7 @@ PHYSICAL = (
 )
 
 
-def _stamps(hass: HomeAssistant) -> dict:
+def _timestamps(hass: HomeAssistant) -> dict:
     """The marks a change at the wall leaves on the virtual light."""
     attrs = _attrs_of(hass, INSTANT)
     return {name: attrs[name] for name in PHYSICAL if attrs[name] is not None}
@@ -2192,10 +2192,10 @@ async def test_stage_fade_is_not_a_dim_at_the_wall(
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == stage
     assert _attrs_of(hass, INSTANT)["brightness"] == 51
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
     await _run(hass, freezer, 30)
     assert hass.states.get(INSTANT).state == "off"
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2218,7 +2218,7 @@ async def test_blink_off_fade_is_not_an_off_at_the_wall(
     assert not member.is_on
     assert hass.states.get(INSTANT).state == "on"
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_EFFECT
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2247,7 +2247,7 @@ async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
     assert _attrs_of(hass, INSTANT)["brightness"] == 204
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2268,7 +2268,7 @@ async def test_auto_off_fade_is_not_a_change_at_the_wall(
     assert not member.is_on
     assert [state for state, _ in seen if state != "off"] == []
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_IDLE
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2308,7 +2308,7 @@ async def test_standby_fade_is_not_a_change_at_the_wall(
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
     assert _attrs_of(hass, INSTANT)["brightness"] == 51
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2329,7 +2329,7 @@ async def test_caller_fade_is_not_a_change_at_the_wall(
     await settle(hass)
     await _run(hass, freezer, fade + 1)
 
-    stamps = _stamps(hass)
+    timestamps = _timestamps(hass)
     if service == "turn_on":
         assert member.brightness == 50
         assert _attrs_of(hass, INSTANT)["brightness"] == 50
@@ -2337,8 +2337,8 @@ async def test_caller_fade_is_not_a_change_at_the_wall(
     else:
         assert not member.is_on
         assert [state for state, _ in seen if state != "off"] == []
-        assert stamps.pop("last_off_manual") is not None  # the caller's off
-    assert stamps == {}
+        assert timestamps.pop("last_off_manual") is not None  # the caller's off
+    assert timestamps == {}
 
 
 @pytest.mark.asyncio
@@ -2363,7 +2363,7 @@ async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
     assert member.brightness == 200
     assert _attrs_of(hass, INSTANT)["brightness"] == 200
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2391,7 +2391,7 @@ async def test_stage_color_fade_is_not_a_recolor_at_the_wall(
     assert member.hs_color == CYAN
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == CYAN
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2410,7 +2410,7 @@ async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
     )
     await _run(hass, freezer, 61 + 7)
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     if change == "brighter":
         member.wall(brightness=230)
@@ -2430,13 +2430,13 @@ async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
     await settle(hass)
 
     attrs = _attrs_of(hass, INSTANT)
-    stamp = {
+    attr = {
         "brighter": "last_brightness_change_physical",
         "off": "last_off_manual",
         "recolor": "last_color_change_physical",
         "command": "last_brightness_change_physical",
     }[change]
-    assert list(_stamps(hass)) == [stamp]
+    assert list(_timestamps(hass)) == [attr]
     assert attrs["warning_active"] is False
     if change == "off":
         assert hass.states.get(INSTANT).state == "off"
@@ -2460,7 +2460,7 @@ async def test_turn_on_at_the_wall_late_in_an_off_fade_is_a_turn_on(
     await _run(hass, freezer, 61 + (7 if when == "during" else 11))
     assert hass.states.get(INSTANT).state == "off"
     assert member.is_on is (when == "during")
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     member.wall(brightness=180)
     await settle(hass)
@@ -2490,13 +2490,13 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
     )
     await _run(hass, freezer, 61 + 7)
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     member.wall(hs_color=PURPLE)
     await settle(hass)
 
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
-    assert list(_stamps(hass)) == ["last_color_change_physical"]
+    assert list(_timestamps(hass)) == ["last_color_change_physical"]
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == PURPLE
 
 
@@ -2559,7 +2559,7 @@ async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
     assert _levels(seen) == {204}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2583,7 +2583,7 @@ async def test_virtual_fade_power_first_at_remembered_level_is_not_a_dim(
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
     assert _levels(seen) == {204}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2616,7 +2616,7 @@ async def test_standby_power_first_at_remembered_level_is_not_a_dim(
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
     assert _levels(seen) == {51}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2647,7 +2647,7 @@ async def test_follow_window_start_power_first_at_remembered_level_is_not_a_dim(
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_SCHEDULED
     assert _levels(seen) == {204}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2685,7 +2685,7 @@ async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
     assert _levels(seen) == {51}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2716,7 +2716,7 @@ async def test_auto_on_power_first_at_remembered_color_is_not_a_recolor(
     assert member.hs_color == CYAN
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == CYAN
     assert _levels(seen) == {204}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2741,7 +2741,7 @@ async def test_auto_on_without_a_level_power_first_then_steps_is_not_a_dim(
     assert _attrs_of(hass, INSTANT)["brightness"] == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
     assert not _levels(seen) & {51, 102, 153}
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2767,7 +2767,7 @@ async def test_fade_runs_from_the_power_first_report(
 
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["brightness"] == 204
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2785,12 +2785,12 @@ async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
     await _occupied(hass)
     await _run(hass, freezer, 5)
     assert member.brightness == 204
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     member.wall(brightness=100)
     await settle(hass)
 
-    assert list(_stamps(hass)) == ["last_brightness_change_physical"]
+    assert list(_timestamps(hass)) == ["last_brightness_change_physical"]
     assert _attrs_of(hass, INSTANT)["brightness"] == 100
 
 
@@ -2808,12 +2808,12 @@ async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
     await _occupied(hass)
     await _run(hass, freezer, 1)
     assert member.brightness == 51  # the first step
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     member.wall(brightness=30)
     await settle(hass)
 
-    assert list(_stamps(hass)) == ["last_brightness_change_physical"]
+    assert list(_timestamps(hass)) == ["last_brightness_change_physical"]
     assert _attrs_of(hass, INSTANT)["brightness"] == 30
 
 
@@ -2834,7 +2834,7 @@ async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
     await settle(hass)
 
     assert hass.states.get(INSTANT).state == "off"
-    assert list(_stamps(hass)) == ["last_off_manual"]
+    assert list(_timestamps(hass)) == ["last_off_manual"]
 
 
 @pytest.mark.asyncio
@@ -2940,7 +2940,7 @@ async def test_late_color_temperature_reply_to_a_color_is_not_physical(
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == color_util.color_RGB_to_hs(
         *rgb
     )
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -2953,7 +2953,7 @@ async def test_late_other_color_temperature_after_a_color_is_physical(
     white, machine_state = await _mixed_light(hass, source, RED_RGB)
     await _run(hass, freezer, (61 if source in ("effect", "warn") else 0) + 4)
     assert _attrs_of(hass, INSTANT)["molight_state"] == machine_state
-    assert _stamps(hass) == {}
+    assert _timestamps(hass) == {}
 
     white.wall(color_temp_kelvin=4000)
     await settle(hass)
@@ -2961,10 +2961,10 @@ async def test_late_other_color_temperature_after_a_color_is_physical(
     attrs = _attrs_of(hass, INSTANT)
     if source in ("auto_on", "standby"):
         # The member was dark until then: a turn-on at the wall.
-        assert list(_stamps(hass)) == ["last_on_physical"]
+        assert list(_timestamps(hass)) == ["last_on_physical"]
         assert attrs["color_temp_kelvin"] == 4000
     else:
-        assert list(_stamps(hass)) == ["last_color_change_physical"]
+        assert list(_timestamps(hass)) == ["last_color_change_physical"]
         assert attrs["molight_state"] == STATE_ACTIVE
         assert attrs["warning_active"] is False
     await _run(hass, freezer, 7)  # the member's reply to a restore after a stage

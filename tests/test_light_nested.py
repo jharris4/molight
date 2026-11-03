@@ -48,7 +48,7 @@ INNER_OCC = "binary_sensor.inner_occ"
 SCHEDULE = "binary_sensor.settings_schedule"
 WINDOW = "binary_sensor.window"
 OUTER_KINDS = ["regular", "scheduled", "follow"]
-HUMAN_STAMPS = (
+HUMAN_TIMESTAMPS = (
     "last_on_physical",
     "last_on_virtual",
     "last_off_manual",
@@ -283,7 +283,7 @@ async def test_service_call_on_the_inner_light_is_a_persons(
 
 @pytest.mark.asyncio
 async def test_outer_commands_still_match_as_echoes(hass: HomeAssistant) -> None:
-    """The inner stamps the outer's own commands as virtual changes, which the
+    """The inner records the outer's own commands as virtual changes, which the
     outer recognizes as its echoes, not as a person's."""
     await _nested(hass, "regular", occupancy=OCC)
     await _lit_by_outer(hass, "regular")
@@ -394,7 +394,7 @@ async def _outer_over_edited_group(
 async def test_warn_dim_through_an_edited_group_does_not_restart_the_outer_timer(
     hass: HomeAssistant, freezer, topology: str
 ) -> None:
-    """The group hides the inner light's stamps; its warn stage is still its own."""
+    """The group hides the inner light's timestamps; its warn stage is still its own."""
     inner = make_light_entry(
         name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
     )
@@ -550,15 +550,17 @@ async def test_inner_lit_by_itself_does_not_restart_a_running_outer_timer(
     assert hass.states.get(INNER_B).state == "off"
     assert hass.states.get(OUTER).state == "on"
     await _tick(hass, freezer, 39)
-    stamps = {stamp: _attrs(hass, INNER_B)[stamp] for stamp in HUMAN_STAMPS}
+    timestamps = {attr: _attrs(hass, INNER_B)[attr] for attr in HUMAN_TIMESTAMPS}
 
     hass.states.async_set(INNER_OCC if trigger == "occupancy" else WINDOW, "on")
     await settle(hass)
     assert hass.states.get(INNER_B).state == "on"
-    assert {stamp: _attrs(hass, INNER_B)[stamp] for stamp in HUMAN_STAMPS} == stamps
+    assert {
+        attr: _attrs(hass, INNER_B)[attr] for attr in HUMAN_TIMESTAMPS
+    } == timestamps
     assert _attrs(hass, OUTER)["last_on_physical"] is None
 
-    # The timeout started at the turn-on still ends the on-period.
+    # The timer started at the turn-on still ends the on-period.
     await _tick(hass, freezer, 11)
     assert hass.states.get(OUTER).state == "off"
     assert hass.states.get(INNER_A).state == "off"
@@ -578,7 +580,7 @@ async def test_inner_lit_by_a_person_restarts_a_running_outer_timer(
     await _tick(hass, freezer, 50)
     assert hass.states.get(INNER_B).state == "off"
 
-    # Held, so the inner light's own timeout does not end the test early.
+    # Held, so the inner light's own timer does not end the test early.
     await hass.services.async_call(
         "switch", "turn_off", {"entity_id": "switch.inner_b_auto_off"}, blocking=True
     )
@@ -692,11 +694,11 @@ async def _held_inner_under(hass: HomeAssistant, *outer: MockConfigEntry) -> Rea
 async def test_turn_on_of_a_lit_inner_light_restarts_the_outer_timer(
     hass: HomeAssistant, freezer, command: str, levels: int
 ) -> None:
-    """Only the inner light's stamps say so, through one wrapper or two."""
+    """Only the inner light's timestamps say so, through one wrapper or two."""
     wrappers = [make_light_entry(name="Outer", lights=[INNER], timeout=60)]
     top = OUTER
     if levels == 2:
-        # The middle light is held too, so the top light's timeout governs.
+        # The middle light is held too, so the top light's timer governs.
         wrappers.append(make_light_entry(name="Top", lights=[OUTER], timeout=60))
         top = "light.top"
     bulb = await _held_inner_under(hass, *wrappers)

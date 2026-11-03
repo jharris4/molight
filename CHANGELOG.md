@@ -305,7 +305,7 @@ longer needs a custom repository.
 ### Changed
 
 - Documentation emphasizes setting the occupancy timeout to match the real
-  sensor's own hold time, which everything downstream is anchored to.
+  sensor's own hold time, which everything downstream depends on.
 
 ## [1.4.0] - 2026-07-12
 
@@ -358,7 +358,7 @@ longer needs a custom repository.
 
 ### Changed
 
-- The maximum light timeout is raised from 1 hour to 4 hours.
+- A virtual light's maximum turn-off timeout is raised from 1 hour to 4 hours.
 - A virtual light's brightness always tracks the real lights it controls.
 
 ## [1.1.0] - 2026-07-04

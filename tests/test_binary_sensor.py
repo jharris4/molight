@@ -675,7 +675,7 @@ async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_fini
     via: str,
 ) -> None:
     """A second invalid report is no recovery: an edit after it still counts
-    the clear timeout, as edited, from the first dropout."""
+    the clear-after-unavailable timeout, as edited, from the first dropout."""
     entry = _dropout_entry()
     await setup_entries(hass, entry)
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -862,7 +862,7 @@ async def test_recovery_to_on_preserves_false_detection_clock(
 ) -> None:
     """An unavailable→on recovery mid-visit must not restart the on-duration clock.
 
-    Otherwise a long, genuine occupancy whose source is briefly unavailable
+    Otherwise a long, genuine visit whose source is briefly unavailable
     just before the clear measures its duration from the recovery moment and gets
     misclassified as a false detection (skipping the latest_occupied_time
     advance and giving the lights that reference it the off delay).
@@ -881,7 +881,7 @@ async def test_recovery_to_on_preserves_false_detection_clock(
     await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    # Long, genuine occupancy...
+    # Long, genuine visit...
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
     freezer.tick(timedelta(seconds=100))
@@ -1657,14 +1657,14 @@ async def test_combined_restored_on_carried_through_a_nested_maintain_sensor(
         ({"last_on_time": None}, None),
         ({}, "now"),
     ],
-    ids=["dated", "undated", "no-stamp"],
+    ids=["dated", "undated", "no-timestamp"],
 )
 @pytest.mark.parametrize("nested", [False, True])
 async def test_combined_dates_a_visit_as_its_trigger_does(
     hass: HomeAssistant, freezer, attributes: dict, dated: str | None, nested: bool
 ) -> None:
     """last_on_time is the trigger's own, through any depth: unknown when the
-    trigger could not date the visit, now for a sensor that keeps no stamp.
+    trigger could not date the visit, now for a sensor that keeps no timestamp.
     It survives a reload of the combined sensor."""
     hass.states.async_set("binary_sensor.m1", "off")
     hass.states.async_set("binary_sensor.m2", "off")
@@ -2512,7 +2512,7 @@ async def test_combined_retriggers_on_constituent_recovery(
 async def test_occupancy_discards_last_on_time_restored_with_off(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """An anchor restored alongside 'off' belongs to a finished visit.
+    """A last_on_time restored alongside 'off' belongs to a finished visit.
 
     Keeping it would let a fresh post-restart visit measure its on-duration
     from the previous visit's start, skewing classification.
@@ -2551,15 +2551,15 @@ def _grace_occupancy_entry() -> MockConfigEntry:
 async def test_occupancy_restores_last_on_time_with_on(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A visit still running at restart keeps its pre-restart anchor.
+    """A visit still running at restart keeps its pre-restart last_on_time.
 
     The post-restart clear then measures the full on-duration: a long-running
     occupancy is a real one, not a false detection timed from the restart.
     """
-    anchor = (datetime.now(UTC) - timedelta(seconds=100)).isoformat()
+    last_on_time = (datetime.now(UTC) - timedelta(seconds=100)).isoformat()
     mock_restore_cache(
         hass,
-        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": anchor})],
+        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": last_on_time})],
     )
     hass.set_state(CoreState.starting)
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -2571,7 +2571,7 @@ async def test_occupancy_restores_last_on_time_with_on(
 
     state = hass.states.get("binary_sensor.boot_occupancy")
     assert state.state == "on"
-    assert state.attributes["last_on_time"] == anchor
+    assert state.attributes["last_on_time"] == last_on_time
 
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set("binary_sensor.motion_1", "off")
@@ -2583,18 +2583,18 @@ async def test_occupancy_restores_last_on_time_with_on(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_classifies_short_visit_from_restored_anchor(
+async def test_occupancy_classifies_short_visit_from_restored_last_on_time(
     hass: HomeAssistant, freezer
 ) -> None:
     """A brief visit spanning the restart is still classified as false.
 
-    Without the restored anchor the visit would be unclassifiable and the
+    Without the restored last_on_time the visit would be unclassifiable and the
     clear would pass as genuine.
     """
-    anchor = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
+    last_on_time = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
     mock_restore_cache(
         hass,
-        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": anchor})],
+        [State("binary_sensor.boot_occupancy", "on", {"last_on_time": last_on_time})],
     )
     hass.set_state(CoreState.starting)
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -2619,7 +2619,7 @@ async def test_occupancy_classifies_short_visit_from_restored_anchor(
 async def test_occupancy_discards_malformed_restored_last_on_time(
     hass: HomeAssistant,
 ) -> None:
-    """A stored anchor that no longer parses is dropped, not a crash."""
+    """A stored last_on_time that no longer parses is dropped, not a crash."""
     mock_restore_cache(
         hass,
         [
@@ -2647,7 +2647,8 @@ async def test_occupancy_discards_malformed_restored_last_on_time(
 async def test_occupancy_seeds_last_on_time_from_source(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A mid-run reload without a restored on-time uses the source's last_changed."""
+    """A mid-run reload without a restored last_on_time uses the source's
+    last_changed."""
     hass.states.async_set("binary_sensor.motion_1", "on")
     freezer.tick(timedelta(seconds=10))
 
@@ -2701,14 +2702,14 @@ async def test_occupancy_does_not_seed_last_on_time_at_startup(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_does_not_stamp_on_time_for_late_loading_source(
+async def test_occupancy_does_not_record_last_on_time_for_late_loading_source(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A source first appearing 'on' during startup gets no on-time anchor.
+    """A source first appearing 'on' during startup gets no last_on_time.
 
     A source entity that loads after the MoLight entry (a retained MQTT
     state, a slow coordinator) delivers its pre-restart 'on' as an event;
-    stamping the startup moment would misclassify the first clear.
+    recording the startup moment would misclassify the first clear.
     """
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -3104,11 +3105,11 @@ async def test_combined_ignores_attribute_only_constituent_update(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_source_swap_drops_the_old_sources_anchor(
+async def test_occupancy_source_swap_drops_the_old_sources_last_on_time(
     hass: HomeAssistant, freezer
 ) -> None:
     """Switching the source to a sensor that is already on measures the next
-    clear from that sensor's own start, not the old source's anchor."""
+    clear from that sensor's own start, not the old source's last_on_time."""
     hass.set_state(CoreState.running)
     hass.states.async_set("binary_sensor.presence", "on")
     presence_on = datetime.now(UTC)

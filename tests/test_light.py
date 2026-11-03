@@ -1385,7 +1385,7 @@ async def test_light_restore_ignores_corrupt_attributes(
     assert state.attributes["pre_warn_brightness"] is None
 
 
-_STAMPED = {
+_TIMESTAMPS = {
     "last_on_physical": "2026-07-01T08:00:00+00:00",
     "last_on_virtual": "2026-07-01T08:01:00+00:00",
     "last_on_occupancy": "2026-07-01T08:02:00+00:00",
@@ -1403,14 +1403,14 @@ async def test_light_restore_keeps_valid_timestamps(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Every restored attribution and change timestamp survives a restart."""
-    mock_restore_cache(hass, [State("light.test_light", "off", _STAMPED)])
+    mock_restore_cache(hass, [State("light.test_light", "off", _TIMESTAMPS)])
 
     light_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(light_entry.entry_id)
     await hass.async_block_till_done()
 
     state = hass.states.get("light.test_light")
-    for attr, value in _STAMPED.items():
+    for attr, value in _TIMESTAMPS.items():
         assert state.attributes[attr] == value, attr
 
 

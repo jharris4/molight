@@ -73,7 +73,7 @@ Ships alone.
 
 ### 4. Occupancy timeout check
 
-- **Problem.** The README calls the occupancy timeout the anchor for everything downstream and says
+- **Problem.** The README says everything downstream depends on the occupancy timeout and that
   MoLight cannot read it. Set too high, a short visit is classified as a false detection and is
   turned off after the false-detection off delay; set wrong either way, turn-off timing drifts.
   Nothing tells the user.

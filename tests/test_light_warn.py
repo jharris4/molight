@@ -969,7 +969,7 @@ async def _pair_in_stage(
     return pair[touched], pair[1 - touched], calls
 
 
-def _wall_stamps(hass: HomeAssistant) -> list[str]:
+def _wall_timestamps(hass: HomeAssistant) -> list[str]:
     attrs = _state(hass).attributes
     return [key for key in WALL_KEYS if attrs[key] is not None]
 
@@ -1000,7 +1000,7 @@ async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_stamps(hass) == ["last_on_physical"]
+    assert _wall_timestamps(hass) == ["last_on_physical"]
     assert _state(hass).attributes["brightness"] == 180
     assert (other.is_on, other.brightness, other.hs_color) == (True, 200, GREEN)
     assert one.brightness == 180
@@ -1037,7 +1037,7 @@ async def test_wall_change_during_a_stage_restores_the_other_light(
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_stamps(hass) == [
+    assert _wall_timestamps(hass) == [
         f"last_{name}_change_physical"
         for name, key in (("brightness", "brightness"), ("color", "hs_color"))
         if key in change
@@ -1094,7 +1094,7 @@ async def test_wall_change_outside_a_warning_leaves_the_other_light_alone(
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_stamps(hass) == ["last_brightness_change_physical"]
+    assert _wall_timestamps(hass) == ["last_brightness_change_physical"]
     assert pair[1 - touched].brightness == 200
     assert [d for d in calls if d["domain"] == "light"] == []
 

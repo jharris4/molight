@@ -414,7 +414,7 @@ async def test_real_light_with_changed_entity_id_is_not_a_change_at_the_wall(
         assert state.attributes[attribute] == before[attribute]
     assert light_targets(calls, "turn_on") == light_targets(calls, "turn_off") == []
 
-    # The timeout turns the real light off under its new entity ID.
+    # The timer turns the real light off under its new entity ID.
     await tick(hass, freezer, 61)
     assert hass.states.get(VIRTUAL).state == "off"
     assert light_targets(calls, "turn_off") == [["light.kitchen_bulb", "light.real_2"]]

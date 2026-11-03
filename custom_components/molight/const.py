@@ -169,7 +169,7 @@ CONF_LIGHTS = "lights"  # list of real light entity_ids
 CONF_OUTSIDE_SCHEDULE_SETTINGS = "outside_schedule_settings"
 CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
 # State attribute naming the settings set a Virtual Scheduled Light is
-# currently using; also what it restores from while the schedule is unusable.
+# currently using; also what it restores from while the schedule is unreadable.
 ATTR_ACTIVE_SETTINGS = "active_settings"
 ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
 ACTIVE_SETTINGS_INSIDE = "inside_schedule"
@@ -395,7 +395,8 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 #   gate:         occupancy may only turn lights on inside the window; the
 #                 window end forces the lights off (the original behavior)
 #   gate_switch:  the same turn-on gate, but the window end reconciles an
-#                 already-on light from current sensor state and history
+#                 already-on light from current sensor state and
+#                 latest_occupied_time
 #   gate_keep:    the same turn-on gate, but the window end leaves an
 #                 already-on light in its current state
 CONF_SCHEDULE_MODE = "schedule_mode"
@@ -456,7 +457,7 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
 # like occupancy (only lights up when dark and inside a gate-mode window).
 # door_mode controls what the door state does after that:
-#   open:        opening turns the lights on with the normal timeout; the door
+#   open:        opening turns the lights on with the turn-off timer; the door
 #                is otherwise ignored (closing does nothing). A momentary
 #                trigger, like a light switch that pops back out.
 #   open_close:  the open door holds the lights on (no timer) while it stays
@@ -470,7 +471,8 @@ DOOR_MODE_OPEN_CLOSE = "open_close"
 DOOR_MODES = [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE]
 DEFAULT_DOOR_MODE = DOOR_MODE_OPEN
 # An open door whose sensor stays unavailable/unknown this long counts as
-# closed, as an occupancy sensor clears after its default unavailable timeout.
+# closed, as an occupancy sensor clears after its default
+# clear-after-unavailable timeout.
 DOOR_UNAVAILABLE_TIMEOUT = 60
 # How long an entity removed by a reload of its integration may take to come
 # back before it counts as gone (seconds).

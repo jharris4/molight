@@ -875,7 +875,7 @@ async def test_restart_missed_window_start_with_lights_already_on(
     hass: HomeAssistant,
 ) -> None:
     """Same boundary catch-up, but nothing to turn on; adopt SCHEDULED and
-    stamp the marker, leaving the already-on lights alone."""
+    record the marker, leaving the already-on lights alone."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, _follow_entry())
@@ -916,7 +916,7 @@ async def test_restart_spanning_into_next_window_applies_its_start(
     hass: HomeAssistant, freezer
 ) -> None:
     """Down from inside one window into the next: the earlier window's marker is
-    stale, so the new window's start is applied and stamped."""
+    stale, so the new window's start is applied and recorded."""
     later = "2026-07-03T21:00:00+00:00"
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "on", {"current_window_start": later})

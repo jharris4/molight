@@ -310,7 +310,7 @@ SECTION_SENSORS = "sensors"
 SECTION_ADVANCED = "advanced"
 SECTION_ON_VALUES = "turn_on_values"
 
-# Which flat config keys live in which section of the virtual-light form.
+# Which settings live in which section of the virtual-light form.
 _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_BEHAVIOR: (
         CONF_FALSE_OFF_DELAY,
@@ -468,7 +468,7 @@ def _flatten_light(user_input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _nest_light(values: dict[str, Any]) -> dict[str, Any]:
-    """Nest stored Virtual Light values into the form shape for a prefill."""
+    """Nest a stored settings mapping into the form shape for a prefill."""
     return _nest_sections(
         _derive_color_modes(values, _LIGHT_COLOR_GROUPS), _LIGHT_SECTIONS
     )
@@ -2094,7 +2094,7 @@ _SCHEDULED_LIGHT_SETTINGS_SETS = (
 )
 # Keys that live at the top level of a light entry (identity, members, the
 # schedule with its schedule mode or At schedule end, the two settings sets)
-# rather than inside one; conversion strips them when lifting flat entry settings
+# rather than inside one; conversion strips them when lifting a settings mapping
 # into a settings set and when flattening one back out.
 _LIGHT_ENTRY_KEYS = frozenset(
     {

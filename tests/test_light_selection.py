@@ -1328,11 +1328,11 @@ async def test_occupancy_after_an_overtaken_virtual_on_still_lights_the_room(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["door", "occupancy"])
-async def test_hold_released_during_slow_selection_still_starts_the_timeout(
+async def test_hold_released_during_slow_selection_still_starts_the_timer(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
     """A hold released while a turn-on waits for its selection leaves the
-    light its normal timeout, not on with no timer."""
+    light its turn-off timer, not on with no timer."""
     select = _SlowSelect(hass)
     sensor = f"binary_sensor.{trigger}"
     hass.states.async_set(sensor, "off")
@@ -2995,7 +2995,7 @@ async def test_resend_started_in_a_stage_yields_to_standby(
 # ---------------------------------------------------------------------------
 
 PRESET_LEVEL = 128
-WALL_STAMPS = (
+WALL_TIMESTAMPS = (
     "last_on_physical",
     "last_brightness_change_physical",
     "last_color_change_physical",
@@ -3055,9 +3055,9 @@ async def _park_real_resend(
     await asyncio.wait_for(select.started.wait(), 2)
 
 
-def _wall_stamps(hass: HomeAssistant) -> dict:
+def _wall_timestamps(hass: HomeAssistant) -> dict:
     attrs = hass.states.get("light.selection_light").attributes
-    return {name: attrs[name] for name in WALL_STAMPS if attrs[name] is not None}
+    return {name: attrs[name] for name in WALL_TIMESTAMPS if attrs[name] is not None}
 
 
 async def _land_preset(hass: HomeAssistant, select: _PresetSelect) -> None:
@@ -3100,7 +3100,7 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
     await _pass(hass, freezer, 61)
     await settle(hass)
     assert _molight_state(hass) == "warn"
-    before = _wall_stamps(hass)
+    before = _wall_timestamps(hass)
     await _park_real_resend(hass, light, select)
 
     await _pass(hass, freezer, 6)
@@ -3112,7 +3112,7 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
     assert light.brightness == 51
     assert state.attributes["molight_state"] == "standby"
     assert state.attributes["brightness"] == 51
-    assert _wall_stamps(hass) == before
+    assert _wall_timestamps(hass) == before
 
 
 class _ScenePreset(_PresetSelect):
@@ -3185,7 +3185,7 @@ async def test_select_on_device_after_a_manual_off_keeps_standby_suppressed(
     hass: HomeAssistant, freezer, reported: str
 ) -> None:
     """The manual off turned standby off until the next boundary. The preset
-    nobody asked for anymore lights the strip, which runs its timeout as any
+    nobody asked for anymore lights the strip, which runs its timer as any
     lit room, but is nobody's turn-on: the pause stands and the timer finishes
     in off, not at standby."""
     light = await _off_then_preset(hass, reported)
@@ -3288,7 +3288,7 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
         await _pass(hass, freezer, 6)
         await settle(hass)
         assert _molight_state(hass) == "warn"
-    before = _wall_stamps(hass)
+    before = _wall_timestamps(hass)
     await _park_real_resend(hass, light, select)
 
     data = {} if command == "restore" else {"brightness": 100}
@@ -3307,7 +3307,7 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
 
     state = hass.states.get("light.selection_light")
     assert state.attributes["molight_state"] == machine_state
-    assert _wall_stamps(hass) == before
+    assert _wall_timestamps(hass) == before
     if command == "blink":
         assert (light.is_on, other.is_on, state.state) == (False, False, "on")
         return
@@ -3319,7 +3319,7 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
     # The strip dimmed at the wall afterwards is a person again.
     light.wall(brightness=77)
     await settle(hass)
-    assert "last_brightness_change_physical" in _wall_stamps(hass)
+    assert "last_brightness_change_physical" in _wall_timestamps(hass)
     assert hass.states.get("light.selection_light").attributes["brightness"] == 77
 
 
@@ -3362,7 +3362,7 @@ async def test_raise_sent_during_a_replaced_standby_select_outlasts_its_preset(
     assert light.brightness == 204
     assert state.attributes["molight_state"] == "occupied"
     assert state.attributes["brightness"] == 204
-    assert _wall_stamps(hass) == {}
+    assert _wall_timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
@@ -3743,4 +3743,4 @@ async def test_select_on_device_as_the_select_call_returns_is_no_wall_turn_on(
     assert light.brightness == _LEVEL[trigger]
     assert state.attributes["brightness"] == _LEVEL[trigger]
     assert state.attributes["last_turn_on_selection_option"] == "Cozy"
-    assert _wall_stamps(hass) == {}
+    assert _wall_timestamps(hass) == {}

@@ -272,7 +272,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self.async_on_remove(self._gone.cancel_all)
         last = await self.async_get_last_state()
         self._latest_occupied_time = _restored_latest_occupied_time(last)
-        # A visit's anchor, its clear's classification and an occupied
+        # A visit's last_on_time, its clear's classification and an occupied
         # dropout describe one source; an options edit that switches the
         # source leaves them behind. A save that predates the source record
         # is trusted.
@@ -292,7 +292,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
                 # The flags describe this very clear, which still stands.
                 self._last_clear_false = bool(attrs.get("last_clear_false_detection"))
                 self._last_clear_unavailable = bool(attrs.get("last_clear_unavailable"))
-            # Only a visit that was still running owns its anchor: a
+            # Only a visit that was still running owns its last_on_time: a
             # last_on_time restored alongside an "off" state belongs to a
             # finished pre-restart visit and would skew the next
             # classification.
@@ -443,7 +443,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._dropout = None
         if new_state.state == "on":
             # A recovery from unavailable while already occupied continues the
-            # running visit; restamping last_on_time here would make a later
+            # running visit; recording last_on_time again here would make a later
             # clear measure the on-duration from the recovery moment and
             # misclassify a long visit as a false detection.
             if not self._attr_is_on:
@@ -554,7 +554,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save which source the saved anchor and classification belong to.
+        """Save which source the saved last_on_time and classification belong to.
 
         And when a running outage of it began.
         """
@@ -620,7 +620,7 @@ class VirtualCombinedOccupancySensor(
         self._seen_lots: dict[str, datetime] = {}
         # Constituents not yet seen: their first report is history.
         self._no_baseline: set[str] = set()
-        # Whether a constituent showed genuine presence in the running visit.
+        # Whether a constituent showed a genuine detection in the running visit.
         self._visit_genuine = False
         # When the visit started, as its trigger dated it; None when unwitnessed.
         self._last_on_time: datetime | None = None
@@ -1031,9 +1031,9 @@ class VirtualCombinedOccupancySensor(
     def _visit_started(self, *, witnessed: bool) -> datetime | None:
         """Return when the visit began, by the trigger sensors showing it.
 
-        The earliest of their own stamps, and unknown if any of them could
+        The earliest of their own timestamps, and unknown if any of them could
         not date its start: a late-loading source that loads occupied is not
-        a detection made now. One without a stamp was seen to start now.
+        a detection made now. One without a timestamp was seen to start now.
         """
         starts: list[datetime] = []
         for entity_id in self._trigger_sensors:
@@ -1081,7 +1081,7 @@ class VirtualCombinedOccupancySensor(
 
     @property
     def extra_restore_state_data(self) -> RestoredExtraData:
-        """Save the running visit's anchor and the constituents of the clear.
+        """Save the running visit's last_on_time and the constituents of the clear.
 
         Home Assistant saves as it starts, while a restored "on" may still
         wait for a maintain sensor to carry it: that wait is saved too.
@@ -1880,8 +1880,8 @@ class VirtualScheduleSensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
 # ---------------------------------------------------------------------------
 
 _NEG_INF = float("-inf")
-# Spells each source keeps between refreshes; only the oldest are dropped.
-_MAX_SPELLS = 100
+# States each source keeps between refreshes; only the oldest are dropped.
+_MAX_PASSED_THROUGH_STATES = 100
 # current_window_start for a schedule period with no known start: stable, so Follow
 # mode applies it only once.
 _ALWAYS_ON_MARKER = "always_on"
@@ -1993,7 +1993,7 @@ class _SourceChanges:
 
     A refresh reads only each source's final state, so an off and on arriving
     together would leave no trace of the window that ended. passed_through
-    keeps the on and off spells (start, end, value) a source left, in order,
+    keeps the on and off states (start, end, value) a source passed through, in order,
     when it changed more than once.
     """
 
@@ -2014,8 +2014,10 @@ class _SourceChanges:
         if old is None or old.state not in ("on", "off"):
             return
         # Bounded for a schedule left unloaded while a source keeps changing.
-        spells = self.passed_through.setdefault(entity_id, deque(maxlen=_MAX_SPELLS))
-        spells.append(
+        states = self.passed_through.setdefault(
+            entity_id, deque(maxlen=_MAX_PASSED_THROUGH_STATES)
+        )
+        states.append(
             (
                 _state_since(old).timestamp(),
                 event.time_fired.timestamp(),
@@ -2400,7 +2402,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
             self._seen.passed_through.get(entity_id or "", ())
         ):
             following = segments[-1][0]
-            # Each spell came before the next, even when its state was written
+            # Each state came before the next, even when it was written
             # late and is dated after the start the next takes from its source.
             segments += [
                 (min(end, following), None),

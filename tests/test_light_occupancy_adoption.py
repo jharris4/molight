@@ -456,13 +456,13 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
     hass: HomeAssistant, freezer, fresh: str, pulse: str, warned: bool
 ) -> None:
     """A fresh timer, as a hold releasing or the door closing starts,
-    outlives a false detection: the sensors' old history is no reason to end
-    it early, and its warning still starts on time."""
+    outlives a false detection: the sensors' old latest_occupied_time is no
+    reason to end it early, and its warning still starts on time."""
     old = (dt_util.utcnow() - timedelta(seconds=600)).isoformat()
-    history = {"latest_occupied_time": old, "last_clear_false_detection": False}
+    sensor_attrs = {"latest_occupied_time": old, "last_clear_false_detection": False}
     hass.states.async_set(REAL, "off")
-    hass.states.async_set(OCC, "off", history)
-    hass.states.async_set(MAINT, "off", history)
+    hass.states.async_set(OCC, "off", sensor_attrs)
+    hass.states.async_set(MAINT, "off", sensor_attrs)
     hass.states.async_set(DOOR, "off")
     hass.states.async_set(HOLD, "off")
     entry = make_light_entry(
@@ -487,7 +487,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
         await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
         await settle(hass)
 
-    # Hold the light for longer than its timeout, then start the fresh one.
+    # Hold the light for longer than its timeout, then start the fresh timer.
     if fresh == "door":
         hass.states.async_set(DOOR, "on")
         await settle(hass)
@@ -517,12 +517,12 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
 
     await _tick(hass, freezer, 1)
     sensor = OCC if pulse == "occupancy" else MAINT
-    hass.states.async_set(sensor, "on", history)
+    hass.states.async_set(sensor, "on", sensor_attrs)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
     await _tick(hass, freezer, 2)
-    history["last_clear_false_detection"] = True
-    hass.states.async_set(sensor, "off", history)
+    sensor_attrs["last_clear_false_detection"] = True
+    hass.states.async_set(sensor, "off", sensor_attrs)
     await settle(hass)
 
     await _tick(hass, freezer, 56)

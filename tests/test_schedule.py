@@ -2324,7 +2324,13 @@ async def _back(hass: HomeAssistant, entry: MockConfigEntry, how: str) -> None:
         (("unavailable", "on"), False),
         (("unknown", "unavailable", "on"), False),
     ],
-    ids=["spell", "spell_then_outage", "unchanged", "outage", "two_outages"],
+    ids=[
+        "passed_through",
+        "passed_through_then_outage",
+        "unchanged",
+        "outage",
+        "two_outages",
+    ],
 )
 @pytest.mark.asyncio
 async def test_schedule_back_from_an_unload_knows_the_window_its_source_started(
@@ -2411,7 +2417,7 @@ async def test_schedule_back_from_an_unload_is_off_when_its_source_went_off(
 
 
 @pytest.mark.asyncio
-async def test_restart_keeps_the_saved_marker_over_a_source_spell_it_could_not_see(
+async def test_restart_keeps_the_saved_marker_over_a_source_state_it_could_not_see(
     hass: HomeAssistant, freezer
 ) -> None:
     """Across a restart nothing read the source: an off and on during the

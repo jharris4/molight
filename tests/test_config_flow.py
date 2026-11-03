@@ -1397,7 +1397,8 @@ async def test_scheduled_light_validates_each_settings_set_timeout(
 async def test_occupancy_edit_checks_both_settings_sets(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Raising an occupancy timeout respects the shorter of the two light timeouts."""
+    """Raising an occupancy timeout respects the shorter of the two turn-off
+    timeouts."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -5813,7 +5814,7 @@ async def _convert(hass: HomeAssistant, direction: str, light: str) -> None:
     "mode",
     [SCHEDULE_MODE_GATE, SCHEDULE_MODE_GATE_SWITCH, SCHEDULE_MODE_GATE_KEEP],
 )
-async def test_conversion_round_trip_restores_flat_config(
+async def test_conversion_round_trip_restores_settings_mapping(
     hass: HomeAssistant, mode: str
 ) -> None:
     """Converting to scheduled and back is lossless and leaks no top-level keys."""

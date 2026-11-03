@@ -1409,20 +1409,20 @@ async def test_event_sharing_a_timestamp_with_the_previous_one_still_fires(
     hass.states.async_set("light.living_room", "off")
     _seed(hass, "event.matter", types)
     await setup_entries(hass, light_entry, remote)
-    stamp = "2026-07-27T11:00:00.000+00:00"
+    timestamp = "2026-07-27T11:00:00.000+00:00"
 
     hass.states.async_set(
-        "event.matter", stamp, {"event_type": "initial_press", "event_types": types}
+        "event.matter", timestamp, {"event_type": "initial_press", "event_types": types}
     )
     hass.states.async_set(
-        "event.matter", stamp, {"event_type": "short_release", "event_types": types}
+        "event.matter", timestamp, {"event_type": "short_release", "event_types": types}
     )
     await settle(hass)
     assert _vlight(hass).state == "on"
 
     hass.states.async_set(
         "event.matter",
-        stamp,
+        timestamp,
         {"event_type": "short_release", "event_types": types, "battery": 50},
     )
     await settle(hass)

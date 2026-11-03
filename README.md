@@ -63,7 +63,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 
 The usual order:
 
-1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. It's the anchor for everything downstream, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
+1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. Everything downstream depends on it, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 2. Create a **Virtual Light** per room or light group, with the real `light` entities as its member lights, referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.

@@ -796,11 +796,11 @@ async def test_unregistered_real_light_reloading_keeps_its_timer(
     await setup_entries(hass, make_light_entry(timeout=60))
     await turn_on(hass)
     await tick(hass, freezer, 30)
-    stamp = attrs(hass)["last_on_physical"]
+    timestamp = attrs(hass)["last_on_physical"]
 
     await reload_unregistered(hass, freezer, MEMBER)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
-    assert attrs(hass)["last_on_physical"] == stamp
+    assert attrs(hass)["last_on_physical"] == timestamp
     await tick(hass, freezer, 28)
     assert hass.states.get(VIRTUAL).state == "on"
     await tick(hass, freezer, 2)

@@ -275,10 +275,10 @@ class _SelectionHass(runner.HomeAssistantClient):
     asked to.
     """
 
-    def __init__(self, *, applies: bool, stamps: bool = True) -> None:
+    def __init__(self, *, applies: bool, records: bool = True) -> None:
         super().__init__()
         self.applies = applies
-        self.stamps = stamps
+        self.records = records
         self.states: dict[str, dict[str, Any]] = {
             runner.VIRTUAL_OCCUPANCY: {"state": "off", "attributes": {}},
             runner.RAW_LIGHT: {"state": "off", "attributes": {}},
@@ -319,7 +319,7 @@ class _SelectionHass(runner.HomeAssistantClient):
             },
         }
         light = self.states[runner.VIRTUAL_LIGHT]["attributes"]
-        if self.stamps:
+        if self.records:
             light["last_on_occupancy"] = "2026-10-01T00:01:00+00:00"
         if self.applies:
             self.states[runner.TARGET_SELECT]["state"] = "Cozy"
@@ -348,7 +348,7 @@ def test_trigger_and_assert_fails_without_a_new_occupancy_turn_on(
 ) -> None:
     with pytest.raises(AssertionError, match="a new occupancy turn-on"):
         runner.trigger_and_assert(
-            _SelectionHass(applies=True, stamps=False),
+            _SelectionHass(applies=True, records=False),
             runner.pct(30),
             "Cozy",
             source="fixed",

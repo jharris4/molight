@@ -618,7 +618,7 @@ async def test_failed_group_turn_on_nobody_answers_goes_idle_once_settled(
 async def test_slow_member_answering_after_another_rejected_the_turn_off_keeps_it_off(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """The mirror: the lit member took the timeout's turn-off that a dark
+    """The mirror: the lit member took the timer's turn-off that a dark
     member's integration rejected, and reports off a moment later. The
     light does not come back on meanwhile, and the off is its own."""
     hass.states.async_set(OCC, "off")
@@ -697,7 +697,7 @@ async def test_failed_stage_turn_on_with_nothing_lit_ends_the_on_period(
 async def test_failed_turn_off_leaves_the_light_reporting_on_until_sent_again(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A member whose integration raises at the timeout's turn-off still
+    """A member whose integration raises at the timer's turn-off still
     burns: the light reports on, not off over a lit room, and sends the off
     again after another timeout."""
     hass.states.async_set(OCC, "off")
@@ -2178,7 +2178,7 @@ async def test_follow_member_recovers_lit_outside_window_is_turned_off(
 
     Regression: unavailable → on used to be read as a physical turn-on and ran
     a fresh timer, so a strip that turns its LEDs on at boot lit the room until
-    the timeout (or someone) turned it off.
+    the timer (or someone) turned it off.
     """
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "off")
@@ -2748,7 +2748,7 @@ async def test_unreadable_sensor_keeps_its_hold_while_other_holds_release(
 async def test_sensor_removed_mid_reload_releases_its_hold(
     hass: HomeAssistant, freezer, role: str
 ) -> None:
-    """A sensor deleted while unloaded is no outage: the light gets a timeout."""
+    """A sensor deleted while unloaded is no outage: the light gets a timer."""
     sensor = await _held_room_loses_sensor(hass, role, "reload")
     hass.states.async_set(REAL, "on")  # the light reloads, and adopts it
     await _release_other_holds(hass, freezer)
@@ -3219,7 +3219,7 @@ async def test_gate_start_an_outage_blocked_is_applied_after_the_light_seeds_aga
 async def test_gate_reading_off_after_the_light_seeds_again_ends_no_window(
     hass: HomeAssistant, freezer, mode: str, how: str
 ) -> None:
-    """A light on through the outage keeps the timeout its seed gave it."""
+    """A light on through the outage keeps the timer its seed gave it."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(REAL, "off")
     light = make_light_entry(schedule=SCHED, schedule_mode=mode)

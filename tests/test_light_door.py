@@ -4,7 +4,7 @@ A configured door entity drives the light directly. Opening the door is a
 turn-on trigger, gated by illuminance/a gate-mode schedule exactly like
 occupancy. door_mode then decides what the door state does afterwards:
 
-  open:         opening lights the room with the normal timeout; the door is
+  open:         opening lights the room with the turn-off timer; the door is
                 otherwise ignored (a momentary trigger, closing does nothing).
   open_close:   the open door holds the light on (OCCUPIED, no timer) while it
                 stays open; closing starts the turn-off timer, deferring to any
@@ -100,7 +100,7 @@ def _record_service_calls(hass: HomeAssistant) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None:
-    """Opening the door lights the room (ACTIVE) with the normal timeout."""
+    """Opening the door lights the room (ACTIVE) with the turn-off timer."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
@@ -112,7 +112,7 @@ async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["last_on_door"] == datetime.now(UTC).isoformat()
 
-    # The normal light_timeout applies even while the door stays open.
+    # The turn-off timer applies even while the door stays open.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)

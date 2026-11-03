@@ -21,7 +21,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.binary_sensor import (
-    _MAX_SPELLS,
+    _MAX_PASSED_THROUGH_STATES,
     _NEG_INF,
     _kleene,
     _Timeline,
@@ -2284,12 +2284,12 @@ async def test_changes_arriving_together_that_leave_no_gap_keep_the_window(
         ("other_input_on", ("off", "on"), False),
     ],
     ids=[
-        "spell",
-        "spell_nested",
-        "spell_inverted_output",
+        "passed_through",
+        "passed_through_nested",
+        "passed_through_inverted_output",
         "unchanged",
         "outage",
-        "spell_under_another_input",
+        "passed_through_under_another_input",
     ],
 )
 @pytest.mark.asyncio
@@ -2416,7 +2416,7 @@ async def test_an_off_between_two_sources_survives_later_changes_of_one(
 
 
 @pytest.mark.asyncio
-async def test_an_unloaded_combination_keeps_only_the_latest_spells(
+async def test_an_unloaded_combination_keeps_only_the_latest_states(
     hass: HomeAssistant, freezer
 ) -> None:
     """A source that keeps changing while the combination is unloaded is
@@ -2429,12 +2429,12 @@ async def test_an_unloaded_combination_keeps_only_the_latest_spells(
     assert await hass.config_entries.async_unload(out.entry_id)
     await settle(hass)
 
-    for value in ["off", "on"] * _MAX_SPELLS:
+    for value in ["off", "on"] * _MAX_PASSED_THROUGH_STATES:
         freezer.tick(timedelta(seconds=1))
         hass.states.async_set("binary_sensor.src", value)
         await settle(hass)
 
-    spells = hass.data[DATA_SCHEDULE_WATCH][out.entry_id].passed_through
-    kept = spells["binary_sensor.mirror"]
-    assert len(kept) == _MAX_SPELLS
+    passed_through = hass.data[DATA_SCHEDULE_WATCH][out.entry_id].passed_through
+    kept = passed_through["binary_sensor.mirror"]
+    assert len(kept) == _MAX_PASSED_THROUGH_STATES
     assert kept[-1][1] == dt_util.utcnow().timestamp()

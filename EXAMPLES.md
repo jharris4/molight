@@ -164,7 +164,7 @@ Schedule sensor: binary_sensor.porch_schedule
 Schedule mode:   Follow    # on at window start, off at window end
 ```
 
-**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** modes instead if occupancy should turn the light on *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and sensor history, and **Gate and keep state** lets it finish its timer (Example 6).
+**Follow** = porch-light behavior; the schedule window owns the light but manual changes mid-window still stand. It gates nothing outside the window: add a motion sensor and it lights the porch at 2pm too. Use one of the **Gate** modes instead if occupancy should turn the light on *only inside* the window: **Gate and turn off** forces it off at the end (Example 5), **Gate and switch state** recalculates an on light from current conditions and the sensors' `latest_occupied_time`, and **Gate and keep state** lets it finish its timer (Example 6).
 
 ---
 
@@ -226,7 +226,7 @@ Schedule mode:     Gate and keep state
 Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the schedule window ends. Someone walking in at 05:58 keeps the light until their timer finishes at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
 
 - **Gate and turn off** (Example 5) would switch the light off at 06:00, mid-stairs.
-- **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and history, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
+- **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and `latest_occupied_time`, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
 
 Two things every Gate mode does at 22:00 that are easy to miss: if someone is already on the stairs when the schedule window starts (the occupancy sensor is on and it's dark), the light turns on right then; and if the light is already on, that person holds it. The window start never turns a light off.
 
@@ -246,9 +246,9 @@ Door sensor:       binary_sensor.storage_door   # a real contact sensor (on = op
 Door mode:         Open & close                 # on while open, timer starts when closed
 ```
 
-Open the door and the light stays on the whole time it's open, with no timeout while you're rummaging. Close it and the turn-off timer (the **Turn-off timeout**) starts.
+Open the door and the light stays on the whole time it's open, with no timer while you're rummaging. Close it and the turn-off timer (the **Turn-off timeout**) starts.
 
-- Pick **On open** instead if you only want the *opening* to turn the light on and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
+- Pick **On open** instead if you only want the *opening* to turn the light on and then leave the turn-off timer to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In **Open & close** mode, if the room goes dark while the door is still standing open, the light comes on then.
 - In **Open & close** mode, closing the door **defers to presence**: if the light also references an occupancy sensor and it still sees someone (or a keep-on entity is holding auto-off), the lights stay on instead of dropping on a person who just shut the door behind them. With an illuminance sensor in **Control** mode, occupancy only counts while it's dark, as for turning the light on; in **Gate only** mode it holds the lit room whatever the reading.
 
@@ -298,7 +298,7 @@ Auto-on color temperature: 2200                  # warm night light
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
 - With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a timer already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
-- Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic turn-off boundary.
+- Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors, `latest_occupied_time` and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic turn-off boundary.
 - Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, off warning sequence, transitions, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which settings set is active; **Configure** walks the same three forms again to edit either settings set.
 

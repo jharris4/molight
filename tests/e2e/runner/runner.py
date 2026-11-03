@@ -2526,7 +2526,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
     # Six seconds into the 12 s timer a virtual turn-on restarts the timer,
-    # so the old occupancy history and the live timer now disagree.
+    # so the old latest_occupied_time and the live timer now disagree.
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=6
     )
@@ -2553,7 +2553,8 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
             client,
             RAW_MULTI_RGB,
             lambda state: state["state"] == "on",
-            "on: gate_keep leaves the restarted timer untouched past the old history",
+            "on: gate_keep leaves the restarted timer untouched past the old "
+            "latest_occupied_time",
             duration=6,
         )
         client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
@@ -2564,13 +2565,14 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
             client,
             RAW_MULTI_RGB,
             lambda state: state["state"] == "on",
-            "on until the finish time from occupancy history",
+            "on until the finish time from latest_occupied_time",
             duration=max(0, cleared + 10 - time.monotonic()),
         )
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
-            "off soon: gate_switch recomputed the finish time from occupancy history",
+            "off soon: gate_switch recomputed the finish time from "
+            "latest_occupied_time",
             timeout=max(1, restarted_timer - time.monotonic()),
         )
         wait_machine_state(client, "idle", GATE_MODE_LIGHT)
@@ -2778,7 +2780,7 @@ def assert_multi_light_routing(client: HomeAssistantClient) -> None:
                 "last_color_change_virtual",
             )
         ),
-        "stamping the virtual turn-on, brightness, and color changes",
+        "recording the virtual turn-on, brightness, and color changes",
     )
     client.wait_state(
         RAW_MULTI_ON_OFF,
@@ -4207,7 +4209,7 @@ def run_auto_off_prepare() -> None:
     )
 
     AUTO_OFF_SNAPSHOT.write_text(json.dumps({"entry_id": entry_id}))
-    print("PASS: disabled auto-off held the light past occupancy timeout")
+    print("PASS: disabled auto-off held the light past its turn-off timeout")
 
 
 def run_auto_off_restart() -> None:
@@ -4341,7 +4343,7 @@ def run_restart_warning_verify() -> None:
             and state["attributes"].get("warning_active") is True
             and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
-        "running a fresh warning after the restored timeout",
+        "running a fresh warning after the restored timer",
         timeout=20,
     )
     if warning["state"] != "on":
@@ -5036,7 +5038,7 @@ def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
             state["attributes"].get("last_on_illuminance") is not None
             and state["attributes"].get("molight_state") == "countdown"
         ),
-        "counting down the remainder, stamped as an illuminance turn-on",
+        "counting down the remainder, recorded as an illuminance turn-on",
     )
     assert_state_stays(
         client,
@@ -5065,7 +5067,7 @@ def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
 
 
 def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
-    """Going dark turns a light on again only for a timer it still has left."""
+    """Going dark turns a light on again only with time left on its turn-off timer."""
     sensor_entry_id = create_entry(
         client,
         "illuminance",
@@ -5091,11 +5093,11 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off: going dark does not light a room with no on-history",
+        "off: going dark does not light a room that was never lit",
         duration=2.5,
     )
     if client.state(DUSK_LIGHT)["attributes"].get("last_on_illuminance") is not None:
-        raise AssertionError("A never-lit room was stamped with an illuminance turn-on")
+        raise AssertionError("A never-lit room recorded an illuminance turn-on")
     client.call_service("light", "turn_on", {"entity_id": DUSK_LIGHT})
     client.wait_state(
         RAW_MULTI_RGB,
@@ -5118,7 +5120,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
     remove_entry_and_entity(client, sensor_entry_id, DUSK_ILLUMINANCE)
     print(
-        "PASS: going dark turns a light on again only with timer left, stamped as such"
+        "PASS: going dark turns a light on again only with timer left, recorded as such"
     )
 
 
@@ -5877,7 +5879,7 @@ def expect_late_end_owed(client: HomeAssistantClient, snapshot: dict[str, Any]) 
 def expect_late_end_applied(
     client: HomeAssistantClient, snapshot: dict[str, Any]
 ) -> None:
-    """A member that loads lit is turned off, never adopted with a timeout."""
+    """A member that loads lit is turned off, never adopted with a timer."""
     for member in (RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF):
         client.wait_state(
             member,
@@ -6545,7 +6547,7 @@ def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
             and state["attributes"].get("last_on_physical") not in (None, first_on)
             and state["attributes"].get("brightness") == 120
         ),
-        "active again with a fresh wall turn-on stamp and the dimmed brightness",
+        "active again with a fresh wall turn-on timestamp and the dimmed brightness",
     )
 
     # Every member switched off at the wall -> idle; one still on keeps it on.
@@ -7163,7 +7165,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", GRACE_BOTH_LIGHT)
 
-    # Genuine presence on the maintain side earns the turn-off timer.
+    # A genuine detection on the maintain side earns the turn-off timer.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, True)
@@ -8987,7 +8989,7 @@ def run_own_system_turn_on_scenarios(client: HomeAssistantClient) -> None:
 # Longer than the 5 s Home Assistant keeps a command's context on a light.
 LONG_FADE = 7
 # What a change at the wall leaves on a virtual light.
-WALL_STAMPS = (
+WALL_TIMESTAMPS = (
     "last_on_physical",
     "last_brightness_change_physical",
     "last_color_change_physical",
@@ -8995,15 +8997,15 @@ WALL_STAMPS = (
 )
 
 
-def wall_stamps(state: dict[str, Any]) -> dict[str, Any]:
+def wall_timestamps(state: dict[str, Any]) -> dict[str, Any]:
     """Return a virtual light's records of changes at the wall."""
-    return {name: state["attributes"].get(name) for name in WALL_STAMPS}
+    return {name: state["attributes"].get(name) for name in WALL_TIMESTAMPS}
 
 
 def watch_long_fade(
     client: HomeAssistantClient,
     light: str,
-    stamps: dict[str, Any],
+    timestamps: dict[str, Any],
     machine_state: str,
     brightness: int | None,
     rgb: list[int] | None = None,
@@ -9020,10 +9022,10 @@ def watch_long_fade(
         state = client.state(light)
         if (
             state["attributes"].get("molight_state") != machine_state
-            or wall_stamps(state) != stamps
+            or wall_timestamps(state) != timestamps
         ):
             raise AssertionError(
-                f"Expected {light} to stay {machine_state} with {stamps} "
+                f"Expected {light} to stay {machine_state} with {timestamps} "
                 f"through its own fade; observed {state}"
             )
         member = client.state(RAW_MULTI_RGB)
@@ -9034,7 +9036,7 @@ def watch_long_fade(
     member = wait_member(client, RAW_MULTI_RGB, brightness)
     if rgb is not None and list(member["attributes"].get("rgb_color") or []) != rgb:
         raise AssertionError(f"The fade ended at another color than {rgb}: {member}")
-    return wall_stamps(wait_machine_state(client, machine_state, light))
+    return wall_timestamps(wait_machine_state(client, machine_state, light))
 
 
 def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
@@ -9071,19 +9073,25 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         "Fade light",
     )
     assert_entry_loaded(client, entry_id)
-    stamps = wall_stamps(client.state(FADE_LIGHT))
+    timestamps = wall_timestamps(client.state(FADE_LIGHT))
 
     set_timer_motion(client, True)
     wait_machine_state(client, "occupied", FADE_LIGHT)
-    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "occupied", pct(80), blue)
+    timestamps = watch_long_fade(
+        client, FADE_LIGHT, timestamps, "occupied", pct(80), blue
+    )
     checkpoint("a 7 s automatic fade in, reported in steps, stayed the sensor's")
 
     # Complementary stage colors fade through gray; neither is a recolor.
     set_timer_motion(client, False)
     wait_machine_state(client, "effect", FADE_LIGHT)
-    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "effect", pct(40), green)
+    timestamps = watch_long_fade(
+        client, FADE_LIGHT, timestamps, "effect", pct(40), green
+    )
     wait_machine_state(client, "warn", FADE_LIGHT)
-    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "warn", pct(20), magenta)
+    timestamps = watch_long_fade(
+        client, FADE_LIGHT, timestamps, "warn", pct(20), magenta
+    )
     checkpoint("7 s effect and warn fades kept the warning running")
 
     # A turn-on restores the pre-warning look over the caller's own transition.
@@ -9091,7 +9099,9 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         "light", "turn_on", {"entity_id": FADE_LIGHT, "transition": LONG_FADE}
     )
     wait_machine_state(client, "active", FADE_LIGHT)
-    stamps = watch_long_fade(client, FADE_LIGHT, stamps, "active", pct(80), blue)
+    timestamps = watch_long_fade(
+        client, FADE_LIGHT, timestamps, "active", pct(80), blue
+    )
     checkpoint("a 7 s fade back to the pre-warning look was not a change at the wall")
 
     # Late in the next stage's fade, brighter at the wall is still a person.
@@ -9105,7 +9115,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("brightness") == 250
             and state["attributes"].get("last_brightness_change_physical")
-            != stamps["last_brightness_change_physical"]
+            != timestamps["last_brightness_change_physical"]
         ),
         "active at the wall's 250, the warning cancelled",
     )
@@ -9114,18 +9124,18 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         lambda state: list(state["attributes"].get("rgb_color") or []) == blue,
         "back at the pre-warning blue",
     )
-    stamps = wall_stamps(client.state(FADE_LIGHT))
+    timestamps = wall_timestamps(client.state(FADE_LIGHT))
     checkpoint("brighter at the wall 5.6 s into a stage's fade cancelled the warning")
 
     # The whole sequence again, to the fade to off: dimmer steps, then off.
     wait_machine_state(client, "effect", FADE_LIGHT)
     wait_machine_state(client, "warn", FADE_LIGHT)
     client.wait_state(FADE_LIGHT, lambda state: state["state"] == "off", "off")
-    watch_long_fade(client, FADE_LIGHT, stamps, "idle", None)
+    watch_long_fade(client, FADE_LIGHT, timestamps, "idle", None)
     assert_state_stays(
         client,
         FADE_LIGHT,
-        lambda state: state["state"] == "off" and wall_stamps(state) == stamps,
+        lambda state: state["state"] == "off" and wall_timestamps(state) == timestamps,
         "off, with no off at the wall recorded for its own fade",
         duration=1,
     )
@@ -9161,16 +9171,20 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         },
     )
     assert_entry_loaded(client, scheduled_entry_id)
-    stamps = wall_stamps(client.state(FADE_SCHEDULED_LIGHT))
+    timestamps = wall_timestamps(client.state(FADE_SCHEDULED_LIGHT))
     client.set_state(RAW_REMOVAL_MOTION, "on")
     wait_machine_state(client, "standby", FADE_SCHEDULED_LIGHT)
-    stamps = watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "standby", pct(10))
+    timestamps = watch_long_fade(
+        client, FADE_SCHEDULED_LIGHT, timestamps, "standby", pct(10)
+    )
     set_timer_motion(client, True)
     wait_machine_state(client, "occupied", FADE_SCHEDULED_LIGHT)
-    stamps = watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "occupied", pct(80))
+    timestamps = watch_long_fade(
+        client, FADE_SCHEDULED_LIGHT, timestamps, "occupied", pct(80)
+    )
     set_timer_motion(client, False)
     wait_machine_state(client, "standby", FADE_SCHEDULED_LIGHT)
-    watch_long_fade(client, FADE_SCHEDULED_LIGHT, stamps, "standby", pct(10))
+    watch_long_fade(client, FADE_SCHEDULED_LIGHT, timestamps, "standby", pct(10))
     client.set_state(RAW_REMOVAL_MOTION, "off")
     wait_member(client, RAW_MULTI_RGB, None)
     remove_entry_and_entity(client, scheduled_entry_id, FADE_SCHEDULED_LIGHT)
@@ -9465,7 +9479,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_MULTI_DIMMER, "off")
     client.set_available(RAW_MULTI_DIMMER, True)
     wait_parked_calls(client, 1)
-    stamps = wall_stamps(client.state(PARK_LIGHT))
+    timestamps = wall_timestamps(client.state(PARK_LIGHT))
     client.call_service(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
     )
@@ -9479,7 +9493,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         return (
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("brightness") == 100
-            and wall_stamps(state) == stamps
+            and wall_timestamps(state) == timestamps
         )
 
     assert_state_stays(

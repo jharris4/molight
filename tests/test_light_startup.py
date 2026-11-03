@@ -371,7 +371,7 @@ async def test_manual_off_in_window_survives_a_crash_after_restart(
 async def test_standby_survives_a_crash_after_restart(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light at standby goes back there, not to a timeout."""
+    """A light at standby goes back there, not to a timer."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     entry = _standby_entry()
@@ -785,7 +785,7 @@ async def _lit_before_switch_end(hass: HomeAssistant, entry) -> _Members:
 async def test_missed_switch_end_with_the_member_known(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """The outside settings' history says the light is already due off."""
+    """The outside settings' latest_occupied_time says the light is already due off."""
     entry = _switch_entry()
     real = await _lit_before_switch_end(hass, entry)
     calls = await _restart_across_end(hass, entry, real, {REAL: boot})
@@ -818,7 +818,7 @@ async def test_missed_switch_end_is_owed_to_a_member_that_loads_late(
 
 @pytest.mark.asyncio
 async def test_new_on_period_replaces_an_owed_switch_end(hass: HomeAssistant) -> None:
-    """A light turned on under the outside settings runs its normal timeout."""
+    """A light turned on under the outside settings runs its turn-off timer."""
     entry = _switch_entry()
     real = await _lit_before_switch_end(hass, entry)
     calls = await _restart_across_end(hass, entry, real, {REAL: "placeholder"})
@@ -1153,7 +1153,7 @@ async def _restart_then_turn_on(
 async def test_turn_on_before_the_seed_replaces_a_missed_end(
     hass: HomeAssistant, freezer, mode: str
 ) -> None:
-    """A light lit on purpose while HA starts runs its normal timeout."""
+    """A light lit on purpose while HA starts runs its turn-off timer."""
     if mode == "switch":
         entry = _switch_entry()
         real = await _lit_before_switch_end(hass, entry)
@@ -1206,7 +1206,7 @@ async def test_turn_on_before_the_seed_leaves_no_end_owed_to_an_unreadable_membe
 async def test_turn_on_before_the_seed_replaces_a_missed_end_under_a_hold(
     hass: HomeAssistant, freezer, mode: str
 ) -> None:
-    """Releasing the hold starts the new on-period's timeout, not the old off."""
+    """Releasing the hold starts the new on-period's timer, not the old off."""
     entry = _end_entry(mode, [REAL], hold=True)
     real = await _lit_in_window(hass, entry, [REAL])
     calls = await _restart_then_turn_on(hass, entry, real, "on", hold=True)
@@ -1336,7 +1336,7 @@ async def _light_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
 async def test_raise_before_the_seed_replaces_a_restored_standby(
     hass: HomeAssistant, freezer, data: dict, level: int
 ) -> None:
-    """The raise stands, and its timeout drops the light back to standby."""
+    """The raise stands, and its timer drops the light back to standby."""
     _Members(hass, [REAL], {})
     entry = await _light_at_standby(hass)
 
@@ -1462,7 +1462,7 @@ async def test_member_switched_after_a_command_before_the_seed_is_read_as_it_is(
 
     assert _state(hass).state == ("off" if first_on else "on")
     assert _attrs(hass)["molight_state"] == (STATE_IDLE if first_on else STATE_ACTIVE)
-    # A light adopted on runs its timeout.
+    # A light adopted on runs its timer.
     await _tick(hass, freezer, 61)
     assert not lamp.is_on
     assert _state(hass).state == "off"
