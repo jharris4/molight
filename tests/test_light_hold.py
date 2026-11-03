@@ -3,7 +3,7 @@
 Auto-off is held while the companion "<name> Auto-off" switch is off or any
 configured keep-on entity is on. While held every automatic turn-off is
 suspended; turn-ons and manual control are unaffected. Releasing the hold
-re-evaluates the configured rules and otherwise starts a fresh full timer.
+re-evaluates the configured rules and otherwise starts a fresh timer.
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ async def test_companion_switch_created_default_on(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_switch_off_holds_timer(hass: HomeAssistant, freezer) -> None:
-    """With the switch off, the auto-off timer never fires."""
+    """With the switch off, the turn-off timer never finishes."""
     await setup_entries(hass, make_light_entry())
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -111,10 +111,8 @@ async def test_switch_off_holds_timer(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_switch_release_starts_fresh_full_timer(
-    hass: HomeAssistant, freezer
-) -> None:
-    """Turning the switch back on starts a fresh full timer (60s fixture)."""
+async def test_switch_release_starts_fresh_timer(hass: HomeAssistant, freezer) -> None:
+    """Turning the switch back on starts a fresh timer (60s fixture)."""
     await setup_entries(hass, make_light_entry())
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -165,7 +163,7 @@ async def test_switch_non_off_restore_defaults_to_enabled(
 
     assert hass.states.get(SWITCH).state == "on"
     assert _state(hass).attributes["auto_off_held"] is False
-    # The adopted light runs its normal timer.
+    # The adopted light runs its turn-off timer.
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
 
@@ -760,7 +758,7 @@ async def test_release_outside_a_gate_window_runs_a_fresh_timer(
     hass: HomeAssistant, freezer, mode: str, hold: str
 ) -> None:
     """Turned on manually outside a gate-mode window: no window ended while
-    held, so the release starts a fresh full timer."""
+    held, so the release starts a fresh timer."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(HOLD, "off")
     await setup_entries(
@@ -934,7 +932,8 @@ async def test_gate_switch_end_into_bright_control_respects_a_hold(
 async def test_hold_suppresses_false_detection_off_delay(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The false-detection off delay ends in an automatic off; held like the rest."""
+    """The false-detection off delay ends in an automatic turn-off; held like the
+    rest."""
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
@@ -1024,7 +1023,7 @@ async def test_reload_keeps_held_window_end_suppressed(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_reload_with_switch_on_runs_the_normal_timer(
+async def test_reload_with_switch_on_runs_the_turn_off_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A hold released before the reload is not carried into it."""
@@ -1043,11 +1042,11 @@ async def test_reload_with_switch_on_runs_the_normal_timer(
 
 
 @pytest.mark.asyncio
-async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None:
-    """A hold that lands in the same loop pass the timer fires still wins.
+async def test_hold_engaged_as_timer_finishes(hass: HomeAssistant, freezer) -> None:
+    """A hold that lands in the same loop pass the timer finishes still wins.
 
     The timer callback is a coroutine, so between its task being created and
-    executed a hold state-change can slip in; _timer_expired re-checks the
+    executed a hold state-change can slip in; _timer_finished re-checks the
     hold before acting. Driven white-box because the ordering can't be
     arranged deterministically through the event loop.
     """
@@ -1065,8 +1064,8 @@ async def test_hold_engaged_as_timer_fires(hass: HomeAssistant, freezer) -> None
         for p in async_get_platforms(hass, "molight")
         if VIRTUAL in p.entities
     )
-    # Simulate the already-dispatched timer firing after the hold engaged.
-    await light._timer_expired(dt_util.utcnow())
+    # Simulate the already-dispatched timer finishing after the hold engaged.
+    await light._timer_finished(dt_util.utcnow())
     await settle(hass)
 
     state = _state(hass)

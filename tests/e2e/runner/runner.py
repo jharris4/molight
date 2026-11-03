@@ -1609,7 +1609,7 @@ def set_hold(client: HomeAssistantClient, on: bool) -> None:
 
 
 def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
-    """A keep-on entity suspends automatic offs; release re-evaluates the rules."""
+    """A keep-on entity suspends automatic turn-offs; release re-evaluates the rules."""
     entry_id = create_entry(
         client,
         "light",
@@ -1630,7 +1630,7 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, entry_id)
     client.wait_state(HOLD_LIGHT, lambda state: state["state"] == "off", "off")
 
-    # Held: turn-ons still work, the countdown never arms, manual off still works.
+    # Held: turn-ons still work, the timer never starts, manual off still works.
     set_hold(client, True)
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
@@ -1647,7 +1647,7 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "off", "off")
     wait_machine_state(client, "idle", HOLD_LIGHT)
 
-    # Release with nobody there: a fresh full timer starts, then the light goes off.
+    # Release with nobody there: a fresh timer starts, then the light goes off.
     set_timer_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_timer_motion(client, False)
@@ -1659,7 +1659,7 @@ def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on: the release started a fresh full timer rather than turning off at once",
+        "on: the release started a fresh timer rather than turning off at once",
         duration=2.5,
     )
     client.wait_state(
@@ -1788,7 +1788,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
 
     # Inside settings: control-mode illuminance forces an occupied light off
     # when it goes bright, and open_close holds until closing starts the
-    # countdown. These contrasts prove the settings switch together.
+    # turn-off timer. These contrasts prove the settings switch together.
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
@@ -2018,7 +2018,7 @@ def run_timeout_warning_scenario(
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
-        "retrigger test initially on",
+        "re-trigger test initially on",
     )
     set_timer_motion(client, False)
     wait_timer_stage(client, "effect", pct(10))
@@ -2029,7 +2029,7 @@ def run_timeout_warning_scenario(
         or restored["attributes"].get("pre_warn_brightness") is not None
     ):
         raise AssertionError(
-            f"Retrigger did not clear warning_active and the snapshot: {restored}"
+            f"Re-trigger did not clear warning_active and the snapshot: {restored}"
         )
     client.wait_state(
         RAW_TIMER_LIGHT,
@@ -2044,7 +2044,7 @@ def run_timeout_warning_scenario(
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
-        "on at restored brightness past the cancelled warning deadline",
+        "on at restored brightness past the cancelled warning finish time",
         duration=light_timeout,
     )
 
@@ -2054,7 +2054,7 @@ def run_timeout_warning_scenario(
     client.remove_entry(timer_entry_id)
     wait_entry_removed(client, timer_entry_id, "Temporary timer-light")
     print(
-        f"PASS: countdown, effect and warn stages, final off, and retrigger cancel "
+        f"PASS: countdown, effect and warn stages, final off, and re-trigger cancel "
         f"({bulb})"
     )
 
@@ -2135,14 +2135,14 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         ),
         "showing the warn brightness and color",
     )
-    # Outlast the original deadline, and the five seconds during which HA keeps
+    # Outlast the original finish time, and the five seconds during which HA keeps
     # MoLight's command context on the member's state writes (a physical change
     # inside that window reads as MoLight's own echo).
     assert_state_stays(
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
-        "on past the original deadline after the physical dim restarted the timer",
+        "on past the original finish time after the physical dim restarted the timer",
         duration=6.5,
     )
     client.set_state(RAW_MULTI_RGB, "on", {"brightness": 120})
@@ -2185,7 +2185,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off after the timer ran out",
+        "off after the timer finished",
         duration=5.5,
     )
 
@@ -2362,7 +2362,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
             "on at the inside settings' brightness",
         )
         wait_machine_state(client, "occupied", SCHEDULE_END_ACTION_LIGHT)
-        # Leave the window during the inside settings' 30 s countdown, so keep
+        # Leave the window during the inside settings' 30 s timer, so keep
         # and switch are told apart by which timer the light runs on.
         set_timer_motion(client, False)
         wait_machine_state(client, "countdown", SCHEDULE_END_ACTION_LIGHT)
@@ -2389,12 +2389,12 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
             wait_machine_state(client, "idle", SCHEDULE_END_ACTION_LIGHT)
         elif schedule_end_action == "switch":
             # Recalculated against the outside settings: their 4 s timeout, not
-            # the inside countdown, now decides when the light goes off.
+            # the inside timer, now decides when the light goes off.
             assert_state_stays(
                 client,
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "on",
-                "on until the outside settings' timeout runs out",
+                "on until the outside settings' timer finishes",
                 duration=max(0, ended + 3 - time.monotonic()),
             )
             client.wait_state(
@@ -2409,7 +2409,7 @@ def run_schedule_end_action_scenarios(client: HomeAssistantClient) -> None:
                 client,
                 RAW_MULTI_RGB,
                 lambda state: state["state"] == "on",
-                "on: keep preserves the inside countdown past the outside timeout",
+                "on: keep preserves the inside timer past the outside timeout",
                 duration=6,
             )
             wait_machine_state(client, "countdown", SCHEDULE_END_ACTION_LIGHT)
@@ -2525,7 +2525,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
     cleared = time.monotonic()
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", GATE_MODE_LIGHT)
-    # Six seconds into the 12 s countdown a virtual turn-on restarts the timer,
+    # Six seconds into the 12 s timer a virtual turn-on restarts the timer,
     # so the old occupancy history and the live timer now disagree.
     assert_state_stays(
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=6
@@ -2537,7 +2537,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         client, RAW_MULTI_RGB, lambda state: state["state"] == "on", "on", duration=1
     )
     set_end_schedule(client, False)
-    # The restarted timer cannot fire before this, so an off by then came
+    # The restarted timer cannot finish before this, so an off by then came
     # from the window end.
     restarted_timer = restarted + 11
     if schedule_mode == "gate":
@@ -2558,19 +2558,19 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         )
         client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
     else:
-        # gate_switch recomputes the deadline from when occupancy last saw
+        # gate_switch recomputes the finish time from when occupancy last saw
         # someone, which is already nearly due, not from the virtual turn-on.
         assert_state_stays(
             client,
             RAW_MULTI_RGB,
             lambda state: state["state"] == "on",
-            "on until the deadline from occupancy history",
+            "on until the finish time from occupancy history",
             duration=max(0, cleared + 10 - time.monotonic()),
         )
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
-            "off soon: gate_switch recomputed the deadline from occupancy history",
+            "off soon: gate_switch recomputed the finish time from occupancy history",
             timeout=max(1, restarted_timer - time.monotonic()),
         )
         wait_machine_state(client, "idle", GATE_MODE_LIGHT)
@@ -2680,7 +2680,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "occupied", MAINTAIN_LIGHT)
 
-    # Both clear: the combined sensor clears and the light runs its countdown.
+    # Both clear: the combined sensor clears and the light runs its timer.
     set_timer_motion(client, False)
     combined = client.wait_state(
         COMBINED_OCCUPANCY, lambda state: state["state"] == "off", "off"
@@ -4202,7 +4202,7 @@ def run_auto_off_prepare() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the disabled three-second auto-off timeout",
+        "on past the disabled three-second turn-off timeout",
         duration=5,
     )
 
@@ -4240,12 +4240,12 @@ def run_auto_off_restart() -> None:
     client.wait_state(
         VIRTUAL_AUTO_OFF_LIGHT,
         lambda state: state["attributes"].get("auto_off_held") is False,
-        "running auto-off after re-enable",
+        "running the turn-off timer after re-enable",
     )
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off after the fresh countdown",
+        "off after the fresh timer",
         timeout=10,
     )
     wait_machine_state(client, "idle", VIRTUAL_AUTO_OFF_LIGHT)
@@ -4253,7 +4253,7 @@ def run_auto_off_restart() -> None:
     client.remove_entry(snapshot["entry_id"])
     wait_entity_absent(client, VIRTUAL_AUTO_OFF_LIGHT)
     wait_entity_absent(client, AUTO_OFF_SWITCH)
-    print("PASS: auto-off switch restored disabled and resumed countdown when enabled")
+    print("PASS: auto-off switch restored disabled and resumed its timer when enabled")
 
 
 def run_restart_warning_prepare() -> None:
@@ -4510,7 +4510,7 @@ def run_false_detection_prepare() -> None:
     )
     wait_machine_state(client, "idle", GRACE_LIGHT)
 
-    # A visit longer than timeout + grace is genuine: the normal countdown runs.
+    # A visit longer than timeout + grace is genuine: the turn-off timer runs.
     set_grace_motion(client, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     assert_state_stays(
@@ -4544,7 +4544,7 @@ def run_false_detection_prepare() -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the false-detection off delay: a genuine clear gets the countdown",
+        "on past the false-detection off delay: a genuine clear gets the timer",
         duration=4,
     )
     client.call_service("light", "turn_off", {"entity_id": GRACE_LIGHT})
@@ -4559,7 +4559,7 @@ def run_false_detection_prepare() -> None:
             {"sensor_entry_id": sensor_entry_id, "light_entry_id": light_entry_id}
         )
     )
-    print("PASS: false-detection off delay, genuine countdown, occupied for restart")
+    print("PASS: false-detection off delay, turn-off timer, occupied for restart")
 
 
 def run_false_detection_verify() -> None:
@@ -4612,7 +4612,7 @@ def run_false_detection_verify() -> None:
         client.remove_entry(entry_id)
         wait_entity_absent(client, entity_id)
         wait_entry_removed(client, entry_id, f"Temporary {entity_id}")
-    print("PASS: restart while occupied took the countdown, not a false-detection off")
+    print("PASS: restart while occupied took the timer, not a false-detection off")
 
 
 def run_late_source_prepare() -> None:
@@ -5028,7 +5028,7 @@ def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
-        "turned on again by going dark while the countdown still had time left",
+        "turned on again by going dark while the timer still had time left",
     )
     client.wait_state(
         DUSK_LIGHT,
@@ -5042,30 +5042,30 @@ def expect_dark_edge_turn_on(client: HomeAssistantClient) -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
-        "on for the remainder of the original countdown",
+        "on for the remainder of the original timer",
         duration=3,
     )
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off at the original deadline",
+        "off at the original finish time",
         timeout=10,
     )
     wait_machine_state(client, "idle", DUSK_LIGHT)
-    # With that countdown spent, another dark edge leaves the room dark.
+    # With that timer finished, another dark edge leaves the room dark.
     set_dusk_lux(client, True)
     set_dusk_lux(client, False)
     assert_state_stays(
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off: no remaining countdown to resume",
+        "off: no remaining timer to resume",
         duration=2.5,
     )
 
 
 def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
-    """Going dark turns a light on again only for a countdown it still has left."""
+    """Going dark turns a light on again only for a timer it still has left."""
     sensor_entry_id = create_entry(
         client,
         "illuminance",
@@ -5081,7 +5081,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     assert_entry_loaded(client, sensor_entry_id)
 
     # Without an occupancy input the remainder is what the interrupted
-    # countdown had left: a never-lit room stays dark, a lit one resumes.
+    # timer had left: a never-lit room stays dark, a lit one resumes.
     light_entry_id = create_dusk_light(client, occupancy=False)
     assert_entry_loaded(client, light_entry_id)
     client.wait_state(DUSK_LIGHT, lambda state: state["state"] == "off", "off")
@@ -5118,8 +5118,7 @@ def run_dark_arrival_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, light_entry_id, DUSK_LIGHT)
     remove_entry_and_entity(client, sensor_entry_id, DUSK_ILLUMINANCE)
     print(
-        "PASS: going dark turns a light on again only with countdown left, "
-        "stamped as such"
+        "PASS: going dark turns a light on again only with timer left, stamped as such"
     )
 
 
@@ -5563,7 +5562,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             )
     remove_entry_and_entity(client, hold_entry_id, END_HOLD_LIGHT)
 
-    # Standby: the inside settings rest at 20 % instead of turning off.
+    # Standby: the inside settings stay at 20 % instead of turning off.
     standby_entry_id = create_two_settings_set_light(
         client,
         "E2E End Standby",
@@ -5588,7 +5587,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             lambda state: (
                 state["state"] == "on" and state["attributes"].get("brightness") == 51
             ),
-            "resting at the 20 % standby level",
+            "at the 20 % standby level",
             timeout=10,
         )
 
@@ -6950,14 +6949,14 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the old deadline while held",
+        "on past the old finish time while held",
         duration=5,
     )
     set_door_hold(client, HOLD_WARN_LIGHT, False)
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off after the fresh full timer that the release started",
+        "off after the fresh timer that the release started",
         timeout=15,
     )
     wait_machine_state(client, "idle", HOLD_WARN_LIGHT)
@@ -7164,7 +7163,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", GRACE_BOTH_LIGHT)
 
-    # Genuine presence on the maintain side earns the normal countdown.
+    # Genuine presence on the maintain side earns the turn-off timer.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
     set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, True)
@@ -7187,7 +7186,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the false-detection off delay: one genuine clear earns the countdown",
+        "on past the false-detection off delay: one genuine clear earns the timer",
         duration=4,
     )
     client.call_service("light", "turn_off", {"entity_id": GRACE_BOTH_LIGHT})
@@ -7836,7 +7835,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     checkpoint(
         "a rejecting and a silent member left the other member and the light working"
     )
-    # The countdown still finishes and turns the working member off.
+    # The timer still finishes and turns the working member off.
     client.wait_state(
         FAULTY_LIGHT,
         lambda state: state["state"] == "off",
@@ -7926,7 +7925,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     checkpoint("a turn-on every member rejected left the light off")
 
     # A slow bulb whose full reply arrives after HA stops reusing our context
-    # is still an echo: the countdown is not restarted by it.
+    # is still an echo: the timer is not restarted by it.
     client.set_behavior(RAW_MULTI_RGB, latency=5)
     physical_before = client.state(FAULTY_LIGHT)["attributes"].get("last_on_physical")
     started = time.monotonic()
@@ -7951,7 +7950,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     checkpoint(f"the light went off {elapsed:.1f}s after the turn-on (timeout 8s)")
     if elapsed > 11:
         raise AssertionError(
-            f"The late reply restarted the countdown: off after {elapsed:.1f}s, not ~8s"
+            f"The late reply restarted the timer: off after {elapsed:.1f}s, not ~8s"
         )
     physical_after = client.state(FAULTY_LIGHT)["attributes"].get("last_on_physical")
     if physical_after != physical_before:
@@ -8883,7 +8882,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
-    """The countdown and off warning sequence on an instant and a slow two-part bulb."""
+    """The timer and off warning sequence on an instant and a slow two-part bulb."""
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)

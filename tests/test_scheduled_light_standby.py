@@ -1,4 +1,4 @@
-"""Tests for a Virtual Scheduled Light resting at standby instead of off."""
+"""Tests for a Virtual Scheduled Light at standby instead of off."""
 
 from __future__ import annotations
 
@@ -109,7 +109,7 @@ def _porch(
     inside: dict | None = None,
     outside: dict | None = None,
 ) -> MockConfigEntry:
-    """The issue's porch: rests at 20 % / 2222 K, motion raises it to 100 %."""
+    """The issue's porch: stays at 20 % / 2222 K, motion raises it to 100 %."""
     return make_scheduled_light_entry(
         schedule_end_action=schedule_end_action,
         outside=outside or {CONF_LIGHT_TIMEOUT: 30},
@@ -404,7 +404,7 @@ async def test_turn_on_without_a_level_and_no_auto_on_level_keeps_standby_level(
 async def test_standby_without_a_color_restores_the_pre_warning_color(
     hass: HomeAssistant, freezer, stage: dict
 ) -> None:
-    """A colored effect or warn stage must not become the resting appearance."""
+    """A colored effect or warn stage must not become the standby appearance."""
     hass.states.async_set(REAL, "off", {"supported_color_modes": ["color_temp"]})
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off")
@@ -652,7 +652,7 @@ def _windows_schedule(name: str, *windows: tuple[str, str]) -> MockConfigEntry:
 
 
 async def _manual_off_at_standby(hass: HomeAssistant, *schedules) -> str:
-    """Rest the porch at standby under real schedules, turn it off manually,
+    """Put the porch at standby under real schedules, turn it off manually,
     and return the schedule sensor's window marker."""
     await setup_entries(hass, *schedules)
     hass.states.async_set(REAL, "off")
@@ -862,7 +862,7 @@ async def test_bright_sensor_that_is_also_a_hold_keeps_standby(
 async def test_physical_dim_at_standby_runs_a_timer_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Brightening at the wall is activity, not a new resting level."""
+    """Brightening at the wall is activity, not a new standby level."""
     await _setup_porch(hass, _porch())
     await _echo_standby(hass)
     _assert_standby(hass)
@@ -993,7 +993,7 @@ async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
 
 
 @pytest.mark.asyncio
-async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_ends(
+async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_finishes(
     hass: HomeAssistant, freezer
 ) -> None:
     """A light someone is using is not dimmed at the start; its timer is."""
@@ -1128,10 +1128,10 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("maintained", [True, False], ids=["maintained", "timed"])
 @pytest.mark.parametrize("standby", [True, False], ids=["standby", "no_standby"])
-async def test_raised_period_cut_short_by_brightness_resumes_when_dark(
+async def test_raised_on_period_cut_short_by_brightness_resumes_when_dark(
     hass: HomeAssistant, freezer, maintained: bool, standby: bool
 ) -> None:
-    """Going dark resumes a recent raised period, with or without standby."""
+    """Going dark resumes a recent raised on-period, with or without standby."""
     maintain = "binary_sensor.porch_maintain"
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(maintain, "on" if maintained else "off")
@@ -1162,7 +1162,7 @@ async def test_raised_period_cut_short_by_brightness_resumes_when_dark(
     if maintained:
         assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
         return
-    # The rest of the 30 s period runs out, and ends where the settings rest.
+    # The rest of the 30 s timer runs, and finishes where the settings stay.
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     await _tick(hass, freezer, 27)
     if standby:
@@ -1367,7 +1367,7 @@ async def _member_reports_off(hass: HomeAssistant) -> None:
 async def test_schedule_end_timeout_from_standby_resumes_after_brightness(
     hass: HomeAssistant, freezer, schedule_end_action: str, restart: bool
 ) -> None:
-    """The fresh outside timeout is an on-period that going dark resumes."""
+    """The fresh outside timer is an on-period that going dark resumes."""
     illuminance = "binary_sensor.yard_bright"
     hass.states.async_set(illuminance, "off")
     entry = _porch(
@@ -1487,10 +1487,10 @@ async def test_hold_release_after_a_keep_end_starts_a_timeout_that_going_dark_re
 
 
 @pytest.mark.asyncio
-async def test_maintain_countdown_cut_short_by_brightness_resumes_when_dark(
+async def test_maintain_timer_cut_short_by_brightness_resumes_when_dark(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A maintain sensor's countdown resumes raised, and still ends at standby."""
+    """A maintain sensor's timer resumes raised, and still ends at standby."""
     maintain = "binary_sensor.porch_maintain"
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(maintain, "off")
@@ -1525,7 +1525,7 @@ async def test_maintain_countdown_cut_short_by_brightness_resumes_when_dark(
     await _tick(hass, freezer, 2)
     await _set(hass, illuminance, "off")
 
-    # 46 s of the countdown are left, at the auto-on level.
+    # 46 s of the timer are left, at the auto-on level.
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     assert _attrs(hass)["brightness"] == BOOST
     await _tick(hass, freezer, 45)
@@ -1538,7 +1538,7 @@ async def test_maintain_countdown_cut_short_by_brightness_resumes_when_dark(
 async def test_schedule_end_timeout_from_standby_survives_a_false_detection(
     hass: HomeAssistant, freezer
 ) -> None:
-    """False motion against an old visit does not cut the fresh timeout short."""
+    """False motion against an old visit does not cut the fresh timer short."""
     yard = "binary_sensor.yard_occupancy"
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(yard, "off", {"latest_occupied_time": visit})
@@ -1566,10 +1566,10 @@ async def test_schedule_end_timeout_from_standby_survives_a_false_detection(
 
 
 @pytest.mark.asyncio
-async def test_schedule_end_switch_from_standby_keeps_a_history_countdown(
+async def test_schedule_end_switch_from_standby_keeps_a_history_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A countdown that recent motion accounts for is not a fresh timeout, so
+    """A timer that recent motion accounts for is not a fresh timer, so
     a false detection afterwards does not stretch it to a full one."""
     yard = "binary_sensor.yard_occupancy"
     visit = (datetime.now(UTC) - timedelta(seconds=20)).isoformat()
@@ -2497,10 +2497,10 @@ async def test_restart_outside_the_window_drops_a_restored_standby(
 
 
 @pytest.mark.asyncio
-async def test_door_closing_at_standby_starts_no_countdown(
+async def test_door_closing_at_standby_starts_no_timer(
     hass: HomeAssistant,
 ) -> None:
-    """A door that never raised the light has no countdown to start."""
+    """A door that never raised the light has no timer to start."""
     door = "binary_sensor.front_door"
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(door, "off")
@@ -2717,7 +2717,7 @@ async def test_wall_turn_on_during_a_waiting_virtual_on_keeps_its_level(
 ) -> None:
     """After a manual off, a turn-on at the wall overtakes a virtual turn-on
     still waiting for its selection: the wall level stands, standby is
-    rejoined, and the timeout ends back at it."""
+    rejoined, and the timer finishes back at it."""
     select = _ParkedSelect(hass, park=2)
     calls = await _setup_porch(hass, _porch(inside=_SCENE))
     await _echo_standby(hass)
@@ -2756,7 +2756,7 @@ async def test_selection_lighting_the_light_does_not_take_standby_over(
     """A preset that lights the real light while standby waits for that select
     call is not a turn-on at the wall, whether the change arrives under the
     select call or as a push of the device both entities belong to: the
-    light rests at standby, and standby is still sent."""
+    light stays at standby, and standby is still sent."""
     if reported == "by_the_device":
         wled = MockConfigEntry(domain="wled")
         wled.add_to_hass(hass)
@@ -3030,7 +3030,7 @@ async def test_manual_off_stands_through_a_time_zone_change(
 async def test_false_pulse_keeps_the_timeout_a_standby_end_started(
     hass: HomeAssistant, freezer, reload: bool
 ) -> None:
-    """Keep state gives a light leaving standby a fresh timeout. A false
+    """Keep state gives a light leaving standby a fresh timer. A false
     detection outside does not cut it short, also once a reload restarted it."""
     history = {
         "latest_occupied_time": (

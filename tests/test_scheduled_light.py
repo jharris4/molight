@@ -329,7 +329,7 @@ async def test_schedule_end_defaults_to_preserving_state(
 async def test_schedule_end_switches_state_from_outside_occupancy_history(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Switch-state replaces the inside timer with the outside deadline."""
+    """Switch-state replaces the inside timer with the outside finish time."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -357,7 +357,7 @@ async def test_schedule_end_switches_state_from_outside_occupancy_history(
 async def test_schedule_end_switch_without_history_uses_full_outside_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Missing incoming occupancy history earns one fresh outside timeout."""
+    """Missing incoming occupancy history earns one fresh outside timer."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -543,7 +543,7 @@ async def test_schedule_end_switch_adopts_active_outside_presence_source(
 async def test_schedule_end_switch_uses_outside_warning_settings(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An already-due switched deadline runs the incoming off warning sequence."""
+    """A switched finish time already past runs the incoming off warning sequence."""
     occupancy = "binary_sensor.outside_occupancy"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -615,8 +615,8 @@ async def test_schedule_end_switch_replaces_inside_warning_with_outside_timer(
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
-    # The discarded inside warning cannot expire the light; the complete
-    # outside timeout now owns its deadline.
+    # The discarded inside warning cannot turn the light off; the complete
+    # outside timeout now owns its finish time.
     freezer.tick(timedelta(seconds=29))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -662,9 +662,9 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
 @pytest.mark.parametrize(
     ("schedule_end_action", "lit_by", "outside_visit", "resumed_for"),
     [
-        # Keep leaves the inside countdown running: 300 s from the turn-on.
-        pytest.param(SCHEDULE_END_ACTION_KEEP, "hand", None, 190, id="keep-countdown"),
-        # Inside presence held it and outside watches nothing: a fresh timeout.
+        # Keep leaves the inside timer running: 300 s from the turn-on.
+        pytest.param(SCHEDULE_END_ACTION_KEEP, "hand", None, 190, id="keep-timer"),
+        # Inside presence held it and outside watches nothing: a fresh timer.
         pytest.param(SCHEDULE_END_ACTION_KEEP, "presence", None, 20, id="keep-held"),
         pytest.param(SCHEDULE_END_ACTION_SWITCH, "hand", None, 20, id="switch-fresh"),
         # Switch counts from the outside sensor's last visit, 15 s before.
@@ -679,7 +679,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
     outside_visit: int | None,
     resumed_for: int,
 ) -> None:
-    """Going dark resumes the countdown the window end would have left."""
+    """Going dark resumes the timer the window end would have left."""
     inside_occupancy = "binary_sensor.inside_occupancy"
     outside_occupancy = "binary_sensor.outside_occupancy"
     illuminance = "binary_sensor.outside_illuminance"
@@ -1543,7 +1543,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
-    # Held: the interrupted warn stage never expires the light.
+    # Held: the interrupted warn stage never turns the light off.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1610,7 +1610,7 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    # Leaving it drops both the inside settings and the hold; a fresh timeout runs.
+    # Leaving it drops both the inside settings and the hold; a fresh timer runs.
     hass.states.async_set(SCHEDULE, "off")
     await settle(hass)
     state = hass.states.get(VIRTUAL)
@@ -1653,7 +1653,7 @@ async def test_schedule_change_hold_cancels_running_timer(
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    # Releasing the hold under the new settings starts a fresh full timeout.
+    # Releasing the hold under the new settings starts a fresh timer.
     hass.states.async_set(hold, "off")
     await settle(hass)
     freezer.tick(timedelta(seconds=9))
@@ -1791,7 +1791,7 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
         assert (state.state, state.attributes["molight_state"]) == ("off", STATE_IDLE)
         return
     # The outside settings have no occupancy or maintain sensor, so their own
-    # timeout runs: recalculated as a fresh one by switch, started for the lost
+    # timeout runs: recalculated as a fresh one by Switch state, started for the lost
     # hold by keep.
     expected = (
         STATE_ACTIVE
@@ -3127,7 +3127,7 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
     """A real light back from unavailable after a keep boundary gets the
     effect still running, judged by that stage and not by the new settings'
     effect: a dim one turns it on again, a blackout leaves it dark. The effect
-    still ends at its own deadline."""
+    still ends at its own finish time."""
     lamp = RealLight("real_1")
     await add_real(hass, lamp)
     hass.states.async_set(SCHEDULE, "on" if boundary == "end" else "off")

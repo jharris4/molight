@@ -622,7 +622,7 @@ async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     await settle(hass)
     assert selected == ["Cozy"]
 
-    # Run the timer out into the effect stage, which turns the real lights off.
+    # Let the timer finish into the effect stage, which turns the real lights off.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -697,7 +697,7 @@ async def test_manual_off_during_slow_selection_stands(hass: HomeAssistant) -> N
 
 @pytest.mark.asyncio
 async def test_bright_off_during_slow_selection_stands(hass: HomeAssistant) -> None:
-    """An automatic off overtakes a waiting turn-on like a manual one."""
+    """An automatic turn-off overtakes a waiting turn-on like a manual one."""
     hass.states.async_set("binary_sensor.illum", "off")
     select = await _park_automatic_turn_on(hass, illuminance="binary_sensor.illum")
     calls = _light_calls(hass)
@@ -852,7 +852,7 @@ async def test_virtual_on_during_blink_off_survives_the_stage_ending(
     assert state.attributes["brightness"] == 200
 
     # The stage's timer is gone: nothing turns the light off before the new
-    # timeout runs out.
+    # timer finishes.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -900,7 +900,7 @@ async def test_occupancy_on_during_a_waiting_virtual_on_defers_to_it(
     assert state.attributes["molight_state"] == "occupied"
     assert state.attributes["brightness"] == 200
 
-    # A quick clear flagged false gets the normal countdown, not the off
+    # A quick clear flagged false gets the turn-off timer, not the off
     # delay reserved for lights that occupancy lit.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set(
@@ -955,7 +955,7 @@ async def test_wall_turn_on_during_slow_selection_keeps_its_level(
     if trigger == "door":
         return
 
-    # A clear flagged false gets the normal countdown, not the off delay.
+    # A clear flagged false gets the turn-off timer, not the off delay.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set(sensor, "off", {"last_clear_false_detection": True})
     await settle(hass)
@@ -1347,7 +1347,7 @@ async def test_hold_released_during_slow_selection_still_starts_the_timeout(
     hass.states.async_set(sensor, "on")
     await asyncio.wait_for(select.started.wait(), 2)
     if trigger == "occupancy":
-        # They left again before the light came on: a countdown, held.
+        # They left again before the light came on: a timer, held.
         hass.states.async_set(sensor, "off")
         await _drain(hass)
     hass.states.async_set("input_boolean.hold", "off")
@@ -2814,7 +2814,7 @@ async def test_resend_started_in_a_stage_sends_the_stage_reached_since(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("ending", ["stays", "occupancy", "expires"])
+@pytest.mark.parametrize("ending", ["stays", "occupancy", "finishes"])
 async def test_resend_started_in_a_stage_follows_how_the_stage_ends(
     hass: HomeAssistant, freezer, ending: str
 ) -> None:
@@ -2836,7 +2836,7 @@ async def test_resend_started_in_a_stage_follows_how_the_stage_ends(
         hass.states.async_set("binary_sensor.occ", "on")
         await _drain(hass)
         assert commands == [{"service": "turn_on", "brightness": 200}]
-    elif ending == "expires":
+    elif ending == "finishes":
         await _pass(hass, freezer, 6)
         assert commands == [{"service": "turn_off"}]
     select.release.set()
@@ -3186,7 +3186,7 @@ async def test_select_on_device_after_a_manual_off_keeps_standby_suppressed(
 ) -> None:
     """The manual off turned standby off until the next boundary. The preset
     nobody asked for anymore lights the strip, which runs its timeout as any
-    lit room, but is nobody's turn-on: the pause stands and the timeout ends
+    lit room, but is nobody's turn-on: the pause stands and the timer finishes
     in off, not at standby."""
     light = await _off_then_preset(hass, reported)
     state = hass.states.get("light.selection_light")
@@ -3209,7 +3209,7 @@ async def test_turn_on_after_such_a_preset_still_rejoins_standby(
     hass: HomeAssistant, freezer, turned_on: str
 ) -> None:
     """A person turning the light on, or dimming it at the wall, once the
-    preset has lit it ends the standby suppression as ever: the timeout ends at
+    preset has lit it ends the standby suppression as ever: the timer finishes at
     standby."""
     light = await _off_then_preset(hass, "push")
 

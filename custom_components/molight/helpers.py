@@ -202,7 +202,7 @@ class GoneJudge:
             )
 
         @callback
-        def _expired(_now: datetime) -> None:
+        def _finished(_now: datetime) -> None:
             del self._pending[entity_id]
             if _gone():
                 action()
@@ -211,7 +211,7 @@ class GoneJudge:
         def _judge() -> None:
             if grace and _gone() and not _just_deleted(hass, entity_id):
                 self._pending[entity_id] = async_call_later(
-                    hass, RELOAD_GRACE, _expired
+                    hass, RELOAD_GRACE, _finished
                 )
                 return
             del self._pending[entity_id]

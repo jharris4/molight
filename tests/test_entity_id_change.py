@@ -1419,11 +1419,11 @@ async def test_scheduled_light_with_changed_entity_id_does_not_replay_an_applied
     assert member.is_on
 
 
-@pytest.mark.parametrize("resting", [True, False], ids=["standby", "turned-off"])
+@pytest.mark.parametrize("at_standby", [True, False], ids=["standby", "turned-off"])
 async def test_scheduled_light_with_changed_entity_id_keeps_its_standby(
-    hass: HomeAssistant, resting: bool
+    hass: HomeAssistant, at_standby: bool
 ) -> None:
-    """A light resting at standby stays there, and one turned off stays off."""
+    """A light at standby stays there, and one turned off stays off."""
     member = RealLight("real_1")
     await add_real(hass, member)
     await setup_entries(
@@ -1437,7 +1437,7 @@ async def test_scheduled_light_with_changed_entity_id_keeps_its_standby(
     await settle(hass)
     virtual = "light.scheduled_light"
     assert attrs(hass, virtual)["molight_state"] == "standby"
-    if not resting:
+    if not at_standby:
         await hass.services.async_call(
             "light", "turn_off", {"entity_id": virtual}, blocking=True
         )
@@ -1445,9 +1445,9 @@ async def test_scheduled_light_with_changed_entity_id_keeps_its_standby(
 
     await change_entity_id(hass, virtual, "light.porch")
     state = hass.states.get("light.porch")
-    assert state.attributes["molight_state"] == ("standby" if resting else "idle")
-    assert state.attributes["standby_suppressed"] is not resting
-    assert member.is_on is resting
+    assert state.attributes["molight_state"] == ("standby" if at_standby else "idle")
+    assert state.attributes["standby_suppressed"] is not at_standby
+    assert member.is_on is at_standby
 
 
 async def test_occupancy_sensor_with_changed_entity_id_keeps_its_history(
@@ -1482,10 +1482,10 @@ async def test_occupancy_sensor_with_changed_entity_id_keeps_its_history(
     assert dict(state.attributes) == before
 
 
-async def test_occupancy_sensor_with_changed_entity_id_keeps_its_dropout_deadline(
+async def test_occupancy_sensor_with_changed_entity_id_keeps_its_finish_time(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A clear-after-unavailable countdown runs on to the same moment."""
+    """A clear-after-unavailable timer runs on to the same moment."""
     motion = RealBinary("motion", on=True)
     await add_real(hass, motion)
     await setup_entries(hass, occupancy_entry())

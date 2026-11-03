@@ -368,10 +368,10 @@ async def test_manual_off_in_window_survives_a_crash_after_restart(
 
 
 @pytest.mark.asyncio
-async def test_standby_rest_survives_a_crash_after_restart(
+async def test_standby_survives_a_crash_after_restart(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light resting at standby goes back there, not to a timeout."""
+    """A light at standby goes back there, not to a timeout."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     entry = _standby_entry()
@@ -801,7 +801,7 @@ async def test_missed_switch_end_with_the_member_known(
 async def test_missed_switch_end_is_owed_to_a_member_that_loads_late(
     hass: HomeAssistant, boot: str, late: str
 ) -> None:
-    """A late lit member gets the recalculation, not a fresh full timeout."""
+    """A late lit member gets the recalculation, not a fresh timer."""
     entry = _switch_entry()
     real = await _lit_before_switch_end(hass, entry)
     calls = await _restart_across_end(hass, entry, real, {REAL: boot})
@@ -912,7 +912,8 @@ async def test_warning_restart_with_the_member_lit(
 async def test_warning_restart_with_the_member_off_stays_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """Members really off completed the auto-off: the light is not turned on again."""
+    """Members really off completed the automatic turn-off: the light is not turned
+    on again."""
     _, _, calls = await _restart_mid_warn(hass, freezer, {REAL: "off"})
     assert _turn_ons(calls) == []
     assert _state(hass).state == "off"
@@ -947,7 +948,8 @@ async def test_pre_warning_snapshot_is_owed_to_a_member_that_loads_late(
 async def test_pre_warning_snapshot_is_dropped_when_the_unreadable_member_is_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, boot: str
 ) -> None:
-    """An unreadable member reporting off completes the auto-off like any other."""
+    """An unreadable member reporting off completes the automatic turn-off like any
+    other."""
     _, real, calls = await _restart_mid_warn(hass, freezer, {REAL: boot})
     real.load(REAL, "off")
     await settle(hass)
@@ -1253,7 +1255,7 @@ async def test_turn_off_before_the_seed_stands_over_a_missed_window_start(
 async def test_turn_on_before_the_seed_joins_a_missed_window_start(
     hass: HomeAssistant,
 ) -> None:
-    """The window claims the light as it was lit, without sending its own look."""
+    """The window adopts the light as it was lit, without sending its own look."""
     _Members(hass, [REAL], {})
     hass.states.async_set(SCHED, "off")
     entry = _end_entry("follow", [REAL])
@@ -1306,8 +1308,8 @@ async def test_turn_off_before_the_seed_stands_over_a_missed_standby_start(
     assert _attrs(hass)["molight_state"] == STATE_STANDBY
 
 
-async def _resting_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
-    """Set a standby light up inside its window, resting at 20 %."""
+async def _light_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
+    """Set a standby light up inside its window, at 20 %."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     entry = make_scheduled_light_entry(
         name="Matrix Light",
@@ -1336,7 +1338,7 @@ async def test_raise_before_the_seed_replaces_a_restored_standby(
 ) -> None:
     """The raise stands, and its timeout drops the light back to standby."""
     _Members(hass, [REAL], {})
-    entry = await _resting_at_standby(hass)
+    entry = await _light_at_standby(hass)
 
     await restart_entries(hass, entry, started=False)
     assert _attrs(hass)["molight_state"] == STATE_STANDBY
@@ -1378,7 +1380,7 @@ async def test_raise_waiting_for_its_selection_at_the_seed_replaces_standby(
 ) -> None:
     """The seed arriving during the raise's select call does not undo it."""
     real = _Members(hass, [REAL], {})
-    entry = await _resting_at_standby(hass)
+    entry = await _light_at_standby(hass)
     data = dict(entry.data)
     inside = {
         **data[CONF_INSIDE_SCHEDULE_SETTINGS],
@@ -1418,7 +1420,7 @@ async def test_turn_off_before_the_seed_keeps_a_restored_standby_off(
 ) -> None:
     """A manual off inside the window still holds standby off after the seed."""
     _Members(hass, [REAL], {})
-    entry = await _resting_at_standby(hass)
+    entry = await _light_at_standby(hass)
 
     await restart_entries(hass, entry, started=False)
     await hass.services.async_call(

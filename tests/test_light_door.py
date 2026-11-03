@@ -7,7 +7,7 @@ occupancy. door_mode then decides what the door state does afterwards:
   open:         opening lights the room with the normal timeout; the door is
                 otherwise ignored (a momentary trigger, closing does nothing).
   open_close:   the open door holds the light on (OCCUPIED, no timer) while it
-                stays open; closing starts the countdown, deferring to any
+                stays open; closing starts the turn-off timer, deferring to any
                 occupied occupancy/maintain sensor or keep-on hold.
 
 The watched entities are plain states set via hass.states.async_set; the
@@ -239,7 +239,7 @@ async def _assert_door_open_gating(
 
 
 # ---------------------------------------------------------------------------
-# open_close mode: held while open, off (countdown) when closed
+# open_close mode: held while open, off (timer) when closed
 # ---------------------------------------------------------------------------
 
 
@@ -261,7 +261,7 @@ async def test_open_close_holds_while_open(hass: HomeAssistant, freezer) -> None
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Closing starts the countdown toward off.
+    # Closing starts the turn-off timer.
     hass.states.async_set(DOOR, CLOSED)  # closed
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -291,7 +291,7 @@ async def test_open_close_close_defers_to_occupancy(hass: HomeAssistant) -> None
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Only when occupancy also clears does the countdown begin.
+    # Only when occupancy also clears does the timer start.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -315,7 +315,7 @@ async def test_open_close_occupancy_clear_defers_to_open_door(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # The sensor clears but the door is still open → still held, no countdown.
+    # The sensor clears but the door is still open → still held, no timer.
     hass.states.async_set(sensor, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -328,7 +328,7 @@ async def test_open_close_occupancy_clear_defers_to_open_door(
 
 @pytest.mark.asyncio
 async def test_open_close_close_defers_to_hold_entity(hass: HomeAssistant) -> None:
-    """A keep-on hold suspends the close-countdown's turn-off."""
+    """A keep-on hold suspends the closing door's turn-off."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, hold_entities=[HOLD]
     )
@@ -423,7 +423,7 @@ async def test_open_close_dark_return_re_holds_open_door(
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Re-held, not a countdown: no timer may expire while the door is open.
+    # Re-held, not COUNTDOWN: no timer may finish while the door is open.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -467,7 +467,7 @@ async def test_gate_window_start_reevaluates_open_door(
     if expect_on:
         assert state.attributes["molight_state"] == STATE_OCCUPIED
         assert state.attributes["last_on_door"] is not None
-        # Closing hands over to the normal countdown.
+        # Closing starts the turn-off timer.
         hass.states.async_set(DOOR, CLOSED)
         await settle(hass)
         assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -481,7 +481,7 @@ async def test_gate_schedule_briefly_unavailable_keeps_the_doors_part(
 ) -> None:
     """Only a gate window that has ended makes the door ignored: while the
     schedule is briefly unavailable the open door still holds, and its close still
-    starts the countdown."""
+    starts the turn-off timer."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(MAINT, "on")
     await setup_entries(
@@ -542,7 +542,7 @@ async def test_open_close_unavailable_door_keeps_holding(
     await _tick(hass, freezer, 59)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    hass.states.async_set(DOOR, CLOSED)  # recovers closed: countdown starts
+    hass.states.async_set(DOOR, CLOSED)  # recovers closed: timer starts
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -553,7 +553,7 @@ async def test_open_close_door_unavailable_for_a_minute_counts_as_closed(
     hass: HomeAssistant, freezer, dead: str
 ) -> None:
     """A dead door sensor cannot hold the light forever: after 60 s it counts
-    as closed and the countdown starts."""
+    as closed and the turn-off timer starts."""
     await setup_entries(
         hass, make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE)
     )
@@ -612,7 +612,9 @@ async def test_door_back_from_unavailable_restarts_the_minute(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("manual_off", [False, True], ids=["timed-out", "manual-off"])
+@pytest.mark.parametrize(
+    "manual_off", [False, True], ids=["counted-closed", "manual-off"]
+)
 async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
     hass: HomeAssistant, freezer, manual_off: bool
 ) -> None:
@@ -644,7 +646,7 @@ async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
-@pytest.mark.parametrize("first", ["late", "dropout"])
+@pytest.mark.parametrize("first", ["late", "unavailable"])
 async def test_door_first_seen_open_is_no_opening_in_open_mode(
     hass: HomeAssistant, freezer, mode: str, first: str
 ) -> None:
@@ -982,7 +984,7 @@ async def test_auto_on_brightness_below_one_percent_is_unset(
 @pytest.mark.asyncio
 async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> None:
     """A door opened under a bright gate never lit the room; closing it must
-    not start a countdown from IDLE."""
+    not start a timer from IDLE."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
     )
@@ -994,7 +996,7 @@ async def test_open_close_close_while_idle_stays_idle(hass: HomeAssistant) -> No
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
-    hass.states.async_set(DOOR, CLOSED)  # closed: nothing to count down
+    hass.states.async_set(DOOR, CLOSED)  # closed: no timer to start
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
@@ -1007,7 +1009,7 @@ async def test_open_close_close_mid_warning_lets_it_finish(
     """Closing the door mid-warning lets the sequence wind down to off.
 
     A door standing open under a bright gate never held the light (the open
-    was gated away), so its close must not restart the countdown either;
+    was gated away), so its close must not restart the timer either;
     the warning already in flight runs to completion.
     """
     entry = make_light_entry(
@@ -1063,7 +1065,7 @@ async def test_open_mode_briefly_unavailable_is_not_a_fresh_opening(
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # The light times out with the door left ajar.
+    # The timer finishes with the door left ajar.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1089,7 +1091,7 @@ async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_mode(
     hass: HomeAssistant, freezer
 ) -> None:
     """Bright in gate mode does not keep occupancy from holding an on light,
-    so the door closing over it starts no countdown."""
+    so the door closing over it starts no timer."""
     hass.states.async_set(ILLUM, "on")  # bright
     hass.states.async_set(OCC, "on")
     hass.states.async_set(DOOR, OPEN)
@@ -1121,7 +1123,7 @@ async def test_open_close_close_ignores_gated_occupancy(
     hass: HomeAssistant, freezer, gate: str
 ) -> None:
     """Occupancy that a gate keeps from holding the light cannot hold it
-    after the door closes: the countdown starts. Outside a gate window the
+    after the door closes: the turn-off timer starts. Outside a gate window the
     door is ignored as well, so it neither holds the light nor restarts its
     timer by closing."""
     if gate == "bright":

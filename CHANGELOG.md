@@ -74,7 +74,7 @@ Virtual Remote buttons.
 ### Added
 
 - **Standby for Virtual Scheduled Lights**: the inside-schedule settings can
-  rest at a low brightness and color instead of turning off. A dusk-to-dawn
+  stay at a low brightness and color instead of turning off. A dusk-to-dawn
   porch can glow at 1%, come up to 100% when someone walks up, drop back to 1%
   once they leave, and turn off when the schedule ends.
 
@@ -115,7 +115,7 @@ Virtual Remote buttons.
   again, instead of being recorded as a manual off.
 - **False detections**: only a light that the false detection itself lit is
   turned off after the false-detection off delay; a blip after a genuine visit
-  keeps that visit's countdown.
+  keeps that visit's timer.
 - **Doors**: a door sensor in *Open & close* door mode that stays
   `unavailable` for 60 seconds, such as one with a dead battery, counts as
   closed instead of holding the light on until a restart.
@@ -123,7 +123,7 @@ Virtual Remote buttons.
   reading only stops an off light turning on. When the sensor saw the lamp, the light
   turned off over people still moving and came back once the room read dark.
   Going dark after going bright turned a light off brings it back for the rest
-  of its countdown.
+  of its timer.
 - **Schedules**: changing a follow-mode light's schedule no longer turns it
   off. The sun-event window fix is under Upgrade notes.
 - **Virtual Remote**: buttons from HomeKit controller, native Lutron, Shelly
@@ -172,7 +172,7 @@ replying late.
   across a reload and inherits its constituents' `latest_occupied_time`, and a
   light turned on manually or by a door keeps its full timeout.
 - A maintain sensor clearing or a door closing while a bright reading or a gate-mode
-  schedule window blocks occupancy starts the countdown instead of leaving the
+  schedule window blocks occupancy starts the turn-off timer instead of leaving the
   light on with no timer.
 - Slow and chatty bulbs: late replies, mid-fade colors and clamped color
   temperatures are no longer read as physical changes, so a warning no longer

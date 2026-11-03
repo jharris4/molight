@@ -723,7 +723,7 @@ async def test_brightness_step_mid_warning_steps_from_pre_warning_brightness(
 ) -> None:
     """A remote's brightness step during the effect or warn stage steps from
     the pre-warning brightness, clamped to 1 to 100 %, never turning the light
-    off, and restarts the full timer like any other press."""
+    off, and starts a fresh timer like any other press."""
     calls = await _step_mid_warning(hass, freezer, stage, before, dim_step, button)
 
     assert calls == [
@@ -1079,7 +1079,7 @@ async def test_turn_on_double_click_uses_the_same_values(
 @pytest.mark.asyncio
 async def test_press_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
     """A bound press mid effect-stage acts as manual control: it cancels the
-    warning and the light returns to a fresh ACTIVE period."""
+    warning and the light returns to a fresh ACTIVE on-period."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={

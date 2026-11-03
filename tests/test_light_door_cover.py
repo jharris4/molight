@@ -95,7 +95,7 @@ async def test_open_mode_reversal_mid_close_is_not_an_opening(
 async def test_open_close_holds_until_the_cover_is_closed(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The hold lasts through closing; the countdown starts once closed."""
+    """The hold lasts through closing; the timer starts once closed."""
     hass.states.async_set(GARAGE, "closed")
     await setup_entries(
         hass, make_light_entry(door=GARAGE, door_mode=DOOR_MODE_OPEN_CLOSE)

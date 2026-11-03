@@ -32,7 +32,7 @@ Ships alone.
   This is the most common complaint about motion lighting anywhere.
 - **Design.** One option on the light, off by default. When on, after a manual off, occupancy and
   the door do not turn the light on until the room has been empty for the turn-off timeout, by the
-  same rule the countdown uses, so there is no new number to set. A virtual or physical turn-on
+  same rule the timer uses, so there is no new number to set. A virtual or physical turn-on
   ends it, as does a schedule boundary, as they end a manual off today. A blocked turn-on fires a
   `turn_on_blocked` event on the Events entity.
 - **Why now.** It is the one gap a remote or a voice assistant cannot paper over: a Turn off then
@@ -49,8 +49,8 @@ One release, none touching the precedence rules.
   while the Schedule helper edits all of that on the Helpers page. The source picker of the Virtual
   Schedule Sensor takes `binary_sensor` only. Offer the `schedule` domain too: its state is on/off
   like a binary sensor, and its `next_event` gives `next_change`. The window logic is untouched.
-- **A `timer_ends` attribute on the virtual light.** "When will it turn off" has no answer on the
-  entity; the deadline is held in memory only. One timestamp attribute, null when no timer runs,
+- **A `finishes_at` attribute on the virtual light.** "When will it turn off" has no answer on the
+  entity; the finish time is held in memory only. One timestamp attribute, null when no timer runs,
   gives a template sensor everything a dashboard card needs.
 - **A device per entry.** A light's companions ("Hallway Auto-off", "Hallway Events", a remote's
   "Last Action") are tied to it by name alone, and the Events entity carries no attribute naming its
@@ -113,7 +113,7 @@ Requests that existing blocks answer:
 - Weekdays only: a workday sensor and a combined All schedule, until item 2 lands.
 - One remote driving two rooms: two remote entries on different buttons of the same remote.
 - Different levels per lamp from one trigger: two virtual lights sharing the sensors.
-- A notification or spoken warning before an automatic off: an Event received trigger on the Events
+- A notification or spoken warning before an automatic turn-off: an Event received trigger on the Events
   entity.
 
 ## Not planned
@@ -127,7 +127,7 @@ Requests that existing blocks answer:
 - Remote hold to dim, more remote actions, targets per binding: the remote binds clicks to light
   actions and no more; hold-to-dim doubles the per-ecosystem vocabulary re-checked on every Home
   Assistant bump, and the rest is one automation or a second remote entry.
-- A re-trigger cooldown after an automatic off: the sensor's hold time means it has rarely cleared by
+- A re-trigger cooldown after an automatic turn-off: the sensor's hold time means it has rarely cleared by
   the time the person reaches the door; the off-by-hand case is item 1.
 - More than two settings sets on a Virtual Scheduled Light: two sets with combined schedules cover
   most requests, and Adaptive Lighting covers the rest.

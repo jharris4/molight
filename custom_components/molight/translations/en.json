@@ -205,7 +205,7 @@
           "occupancy_timeout": "Occupancy timeout"
         },
         "data_description": {
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors the turn-off timer)."
         },
         "sections": {
           "advanced": {
@@ -270,7 +270,7 @@
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -295,7 +295,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (the timer finishing, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -334,7 +334,7 @@
       },
       "occupancy": {
         "title": "Virtual Occupancy Sensor",
-        "description": "Wraps one real motion/presence sensor and estimates when the person actually left, for accurate light countdowns.",
+        "description": "Wraps one real motion/presence sensor and estimates when the person actually left, for accurate turn-off timers.",
         "data": {
           "name": "Name",
           "occupancy_sensor": "Source sensor",
@@ -342,7 +342,7 @@
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors the turn-off timer)."
         },
         "sections": {
           "advanced": {
@@ -566,7 +566,7 @@
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -591,7 +591,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (the timer finishing, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -695,7 +695,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -787,7 +787,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -849,7 +849,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer runs out. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
+            "description": "Stay at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1030,7 +1030,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer finishes it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       }
     },
     "error": {
@@ -1042,7 +1042,7 @@
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
-      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic off for the effect and warn stages to warn of. Set both stage durations to 0, or set a turn-off timeout.",
+      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic turn-off for the effect and warn stages to warn of. Set both stage durations to 0, or set a turn-off timeout.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
@@ -1203,7 +1203,7 @@
     "door_mode": {
       "options": {
         "open": "On open: turn on when the door opens (normal timeout)",
-        "open_close": "Open & close: on while open, countdown when closed"
+        "open_close": "Open & close: on while open, turn-off timer starts when closed"
       }
     },
     "occupancy_turn_on": {
@@ -1261,7 +1261,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -1353,7 +1353,7 @@
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -1415,7 +1415,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Rest at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer runs out. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
+            "description": "Stay at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1445,7 +1445,7 @@
       },
       "occupancy": {
         "title": "Virtual Occupancy Sensor",
-        "description": "Wraps one real motion/presence sensor and estimates when the person actually left, for accurate light countdowns.",
+        "description": "Wraps one real motion/presence sensor and estimates when the person actually left, for accurate turn-off timers.",
         "data": {
           "name": "Name",
           "occupancy_sensor": "Source sensor",
@@ -1453,7 +1453,7 @@
         },
         "data_description": {
           "occupancy_sensor": "The real motion/presence binary sensor to wrap.",
-          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors light countdowns)."
+          "occupancy_timeout": "The source sensor's own hold time, in seconds. When it clears, the moment the person actually left is estimated as clear time - timeout (the latest_occupied_time attribute, which anchors the turn-off timer)."
         },
         "sections": {
           "advanced": {
@@ -1617,7 +1617,7 @@
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
-              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the countdown when it closes, unless occupancy still holds them.",
+              "door_mode": "On open: opening turns the lights on with the normal timeout; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
           },
@@ -1642,7 +1642,7 @@
               "auto_on_rgb_color": "Optional. Color for automatic turn-ons, applied to lights that can show it. Manual turn-ons keep their own color.",
               "turn_on_select_entity": "Optional. The select entity to set before this virtual light turns on, such as a WLED preset, theme, mood, or mode select. The next step picks the required fixed/fallback option from its available options, plus an optional option source entity.",
               "auto_on_transition": "Optional. Fade-in time for automatic turn-ons. Manual turn-ons are unaffected; blank or 0 sends no transition.",
-              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (timer expiry, going bright, schedule window end). A manual off is unaffected."
+              "auto_off_transition": "Optional. Fade-out time for automatic turn-offs (the timer finishing, going bright, schedule window end). A manual off is unaffected."
             }
           },
           "warning": {
@@ -1693,7 +1693,7 @@
       },
       "confirm_wrapped_lights": {
         "title": "Wrapped virtual lights",
-        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer runs out it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
+        "description": "These lights to control are virtual lights: {lights}.\n\nEach keeps its own timer, sensors and schedule and runs them by itself, so when a wrapped light's timer finishes it turns off even if this light's timeout is longer. To let this light's timeout govern it, turn off that light's Auto-off switch."
       },
       "remote": {
         "title": "Virtual Remote",
@@ -1842,7 +1842,7 @@
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
-      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic off for the effect and warn stages to warn of. Set both stage durations to 0, or set a turn-off timeout.",
+      "light_timeout_blank_warning": "A blank turn-off timeout runs no timer, so there is no automatic turn-off for the effect and warn stages to warn of. Set both stage durations to 0, or set a turn-off timeout.",
       "occupancy_timeout_too_long": "This occupancy timeout exceeds the turn-off timeout of a virtual light that references this sensor.",
       "window_incomplete": "Incomplete window: both the start and the end need a time and/or a sun event.",
       "window_required": "A window is required: give both the start and the end a time and/or a sun event.",

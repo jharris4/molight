@@ -142,7 +142,7 @@ async def test_a_source_group_changed_to_include_the_sensor_is_not_read(
     issue = {"entity": SEEN, "source": GROUP}
     assert molight_issues(hass, seen.entry_id) == {"occupancy_source_cycle": issue}
     if unavailable_timeout == 0:
-        # No clear-after-unavailable to wait for.
+        # No Clear after unavailable timer to wait for.
         assert hass.states.get(SEEN).state == "off"
     real.set(True)
     await settle(hass)

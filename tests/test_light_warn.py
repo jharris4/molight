@@ -4,7 +4,7 @@ test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and
 WARN states: attribute invariance while the warning drives the real lights,
 forced offs (manual, physical, bright, gate window end), the maintain
-entity, follow-mode schedule windows taking over mid-warning, and the
+entity, follow-mode schedule windows adopting the light mid-warning, and the
 pre-warn brightness restore on every kind of re-trigger.
 """
 
@@ -116,7 +116,7 @@ async def test_attributes_unchanged_through_effect_and_warn(
     assert base["last_on_virtual"] is not None
     assert base["last_brightness_change_virtual"] is not None
 
-    # Timer expiry → EFFECT (real lights blinked off, self-caused).
+    # The timer finishing → EFFECT (real lights blinked off, self-caused).
     assert _state(hass).attributes["pre_warn_brightness"] is None
 
     freezer.tick(timedelta(seconds=61))
@@ -424,7 +424,7 @@ async def test_virtual_on_during_warn_restores_pre_warn_brightness(
     # The restore is not a user brightness change.
     assert state.attributes["last_brightness_change_virtual"] == base_change
 
-    # A fresh full timer runs from the re-trigger.
+    # A fresh timer runs from the re-trigger.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -470,7 +470,7 @@ async def test_maintain_on_during_warn_restores_and_occupies(
 
 
 # ---------------------------------------------------------------------------
-# Follow-mode schedule windows taking over mid-warning
+# Follow-mode schedule windows adopting the light mid-warning
 # ---------------------------------------------------------------------------
 
 
@@ -542,7 +542,7 @@ async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     assert _mstate(hass) == STATE_IDLE
 
     # The schedule is briefly unavailable, then someone lights the room physically:
-    # with the window unreadable the light runs a normal ACTIVE timer.
+    # with the window unreadable the light runs its turn-off timer in ACTIVE.
     hass.states.async_set(SCHED, "unavailable")
     await settle(hass)
     hass.states.async_set(REAL, "on", {"brightness": 200})
@@ -601,7 +601,7 @@ async def test_physical_dim_during_warning_honors_new_brightness(
     assert state.attributes["pre_warn_brightness"] is None
     assert state.attributes["last_brightness_change_physical"] is not None
 
-    # The full timer restarted: the warning comes back around, snapshotting
+    # A fresh timer started: the warning comes back around, snapshotting
     # the dimmed brightness this time.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)

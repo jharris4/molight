@@ -3208,7 +3208,7 @@ async def test_light_flow_saves_a_blank_timeout(
 async def test_light_flow_rejects_a_blank_timeout_with_an_effect_or_warn_stage(
     hass: HomeAssistant, stage_key: str
 ) -> None:
-    """No timer means no automatic off to warn of."""
+    """No timer means no automatic turn-off to warn of."""
     result = await _reach_light_form(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -9205,7 +9205,7 @@ _SHARED_LIGHT_CASES = {
         },
         {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"},
     ),
-    # A maintain sensor's visits feed the countdown the same way.
+    # A maintain sensor's visits feed the turn-off timer the same way.
     "maintain_timeout": (
         _ALL_MODES,
         LightEntityFeature.TRANSITION,

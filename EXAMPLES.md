@@ -70,7 +70,7 @@ Turn-off timeout:  60         # 60s after you actually left
 Occupancy sensor:  binary_sensor.hallway_occupancy
 ```
 
-Walk in → lights on. Room empties → 60s countdown anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on manually and it still turns off after the room empties, but a false blip never cuts short a manual on.
+Walk in → lights on. Room empties → 60s turn-off timer anchored to when you *actually left* (not when the sensor cleared) → off. Turn it on manually and it still turns off after the room empties, but a false blip never cuts short a manual on.
 
 > Note the guard: **Turn-off timeout (60) must be at least the occupancy timeout (30)**. MoLight enforces this both ways.
 
@@ -128,7 +128,7 @@ Warn duration:           20       # then 20s at current brightness to re-trigger
 Warn color:              255, 0, 0   # red: bulbs that can show color turn red for it
 ```
 
-Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → countdown starts only once **both** sensors are clear. Before turning off you get a quick blink, then a 20s warn stage to wave and cancel, shown in red on any color-capable bulb (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
+Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → the turn-off timer starts only once **both** sensors are clear. Before turning off you get a quick blink, then a 20s warn stage to wave and cancel, shown in red on any color-capable bulb (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
 
 Each time MoLight turns the light on, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
@@ -223,7 +223,7 @@ Schedule sensor:   binary_sensor.night_window
 Schedule mode:     Gate and keep state
 ```
 
-Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the schedule window ends. Someone walking in at 05:58 keeps the light until their timer runs out at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
+Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the schedule window ends. Someone walking in at 05:58 keeps the light until their timer finishes at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
 
 - **Gate and turn off** (Example 5) would switch the light off at 06:00, mid-stairs.
 - **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and history, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
@@ -234,19 +234,19 @@ Two things every Gate mode does at 22:00 that are easy to miss: if someone is al
 
 ### Example 7: Storage room light (door sensor)
 
-Open the storage room door → light on; close it → countdown to off. A single entry driven by a real door/contact sensor:
+Open the storage room door → light on; close it → turn-off timer, then off. A single entry driven by a real door/contact sensor:
 
 **Virtual Light**
 
 ```text
 Name:              Storage Room                 # → light.storage_room
 Lights to control: light.storage_room_real
-Turn-off timeout:  120                          # countdown once the door closes
+Turn-off timeout:  120                          # timer starts once the door closes
 Door sensor:       binary_sensor.storage_door   # a real contact sensor (on = open)
-Door mode:         Open & close                 # on while open, countdown when closed
+Door mode:         Open & close                 # on while open, timer starts when closed
 ```
 
-Open the door and the light stays on the whole time it's open, with no timeout while you're rummaging. Close it and a countdown (the **Turn-off timeout**) begins.
+Open the door and the light stays on the whole time it's open, with no timeout while you're rummaging. Close it and the turn-off timer (the **Turn-off timeout**) starts.
 
 - Pick **On open** instead if you only want the *opening* to turn the light on and then leave the normal timeout to turn it off; closing is ignored. Handy for a door that may be left standing open, which would otherwise hold the light on.
 - Add an **Illuminance sensor** and the door only lights the room when it's actually dark, exactly like occupancy, so no light is wasted opening a storage room in daylight. In **Open & close** mode, if the room goes dark while the door is still standing open, the light comes on then.
@@ -297,8 +297,8 @@ Auto-on color temperature: 2200                  # warm night light
 
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
-- With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a countdown already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
-- Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic off boundary.
+- With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a timer already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
+- Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors/history and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic turn-off boundary.
 - Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, off warning sequence, transitions, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which settings set is active; **Configure** walks the same three forms again to edit either settings set.
 
@@ -469,7 +469,7 @@ Turn-off timeout:  180                         # must be >= 120, the largest con
 Occupancy sensor:  binary_sensor.kitchen_occupancy
 ```
 
-Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the countdown starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
+Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the turn-off timer starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
 
 Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on manually: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a manually lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
 
@@ -498,7 +498,7 @@ Occupancy sensor:  binary_sensor.living_occupancy  # a Virtual Occupancy Sensor 
 Keep-on entities:  binary_sensor.tv_playing
 ```
 
-While the TV plays, the timer and every other automatic turn-off are suspended; a manual off still works. When the TV stops, the hold releases: if the PIR still sees someone the light stays on as usual, and otherwise a fresh full timeout starts, so the lights go out five minutes after the film ends if nobody moves.
+While the TV plays, the timer and every other automatic turn-off are suspended; a manual off still works. When the TV stops, the hold releases: if the PIR still sees someone the light stays on as usual, and otherwise a fresh timer starts, so the lights go out five minutes after the film ends if nobody moves.
 
 The same shape covers a numeric reading: a **Threshold** helper over `sensor.bathroom_humidity` with an upper limit and a hysteresis gives a binary sensor that is `on` while the shower is running, and it goes in the same field.
 

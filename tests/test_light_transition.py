@@ -93,10 +93,10 @@ async def test_virtual_turn_on_has_no_transition(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_timer_expiry_off_carries_auto_off_transition(
+async def test_timer_finishing_off_carries_auto_off_transition(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The automatic turn-off at timer expiry fades over auto_off_transition."""
+    """The automatic turn-off when the timer finishes fades over auto_off_transition."""
     entry = make_light_entry(auto_off_transition=3)
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})

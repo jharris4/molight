@@ -154,7 +154,7 @@ async def test_options_reload_removing_occupancy_while_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
     """Deleting the occupancy sensor while OCCUPIED demotes the lit light
-    to a plain ACTIVE timer instead of holding it on forever."""
+    to ACTIVE with a turn-off timer instead of holding it on forever."""
     entry = make_light_entry(occupancy=OCC)
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, entry)
@@ -184,8 +184,8 @@ async def test_options_reload_removing_occupancy_while_occupied(
 async def test_options_reload_during_countdown_restarts_with_new_timeout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A reload mid-COUNTDOWN adopts the lit light as ACTIVE with a full timer
-    at the new timeout; the old countdown no longer fires."""
+    """A reload mid-COUNTDOWN adopts the lit light as ACTIVE with a fresh timer
+    at the new timeout; the old timer no longer finishes."""
     entry = make_light_entry(occupancy=OCC, timeout=60)
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, entry)
@@ -258,7 +258,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
     hass: HomeAssistant, freezer
 ) -> None:
     """A reload landing during the effect blink-off finds the real lights off
-    and seeds IDLE: the auto-off effectively completed early."""
+    and seeds IDLE: the automatic turn-off effectively completed early."""
     contexts = []
 
     @callback

@@ -117,7 +117,7 @@ def _attrs(hass: HomeAssistant, entity_id: str) -> dict:
 async def test_inner_timer_off_is_not_a_manual_off(
     hass: HomeAssistant, freezer, kind: str
 ) -> None:
-    """The inner light's own timer ends the on-period as an automatic off."""
+    """The inner light's own timer ends the on-period as an automatic turn-off."""
     await _nested(hass, kind, occupancy=None if kind == "follow" else OCC)
     await _lit_by_outer(hass, kind)
 
@@ -259,7 +259,7 @@ async def test_dim_at_the_wall_on_the_inner_bulb_is_physical(
     assert _attrs(hass, INNER)["last_brightness_change_physical"] is not None
     assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
     assert _attrs(hass, OUTER)["brightness"] == 100
-    # The dim restarted the outer's full timer: still on past the old end.
+    # The dim started the outer's fresh timer: still on past the old end.
     await _tick(hass, freezer, 100)
     assert hass.states.get(OUTER).state == "on"
 
@@ -458,7 +458,7 @@ async def test_a_persons_dim_through_an_edited_group_restarts_the_outer_timer(
 async def test_a_dim_at_a_bulb_beside_the_inner_light_is_a_persons(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A bulb in the group changing with the inner light is not its automation."""
+    """A bulb in the group changing with the inner light: not acting by itself."""
     inner = make_light_entry(
         name="Inner", lights=[REAL], timeout=50, warn_timeout=120, warn_brightness=20
     )
@@ -499,7 +499,7 @@ async def test_a_group_of_bulbs_is_a_person_at_the_wall(
 
 
 # ---------------------------------------------------------------------------
-# A wrapped light lit by its own automation while the outer light is on
+# A wrapped light lit by itself while the outer light is on
 # ---------------------------------------------------------------------------
 
 INNER_A = "light.inner_a"
@@ -507,7 +507,7 @@ INNER_B = "light.inner_b"
 
 
 async def _outer_over_two(hass: HomeAssistant, inner_b: MockConfigEntry) -> None:
-    """An outer light over a held inner light and one with its own automation."""
+    """An outer light over a held inner light and one acting by itself."""
     hass.states.async_set(INNER_OCC, "off")
     hass.states.async_set(WINDOW, "off")
     await add_real(hass, RealLight("real_1"), RealLight("real_2"))
@@ -657,7 +657,7 @@ async def test_inner_lit_during_the_outer_blink(
     await settle(hass)
     assert _attrs(hass, OUTER)["warning_active"] is (turn_on != "person")
 
-    # The stages run on to the automatic off unless a person cancelled them.
+    # The stages run on to the automatic turn-off unless a person cancelled them.
     await _tick(hass, freezer, 4)
     await _tick(hass, freezer, 6)
     assert (hass.states.get(OUTER).state == "on") is (turn_on == "person")
@@ -854,7 +854,7 @@ async def test_inner_light_lit_by_its_sensor_keeps_the_outer_standby_suppressed(
 ) -> None:
     """A manual off keeps the outer light's standby off. The inner light's own
     sensor then lights it, which is nobody's turn-on of the outer light: its
-    timeout ends in off, not at standby."""
+    timer finishes in off, not at standby."""
     hass.states.async_set(INNER_OCC, "off")
     hass.states.async_set(SCHEDULE, "on")
     await add_real(hass, RealLight("real_1"))

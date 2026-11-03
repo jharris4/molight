@@ -1,10 +1,10 @@
 """Tests for adopting an already occupied sensor into an on light.
 
-Occupancy normally takes the light over on its own rising edge. When it is
+Occupancy normally adopts the light on its own rising edge. When it is
 already on while the light turns on (virtual/physical after a manual off, or
 suppressed earlier by bright/window), or when the gate suppressing it lifts
 (illuminance going dark, a gate-mode window start) while the light is
-already on, the light must adopt it as OCCUPIED; otherwise a timer expires
+already on, the light must adopt it as OCCUPIED; otherwise a timer finishes
 despite presence and the steady-on sensor produces no event that could ever
 rescue the light. Adoption is gated like a turn-on (bright or outside a
 gate-mode window suppress it), except that bright in illuminance gate mode
@@ -73,7 +73,7 @@ async def test_virtual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) 
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
 
     # Turning back on must re-adopt the still occupied sensor: no timer may
-    # expire while the room is occupied.
+    # finish while the room is occupied.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -81,7 +81,7 @@ async def test_virtual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) 
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    # Occupancy clearing starts the normal countdown.
+    # Occupancy clearing starts the turn-off timer.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -261,7 +261,7 @@ async def test_dark_mid_warning_adopts_occupancy_and_restores(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # Timer expiry starts the off warning sequence (still bright, still ACTIVE-gated).
+    # The timer finishes: the off warning sequence (still bright, still ACTIVE-gated).
     await _tick(hass, freezer, 61)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 
@@ -297,7 +297,7 @@ async def _setup_gate_mode(hass: HomeAssistant, **kwargs) -> None:
 async def test_gate_mode_occupancy_rehold_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Moving again during the countdown holds the light the lamp makes bright."""
+    """Moving again while the timer runs holds the light the lamp makes bright."""
     await _setup_gate_mode(hass, timeout=300)
     hass.states.async_set(
         OCC, "off", {"latest_occupied_time": dt_util.utcnow().isoformat()}
@@ -452,10 +452,10 @@ SWITCH = "switch.matrix_light_auto_off"
 @pytest.mark.parametrize("fresh", ["door", "auto_off", "keep_on", "reload", "turn_on"])
 @pytest.mark.parametrize("pulse", ["occupancy", "maintain"])
 @pytest.mark.parametrize("warned", [False, True])
-async def test_false_pulse_does_not_shorten_a_fresh_timeout(
+async def test_false_pulse_does_not_shorten_a_fresh_timer(
     hass: HomeAssistant, freezer, fresh: str, pulse: str, warned: bool
 ) -> None:
-    """A fresh full timeout, as a hold releasing or the door closing starts,
+    """A fresh timer, as a hold releasing or the door closing starts,
     outlives a false detection: the sensors' old history is no reason to end
     it early, and its warning still starts on time."""
     old = (dt_util.utcnow() - timedelta(seconds=600)).isoformat()
@@ -538,7 +538,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timeout(
 async def test_false_detection_still_gets_the_off_delay_on_a_light_it_lit(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A fresh timeout of an earlier on-period gives a later false detection
+    """A fresh timer of an earlier on-period gives a later false detection
     nothing to wait for."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set(OCC, "off")

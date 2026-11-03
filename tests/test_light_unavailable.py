@@ -145,13 +145,13 @@ async def test_real_light_briefly_unavailable_and_back(
 
 
 @pytest.mark.asyncio
-async def test_real_light_recovery_keeps_running_countdown(
+async def test_real_light_recovery_keeps_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A member briefly unavailable mid-countdown must not win a fresh full timer.
+    """A member briefly unavailable mid-countdown must not win a fresh timer.
 
     Regression: unavailable → on used to be handled as a physical turn-on,
-    replacing an occupancy-anchored countdown with a full ACTIVE timer: a
+    replacing an occupancy-anchored timer with a fresh ACTIVE timer: a
     bulb that briefly drops off the mesh every few minutes never turned off.
     """
     await setup_entries(hass, make_light_entry(occupancy=OCC, timeout=60))
@@ -164,7 +164,7 @@ async def test_real_light_recovery_keeps_running_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # 30s into the 60s countdown the bulb drops off the mesh and rejoins.
+    # 30s into the 60s timer the bulb drops off the mesh and rejoins.
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass)
     hass.states.async_set(REAL, "unavailable")
@@ -173,7 +173,7 @@ async def test_real_light_recovery_keeps_running_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The original countdown completes on schedule: 31s later, not 60s.
+    # The original timer finishes on schedule: 31s later, not 60s.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -777,7 +777,7 @@ async def test_failed_manual_turn_off_leaves_the_light_reporting_on(
 async def test_occupancy_briefly_unavailable_keeps_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy going unavailable must not start the countdown."""
+    """Occupancy going unavailable must not start the timer."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
     hass.states.async_set(OCC, "on")
@@ -794,7 +794,7 @@ async def test_occupancy_briefly_unavailable_keeps_occupied(
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # Recovery straight to off starts the countdown as a real clear.
+    # Recovery straight to off starts the timer as a real clear.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -1924,9 +1924,9 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
 ) -> None:
     """End-to-end: a dead motion sensor no longer holds the lights on forever.
 
-    The virtual occupancy sensor clears itself after its clear-on-unavailable
+    The virtual occupancy sensor clears itself after its clear-after-unavailable
     timeout (default 60s), and because the clear is not flagged as a false
-    detection, the light runs its normal countdown (anchored to the dropout
+    detection, the light runs its turn-off timer (anchored to the dropout
     moment) instead of the off delay.
     """
     occupancy = MockConfigEntry(
@@ -1951,7 +1951,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     # 61s later the virtual occupancy clears itself; the light starts the
-    # normal countdown: light_timeout (300s) anchored to the dropout, so
+    # turn-off timer: light_timeout (300s) anchored to the dropout, so
     # ~239s remain.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -1960,7 +1960,7 @@ async def test_source_dropout_releases_light_via_virtual_occupancy(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Not the 5s off delay, and not off yet halfway through the countdown.
+    # Not the 5s off delay, and not off yet halfway through the timer.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -2177,7 +2177,7 @@ async def test_follow_member_recovers_lit_outside_window_is_turned_off(
     """A member booting lit outside the window is turned straight off.
 
     Regression: unavailable → on used to be read as a physical turn-on and ran
-    a full timer, so a strip that turns its LEDs on at boot lit the room until
+    a fresh timer, so a strip that turns its LEDs on at boot lit the room until
     the timeout (or someone) turned it off.
     """
     calls = _record_calls(hass)
@@ -2720,7 +2720,7 @@ async def test_unreadable_sensor_keeps_its_hold_while_other_holds_release(
     """An occupancy or maintain sensor that reloads or goes unavailable keeps its hold.
 
     The other of the two sensors clearing, the door closing and a keep-on entity
-    releasing meanwhile start no countdown; what the sensor reports when it
+    releasing meanwhile start no timer; what the sensor reports when it
     returns decides.
     """
     sensor = await _held_room_loses_sensor(hass, role, how)
@@ -3006,7 +3006,7 @@ async def test_gate_recovery_tells_a_reloaded_visit_from_a_new_one(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("fresh", [False, True])
-async def test_gate_recovery_tells_a_door_dropout_from_an_opening(
+async def test_gate_recovery_tells_an_unavailable_door_from_an_opening(
     hass: HomeAssistant, freezer, fresh: bool
 ) -> None:
     """A held-open door briefly unavailable during a gate outage did not open."""

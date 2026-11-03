@@ -144,7 +144,7 @@ async def test_virtual_light_turn_on(
 
 
 @pytest.mark.asyncio
-async def test_virtual_light_auto_off(
+async def test_virtual_light_automatic_turn_off(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """Virtual light turns off automatically after the configured timeout."""
@@ -248,7 +248,7 @@ async def test_occupancy_turns_light_on_when_dark(
     illuminance_entry: MockConfigEntry,
     freezer,
 ) -> None:
-    """Occupancy turns the light on when dark; clearing starts the countdown."""
+    """Occupancy turns the light on when dark; clearing starts the timer."""
     await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
 
     hass.states.async_set("sensor.lux_1", "5")  # dark
@@ -268,7 +268,7 @@ async def test_occupancy_turns_light_on_when_dark(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Countdown anchors to latest_occupied_time: light_timeout (60s) minus the
+    # The timer anchors to latest_occupied_time: light_timeout (60s) minus the
     # occupancy timeout (30s), i.e. 30s after the sensor cleared.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
@@ -517,7 +517,7 @@ async def test_illuminance_dark_resumes_remaining_time(
     await _settle(hass)
     assert hass.states.get("light.kitchen_light").state == "on"
 
-    # T0+61: the original 60s on-period is exhausted.
+    # T0+61: the original 60s on-period has ended.
     freezer.tick(timedelta(seconds=3))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -528,7 +528,7 @@ async def test_illuminance_dark_resumes_remaining_time(
 
 
 @pytest.mark.asyncio
-async def test_brightness_change_resets_countdown(
+async def test_brightness_change_resets_timer(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """A physical brightness change is activity: timestamp + timer restart."""
@@ -551,13 +551,13 @@ async def test_brightness_change_resets_countdown(
     assert state.attributes["molight_state"] == STATE_ACTIVE
 
     # 55s after the dim (105s after turn-on): the original timer would have
-    # fired at 60s; the reset one has 5s left.
+    # finished at 60s; the reset one has 5s left.
     freezer.tick(timedelta(seconds=55))
     async_fire_time_changed(hass)
     await _settle(hass)
     assert hass.states.get("light.test_light").state == "on"
 
-    # 61s after the dim: the reset timer fires.
+    # 61s after the dim: the reset timer finishes.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -812,9 +812,9 @@ async def test_false_detection_off_delay(hass: HomeAssistant, freezer) -> None:
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
-    assert hass.states.get("light.fd_light").state == "on"  # short countdown running
+    assert hass.states.get("light.fd_light").state == "on"  # off delay running
 
-    # The 5s off delay applies instead of the normal 30s countdown.
+    # The 5s off delay applies instead of the 30s turn-off timer.
     freezer.tick(timedelta(seconds=6))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -884,7 +884,7 @@ async def test_false_detection_never_cuts_manual_lights(
     assert attrs["molight_state"] == STATE_OCCUPIED
 
     # False clear, but occupancy didn't light these lights, so the normal
-    # countdown (60s here, lot never advanced) applies, not the 5s off delay.
+    # timer (60s here, lot never advanced) applies, not the 5s off delay.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
@@ -996,7 +996,7 @@ async def test_illuminance_gate_mode_never_forces_off(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
-    # Occupancy clears → normal precise countdown turns them off.
+    # Occupancy clears → precise turn-off timer turns them off.
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
     assert hass.states.get("light.gate_only_light").state == "on"
@@ -1245,7 +1245,7 @@ async def test_follow_mode_unreadable_schedule_at_startup_respects_hold(
 async def test_follow_mode_manual_re_on_rejoins_window(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Turning the light back on mid-window rejoins SCHEDULED (no auto-off timer)."""
+    """Turning the light back on mid-window rejoins SCHEDULED (no turn-off timer)."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 22:00:00+00:00")  # inside the window
     await _setup_entries(hass, _night_schedule_entry(), _follow_light_entry())
@@ -1415,7 +1415,7 @@ async def test_light_restore_keeps_valid_timestamps(
 
 
 # ---------------------------------------------------------------------------
-# Off warning sequence before auto-off
+# Off warning sequence before an automatic turn-off
 # ---------------------------------------------------------------------------
 
 
@@ -1475,8 +1475,8 @@ def _real_calls(calls: list[dict], service: str) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
-    """At auto-off the light blinks off (effect stage), holds the warn brightness
-    (warn stage), then turns off, instead of turning off immediately."""
+    """At an automatic turn-off the light blinks off (effect stage), holds the warn
+    brightness (warn stage), then turns off, instead of turning off immediately."""
     entry = _warn_light_entry(
         effect_timeout=10, effect_brightness=0, warn_timeout=15, warn_brightness=100
     )
@@ -1490,7 +1490,7 @@ async def test_effect_then_warn_then_off(hass: HomeAssistant, freezer) -> None:
     await hass.async_block_till_done()
     calls = _record_service_calls(hass)
 
-    # Auto-off timer (60s) expires → EFFECT stage: real lights blink off while
+    # Turn-off timer (60s) finishes → EFFECT stage: real lights blink off while
     # the virtual light stays logically on.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
@@ -1549,7 +1549,7 @@ async def test_warn_only_keeps_prior_brightness(hass: HomeAssistant, freezer) ->
 @pytest.mark.asyncio
 async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> None:
     """A physical dim during the warn stage is a re-trigger: back to ACTIVE
-    with a fresh full timer, exactly as a dim mid-countdown would be."""
+    with a fresh timer, exactly as a dim mid-countdown would be."""
     entry = _warn_light_entry(warn_timeout=30, warn_brightness=100)
     entry.add_to_hass(hass)
     # Real light already on so later brightness changes are on→on dims (the
@@ -1572,7 +1572,7 @@ async def test_dim_during_warn_restarts_timer(hass: HomeAssistant, freezer) -> N
     assert state.attributes["molight_state"] == STATE_ACTIVE
     assert state.attributes["brightness"] == 80
 
-    # The full timer restarted: still active well past the old warn stage.
+    # A fresh timer started: still active well past the old warn stage.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -1615,7 +1615,7 @@ async def test_virtual_on_during_effect_restores(hass: HomeAssistant, freezer) -
 @pytest.mark.asyncio
 async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> None:
     """Occupancy returning during the warn stage cancels the warning and holds
-    the light on (OCCUPIED), as if the countdown were still running."""
+    the light on (OCCUPIED), as if the timer were still running."""
     entry = _warn_light_entry(
         warn_timeout=30, warn_brightness=100, occupancy="binary_sensor.motion_1"
     )
@@ -1632,7 +1632,7 @@ async def test_occupancy_retrigger_during_warn(hass: HomeAssistant, freezer) -> 
     await _settle(hass)
     assert _mstate(hass) == STATE_COUNTDOWN
 
-    # Countdown (60s) expires → WARN.
+    # Turn-off timer (60s) finishes → WARN.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await _settle(hass)
@@ -1679,7 +1679,7 @@ async def test_hold_during_warn_cancels(hass: HomeAssistant, freezer) -> None:
     assert state.attributes["auto_off_held"] is True
     assert state.attributes["brightness"] == 200
 
-    # Held, so it never auto-offs no matter how much time passes.
+    # Held, so it never turns off automatically no matter how much time passes.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await _settle(hass)

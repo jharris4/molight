@@ -90,7 +90,8 @@ def _state(hass: HomeAssistant):
 async def test_restart_adopts_burning_lights_with_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Real lights already on at startup are adopted as ACTIVE and still time out."""
+    """Real lights already on at startup are adopted as ACTIVE; their timer still
+    finishes."""
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, make_light_entry())
     await settle(hass)
@@ -212,7 +213,7 @@ async def test_restart_occupied_with_illuminance_state_missing(
 async def test_restart_occupied_outside_gate_window_adopts_active(
     hass: HomeAssistant,
 ) -> None:
-    """Outside a gate-mode window, startup occupancy may not claim the lights."""
+    """Outside a gate-mode window, startup occupancy may not adopt the lights."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "on")
@@ -265,14 +266,14 @@ async def test_restart_occupancy_unavailable_adopts_active(
 
 
 @pytest.mark.asyncio
-async def test_restart_mid_countdown_adopts_active_with_full_timer(
+async def test_restart_mid_countdown_adopts_active_with_fresh_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A restart during COUNTDOWN loses the anchor and restarts the full timeout.
 
     Pins current behavior: occupancy is off with a recent latest_occupied_time,
     but the seed only looks at the current on/off state, so the light is
-    adopted as ACTIVE with a fresh light_timeout.
+    adopted as ACTIVE with a fresh timer.
     """
     lot = datetime.now(UTC) - timedelta(seconds=10)
     hass.states.async_set(OCC, "off", {"latest_occupied_time": lot.isoformat()})
@@ -744,7 +745,7 @@ async def test_swapping_the_follow_schedule_leaves_the_old_marker_behind(
     assert light_targets(calls, "turn_off") == []
     state = _state(hass)
     assert state.state == "on"
-    # The new schedule's own window claims the light; otherwise it is adopted.
+    # The new schedule's own window adopts the light as SCHEDULED, otherwise as ACTIVE.
     assert state.attributes["molight_state"] == (
         STATE_SCHEDULED if other == "on" else STATE_ACTIVE
     )
@@ -861,7 +862,7 @@ async def test_restart_applies_missed_window_start(
     assert state.attributes["molight_state"] == STATE_SCHEDULED
     assert state.attributes["schedule_window_start"] == MARKER
 
-    # No auto-off timer in SCHEDULED.
+    # No turn-off timer in SCHEDULED.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -902,7 +903,7 @@ async def test_restart_readopts_window_already_applied(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
-    # No auto-off timer in SCHEDULED.
+    # No turn-off timer in SCHEDULED.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -959,7 +960,7 @@ async def test_restart_during_effect_blink_off_seeds_idle(
     hass: HomeAssistant,
 ) -> None:
     """A restart during the effect blink-off finds the real lights off and
-    seeds IDLE: the auto-off effectively completed early; the restored
+    seeds IDLE: the automatic turn-off effectively completed early; the restored
     pre-warning snapshot must not turn the light on again."""
     mock_restore_cache(
         hass,
@@ -997,7 +998,7 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
 ) -> None:
     """A restart during the warn stage re-adopts the lit lights as ACTIVE at
     the restored pre-warning brightness (not the warn-stage brightness), with
-    a fresh full timer that later runs a new warning."""
+    a fresh timer that later runs a new warning."""
     mock_restore_cache(
         hass,
         [State(VIRTUAL, "on", {"brightness": 255, "pre_warn_brightness": 200})],
@@ -1012,7 +1013,7 @@ async def test_restart_during_warn_restores_pre_warn_brightness(
     assert state.attributes["brightness"] == 200
     assert state.attributes["pre_warn_brightness"] is None
 
-    # A fresh full timer (60s) runs, then the warn stage, then off.
+    # A fresh timer (60s) runs, then the warn stage, then off.
     freezer.tick(timedelta(seconds=59))
     async_fire_time_changed(hass)
     await settle(hass)

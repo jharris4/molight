@@ -201,7 +201,7 @@ async def async_setup_entry(
 class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity):
     """Wraps a single real binary sensor with an occupancy timeout.
 
-    is_on mirrors the real sensor directly (no countdown).
+    is_on mirrors the real sensor directly (no delay).
     latest_occupied_time = last_turn_off - timeout, representing our best
     estimate of when the person actually left.
 
@@ -214,14 +214,14 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     last_clear_false_detection so lights can turn off after their
     false-detection off delay.
 
-    Clear-on-unavailable (when clear_on_unavailable_timeout > 0): a source
+    Clear after unavailable (when clear_on_unavailable_timeout > 0): a source
     that stays unavailable/unknown while occupied would otherwise
     hold occupancy (and any lights it lit) on forever. Instead, the person
     is assumed present right up to the dropout: latest_occupied_time advances
     to that moment immediately, and if the source hasn't recovered after the
     timeout the occupancy is cleared, flagged via last_clear_unavailable.
     Such clears are never classified as false detections (the room may well
-    still be occupied), so lights that reference it run their normal gentle countdown.
+    still be occupied), so lights that reference it run their turn-off timer.
     A recovery cancels the pending clear: straight to "off" is processed as a
     real clear, straight to "on" simply continues the visit.
     """
@@ -411,7 +411,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             if self._attr_is_on and self._unavailable_timeout <= 0:
                 # Unlike an outage it cannot end by itself: clear now.
                 self._latest_occupied_time = datetime.now(UTC)
-                self._unavailable_expired(self._latest_occupied_time)
+                self._unavailable_finished(self._latest_occupied_time)
             else:
                 self._on_source_unavailable()
             return True
@@ -428,8 +428,8 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             return
         new_state = event.data.get("new_state")
         if new_state is None:
-            # A source whose entity ID changed did not drop out, and the dropout
-            # countdown is grace enough for a reload.
+            # A source whose entity ID changed did not drop out, and the
+            # clear-after-unavailable timer is grace enough for a reload.
             self._gone.run_unless_entity_id_changed(
                 self._source_sensor, self._on_source_unavailable, grace=False
             )
@@ -467,7 +467,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             self._attr_is_on = True
         else:
             if not self._attr_is_on:
-                # Already cleared (the unavailable timeout fired): a late
+                # Already cleared (the clear-after-unavailable timer finished): a late
                 # recovery straight to "off" must not re-process the clear,
                 # which would advance latest_occupied_time past the dropout
                 # and overwrite the clear's classification.
@@ -494,7 +494,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             self._latest_occupied_time = candidate
 
     def _resume_dropout(self, dropout: datetime) -> None:
-        """Carry an occupied dropout across a reload, keeping its clear deadline."""
+        """Carry an occupied dropout across a reload, keeping its finish time."""
         self._attr_is_on = True
         if self._unavailable_timeout <= 0:
             return
@@ -508,12 +508,12 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             return
         self._dropout = dropout
         self._unavailable_unsub = async_call_later(
-            self.hass, self._unavailable_timeout - elapsed, self._unavailable_expired
+            self.hass, self._unavailable_timeout - elapsed, self._unavailable_finished
         )
 
     @callback
     def _on_source_unavailable(self) -> None:
-        """Start the clear-on-unavailable countdown for an occupied dropout."""
+        """Start the clear-after-unavailable timer for an occupied dropout."""
         if (
             self._unavailable_timeout <= 0
             or not self._attr_is_on
@@ -527,12 +527,12 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
             self._latest_occupied_time = now
         self._dropout = now
         self._unavailable_unsub = async_call_later(
-            self.hass, self._unavailable_timeout, self._unavailable_expired
+            self.hass, self._unavailable_timeout, self._unavailable_finished
         )
         self.async_write_ha_state()
 
     @callback
-    def _unavailable_expired(self, _now: datetime) -> None:
+    def _unavailable_finished(self, _now: datetime) -> None:
         self._unavailable_unsub = None
         self._dropout = None
         self._attr_is_on = False
@@ -723,7 +723,7 @@ class VirtualCombinedOccupancySensor(
             # reads occupied before startup finishes, or on its first sighting
             # after it, carry the restored visit instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
-            # lights that reference it adopt with a full timer and re-evaluate.
+            # lights that reference it adopt with a fresh timer and re-evaluate.
             self._restored_carry = True
             self._startup_done = self.hass.state is CoreState.running
             self._unreported_maintain = {
@@ -978,11 +978,13 @@ class VirtualCombinedOccupancySensor(
         dropout = datetime.now(UTC)
 
         @callback
-        def _expired(_now: datetime) -> None:
+        def _finished(_now: datetime) -> None:
             del self._reloading[entity_id]
             self._reevaluate_on_dropout(event, dropout, showed=True)
 
-        self._reloading[entity_id] = async_call_later(self.hass, RELOAD_GRACE, _expired)
+        self._reloading[entity_id] = async_call_later(
+            self.hass, RELOAD_GRACE, _finished
+        )
 
     def _reevaluate_on_dropout(
         self, event: Event[EventStateChangedData], dropout: datetime, *, showed: bool
@@ -993,11 +995,11 @@ class VirtualCombinedOccupancySensor(
 
         A constituent leaving the state machine (its entry unloaded, the
         entity removed) must not hold the combined sensor on forever. Like
-        the simple sensor's clear-on-unavailable, never classified as a
-        false detection (the room may still be occupied), and the person is
-        assumed present right up to the dropout, so latest_occupied_time
-        advances to that moment: lights that reference it run their normal gentle
-        countdown, and a nesting combined sensor sees an advanced lot rather
+        a clear by the simple sensor's Clear after unavailable field, never
+        classified as a false detection (the room may still be occupied), and the
+        person is assumed present right up to the dropout, so latest_occupied_time
+        advances to that moment: lights that reference it run their turn-off
+        timer, and a nesting combined sensor sees an advanced lot rather
         than misreading the clear as a false detection.
         """
         new_state = event.data.get("new_state")

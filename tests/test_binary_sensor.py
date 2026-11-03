@@ -143,7 +143,7 @@ async def test_occupancy_clear_records_latest_occupied_time(
 async def test_occupancy_holds_forever_when_unavailable_clear_disabled(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With clear_on_unavailable disabled, a dropout never reads as a clear."""
+    """With Clear after unavailable disabled, a dropout never reads as a clear."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -184,7 +184,7 @@ async def test_occupancy_clears_after_unavailable_timeout(
     latest_occupied_time advances to the dropout moment immediately, and the
     clear is flagged via last_clear_unavailable, never as a false detection.
     """
-    occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
+    occupancy_entry.add_to_hass(hass)  # default Clear after unavailable: 60s
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -229,7 +229,7 @@ async def test_occupancy_dropout_recovery_to_on_cancels_clear(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await hass.async_block_till_done()
 
-    # The pending clear was cancelled: still on long after it would have fired.
+    # The pending clear was cancelled: still on long after its timer would finish.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -266,7 +266,7 @@ async def test_occupancy_dropout_recovery_to_off_is_real_clear(
     # (now - occupancy_timeout), so it stands.
     assert state.attributes["latest_occupied_time"] == dropout.isoformat()
 
-    # No stray timer fires later.
+    # No stray timer finishes later.
     freezer.tick(timedelta(seconds=120))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -277,14 +277,15 @@ async def test_occupancy_dropout_recovery_to_off_is_real_clear(
 async def test_occupancy_recovery_to_off_after_unavailable_clear_is_noop(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A recovery straight to 'off' after the unavailable clear fired is a no-op.
+    """A recovery straight to 'off' after the clear-after-unavailable timer finished
+    is a no-op.
 
-    The clear was already processed when the timeout expired; re-processing it
+    The clear was already processed when the timer finished; re-processing it
     would advance latest_occupied_time far past the dropout (as if someone had
     been present the whole time the sensor was dead) and wipe the
     last_clear_unavailable classification.
     """
-    occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
+    occupancy_entry.add_to_hass(hass)  # default Clear after unavailable: 60s
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -314,10 +315,10 @@ async def test_occupancy_recovery_to_off_after_unavailable_clear_is_noop(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_dropout_while_off_is_ignored(
+async def test_occupancy_source_unavailable_while_off_is_ignored(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A dropout while not occupied must not advance lot or start a timer."""
+    """A source unavailable while not occupied must not advance lot or start a timer."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
@@ -407,7 +408,7 @@ async def test_late_loading_source_clear_is_not_false_detection(
 
     Until a slow integration provides it, HA shows the source as a restored
     placeholder; a visit arriving then may be a replay of one that began
-    long before, so an early clear must take the normal countdown.
+    long before, so an early clear must take the turn-off timer.
     """
     hass.states.async_set("binary_sensor.motion_1", "unavailable", {"restored": True})
     entry = MockConfigEntry(
@@ -624,10 +625,10 @@ async def _occupied_then_dropped(hass: HomeAssistant, *entries) -> datetime:
 @pytest.mark.parametrize(
     ("new_timeout", "clears_after"), [(45, 45), (5, 10), (0, None)]
 )
-async def test_occupancy_edit_during_dropout_keeps_the_clear_deadline(
+async def test_occupancy_edit_during_dropout_keeps_the_finish_time(
     hass: HomeAssistant, freezer, new_timeout: int, clears_after: int | None
 ) -> None:
-    """An edit mid-dropout keeps occupancy until the (new) deadline, not at once."""
+    """An edit mid-dropout keeps occupancy until the (new) finish time, not at once."""
     entry = _dropout_entry()
     dropout = await _occupied_then_dropped(hass, entry)
     freezer.tick(timedelta(seconds=10))
@@ -636,7 +637,7 @@ async def test_occupancy_edit_during_dropout_keeps_the_clear_deadline(
 
     state = hass.states.get("binary_sensor.dropout_occupancy")
     assert state.attributes["latest_occupied_time"] == dropout.isoformat()
-    if clears_after == 10:  # the shortened deadline has already passed
+    if clears_after == 10:  # the shortened finish time has already passed
         assert state.state == "off"
         assert state.attributes["last_clear_unavailable"] is True
         return
@@ -665,7 +666,7 @@ async def test_occupancy_edit_during_dropout_keeps_the_clear_deadline(
     ("new_timeout", "clears_after"), [(60, 60), (90, 90), (45, 45), (35, 40)]
 )
 @pytest.mark.parametrize("via", ["edit", "reload"])
-async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_deadline(
+async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_finish_time(
     hass: HomeAssistant,
     freezer,
     invalid: tuple[str, str],
@@ -713,11 +714,11 @@ async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_dead
 
 
 @pytest.mark.asyncio
-async def test_occupancy_new_dropout_after_a_recovery_gets_its_own_deadline(
+async def test_occupancy_new_dropout_after_a_recovery_gets_its_own_finish_time(
     hass: HomeAssistant, freezer
 ) -> None:
     """A source that recovered and dropped out again starts a new outage,
-    and an edit keeps that one's deadline."""
+    and an edit keeps that one's finish time."""
     entry = _dropout_entry()
     await _occupied_then_dropped(hass, entry)
     freezer.tick(timedelta(seconds=30))
@@ -772,10 +773,10 @@ async def test_occupancy_dropout_during_a_reload_counts_from_its_report(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_edit_after_source_removal_keeps_the_clear_deadline(
+async def test_occupancy_edit_after_source_removal_keeps_the_finish_time(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A source with no state at all is a dropout too: an edit keeps its deadline."""
+    """A source with no state at all is a dropout too: an edit keeps its finish time."""
     entry = _dropout_entry()
     await setup_entries(hass, entry)
     hass.states.async_set("binary_sensor.motion_1", "on")
@@ -830,7 +831,8 @@ async def test_occupancy_recovery_after_a_dropout_edit_continues(
 async def test_light_outlives_an_occupancy_edit_during_dropout(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A light whose timeout is under the dropout timeout is not turned off early."""
+    """A light whose timeout is under the clear-after-unavailable timeout is not
+    turned off early."""
     occupancy = _dropout_entry()
     light = make_light_entry(occupancy="binary_sensor.dropout_occupancy", timeout=30)
     hass.states.async_set("light.real_1", "on")
@@ -847,7 +849,7 @@ async def test_light_outlives_an_occupancy_edit_during_dropout(
     async_fire_time_changed(hass)
     await settle(hass)
     assert hass.states.get("binary_sensor.dropout_occupancy").state == "off"
-    # The countdown anchored to the dropout is already due.
+    # The turn-off timer anchored to the dropout is already due.
     freezer.tick(timedelta(seconds=1))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -909,9 +911,9 @@ async def test_recovery_to_on_preserves_false_detection_clock(
 async def test_second_dropout_event_does_not_rearm_clear_timer(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """More unavailable/unknown events while the clear countdown is armed
+    """More unavailable/unknown events while the clear-after-unavailable timer is armed
     must neither restart it nor re-advance latest_occupied_time."""
-    occupancy_entry.add_to_hass(hass)  # default clear-on-unavailable: 60s
+    occupancy_entry.add_to_hass(hass)  # default Clear after unavailable: 60s
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -922,7 +924,7 @@ async def test_second_dropout_event_does_not_rearm_clear_timer(
     hass.states.async_set("binary_sensor.motion_1", "unavailable")
     await hass.async_block_till_done()
 
-    # 30s in, the source reports unknown; the countdown is already armed.
+    # 30s in, the source reports unknown; the timer is already armed.
     freezer.tick(timedelta(seconds=30))
     hass.states.async_set("binary_sensor.motion_1", "unknown")
     await hass.async_block_till_done()
@@ -931,7 +933,7 @@ async def test_second_dropout_event_does_not_rearm_clear_timer(
     assert state.state == "on"
     assert state.attributes["latest_occupied_time"] == dropout.isoformat()
 
-    # The original 60s countdown expires on schedule (30+31), not 30+60.
+    # The original 60s timer finishes on schedule (30+31), not 30+60.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -2116,7 +2118,7 @@ async def test_combined_clears_when_last_constituent_drops_out(
     assert combined.attributes["last_clear_false_detection"] is False
     assert combined.attributes["false_detection_count"] == 0
     # The person is assumed present up to the dropout: the lot advances so
-    # lights that reference it run their normal countdown, not the off delay.
+    # lights that reference it run their turn-off timer, not the off delay.
     assert combined.attributes["latest_occupied_time"] == datetime.now(UTC).isoformat()
 
 
@@ -2348,7 +2350,7 @@ async def test_combined_reload_grace_ends_when_constituent_reports_gone(
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "off"
 
-    # The cancelled grace does not fire later.
+    # The cancelled grace timer does not finish later.
     seen = _room_states(hass, "binary_sensor.seed_combined")
     async_fire_time_changed(hass, datetime.now(UTC) + timedelta(seconds=11))
     await settle(hass)
@@ -2433,7 +2435,7 @@ async def test_combined_clears_at_once_when_holding_constituent_is_removed(
 async def test_combined_unload_during_reload_grace_drops_the_timer(
     hass: HomeAssistant,
 ) -> None:
-    """Unloading the combined sensor mid-grace leaves no timer to fire."""
+    """Unloading the combined sensor mid-grace leaves no timer to finish."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -2686,7 +2688,7 @@ async def test_occupancy_does_not_seed_last_on_time_at_startup(
     assert state.attributes["last_on_time"] is None
 
     # Motion that began before the restart clears moments later: not a false
-    # detection, so the countdown gets a real latest_occupied_time.
+    # detection, so the timer gets a real latest_occupied_time.
     freezer.tick(timedelta(seconds=2))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await hass.async_block_till_done()
@@ -2749,7 +2751,7 @@ async def test_occupancy_seeds_off_when_source_unavailable_at_startup(
 ) -> None:
     """A source unavailable at startup seeds occupancy off (no grace timer).
 
-    Consistent with the clear-on-unavailable behavior: after a restart we
+    Consistent with the clear-after-unavailable behavior: after a restart we
     can't know how long the source has been gone, so the safe read is 'not
     occupied'; a recovery to 'on' re-triggers normally.
     """
@@ -3373,10 +3375,10 @@ async def test_occupancy_does_not_date_a_clear_from_a_restart(
 @pytest.mark.parametrize(
     ("occupied_for", "false"), [(120, False), (2, True)], ids=["genuine", "false"]
 )
-async def test_light_countdown_after_a_clear_missed_during_an_occupancy_reload(
+async def test_light_timer_after_a_clear_missed_during_an_occupancy_reload(
     hass: HomeAssistant, freezer, topology: str, occupied_for: int, false: bool
 ) -> None:
-    """A light gets the normal countdown after a genuine visit whose clear the
+    """A light gets the turn-off timer after a genuine visit whose clear the
     reloading sensor missed, and the off delay after a false one, whether it
     references the sensor directly or through combined sensors."""
     lamp, motion = RealLight("lamp"), RealBinary("motion")

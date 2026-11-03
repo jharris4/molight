@@ -231,7 +231,7 @@ async def test_physical_recolor_mirrors_and_restarts_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """Recoloring a real light is human activity: the color is mirrored,
-    attributed, and a running countdown restarts with the full timeout."""
+    attributed, and a running timer restarts with the full timeout."""
     member_attrs = {
         **HS_CAPS,
         "color_mode": "hs",
@@ -253,7 +253,7 @@ async def test_physical_recolor_mirrors_and_restarts_timer(
     assert tuple(attrs["hs_color"]) == (200.0, 50.0)
     assert attrs["last_color_change_physical"] == datetime.now(UTC).isoformat()
 
-    # 80s after adoption: past the original expiry, inside the restarted one.
+    # 80s after adoption: past the original finish time, inside the restarted timer.
     freezer.tick(timedelta(seconds=40))
     async_fire_time_changed(hass)
     await settle(hass)

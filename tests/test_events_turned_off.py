@@ -2,7 +2,7 @@
 
 It fires once per on-period end, with why: a person, the timer, a false
 detection's off delay, brightness, or a schedule end, including one left pending
-by an auto-off hold or missed during a restart. A rest at standby is a
+by an auto-off hold or missed during a restart. Going to standby is a
 turned_off with standby set.
 """
 
@@ -265,8 +265,8 @@ async def test_window_end_missed_during_a_restart(hass) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_timer_rests_at_standby(hass, freezer) -> None:
-    """A raised standby light's timeout ends at standby, not dark."""
+async def test_timer_finishes_at_standby(hass, freezer) -> None:
+    """A raised standby light's timer finishes at standby, not dark."""
     records = await _setup(
         hass,
         make_scheduled_light_entry(
@@ -389,11 +389,11 @@ async def test_an_unreadable_member_at_a_restart_settles_the_on_period(
 
 
 @pytest.mark.asyncio
-async def test_a_restart_finding_the_lights_off_at_standby_rests_them_again(
+async def test_a_restart_finding_the_lights_off_at_standby_puts_them_back(
     hass,
 ) -> None:
-    """A light resting at standby that was switched off while Home Assistant
-    was down: the rest ended, and the startup rests the lights again."""
+    """A light at standby that was switched off while Home Assistant
+    was down: standby ended, and the startup puts the lights back."""
     entry = make_scheduled_light_entry(
         name="Hall",
         schedule=SCHED,

@@ -431,7 +431,7 @@ async def test_dark_edge_resume_is_anchored_to_latest_occupied_time(
 async def test_dark_edge_after_the_timeout_resumes_nothing(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A bright off whose on-period has since run out is not resumed."""
+    """A bright off whose on-period has since ended is not resumed."""
     hass.states.async_set(ILLUM, "off")  # dark
     await setup_entries(hass, make_light_entry(illuminance=ILLUM))
 
@@ -649,7 +649,7 @@ async def test_dark_edge_resumes_the_timeout_of_a_light_adopted_at_startup(
 async def test_dark_edge_after_a_bright_off_during_the_warning_resumes_nothing(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An effect or warn stage is no countdown: the on-period was already over."""
+    """An effect or warn stage has no timer: the on-period was already over."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)
@@ -701,10 +701,10 @@ async def test_dark_edge_resume_survives_restart(hass: HomeAssistant, freezer) -
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_resumes_the_countdown_a_raw_sensors_clear_started(
+async def test_dark_edge_resumes_the_timer_a_raw_sensors_clear_started(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A sensor with no latest_occupied_time still resumes its countdown."""
+    """A sensor with no latest_occupied_time still resumes its timer."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
@@ -712,7 +712,7 @@ async def test_dark_edge_resumes_the_countdown_a_raw_sensors_clear_started(
     hass.states.async_set(OCC, "on")  # an occupancy source
     await settle(hass)
     freezer.tick(timedelta(seconds=10))
-    hass.states.async_set(OCC, "off")  # T0: a 60 s countdown
+    hass.states.async_set(OCC, "off")  # T0: a 60 s timer
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -737,7 +737,7 @@ async def test_dark_edge_resumes_a_timeout_restarted_at_the_wall(
     changed = {"brightness": 150} if change == "dim" else {"hs_color": (200, 80)}
     hass.states.async_set(
         REAL, "on", {"brightness": 200, "hs_color": (30, 80)} | changed
-    )  # T0: a fresh 60 s timeout
+    )  # T0: a fresh 60 s timer
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
@@ -751,7 +751,7 @@ async def test_dark_edge_resumes_a_timeout_restarted_at_the_wall(
 async def test_dark_edge_resumes_the_timeout_a_hold_release_started(
     hass: HomeAssistant, freezer, hold: str, restart: bool
 ) -> None:
-    """Releasing a long hold starts a fresh timeout, which going dark resumes."""
+    """Releasing a long hold starts a fresh timer, which going dark resumes."""
 
     async def _hold(held: bool) -> None:
         if hold == "keep_on_entity":
@@ -772,7 +772,7 @@ async def test_dark_edge_resumes_the_timeout_a_hold_release_started(
     await _hold(True)
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
-    await _hold(False)  # T0: a fresh 60 s timeout
+    await _hold(False)  # T0: a fresh 60 s timer
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
     freezer.tick(timedelta(seconds=10))
@@ -788,10 +788,10 @@ async def test_dark_edge_resumes_the_timeout_a_hold_release_started(
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_resumes_a_maintain_sensors_countdown(
+async def test_dark_edge_resumes_a_maintain_sensors_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The countdown a maintain sensor's clear started is resumed like any."""
+    """The timer a maintain sensor's clear started is resumed like any."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(MAINT, "off")
     hass.states.async_set(REAL, "off")
@@ -818,7 +818,7 @@ async def test_dark_edge_resumes_a_maintain_sensors_countdown(
 async def test_dark_edge_after_the_room_emptied_while_bright(
     hass: HomeAssistant, freezer, sensor: str, away: int
 ) -> None:
-    """Presence held the light with no countdown: when they left decides."""
+    """Presence held the light with no timer: when they left decides."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
@@ -886,7 +886,7 @@ async def test_dark_edge_resumes_a_held_light_for_a_timeout_from_the_bright_off(
 async def test_dark_edge_resumes_a_manual_timeout_despite_an_old_visit(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An old visit does not end the countdown of a light turned on since."""
+    """An old visit does not end the timer of a light turned on since."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(OCC, "off", {"latest_occupied_time": visit})
@@ -909,7 +909,7 @@ async def test_dark_edge_resume_lasts_until_a_timeout_after_a_later_visit(
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)
     await setup_entries(hass, make_light_entry(occupancy=OCC, illuminance=ILLUM))
-    await _turn_on_by(hass, "virtual")  # its timeout ends in 60 s
+    await _turn_on_by(hass, "virtual")  # its timer finishes in 60 s
 
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set(ILLUM, "on")
@@ -1085,7 +1085,7 @@ async def test_scheduled_ignores_occupancy_and_illuminance(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_SCHEDULED
 
-    # Occupancy on/off must not take over or start a countdown.
+    # Occupancy on/off must not adopt it or start a timer.
     hass.states.async_set(OCC, "on")
     await settle(hass)
     state = _state(hass)
@@ -1323,7 +1323,7 @@ async def test_switching_gate_recalculates_from_occupancy_history(
     await setup_entries(hass, entry)
 
     # A manual on-period has a fresh timer, but the switch-state boundary
-    # replaces it with the already-expired occupancy-based deadline.
+    # replaces it with the occupancy-based finish time, already past.
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -1393,7 +1393,7 @@ async def test_state_preserving_gate_keeps_on_period_at_window_end(
             hass.states.async_set(OCC, "off")
             await settle(hass)
             expected_state = STATE_COUNTDOWN
-            # Let half the existing countdown elapse before the boundary.
+            # Let half the existing timer run before the boundary.
             freezer.tick(timedelta(seconds=30))
             async_fire_time_changed(hass)
             await settle(hass)
@@ -1405,7 +1405,7 @@ async def test_state_preserving_gate_keeps_on_period_at_window_end(
     assert state.attributes["molight_state"] == expected_state
 
     if origin == "countdown":
-        # The boundary must not restart the 60-second countdown.
+        # The boundary must not restart the 60-second timer.
         freezer.tick(timedelta(seconds=31))
         async_fire_time_changed(hass)
         await settle(hass)
@@ -1492,7 +1492,7 @@ async def test_state_preserving_gate_adopts_occupancy_on_virtual_turn_on_outside
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # Occupancy clearing starts the normal countdown.
+    # Occupancy clearing starts the turn-off timer.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -1651,7 +1651,7 @@ async def test_gate_window_start_keeps_running_state(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # The original 60s timer still fires.
+    # The original 60s timer still finishes.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1775,7 +1775,7 @@ async def test_reoccupancy_during_countdown_cancels_timer(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Way past any timer: occupied lights never time out.
+    # Way past any timer: occupied lights run no timer.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1783,13 +1783,13 @@ async def test_reoccupancy_during_countdown_cancels_timer(
 
 
 @pytest.mark.asyncio
-async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
+async def test_finished_timer_defers_to_reoccupancy_in_same_iteration(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A timer expiring in the same loop iteration occupancy returns is a no-op.
+    """A timer finishing in the same loop iteration occupancy returns is a no-op.
 
     async_call_later has already fired the callback at that point, so the
-    occupancy handler's _cancel_timer can't stop it; _timer_expired itself
+    occupancy handler's _cancel_timer can't stop it; _timer_finished itself
     must notice the state machine moved on (mirroring its _held guard) instead
     of turning the lights off over an occupied room.
     """
@@ -1802,14 +1802,14 @@ async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # Occupancy returns; the expiry coroutine still runs afterwards, exactly
+    # Occupancy returns; `_timer_finished` still runs afterwards, exactly
     # as when both land in the same event-loop iteration.
     hass.states.async_set(OCC, "on")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     light = hass.data["entity_components"]["light"].get_entity(VIRTUAL)
-    await light._timer_expired(datetime.now(UTC))
+    await light._timer_finished(datetime.now(UTC))
     await settle(hass)
 
     state = _state(hass)
@@ -1818,7 +1818,7 @@ async def test_expired_timer_defers_to_reoccupancy_in_same_iteration(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -> None:
+async def test_occupancy_adopts_manual_light(hass: HomeAssistant, freezer) -> None:
     """Occupancy during a manual on-period suspends the timeout until it clears."""
     entry = make_light_entry(occupancy=OCC)
     await setup_entries(hass, entry)
@@ -1836,7 +1836,7 @@ async def test_occupancy_takes_over_manual_light(hass: HomeAssistant, freezer) -
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # Clearing starts the countdown (no latest_occupied_time → full timeout).
+    # Clearing starts the timer (no latest_occupied_time → full timeout).
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -2016,25 +2016,25 @@ async def test_false_clear_leaves_a_light_changed_at_the_wall_its_timeout(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hold", ["occupancy", "maintain"])
 @pytest.mark.parametrize("lit_by", ["occupancy", "dark"])
-async def test_false_blip_after_a_genuine_visit_keeps_its_countdown(
+async def test_false_blip_after_a_genuine_visit_keeps_its_timer(
     hass: HomeAssistant, freezer, lit_by: str, hold: str
 ) -> None:
     """Only the visit that lit the light gets the false-detection off delay: a
-    blip after a genuine visit cleared keeps that visit's countdown."""
-    await _assert_false_blip_keeps_the_visits_countdown(hass, freezer, lit_by, hold)
+    blip after a genuine visit cleared keeps that visit's timer."""
+    await _assert_false_blip_keeps_the_visits_timer(hass, freezer, lit_by, hold)
 
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("hold", ["occupancy", "maintain"])
-async def test_false_blip_after_a_window_start_visit_keeps_its_countdown(
+async def test_false_blip_after_a_window_start_visit_keeps_its_timer(
     hass: HomeAssistant, freezer, hold: str
 ) -> None:
     """The same for a light a gate window start lit for standing presence."""
-    await _assert_false_blip_keeps_the_visits_countdown(hass, freezer, "window", hold)
+    await _assert_false_blip_keeps_the_visits_timer(hass, freezer, "window", hold)
 
 
-async def _assert_false_blip_keeps_the_visits_countdown(
+async def _assert_false_blip_keeps_the_visits_timer(
     hass: HomeAssistant, freezer, lit_by: str, hold: str
 ) -> None:
     sensors = (OCC, MAINT) if hold == "maintain" else (OCC,)
@@ -2127,7 +2127,7 @@ async def test_false_off_delay_never_outlasts_the_turn_off_timeout(
 
 
 @pytest.mark.asyncio
-async def test_false_clear_after_genuine_maintain_presence_keeps_its_countdown(
+async def test_false_clear_after_genuine_maintain_presence_keeps_its_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A blip lights the room, the maintain sensor then sees someone for
@@ -2305,7 +2305,7 @@ async def test_virtual_turn_on_while_occupied_stays_occupied(
 
 
 @pytest.mark.asyncio
-async def test_self_service_echo_does_not_upgrade_countdown(
+async def test_self_service_echo_does_not_upgrade_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """The real light confirming our own turn_on must not restart the timer.
@@ -2313,8 +2313,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
     Turning back on when dark again grants only the remaining portion of the
     original on-period. When the real light's state then echoes our own
     service call, that echo must be recognized as self-caused; treating it
-    as a physical turn-on would upgrade COUNTDOWN to ACTIVE with a fresh
-    full timer.
+    as a physical turn-on would upgrade COUNTDOWN to ACTIVE with a fresh timer.
     """
     contexts = []
 
@@ -2353,7 +2352,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
-    # The remaining ~20s countdown still stands, not a fresh 60s timer.
+    # The remaining ~20s timer still stands, not a fresh 60s timer.
     freezer.tick(timedelta(seconds=21))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -2363,9 +2362,7 @@ async def test_self_service_echo_does_not_upgrade_countdown(
 
 
 @pytest.mark.asyncio
-async def test_countdown_falls_back_when_lot_corrupt(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_timer_falls_back_when_lot_corrupt(hass: HomeAssistant, freezer) -> None:
     """A garbage latest_occupied_time falls back to the full light_timeout."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
@@ -2406,7 +2403,7 @@ async def test_attribute_only_change_does_not_restart_timer(
     hass.states.async_set(REAL, "on", {"brightness": 100, "battery": 42})
     await settle(hass)
 
-    # The original 60s timer still expires on schedule; it was not restarted
+    # The original 60s timer still finishes on schedule; it was not restarted
     # by the attribute update at the 30s mark.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
@@ -2478,7 +2475,7 @@ async def test_member_on_at_brightness_zero_keeps_running_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A member appearing on at brightness 0 while another is lit must not
-    restart the running countdown; it carries no human activity."""
+    restart the running timer; it carries no human activity."""
     hass.states.async_set(REAL, "on", {"brightness": 100})
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -2490,7 +2487,7 @@ async def test_member_on_at_brightness_zero_keeps_running_timer(
     await settle(hass)
     assert _state(hass).state == "on"
 
-    # The original 60s timer still expires on schedule.
+    # The original 60s timer still finishes on schedule.
     freezer.tick(timedelta(seconds=31))
     async_fire_time_changed(hass)
     await settle(hass)

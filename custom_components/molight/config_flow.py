@@ -652,7 +652,7 @@ def _effective_occupancy_timeout(
 
     For a simple occupancy sensor this is its configured timeout; for a
     combined sensor it is the max across all constituent sensors (the
-    countdown math anchors to the constituent that clears last). Combined
+    timer anchor is the constituent that clears last). Combined
     sensors can reference each other, and while the flows reject cycles a
     hand-edited entry settings could still hold one, so entities already being
     resolved are skipped.
@@ -985,7 +985,7 @@ def _validate_light_timeout(
 ) -> dict[str, str]:
     """Check light_timeout >= any occupancy sensor's timeout.
 
-    The maintain entity's latest_occupied_time feeds the countdown the same
+    The maintain entity's latest_occupied_time feeds the turn-off timer the same
     way the occupancy sensor's does, so both are checked. A blank
     timeout runs no timer, so it passes that check but allows no effect or
     warn stage: they only ever warn of a timer off.
@@ -3352,7 +3352,7 @@ class MoLightConfigFlow(
                 ),
                 "mode_key": None,
                 "mode": None,
-                # Occupancy feeds the countdown, so the light_timeout guard
+                # Occupancy feeds the turn-off timer, so the light_timeout guard
                 # applies to each light the same way the light form enforces it.
                 "check_timeout": True,
             }

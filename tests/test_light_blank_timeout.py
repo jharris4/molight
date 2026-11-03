@@ -120,7 +120,7 @@ async def test_manual_turn_on_runs_no_timer(hass: HomeAssistant, freezer) -> Non
 async def test_occupancy_clear_leaves_the_light_on(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy turns the light on; its clearing starts no countdown."""
+    """Occupancy turns the light on; its clearing starts no timer."""
     hass.states.async_set(OCC, "off")
     await setup_entries(hass, make_light_entry(timeout=None, occupancy=OCC))
     calls = record_service_calls(hass)
@@ -205,7 +205,7 @@ async def test_hold_release_starts_no_timer(hass: HomeAssistant, freezer) -> Non
 async def test_restart_adopts_a_lit_light_without_a_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A real light found on at startup is adopted and never timed out."""
+    """A real light found on at startup is adopted and runs no timer."""
     hass.states.async_set(REAL, "on")
     await setup_entries(hass, make_light_entry(timeout=None))
     await settle(hass)
@@ -287,7 +287,7 @@ async def test_manual_off_while_bright_ends_the_on_period(
 
 @pytest.mark.asyncio
 async def test_maintain_clear_leaves_the_light_on(hass: HomeAssistant, freezer) -> None:
-    """The maintain sensor holds a lit light; its clearing starts no countdown."""
+    """The maintain sensor holds a lit light; its clearing starts no timer."""
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, make_light_entry(timeout=None, maintain=MAINT))
     calls = record_service_calls(hass)

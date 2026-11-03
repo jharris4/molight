@@ -128,7 +128,7 @@ async def turn_on(hass: HomeAssistant) -> None:
     await settle(hass)
 
 
-async def expect_fresh_timeout(hass: HomeAssistant, freezer) -> None:
+async def expect_fresh_timer(hass: HomeAssistant, freezer) -> None:
     """The light, no longer held, runs one full timeout of 60 s and turns off."""
     await tick(hass, freezer, 59)
     assert hass.states.get(VIRTUAL).state == "on"
@@ -153,7 +153,7 @@ async def test_keep_on_entity_that_goes_missing_stops_holding(
     await remove(hass, how, INPUT)
     assert attrs(hass)["auto_off_held"] is False
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
 
 
 @pytest.mark.parametrize("outage", [False, True], ids=["open", "unavailable"])
@@ -183,7 +183,7 @@ async def test_open_door_that_goes_missing_counts_as_closed(
 
     await remove(hass, how, INPUT)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
 
 
 async def first_reading_while_open_door_awaits_its_reload(
@@ -254,7 +254,7 @@ async def test_sensor_that_goes_missing_counts_as_clear(
 
     await remove(hass, how, INPUT)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
 
 
 @pytest.mark.parametrize("manual_off", [False, True], ids=["closed", "manual_off"])
@@ -830,7 +830,7 @@ async def test_unregistered_entity_removed_again_is_judged_once(
     await tick(hass, freezer, 1)
     assert attrs(hass)["auto_off_held"] is False
     assert light._gone._pending == {}
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
 
 
 @pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
@@ -881,7 +881,7 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
     assert hass.states.get(presence).state == "unavailable"
     assert attrs(hass)["auto_off_held"] is False
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
     assert not member.is_on
 
 
@@ -979,7 +979,7 @@ async def test_illuminance_source_that_goes_missing_resumes_a_bright_off(
     await remove_lux(hass, "deleted", source)
     assert hass.states.get(VIRTUAL).state == "on"
     assert attrs(hass)["molight_state"] == STATE_COUNTDOWN
-    await expect_fresh_timeout(hass, freezer)
+    await expect_fresh_timer(hass, freezer)
 
 
 async def test_illuminance_sensor_losing_a_dark_reading_changes_nothing(

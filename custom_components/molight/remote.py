@@ -295,7 +295,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
         ):
             # The entity just appeared or recovered; its state carries its
             # last (possibly restored, certainly stale) event; never replay
-            # it. A recovery that brings an event fired since it dropped out
+            # it. A recovery that brings an event fired since it went unavailable
             # is a press. An "unknown" old state is different: the entity
             # existed but had never fired an event (a freshly paired button),
             # so this first event is genuinely fresh and must not be swallowed.

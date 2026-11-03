@@ -191,9 +191,9 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # filters/converts color parameters per real light.
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
-# A Virtual Scheduled Light's inside-schedule settings can rest at a standby
+# A Virtual Scheduled Light's inside-schedule settings can stay at a standby
 # level instead of turning off: an off light comes on at it on switching to those
-# settings, and an expired timer drops back to it rather than off.
+# settings, and a finished timer drops back to it rather than off.
 # The brightness (percent, 1-100) enables standby; the optional color is one
 # of a color temperature or an [r, g, b], like the auto-on color.
 CONF_STANDBY_BRIGHTNESS = "standby_brightness"
@@ -224,11 +224,11 @@ CONF_TURN_ON_SELECT_OPTION = "turn_on_select_option"
 CONF_TURN_ON_SELECT_SOURCE_ENTITY = "turn_on_select_source_entity"
 # When occupancy clears and the sensor flags the visit as a false detection,
 # lights that were lit BY that visit turn off after this short delay instead
-# of the normal countdown. Lights turned on manually are never affected.
+# of the turn-off timer. Lights turned on manually are never affected.
 CONF_FALSE_OFF_DELAY = "false_detection_off_delay"
 DEFAULT_FALSE_OFF_DELAY = 5
-# Off warning sequence before an automatic turn-off. When the auto-off
-# timer expires the light can flag the impending off before turning off:
+# Off warning sequence before an automatic turn-off. When the turn-off
+# timer finishes the light can flag the impending off before turning off:
 #   EFFECT: the effect stage (a blink/dip to effect_brightness), shown
 #           for effect_timeout seconds. effect_brightness is a percent 0-100
 #           where 0 blinks the real lights fully off.
@@ -238,7 +238,7 @@ DEFAULT_FALSE_OFF_DELAY = 5
 # Each stage is skipped when its duration is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
 # either stage (occupancy, virtual/physical on, a dim, ...) cancels it and
-# behaves as if the pre-off timer were still running, restoring the brightness.
+# behaves as if the turn-off timer were still running, restoring the brightness.
 CONF_EFFECT_TIMEOUT = "effect_timeout"
 DEFAULT_EFFECT_TIMEOUT = 0
 CONF_EFFECT_BRIGHTNESS = "effect_brightness"
@@ -262,10 +262,10 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # virtual light makes itself. Absent/0 = no transition attribute is sent
 # (the real lights use their own default).
 #   auto_on_transition:   automatic turn-ons only (occupancy, a door opening,
-#                         illuminance going dark, a window start); virtual and
+#                         illuminance going dark, a schedule window start); virtual and
 #                         physical turn-ons are untouched.
-#   auto_off_transition:  automatic turn-offs (timer expiry, false-detection
-#                         off delay, bright-forces-off, window end); a manual
+#   auto_off_transition:  automatic turn-offs (the timer finishing, false-detection
+#                         off delay, bright-forces-off, schedule window end); a manual
 #                         off is untouched.
 #   effect_transition:    fade into the effect stage's brightness.
 #   warn_transition:      fade into the warn stage's brightness.
@@ -305,7 +305,7 @@ CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"
 # Keep-on entities: while ANY of these entities is "on", every automatic
-# turn-off (timer expiry, false-detection off delay, bright-forces-off,
+# turn-off (the timer finishing, false-detection off delay, bright-forces-off,
 # schedule window end) is suspended. Turn-ons and manual control are never
 # affected. When the last hold releases the light re-evaluates its rules.
 CONF_HOLD_ENTITIES = "hold_entities"
@@ -366,7 +366,7 @@ REASON_DOOR = "door"
 REASON_ILLUMINANCE = "illuminance"  # going dark with presence
 REASON_RESUME = "resume"  # going dark resumed an on-period that going bright cut short
 REASON_SCHEDULE_START = "schedule_start"
-REASON_STARTUP = "startup"  # a restart found the light off where it rests at standby
+REASON_STARTUP = "startup"  # a restart found a light off that should be at standby
 REASON_TIMER = "timer"
 REASON_FALSE_DETECTION = "false_detection"
 REASON_BRIGHT = "bright"
@@ -460,7 +460,7 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 #                is otherwise ignored (closing does nothing). A momentary
 #                trigger, like a light switch that pops back out.
 #   open_close:  the open door holds the lights on (no timer) while it stays
-#                open, and closing starts the auto-off countdown, deferring to
+#                open, and closing starts the turn-off timer, deferring to
 #                occupancy/keep-on holds (a closed door never cuts the lights
 #                over someone the occupancy sensor still sees).
 CONF_DOOR_ENTITY = "door_entity"
@@ -587,9 +587,9 @@ REMOTE_ACTION_VALUE_KEYS = {
 # --- virtual light state machine states ---
 STATE_IDLE = "idle"
 STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied)
-STATE_OCCUPIED = "occupied"  # lights on, occupied, no countdown
-STATE_COUNTDOWN = "countdown"  # occupancy cleared, timer ticking before lights-off
+STATE_OCCUPIED = "occupied"  # lights on, occupied, no timer
+STATE_COUNTDOWN = "countdown"  # occupancy cleared, turn-off timer running
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
 STATE_STANDBY = "standby"  # lights at the standby level, no timer
-STATE_EFFECT = "effect"  # auto-off imminent, effect stage
-STATE_WARN = "warn"  # auto-off imminent, warn stage before lights-off
+STATE_EFFECT = "effect"  # automatic turn-off imminent, effect stage
+STATE_WARN = "warn"  # automatic turn-off imminent, warn stage

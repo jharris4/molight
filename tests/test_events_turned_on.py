@@ -1,6 +1,6 @@
 """Tests for the turned_on event on a light's Events entity.
 
-It fires once per on-period start, and when a resting light is raised,
+It fires once per on-period start, and when a light at standby is raised,
 with the reason, the look MoLight commanded and the turn-on selection it
 applied. A re-send, a member back from unavailable and a restart that
 re-applies a look fire nothing.
@@ -350,7 +350,7 @@ def _porch(**inside) -> object:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_standby_at_a_schedule_start_and_its_raise(hass) -> None:
-    """Resting at standby is a turned_on with standby set; a raise is another."""
+    """Going to standby is a turned_on with standby set; a raise is another."""
     records = await _setup(
         hass, _porch(), binary_sensor__occ="off", binary_sensor__sched="off"
     )
@@ -374,7 +374,7 @@ async def test_standby_at_a_schedule_start_and_its_raise(hass) -> None:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_startup_at_standby(hass) -> None:
-    """A light found off where it rests at standby comes on for the startup."""
+    """A light found off that should be at standby comes on for the startup."""
     records = await _setup(
         hass, _porch(), binary_sensor__occ="off", binary_sensor__sched="on"
     )

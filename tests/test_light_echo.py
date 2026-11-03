@@ -296,7 +296,7 @@ async def test_dim_during_warning_under_our_context_cancels_it(
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
     await _write(hass, "on", contexts[-1], brightness=153)
-    # Run the full timeout out so the state machine enters its warning.
+    # Let the timer finish so the state machine enters its warning.
     freezer.tick(timedelta(seconds=61))
     async_fire_time_changed(hass)
     await settle(hass)
@@ -1178,7 +1178,7 @@ async def test_turn_off_echo_mirrors_nothing(
 
 
 @pytest.mark.asyncio
-async def test_automatic_off_echo_at_brightness_zero_is_no_manual_off(
+async def test_automatic_turn_off_echo_at_brightness_zero_is_no_manual_off(
     hass: HomeAssistant, freezer
 ) -> None:
     """The timer's off echoed as on at brightness 0 is no manual off,
@@ -2256,7 +2256,7 @@ async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
 async def test_auto_off_fade_is_not_a_change_at_the_wall(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """An automatic off fading out neither turns the light on again nor counts as
+    """An automatic turn-off fading out neither turns the light on again nor counts as
     an off at the wall."""
     member = await _fading_light(hass, make_light_entry(auto_off_transition=fade))
     seen = _reports_of(hass, INSTANT)
