@@ -256,7 +256,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         self._last_clear_false: bool = False
         self._last_clear_unavailable: bool = False
         self._unavailable_unsub: CALLBACK_TYPE | None = None
-        # When the dropout began; kept through unload.
+        # When the dropout began, while its clear is pending; kept through unload.
         self._dropout: datetime | None = None
         # Whether the source is computed from this sensor, as a group can be.
         self._source_cycle = False
@@ -369,8 +369,8 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
                 )
         if cyclic and not self._source_cycle:
             _LOGGER.warning(
-                "Occupancy sensor %s reads as clear because its source %s "
-                "includes it; remove it there or pick another source",
+                "Occupancy sensor %s is part of its own source %s; remove it "
+                "there or pick another source",
                 self.entity_id,
                 self._source_sensor,
             )

@@ -4704,7 +4704,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 ):
                     # Time left of the on-period justified the turn-on; the maintain
                     # entity, or presence a gate blocking only turn-ons let through
-                    # once the light is on, now holds the light it turned on again.
+                    # once the light is on, now holds the resumed light.
                     self._machine_state = STATE_OCCUPIED
                     self._cancel_timer()
                 else:

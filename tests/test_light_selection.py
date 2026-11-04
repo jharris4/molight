@@ -3186,7 +3186,7 @@ async def test_select_on_device_after_a_manual_off_keeps_standby_suppressed(
 ) -> None:
     """The manual off turned standby off until the next boundary. The preset
     nobody asked for anymore lights the strip, which runs its timer as any
-    lit room, but is nobody's turn-on: the pause stands and the timer finishes
+    lit room, but is nobody's turn-on: standby stays off and the timer finishes
     in off, not at standby."""
     light = await _off_then_preset(hass, reported)
     state = hass.states.get("light.selection_light")
@@ -3239,7 +3239,7 @@ async def test_select_on_device_as_standby_comes_on_leaves_standby(
     hass: HomeAssistant, reported: str
 ) -> None:
     """With no manual off, the preset is the turn-on's own: standby is sent
-    after it and nothing is paused."""
+    after it and nothing keeps it off."""
     light, select = await _standby_coming_on(hass, reported)
 
     await _land_preset(hass, select)

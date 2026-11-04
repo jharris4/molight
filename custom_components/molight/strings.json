@@ -1913,7 +1913,7 @@
       "description": "Two virtual lights commanding one light fight over it. Give {light} to one of them in Configure, and add that virtual light to the other instead."
     },
     "occupancy_source_cycle": {
-      "title": "{entity} reads as clear because its source includes it",
+      "title": "{entity} is part of its own source",
       "description": "The source {source} is computed from {entity} itself, so the sensor would hold itself on. It reads as clear until {entity} is removed from {source}, or another source is chosen in Configure."
     },
     "schedule_source_cycle": {

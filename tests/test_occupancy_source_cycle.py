@@ -52,9 +52,7 @@ if TYPE_CHECKING:
 SEEN = "binary_sensor.seen"
 ROOM = "binary_sensor.room"
 TOPOLOGIES = ["direct", "nested", "combined"]
-WARNING = (
-    f"Occupancy sensor {SEEN} reads as clear because its source {GROUP} includes it"
-)
+WARNING = f"Occupancy sensor {SEEN} is part of its own source {GROUP}"
 
 
 def _occupancy(
@@ -195,7 +193,7 @@ async def test_a_source_group_of_other_sensors_is_read(
         assert hass.states.get(SEEN).state == "off"
     await _wait(hass, freezer, 2)
     assert hass.states.get(SEEN).state == "off"
-    assert "reads as clear" not in caplog.text
+    assert "is part of its own source" not in caplog.text
 
 
 async def _edit_source(hass: HomeAssistant, entry: MockConfigEntry, source: str):

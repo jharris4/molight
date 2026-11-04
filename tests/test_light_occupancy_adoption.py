@@ -261,7 +261,7 @@ async def test_dark_mid_warning_adopts_occupancy_and_restores(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    # The timer finishes: the off warning sequence (still bright, still ACTIVE-gated).
+    # The timer finishes and the warning starts (still bright, still ACTIVE-gated).
     await _tick(hass, freezer, 61)
     assert _state(hass).attributes["molight_state"] == STATE_EFFECT
 

@@ -101,7 +101,7 @@ def _fd_occupancy_entry() -> MockConfigEntry:
 
 @pytest.mark.asyncio
 async def test_manual_turn_on_runs_no_timer(hass: HomeAssistant, freezer) -> None:
-    """A light turned on by hand stays on until turned off by hand."""
+    """A light turned on manually stays on until turned off manually."""
     await setup_entries(hass, make_light_entry(timeout=None))
     calls = record_service_calls(hass)
 

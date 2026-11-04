@@ -1802,7 +1802,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "off",
-        "off while the inside settings' occupancy sensor is bright",
+        "off while the inside settings' illuminance sensor is bright",
     )
     client.set_state(RAW_ILLUMINANCE, 5)
     client.wait_state(

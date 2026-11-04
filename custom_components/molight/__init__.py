@@ -84,8 +84,8 @@ _REFERENCE_LIST_KEYS = (
     CONF_TARGET_LIGHTS,
     # A virtual light may wrap another virtual light (the member picker is any
     # light entity). A removed member must not linger: _all_lights_off treats
-    # an unreadable member as "maybe still on", which would pin the outer
-    # light on forever.
+    # a registered member with no state as "maybe still on", which would pin
+    # the outer light on forever.
     CONF_LIGHTS,
 )
 # Every key that stores an entity ID. The further ones only ever name
