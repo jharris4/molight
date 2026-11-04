@@ -1060,7 +1060,7 @@ async def test_input_with_changed_entity_id_keeps_combined_schedules_on_the_same
 async def test_button_and_target_with_changed_entity_ids_keep_the_remote_working(
     hass: HomeAssistant,
 ) -> None:
-    """A remote follows its button and its target, and replays no press."""
+    """A remote follows its button and its target, and replays no click."""
     button = RealButton("pico_on")
     member = RealLight("real_1")
     await add_real(hass, button, member)
@@ -1082,7 +1082,7 @@ async def test_button_and_target_with_changed_entity_ids_keep_the_remote_working
     )
     await settle(hass)
 
-    # Neither entity ID change replays the button's last press.
+    # Neither entity ID change replays the button's last click.
     await change_entity_id(hass, "event.pico_on", "event.hall_pico_on")
     await change_entity_id(hass, VIRTUAL, "light.hall")
     assert entry_settings(remote)[CONF_ON_BUTTONS_SINGLE] == ["event.hall_pico_on"]

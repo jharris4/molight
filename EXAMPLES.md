@@ -324,7 +324,7 @@ Preset 1        → Single-click buttons:  event.closet_pico_stop   # the middle
                   Brightness:            60
 ```
 
-The on button turns the light on at 100%; each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Presses count as *manual* control on a virtual light: they cancel a running off warning sequence and restart the turn-off timer, exactly like a dashboard tap.
+The on button turns the light on at 100%; each raise/lower click steps the brightness by 10%; the favorite button jumps to 60%. Clicks count as *manual* control on a virtual light: they cancel a running off warning sequence and restart the turn-off timer, exactly like a dashboard tap.
 
 ---
 

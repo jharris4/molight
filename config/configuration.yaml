@@ -114,9 +114,9 @@ input_boolean:
 # Input buttons: each press fires the matching Test Button event
 input_button:
   button_single:
-    name: "Test Button Single Press"
+    name: "Test Button Single Click"
   button_double:
-    name: "Test Button Double Press"
+    name: "Test Button Double Click"
 
 # Input number: backing state for the lux sensor
 input_number:

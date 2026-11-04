@@ -2805,7 +2805,8 @@ def _window_entry() -> MockConfigEntry:
 async def _occupied_room_loses_gate(
     hass: HomeAssistant, mode: str, how: str, *, window: str = "on"
 ) -> MockConfigEntry:
-    """Hold a gated room by occupancy, maintain, door and keep-on; drop the gate."""
+    """Hold a schedule-gated room by occupancy, maintain, door and keep-on; drop the
+    gate."""
     hass.states.async_set(WINDOW_SOURCE, window)
     for entity_id in (OCC, "binary_sensor.maintain", DOOR, HOLD):
         hass.states.async_set(entity_id, "on")

@@ -6,7 +6,7 @@ watches the state changes of the `event` entities Home Assistant
 exposes per physical button (a Lutron Pico button, an IKEA Bilresa button,
 ...) and turns each configured (button, click) pair into one service call on
 the target lights, sending each execution on SIGNAL_REMOTE_ACTION.
-Because each press is a service call, a press on a virtual light
+Because each click is a service call, a click on a virtual light
 behaves exactly like a dashboard tap: never gated by darkness or a schedule,
 cancels an off warning sequence, restarts the timer.
 
@@ -161,9 +161,9 @@ def entity_double_click_supported(hass: HomeAssistant, entity_id: str) -> bool |
 
 
 def _action_call(
-    action: str, cfg: dict[str, Any], dim_step: int
+    action: str, cfg: dict[str, Any], brightness_step: int
 ) -> tuple[str, dict[str, Any]] | None:
-    """Map an action slot to its light service call (service, service data).
+    """Map a remote action to its light service call (service, service data).
 
     Turn on and the presets carry their optional brightness and color. A
     Turn on with none is a plain turn-on; a preset with none stays inert
@@ -175,9 +175,9 @@ def _action_call(
     if action == REMOTE_ACTION_TOGGLE:
         return ("toggle", {})
     if action == REMOTE_ACTION_BRIGHTNESS_UP:
-        return ("turn_on", {"brightness_step_pct": dim_step})
+        return ("turn_on", {"brightness_step_pct": brightness_step})
     if action == REMOTE_ACTION_BRIGHTNESS_DOWN:
-        return ("turn_on", {"brightness_step_pct": -dim_step})
+        return ("turn_on", {"brightness_step_pct": -brightness_step})
     brightness_key, color_temp_key, rgb_key = REMOTE_ACTION_VALUE_KEYS[action]
     data: dict[str, Any] = {}
     # Below 1% is unset, not a turn-off.
@@ -249,16 +249,16 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     Watching is deferred until Home Assistant has fully started, exactly
     like the virtual light watching its sensors: at startup event entities
     are restored carrying their last pre-shutdown event, which must never be
-    replayed as a fresh press.
+    replayed as a fresh click.
     """
     cfg = entry_settings(entry)
     targets: list[str] = cfg.get(CONF_TARGET_LIGHTS, [])
-    dim_step = int(cfg.get(CONF_DIM_STEP) or 0) or DEFAULT_DIM_STEP
+    brightness_step = int(cfg.get(CONF_DIM_STEP) or 0) or DEFAULT_DIM_STEP
 
     # (button entity_id, click) -> (action, service, service data)
     bindings: dict[tuple[str, str], tuple[str, str, dict[str, Any]]] = {}
     for single_key, double_key, action in REMOTE_ACTION_FIELDS:
-        call = _action_call(action, cfg, dim_step)
+        call = _action_call(action, cfg, brightness_step)
         if call is None:
             continue
         for entity_id in cfg.get(single_key) or []:
@@ -296,7 +296,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
             # The entity just appeared or recovered; its state carries its
             # last (possibly restored, certainly stale) event; never replay
             # it. A recovery that brings an event fired since it went unavailable
-            # is a press. An "unknown" old state is different: the entity
+            # is a new event. An "unknown" old state is different: the entity
             # existed but had never fired an event (a freshly paired button),
             # so this first event is genuinely fresh and must not be swallowed.
             return

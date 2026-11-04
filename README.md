@@ -15,7 +15,7 @@ Writing these automations by hand is tedious, and the complexity grows fast once
 | [Virtual Combined Schedule Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-combined-schedule-sensor) | Combines schedules with any/all logic, optionally inverted, e.g. a morning and an evening window for one lamp |
 | [Virtual Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-light) | Controls N real lights with an occupancy/illuminance/schedule-aware state machine |
 | [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) | Uses a complete set of Virtual Light settings inside a schedule and another outside it, optionally staying at a standby level |
-| [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to light actions, with no automations |
+| [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote) | Binds remote-control buttons (Pico, Bilresa, and others) to remote actions on lights, with no automations |
 
 Each of these is a *virtual entity*: it stands in front of real devices (sensors, lights, remote buttons) and works from them. The two light types are both *virtual lights*: a *regular* Virtual Light uses one set of settings, and a Virtual Scheduled Light uses different settings inside and outside a schedule.
 
@@ -144,7 +144,7 @@ Bulk assignment currently applies only to regular Virtual Lights. Configure the 
 
 ### Light conversion
 
-**Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, remote targets, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
+**Convert virtual lights** changes existing entries in place, preserving their config entry, entity IDs, history, dashboard references, Virtual Remote target lights, and other entity references. A **Configure** form of a light that was opened before its conversion can no longer be saved; open it again.
 
 - **Regular Virtual Light → Virtual Scheduled Light**: available for regular Virtual Lights whose Schedule mode is one of the three Gate modes. Each light retains its own schedule. Its current settings become the inside-schedule settings; the outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection, and keep-on entities but start without occupancy, maintain, illuminance, or door inputs. The **Gate and turn off**, **Gate and switch state** and **Gate and keep state** modes map to the **Turn off**, **Switch state** and **Keep state** [**At schedule end** choices](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light). This creates a useful starting point rather than promising identical runtime behavior: add any automatic inputs you want outside the schedule afterward.
 - **Virtual Scheduled Light → regular Virtual Light**: every Virtual Scheduled Light that still has a schedule can be converted. The inside-schedule settings become the regular Virtual Light's settings, the schedule stays, and Schedule mode is set to the matching **Gate and turn off**, **Gate and switch state** or **Gate and keep state**. The outside-schedule settings and any [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) settings are permanently discarded after an explicit confirmation warning.

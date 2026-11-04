@@ -58,13 +58,14 @@ from tests.conftest import (
 pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 
 
-def _gated_light_entry() -> MockConfigEntry:
-    """A virtual light gated by the fixture occupancy and illuminance sensors."""
+def _bright_gated_light_entry() -> MockConfigEntry:
+    """A virtual light on the fixture occupancy sensor, gated by the fixture
+    illuminance sensor."""
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
-            CONF_NAME: "Gated Light",
+            CONF_NAME: "Bright Gated Light",
             CONF_LIGHTS: ["light.living_room"],
             CONF_LIGHT_TIMEOUT: 60,
             CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
@@ -220,7 +221,9 @@ async def test_occupancy_suppressed_when_bright(
     illuminance_entry: MockConfigEntry,
 ) -> None:
     """Occupancy must not turn the light on while illuminance reads bright."""
-    await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
+    await _setup_entries(
+        hass, occupancy_entry, illuminance_entry, _bright_gated_light_entry()
+    )
 
     hass.states.async_set("sensor.lux_1", "500")  # bright (threshold 10 in fixture)
     await _settle(hass)
@@ -228,7 +231,7 @@ async def test_occupancy_suppressed_when_bright(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 
@@ -236,7 +239,7 @@ async def test_occupancy_suppressed_when_bright(
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
@@ -249,7 +252,9 @@ async def test_occupancy_turns_light_on_when_dark(
     freezer,
 ) -> None:
     """Occupancy turns the light on when dark; clearing starts the timer."""
-    await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
+    await _setup_entries(
+        hass, occupancy_entry, illuminance_entry, _bright_gated_light_entry()
+    )
 
     hass.states.async_set("sensor.lux_1", "5")  # dark
     await _settle(hass)
@@ -257,14 +262,14 @@ async def test_occupancy_turns_light_on_when_dark(
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -274,7 +279,7 @@ async def test_occupancy_turns_light_on_when_dark(
     async_fire_time_changed(hass)
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 
@@ -427,19 +432,21 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
     illuminance_entry: MockConfigEntry,
 ) -> None:
     """With no auto-on brightness set, an automatic turn-on doesn't touch brightness."""
-    # The gated light entry configures no auto-on brightness.
+    # The bright-gated light entry configures no auto-on brightness.
     mock_restore_cache(
         hass,
-        [State("light.gated_light", "on", {"brightness": 143})],
+        [State("light.bright_gated_light", "on", {"brightness": 143})],
     )
-    await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
+    await _setup_entries(
+        hass, occupancy_entry, illuminance_entry, _bright_gated_light_entry()
+    )
 
     hass.states.async_set("sensor.lux_1", "5")  # dark
     await _settle(hass)
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
     # The restored brightness is preserved; no auto-on value overrode it.
@@ -959,13 +966,14 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
 
 
 @pytest.mark.asyncio
-async def test_illuminance_gate_mode_never_forces_off(
+async def test_illuminance_gate_only_mode_never_forces_off(
     hass: HomeAssistant,
     occupancy_entry: MockConfigEntry,
     illuminance_entry: MockConfigEntry,
     freezer,
 ) -> None:
-    """Gate mode: bright never turns lights off, but still gates turn-ons."""
+    """Illuminance Gate only mode: bright never turns lights off, but still gates
+    turn-ons."""
     light = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -1333,18 +1341,20 @@ async def test_bright_turns_light_off(
     illuminance_entry: MockConfigEntry,
 ) -> None:
     """Illuminance switching to bright turns an occupancy-lit light off."""
-    await _setup_entries(hass, occupancy_entry, illuminance_entry, _gated_light_entry())
+    await _setup_entries(
+        hass, occupancy_entry, illuminance_entry, _bright_gated_light_entry()
+    )
 
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
-    assert hass.states.get("light.gated_light").state == "on"
+    assert hass.states.get("light.bright_gated_light").state == "on"
 
     hass.states.async_set("sensor.lux_1", "500")
     await _settle(hass)
 
-    state = hass.states.get("light.gated_light")
+    state = hass.states.get("light.bright_gated_light")
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
 

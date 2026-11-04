@@ -1,12 +1,12 @@
 """Door-sensor tests for virtual lights.
 
-A configured door entity drives the light directly. Opening the door is a
+A configured door sensor drives the light directly. Opening the door is a
 turn-on trigger, gated by illuminance/a gate-mode schedule exactly like
 occupancy. door_mode then decides what the door state does afterwards:
 
-  open:         opening lights the room with the turn-off timer; the door is
+  On open:      opening lights the room with the turn-off timer; the door is
                 otherwise ignored (a momentary trigger, closing does nothing).
-  open_close:   the open door holds the light on (OCCUPIED, no timer) while it
+  Open & close: the open door holds the light on (OCCUPIED, no timer) while it
                 stays open; closing starts the turn-off timer, deferring to any
                 occupied occupancy/maintain sensor or keep-on hold.
 
@@ -94,12 +94,12 @@ def _record_service_calls(hass: HomeAssistant) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# open mode: momentary trigger
+# On open mode: momentary trigger
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None:
+async def test_on_open_trigger_times_out(hass: HomeAssistant, freezer) -> None:
     """Opening the door lights the room (ACTIVE) with the turn-off timer."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
@@ -121,8 +121,8 @@ async def test_open_mode_trigger_times_out(hass: HomeAssistant, freezer) -> None
 
 
 @pytest.mark.asyncio
-async def test_open_mode_close_is_noop(hass: HomeAssistant, freezer) -> None:
-    """In open mode, closing the door does nothing; the timer stands."""
+async def test_on_open_closing_is_noop(hass: HomeAssistant, freezer) -> None:
+    """In On open mode, closing the door does nothing; the timer stands."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
 
@@ -142,7 +142,7 @@ async def test_open_mode_close_is_noop(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_mode_reopen_retriggers_timer(hass: HomeAssistant, freezer) -> None:
+async def test_on_open_reopen_retriggers_timer(hass: HomeAssistant, freezer) -> None:
     """Re-opening the door restarts the full timeout."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN)
     await setup_entries(hass, entry)
@@ -215,7 +215,7 @@ async def _assert_door_open_gating(
     sched: str | None,
     expect_on: bool,
 ) -> None:
-    """Exercise door-trigger gating with the supplied light inputs."""
+    """Exercise door-opening gating with the supplied light inputs."""
     entry = make_light_entry(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN,
@@ -239,7 +239,7 @@ async def _assert_door_open_gating(
 
 
 # ---------------------------------------------------------------------------
-# open_close mode: held while open, off (timer) when closed
+# Open & close mode: held while open, off (timer) when closed
 # ---------------------------------------------------------------------------
 
 
@@ -442,9 +442,9 @@ async def test_open_close_dark_return_re_holds_open_door(
 async def test_gate_window_start_reevaluates_open_door(
     hass: HomeAssistant, door_mode: str, expect_on: bool
 ) -> None:
-    """A standing-open open_close door lights the room when the window starts.
+    """A standing-open Open & close door lights the room when the window starts.
 
-    An open-mode door is a momentary trigger with no standing state, so the
+    An On open door is a momentary trigger with no standing state, so the
     window start does not re-fire it.
     """
     entry = make_light_entry(
@@ -647,7 +647,7 @@ async def test_door_back_open_after_counting_as_closed_is_a_first_sighting(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
 @pytest.mark.parametrize("first", ["late", "unavailable"])
-async def test_door_first_seen_open_is_no_opening_in_open_mode(
+async def test_door_first_seen_open_per_door_mode(
     hass: HomeAssistant, freezer, mode: str, first: str
 ) -> None:
     """A door first seen open, after startup or after counting as closed, may
@@ -695,7 +695,7 @@ async def test_dead_door_does_not_light_the_room_when_it_gets_dark(
         illuminance_mode=ILLUMINANCE_MODE_GATE,
     )
     await setup_entries(hass, entry)
-    hass.states.async_set(DOOR, OPEN)  # gated
+    hass.states.async_set(DOOR, OPEN)  # bright-gated
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -720,7 +720,7 @@ async def test_dead_door_does_not_light_the_room_at_a_gate_window_start(
         schedule_mode=SCHEDULE_MODE_GATE,
     )
     await setup_entries(hass, entry)
-    hass.states.async_set(DOOR, OPEN)  # gated
+    hass.states.async_set(DOOR, OPEN)  # schedule-gated
     await settle(hass)
     hass.states.async_set(DOOR, "unavailable")
     await settle(hass)
@@ -777,10 +777,10 @@ async def test_follow_window_ignores_door(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_mode_occupancy_holds_after_trigger(
+async def test_on_open_occupancy_holds_after_trigger(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An open-mode trigger lands OCCUPIED while occupancy holds, then defers."""
+    """An opening in On open mode lands OCCUPIED while occupancy holds, then defers."""
     entry = make_light_entry(door=DOOR, door_mode=DOOR_MODE_OPEN, occupancy=OCC)
     await setup_entries(hass, entry)
 
@@ -790,13 +790,13 @@ async def test_open_mode_occupancy_holds_after_trigger(
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Occupancy, not the open-mode door, is what holds: no timer while on.
+    # Occupancy, not the On open door, is what holds: no timer while on.
     freezer.tick(timedelta(seconds=300))
     async_fire_time_changed(hass)
     await settle(hass)
     assert _state(hass).state == "on"
 
-    hass.states.async_set(OCC, "off")  # the open-mode door does not hold
+    hass.states.async_set(OCC, "off")  # the On open door does not hold
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
 
@@ -811,7 +811,7 @@ async def test_reopen_mid_warning_retriggers(hass: HomeAssistant, freezer) -> No
 
     hass.states.async_set(DOOR, OPEN)
     await settle(hass)
-    hass.states.async_set(DOOR, CLOSED)  # ignored in open mode
+    hass.states.async_set(DOOR, CLOSED)  # ignored in On open mode
     await settle(hass)
 
     freezer.tick(timedelta(seconds=61))  # timeout → warning (EFFECT) begins
@@ -924,7 +924,7 @@ async def test_open_close_seed_keeps_manual_off_over_open_door(
 async def test_door_open_applies_auto_on_brightness_and_transition(
     hass: HomeAssistant,
 ) -> None:
-    """A door-triggered turn-on is automatic: it carries the configured
+    """A turn-on by a door opening is automatic: it carries the configured
     auto-on brightness and transition, exactly like an occupancy turn-on."""
     entry = make_light_entry(
         door=DOOR,
@@ -1054,7 +1054,7 @@ async def test_open_close_close_mid_warning_lets_it_finish(
 
 
 @pytest.mark.asyncio
-async def test_open_mode_briefly_unavailable_is_not_a_fresh_opening(
+async def test_on_open_briefly_unavailable_is_not_a_fresh_opening(
     hass: HomeAssistant, freezer
 ) -> None:
     """A standing-open door briefly unavailable must not replay the opening edge."""
@@ -1087,11 +1087,11 @@ async def test_open_mode_briefly_unavailable_is_not_a_fresh_opening(
 
 
 @pytest.mark.asyncio
-async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_mode(
+async def test_open_close_close_defers_to_occupancy_while_bright_in_gate_only_mode(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright in gate mode does not keep occupancy from holding an on light,
-    so the door closing over it starts no timer."""
+    """Bright in illuminance Gate only mode does not keep occupancy from holding an
+    on light, so the door closing over it starts no timer."""
     hass.states.async_set(ILLUM, "on")  # bright
     hass.states.async_set(OCC, "on")
     hass.states.async_set(DOOR, OPEN)

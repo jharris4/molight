@@ -290,15 +290,15 @@ longer needs a custom repository.
 
 ### Added
 
-- **Virtual Remote**: binds remote-control buttons to light actions with no
-  hand-written automations. Single and double clicks of any remote whose buttons
+- **Virtual Remote**: binds remote-control buttons to remote actions on lights with
+  no hand-written automations. Single and double clicks of any remote whose buttons
   appear as `event` entities map to on/off/toggle/brightness-step/preset actions,
   with the single-vs-double vocabulary resolved per button from the event types
   it has.
 - A diagnostic **Last Action** sensor per Virtual Remote, recording the last
   action executed with its source button, resolved click, raw event type and
   time.
-- Double-press support for Lutron Caséta Picos via the separate
+- Double-click support for Lutron Caséta Picos via the separate
   [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events)
   integration.
 
@@ -392,8 +392,8 @@ Initial release.
 - **Virtual Schedule Sensor**: a reusable schedule from a fixed-time
   and/or sun-based window, with sun offsets.
 - **Virtual Light**: controls N real lights from an occupancy-, illuminance- and
-  schedule-aware state machine (including the illuminance control-vs-gate and
-  schedule follow-vs-gate modes), with virtual brightness controls, an optional
+  schedule-aware state machine (including the illuminance Control and Gate only
+  modes and schedule follow-vs-gate modes), with virtual brightness controls, an optional
   maintain-occupancy sensor, and a companion Auto-off switch for holding
   automatic turn-offs.
 - State restored across Home Assistant restarts throughout, including timestamps,

@@ -1568,7 +1568,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
             cfg.get("illuminance_entity") == VIRTUAL_ILLUMINANCE
             and cfg.get("illuminance_mode") == "gate"
         ),
-        "assigned the illuminance sensor in gate mode",
+        "assigned the illuminance sensor in Gate only mode",
     )
     summary = assign(
         "assign_schedule",
@@ -1725,7 +1725,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     reset_trigger(client)
     wait_active_settings(client, ACTIVE_SETTINGS_OUTSIDE)
 
-    # Outside settings: gate-mode illuminance suppresses the initial occupancy
+    # Outside settings: illuminance Gate only mode suppresses the initial occupancy
     # turn-on and going dark admits it, but going bright again does not force
     # an already-on light off.
     client.set_state(RAW_ILLUMINANCE, 50)
@@ -1760,7 +1760,7 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_LIGHT,
         lambda state: state["state"] == "on",
-        "on under the outside settings' gate-only illuminance mode",
+        "on under the outside settings' illuminance Gate only mode",
     )
 
     reset_trigger(client)
@@ -1787,8 +1787,8 @@ def run_illuminance_and_door_scenarios(client: HomeAssistantClient) -> None:
     reset_trigger(client)
 
     # Inside settings: control-mode illuminance forces an occupied light off
-    # when it goes bright, and open_close holds until closing starts the
-    # turn-off timer. These contrasts prove the settings switch together.
+    # when it goes bright, and an Open & close door holds until closing
+    # starts the turn-off timer. These contrasts prove the settings switch together.
     client.set_state(RAW_SCHEDULE, "on")
     client.wait_state(VIRTUAL_SCHEDULE, lambda state: state["state"] == "on", "on")
     wait_active_settings(client, ACTIVE_SETTINGS_INSIDE)
@@ -2980,7 +2980,7 @@ def wait_remote_action(
 
 
 def wait_multi_members_off(client: HomeAssistantClient) -> None:
-    """Wait for the remote target and its available members to report off."""
+    """Wait for the remote's target light and its available members to report off."""
     client.wait_state(VIRTUAL_MULTI_LIGHT, lambda state: state["state"] == "off", "off")
     for entity_id in (RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB):
         state = client.state(entity_id)
@@ -2989,7 +2989,7 @@ def wait_multi_members_off(client: HomeAssistantClient) -> None:
 
 
 def turn_off_multi_members(client: HomeAssistantClient) -> None:
-    """Return the temporary remote target and its available members to off."""
+    """Return the remote's temporary target light and its available members to off."""
     client.call_service("light", "turn_off", {"entity_id": VIRTUAL_MULTI_LIGHT})
     wait_multi_members_off(client)
 
@@ -3214,7 +3214,7 @@ def verify_current_remote_after_restart(
     exercise_edited_remote(client)
 
 
-def finish_current_remote_target_cleanup(
+def finish_current_remote_target_light_cleanup(
     client: HomeAssistantClient, entry_id: str
 ) -> None:
     """Prove target removal makes the surviving remote inert, then remove it."""
@@ -3661,7 +3661,8 @@ def run_primary() -> None:
     run_assign_scenarios(client)
     run_illuminance_and_door_scenarios(client)
     checkpoint(
-        "illuminance gate/control and door open/open-close behavior per settings set"
+        "illuminance Gate only/Control and door On open/Open & close behavior "
+        "per settings set"
     )
     run_sensor_briefly_unavailable_scenarios(client)
 
@@ -3907,7 +3908,7 @@ def run_container_restart_verification() -> None:
         client, entries["remote"], "a full container restart"
     )
     verify_and_remove_multi_light(client)
-    finish_current_remote_target_cleanup(client, entries["remote"])
+    finish_current_remote_target_light_cleanup(client, entries["remote"])
     finish_removal_reference_cleanup(
         client,
         {
@@ -7313,7 +7314,8 @@ def run_door_gate_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "off",
-        "off: in open mode a door already standing open does nothing at the gate lift",
+        "off: in On open mode a door already standing open does nothing "
+        "at the gate lift",
         duration=2,
     )
     client.set_state(RAW_DOOR, "off")
@@ -7337,7 +7339,7 @@ def run_door_gate_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on: open_close re-evaluates the standing-open door at the gate lift",
+        "on: an Open & close door standing open re-evaluates at the gate lift",
     )
     wait_machine_state(client, "occupied", DOOR_GATE_LIGHT)
     client.set_state(RAW_DOOR, "off")
@@ -7348,12 +7350,13 @@ def run_door_gate_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, entry_id, DOOR_GATE_LIGHT)
     remove_entry_and_entity(client, schedule_entry_id, END_SCHEDULE)
     print(
-        "PASS: standing-open door at gate lift: ignored in open, adopted in open_close"
+        "PASS: standing-open door at gate lift: ignored in On open mode, "
+        "adopted in Open & close mode"
     )
 
 
 def run_door_restart_prepare() -> None:
-    """Leave an on light with its open_close door standing open across a restart."""
+    """Leave an on light with its Open & close door standing open across a restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -7381,7 +7384,7 @@ def run_door_restart_prepare() -> None:
 
 
 def run_door_restart_verify() -> None:
-    """An on light whose open_close door is open at startup is adopted as occupied."""
+    """An on light whose Open & close door is open at startup is adopted as occupied."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -8879,7 +8882,8 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
     wait_entry_removed(client, remote_id, "Temporary vocab remote")
     remove_entry_and_entity(client, light_id, VOCAB_LIGHT)
     print(
-        "PASS: click vocabularies resolved per button; no constituent/replayed presses"
+        "PASS: click vocabularies resolved per button; no constituent presses "
+        "or replayed clicks"
     )
 
 

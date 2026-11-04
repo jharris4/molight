@@ -226,7 +226,7 @@ async def test_door_turn_on(hass) -> None:
 
 @pytest.mark.asyncio
 async def test_going_dark_with_presence(hass) -> None:
-    """Presence refused while bright lights the room when it goes dark."""
+    """Presence blocked while bright lights the room when it goes dark."""
     records = await _setup(
         hass,
         make_light_entry(
@@ -306,7 +306,7 @@ async def test_follow_window_start(hass) -> None:
 async def test_presence_outside_a_gate_window_is_blocked_then_lit_at_its_start(
     hass,
 ) -> None:
-    """Occupancy refused by a gate window lights the room when it starts."""
+    """Occupancy blocked by a gate window lights the room when it starts."""
     records = await _setup(
         hass,
         make_light_entry(

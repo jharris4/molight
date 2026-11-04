@@ -2,7 +2,7 @@
 
 A cover is open in every state but closed, so its moving states (opening,
 closing) are no edge of their own: only closed -> anything lights the room,
-and only reaching closed releases an open_close hold. test_light_door.py
+and only reaching closed releases an Open & close door's hold. test_light_door.py
 runs the shared door behavior against a cover too; these cover what only a
 cover can report.
 """
@@ -49,7 +49,7 @@ async def _set(hass: HomeAssistant, state: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_mode_moving_cover_does_not_retrigger(
+async def test_on_open_moving_cover_does_not_retrigger(
     hass: HomeAssistant, freezer
 ) -> None:
     """Opening lights the room once; open and closing keep the first timer."""
@@ -71,7 +71,7 @@ async def test_open_mode_moving_cover_does_not_retrigger(
 
 
 @pytest.mark.asyncio
-async def test_open_mode_reversal_mid_close_is_not_an_opening(
+async def test_on_open_reversal_mid_close_is_not_an_opening(
     hass: HomeAssistant, freezer
 ) -> None:
     """A cover that reverses before it shuts never closed, so nothing lights."""
@@ -116,7 +116,7 @@ async def test_open_close_holds_until_the_cover_is_closed(
 
 
 @pytest.mark.asyncio
-async def test_open_mode_recovering_in_another_open_state_is_no_opening(
+async def test_on_open_recovering_in_another_open_state_is_no_opening(
     hass: HomeAssistant, freezer
 ) -> None:
     """A cover briefly unavailable, back closing, not open, replays no opening."""

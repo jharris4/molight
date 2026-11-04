@@ -7,8 +7,8 @@ State machine
 =============
   IDLE       lights off, no timer
   ACTIVE     lights on, timer running
-               → entered on a virtual/physical turn-on or an open-mode door
-                 trigger, when no occupancy/maintain/door hold applies
+               → entered on a virtual/physical turn-on or a door opening in On open
+                 mode, when no occupancy/maintain/door hold applies
   OCCUPIED   lights on, occupied, timer suspended
   COUNTDOWN  occupancy just cleared, turn-off timer running
   SCHEDULED  lights on inside a follow-mode schedule window, no timer
@@ -17,7 +17,7 @@ State machine
   WARN       automatic turn-off imminent, showing the warn stage
 
 State changes
-  IDLE + (virtual/physical on OR open-mode door trigger) [no active hold]
+  IDLE + (virtual/physical on OR door opening in On open mode) [no active hold]
        → ACTIVE  (start timer immediately)
 
   IDLE/ACTIVE/COUNTDOWN + the occupancy sensor becomes occupied
@@ -74,8 +74,9 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
   instead of turning off while the inside settings are active:
   - An off light comes on at standby when switching to the inside settings, at
     startup, or when illuminance in control mode goes dark (control mode
-    keeps standby off while bright; gate mode never touches it). A raised
-    on-period that going bright cut short is resumed first, as without standby.
+    keeps standby off while bright; illuminance Gate only mode never touches it).
+    A raised on-period that going bright cut short is resumed first, as without
+    standby.
   - Occupancy and the door raise it to the auto-on level like any turn-on
     (the maintain entity only holds a raised light); when the timer finishes,
     the effect and warn stages run and the last step drops to standby, not off
@@ -168,8 +169,8 @@ Maintain occupancy (when a maintain occupancy entity is configured)
 Illuminance handling (when an illuminance sensor is configured), per
 illuminance_mode:
   - Occupancy only turns lights ON when illuminance is OFF (dark), in both modes.
-    In gate mode bright only gates turning an off light on (or a rise from
-    standby): occupancy and the door hold and re-trigger an on light as usual.
+    In illuminance Gate only mode bright only gates turning an off light on (or a
+    rise from standby): occupancy and the door hold and re-trigger an on light as usual.
   - Illuminance ON→OFF (bright→dark): if occupied, enter OCCUPIED;
     else if going bright forced the lights off and that on-period has time left,
     enter COUNTDOWN for the rest of it. It lasts until the later of
@@ -181,11 +182,11 @@ illuminance_mode:
     way (manual off, timer, schedule) is never resumed, nor is one the user
     turned off, or whose gate window ended, while going bright had it off.
   - Illuminance OFF→ON (dark→bright):
-      control:  go IDLE, turn lights off.
-      gate:     no effect; bright never turns lights off. Use when the lux
-                sensor can see the virtual light's member lights, which would
-                otherwise oscillate (lights on → reads bright → forced off →
-                dark → ...).
+      Control:    go IDLE, turn lights off.
+      Gate only:  no effect; bright never turns lights off. Use when the lux
+                  sensor can see the virtual light's member lights, which would
+                  otherwise oscillate (lights on → reads bright → forced off →
+                  dark → ...).
 
 Holding auto-off
   Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
@@ -230,14 +231,14 @@ Schedule handling (when a schedule sensor is configured), per schedule_mode:
     re-hold), and window end preserves the current on-period, including its
     presence hold, timer or warning.
 
-Door handling (when a door entity is configured), per door_mode:
+Door handling (when a door sensor is configured), per door_mode:
   Opening the door (state on) is a turn-on trigger, gated by illuminance and
   a gate-mode schedule exactly like occupancy: it only lights the room when
   it is dark (if an illuminance sensor is set) and inside a gate window.
-  - open:       opening turns the lights on with the turn-off timer (ACTIVE);
+  - On open:      opening turns the lights on with the turn-off timer (ACTIVE);
     the door is otherwise ignored, so closing does nothing and the
     timer finishes even if the door stays open. A momentary trigger.
-  - open_close: the open door holds the lights on with no timer (OCCUPIED,
+  - Open & close: the open door holds the lights on with no timer (OCCUPIED,
     just like an occupancy sensor) for as long as it stays open; closing
     starts the turn-off timer, but defers to an occupied occupancy/maintain
     entity or keep-on hold so a closed door never cuts the lights over someone
@@ -1957,7 +1958,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if dark and self._occupancy_active() and self._molight_turns_on_for_occupancy():
             self._on_occupancy_change(occupied=True)
         elif dark and self._door_holds():
-            # Not _door_open: in plain open mode the door is momentary,
+            # Not _door_open: in On open mode the door is momentary,
             # and switching settings is not an opening.
             self._on_door_change(True)
         elif self._can_be_at_standby():
@@ -3673,8 +3674,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _bright_gates_presence(self) -> bool:
         """Return True when brightness keeps occupancy or a door from acting.
 
-        In gate mode it only stops an off light turning on or rising from
-        standby: an on light is held and re-triggered as usual.
+        In illuminance Gate only mode it only stops an off light turning on or rising
+        from standby: an on light is held and re-triggered as usual.
         """
         return self._is_illuminance_bright() and (
             self._illuminance_mode != ILLUMINANCE_MODE_GATE
@@ -3825,7 +3826,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         # Occupancy adoption is gated exactly like every other adoption path
         # (_occupancy_holds); the maintain entity is never gated once the
-        # light is on, and an open_close door only by a Gate and turn off window.
+        # light is on, and an Open & close door only by a Gate and turn off window.
         if self._occupancy_holds() or self._maintain_active() or self._door_holds():
             self._machine_state = STATE_OCCUPIED
             return
@@ -3997,7 +3998,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     self.async_write_ha_state()
                 return
             if self._is_illuminance_bright():
-                return  # dark-gated, like any automatic turn-on
+                return  # bright-gated, like any automatic turn-on
             occ_state = (
                 self.hass.states.get(self._occupancy_entity)
                 if self._occupancy_entity
@@ -4340,8 +4341,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Return True when being occupied may hold an on light as OCCUPIED.
 
         Adoption is gated like a turn-on (bright or outside a gate-mode
-        window suppress it, though bright in gate mode only for a light off
-        or at standby), unlike the maintain entity, which is never gated.
+        window suppress it, though bright in illuminance Gate only mode only for a
+        light off or at standby), unlike the maintain entity, which is never gated.
         Without adoption, a light turned on while already occupied
         would run a timer that finishes despite presence, and the steady-on
         sensor produces no event that could ever rescue it.
@@ -4512,11 +4513,11 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return state.state == "on"
 
     def _door_holds(self) -> bool:
-        """Return True when an open_close-mode door is open (holds the light).
+        """Return True when an Open & close door is open (holds the light).
 
         Such a door holds an already-on light on with no timer, exactly like
         an occupied occupancy sensor or the maintain entity, and its closing starts the
-        turn-off timer. In plain open mode a door never holds (it is only a
+        turn-off timer. In On open mode a door never holds (it is only a
         momentary turn-on trigger), so this is always False there. Nor does
         it hold outside a Gate and turn off window, where the door is ignored. Reads
         the door sensor's last known value, so a sensor that is briefly
@@ -4556,9 +4557,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Handle the configured door sensor changing (on = open).
 
         Opening is a turn-on trigger, gated by illuminance/a gate-mode schedule
-        exactly like occupancy. In open_close mode the open door then holds the
+        exactly like occupancy. In Open & close mode the open door then holds the
         lights on (OCCUPIED, no timer) until it closes, whereupon the timer
-        starts unless occupancy/a keep-on hold still applies; in open mode the
+        starts unless occupancy/a keep-on hold still applies; in On open mode the
         door is a momentary trigger (ACTIVE, turn-off timer) and closing is
         ignored.
         """
@@ -4567,7 +4568,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if is_open:
             if self._bright_gates_presence():
                 self._send_blocked(REASON_DOOR, REASON_BRIGHT)
-                return  # dark-gated, like occupancy
+                return  # bright-gated, like occupancy
             if self._gate_schedule_inactive():
                 self._send_blocked(REASON_DOOR, REASON_SCHEDULE)
                 return  # outside a gate-mode schedule window
@@ -4576,9 +4577,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self._last_on_door = datetime.now(UTC)
             # A person opened it, so a false clear no longer cuts the light short.
             self._occupancy_lit_lights = False
-            # An open_close door holds the light (no timer) like the maintain
-            # entity; an already-occupied/maintained room holds it too. Only a
-            # plain open-mode trigger with no other hold runs the timer.
+            # An Open & close door holds the light (no timer) like the maintain
+            # entity; an already-occupied/maintained room holds it too. Only an
+            # opening in On open mode with no other hold runs the timer.
             # (Occupancy needs no bright/window re-check here; the gates
             # above already returned.)
             holds = (
@@ -4599,7 +4600,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             self.async_write_ha_state()
         else:
             if self._door_mode != DOOR_MODE_OPEN_CLOSE:
-                return  # open mode: closing is ignored
+                return  # On open: closing is ignored
             if self._gate_and_turn_off_schedule_inactive():
                 return  # outside a Gate and turn off window the door is ignored
             if self._machine_state in (STATE_IDLE, STATE_STANDBY):
@@ -4642,7 +4643,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             return  # follow-mode window owns the lights
         if is_bright:
             if self._illuminance_mode == ILLUMINANCE_MODE_GATE:
-                # Gate-only: bright never forces the lights off (breaks the
+                # Gate only: bright never forces the lights off (breaks the
                 # feedback loop when the lux sensor sees the controlled
                 # lights). Occupancy/timer handle turning off.
                 return
@@ -4663,7 +4664,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             # Outside a gate-mode window presence lights no off room, but an
             # on-period that going bright cut short still resumes: it already
             # exists.
-            gated = self._gate_schedule_inactive()
+            schedule_gated = self._gate_schedule_inactive()
 
             # Check whether we should turn on due to occupancy, a held-open
             # door, or time left of an on-period that going bright cut short.
@@ -4682,7 +4683,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     self.hass.states.get(self._door_entity), observed=False
                 )
             occ_turns_on = occ_active and self._molight_turns_on_for_occupancy()
-            if (occ_turns_on or door_holds) and not gated:
+            if (occ_turns_on or door_holds) and not schedule_gated:
                 self._last_on_illuminance = datetime.now(UTC)
                 self._machine_state = STATE_OCCUPIED
                 self._cancel_timer()
@@ -4713,7 +4714,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                         self._machine_state = self._countdown_state()
                     self._start_timer(timer_seconds)
                 self.async_write_ha_state()
-            elif not gated and self._can_be_at_standby():
+            elif not schedule_gated and self._can_be_at_standby():
                 # Control mode kept standby off while bright.
                 self._last_on_illuminance = datetime.now(UTC)
                 self._enter_standby(
@@ -4852,7 +4853,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         if self._machine_state == STATE_STANDBY:
             self._machine_state = STATE_ACTIVE  # raised manually, so on above standby
-        # Turned on while the maintain entity, an open_close door, or the
+        # Turned on while the maintain entity, an Open & close door, or the
         # occupancy sensor (when not gated by bright/window) is
         # already holding presence: hold the light immediately instead of
         # running a timer that would finish despite presence.
@@ -5192,7 +5193,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Return True when an off light should come on at standby now.
 
         Bright in illuminance control mode makes standby wait for darkness;
-        gate mode only gates turn-ons above standby.
+        illuminance Gate only mode gates only turn-ons above standby.
         """
         return self._standby_applies() and not (
             self._illuminance_mode == ILLUMINANCE_MODE_CONTROL

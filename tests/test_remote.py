@@ -120,7 +120,7 @@ def _seed(hass: HomeAssistant, entity_id: str, event_types: list[str]) -> None:
     """Give an event entity an initial (restored-looking) state.
 
     The runtime ignores an entity's first sighting (its state carries the
-    last pre-shutdown event), so tests seed before pressing.
+    last pre-shutdown event), so tests seed before clicking.
     """
     _fire(hass, entity_id, event_types[0], event_types)
 
@@ -423,12 +423,12 @@ async def test_first_sighting_and_unavailable_never_fire(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A button's first (restored) state and its recovery from unavailable
-    both carry a stale event that must never be replayed as a press."""
+    both carry a stale event that must never be replayed as a click."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     hass.states.async_set("light.living_room", "off")
     await setup_entries(hass, light_entry, remote)
 
-    # First sighting after startup: the state IS a press, but a stale one.
+    # First sighting after startup: the state IS a click, but a stale one.
     _fire(hass, "event.pico_on", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "off"
@@ -441,7 +441,7 @@ async def test_first_sighting_and_unavailable_never_fire(
     await settle(hass)
     assert _vlight(hass).state == "off"
 
-    # The next real press fires.
+    # The next real click fires.
     _fire(hass, "event.pico_on", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "on"
@@ -450,14 +450,14 @@ async def test_first_sighting_and_unavailable_never_fire(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("click", ["single", "double"])
 @pytest.mark.parametrize("recovery", ["fresh", "replay", "separate", "reload"])
-async def test_press_arriving_with_availability_recovery(
+async def test_click_arriving_with_availability_recovery(
     hass: HomeAssistant, freezer, recovery: str, click: str
 ) -> None:
-    """A button back from unavailable with an event fired since is a press.
+    """A button back from unavailable with an event fired since is a click.
 
-    Its recovery may arrive in the same state write as the press, or in one
+    Its recovery may arrive in the same state write as the click, or in one
     of its own first. A recovery that only shows the last event again, as
-    after its integration reloads, is still no press.
+    after its integration reloads, is still no click.
     """
     from tests.real_entities import (  # noqa: PLC0415
         InstantLight,
@@ -508,7 +508,7 @@ async def test_press_arriving_with_availability_recovery(
     assert hass.states.get("event.recovery_button").state != "unavailable"
     assert bulb.is_on == (recovery in ("fresh", "separate"))
 
-    # The press after any of them counts.
+    # The click after any of them counts.
     freezer.tick(timedelta(seconds=1))
     buttons[-1].press(click)
     await settle(hass)
@@ -557,10 +557,10 @@ async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
 
 
 @pytest.mark.asyncio
-async def test_dim_step_below_one_percent_uses_the_default(
+async def test_brightness_step_below_one_percent_uses_the_default(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A dim step that truncates to 0% would make the buttons do nothing."""
+    """A brightness step that truncates to 0% would make the buttons do nothing."""
     remote = _remote_entry(
         **{CONF_DIM_STEP: 0.5, CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"]}
     )
@@ -650,18 +650,18 @@ async def _step_mid_warning(
     freezer,
     stage: str,
     before: int,
-    dim_step: int,
+    brightness_step: int,
     button: str,
     extra_targets: list[str] | None = None,
 ) -> list[dict]:
-    """Bring light.matrix_light into a stage from `before`, press `button`, and
+    """Bring light.matrix_light into a stage from `before`, click `button`, and
     return the remote's service calls."""
     light_kwargs, stage_state, stage_level = STAGES[stage]
     hass.states.async_set("light.real_1", "off")
     remote = _remote_entry(
         **{
             CONF_TARGET_LIGHTS: ["light.matrix_light", *(extra_targets or [])],
-            CONF_DIM_STEP: dim_step,
+            CONF_DIM_STEP: brightness_step,
             CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
             CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE: ["event.pico_lower"],
         }
@@ -702,7 +702,7 @@ async def _step_mid_warning(
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("stage", list(STAGES))
 @pytest.mark.parametrize(
-    ("button", "before", "dim_step", "expected_pct", "expected_brightness"),
+    ("button", "before", "brightness_step", "expected_pct", "expected_brightness"),
     [
         ("event.pico_raise", 200, 10, 88, 224),
         ("event.pico_lower", 200, 10, 68, 173),
@@ -717,14 +717,16 @@ async def test_brightness_step_mid_warning_steps_from_pre_warning_brightness(
     stage: str,
     button: str,
     before: int,
-    dim_step: int,
+    brightness_step: int,
     expected_pct: int,
     expected_brightness: int,
 ) -> None:
     """A remote's brightness step during the effect or warn stage steps from
     the pre-warning brightness, clamped to 1 to 100 %, never turning the light
-    off, and starts a fresh timer like any other press."""
-    calls = await _step_mid_warning(hass, freezer, stage, before, dim_step, button)
+    off, and starts a fresh timer like any other click."""
+    calls = await _step_mid_warning(
+        hass, freezer, stage, before, brightness_step, button
+    )
 
     assert calls == [
         {
@@ -770,7 +772,7 @@ class _HeldSelect:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", list(STAGES))
 @pytest.mark.parametrize(
-    ("presses", "expected_pct"),
+    ("clicks", "expected_pct"),
     [
         (["raise", "raise"], 70),
         (["lower", "lower"], 30),
@@ -781,16 +783,16 @@ class _HeldSelect:
     ids=["up-up", "down-down", "up-down", "down-up", "up-up-up"],
 )
 @pytest.mark.parametrize("order", ["first", "last"])
-async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
+async def test_brightness_steps_add_up_while_a_click_ends_a_warning(
     hass: HomeAssistant,
     freezer,
     stage: str,
-    presses: list[str],
+    clicks: list[str],
     expected_pct: int,
     order: str,
 ) -> None:
-    """The first press mid-warning steps from the pre-warning brightness; one made
-    while that press still waits for its turn-on selection builds on it, in
+    """The first click mid-warning steps from the pre-warning brightness; one made
+    while that click still waits for its turn-on selection builds on it, in
     whichever order the select calls finish."""
     from tests.real_entities import RealLight, add_real  # noqa: PLC0415
 
@@ -828,13 +830,13 @@ async def test_brightness_steps_add_up_while_a_press_ends_a_warning(
     select.held = True
     calls = _record_service_calls(hass)
 
-    for press in presses:
-        _fire(hass, f"event.pico_{press}", "press", PICO_TYPES)
+    for click in clicks:
+        _fire(hass, f"event.pico_{click}", "press", PICO_TYPES)
         for _ in range(4):  # settle() would wait for the select calls
             await asyncio.sleep(0)
     waiting = list(select.calls)
     # Only a stage that blinks the lights off leaves a turn-on to wait.
-    assert len(waiting) == (len(presses) if stage == "blink_effect" else 0)
+    assert len(waiting) == (len(clicks) if stage == "blink_effect" else 0)
     if waiting:
         attributes = _vlight(hass).attributes
         assert attributes["warning_active"] is False
@@ -934,7 +936,7 @@ async def test_toggle_on_several_targets_moves_them_together(
 async def test_preset_turns_on_with_values(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A preset press turns the lights on at its brightness/color."""
+    """A preset click turns the lights on at its brightness/color."""
     remote = _remote_entry(
         **{
             CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"],
@@ -1077,8 +1079,8 @@ async def test_turn_on_double_click_uses_the_same_values(
 
 
 @pytest.mark.asyncio
-async def test_press_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
-    """A bound press mid effect-stage acts as manual control: it cancels the
+async def test_click_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
+    """A bound click mid effect-stage acts as manual control: it cancels the
     warning and the light returns to a fresh ACTIVE on-period."""
     light = MockConfigEntry(
         domain=DOMAIN,
@@ -1133,10 +1135,10 @@ async def test_unload_stops_listening(
 
 
 @pytest.mark.asyncio
-async def test_removing_light_removes_remote_target(
+async def test_removing_light_removes_target_light(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Deleting a virtual light removes it from a remote's target list."""
+    """Deleting a virtual light removes it from a remote's target lights."""
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     hass.states.async_set("light.living_room", "off")
     await setup_entries(hass, light_entry, remote)
@@ -1191,14 +1193,14 @@ async def test_last_action_sensor(
 
 
 @pytest.mark.asyncio
-async def test_first_press_of_a_brand_new_button_fires(
+async def test_first_click_of_a_brand_new_button_fires(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A freshly paired button (state "unknown", never fired an event) has
-    nothing stale to replay; its very first press must execute.
+    nothing stale to replay; its very first click must execute.
 
     Regression: the guard used to swallow any state change out of "unknown",
-    so the first press of every new button did nothing.
+    so the first click of every new button did nothing.
     """
     remote = _remote_entry(**{CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]})
     hass.states.async_set("light.living_room", "off")
@@ -1377,7 +1379,7 @@ async def test_preset_2_binding_fires(
 async def test_attribute_only_write_never_refires(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A same-state write (battery/attribute update) is not a new press."""
+    """A same-state write (battery/attribute update) is not a new click."""
     remote = _remote_entry(**{CONF_TOGGLE_BUTTONS_SINGLE: ["event.pico_on"]})
     hass.states.async_set("light.living_room", "off")
     _seed(hass, "event.pico_on", PICO_TYPES)
@@ -1551,7 +1553,7 @@ async def _start_remote_create(hass: HomeAssistant) -> dict:
 
 @pytest.mark.asyncio
 async def test_create_remote_flow(hass: HomeAssistant) -> None:
-    """The create flow stores bound slots flat and drops empty ones."""
+    """The create flow stores bindings flat and drops empty ones."""
     result = await _start_remote_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -1571,7 +1573,7 @@ async def test_create_remote_flow(hass: HomeAssistant) -> None:
     assert data[CONF_DIM_STEP] == 15
     assert data[CONF_ON_BUTTONS_SINGLE] == ["event.pico_on"]
     assert data[CONF_OFF_BUTTONS_SINGLE] == ["event.pico_off"]
-    # Unbound slots are absent, not stored as [].
+    # Unbound keys are absent, not stored as [].
     assert CONF_TOGGLE_BUTTONS_SINGLE not in data
     assert CONF_ON_BUTTONS_DOUBLE not in data
 
@@ -2233,7 +2235,7 @@ async def test_native_integration_vocabulary(
         ]
 
     async def _press(event_type: str) -> None:
-        # Real presses are milliseconds apart, so each is its own state.
+        # Real events are milliseconds apart, so each is its own state.
         freezer.tick(timedelta(milliseconds=100))
         button.press(event_type)
         await settle(hass)

@@ -1289,7 +1289,7 @@ async def test_schedule_change_rechecks_already_open_door(
 async def test_schedule_change_ignores_a_standing_open_momentary_door(
     hass: HomeAssistant,
 ) -> None:
-    """In plain open mode the door is a momentary trigger, so switching settings
+    """In On open mode the door is a momentary trigger, so switching settings
     is not an opening, matching startup, illuminance going dark and a
     gate-mode window starting, which all ignore a door that is merely open."""
     door = "binary_sensor.inside_door"
@@ -1428,11 +1428,11 @@ async def test_schedule_change_applies_selected_illuminance_mode(
 
 
 @pytest.mark.asyncio
-async def test_schedule_change_bright_gate_sensor_lets_occupancy_hold_on_light(
+async def test_schedule_change_bright_gate_only_sensor_lets_occupancy_hold_on_light(
     hass: HomeAssistant,
 ) -> None:
-    """A newly selected gate-mode sensor reading bright only gates an off
-    light, so the new settings' occupied sensor holds an on one."""
+    """A newly selected sensor in illuminance Gate only mode reading bright only
+    gates an off light, so the new settings' occupied sensor holds an on one."""
     occupancy = "binary_sensor.inside_occupancy"
     illuminance = "binary_sensor.inside_illuminance"
     hass.states.async_set(REAL, "on")

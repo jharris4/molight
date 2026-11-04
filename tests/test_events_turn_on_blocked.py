@@ -1,8 +1,8 @@
 """Tests for the turn_on_blocked event on a light's Events entity.
 
-A trigger that would have lit the room but was refused by a gate names the
-trigger and the gate. A trigger arriving while the light is on is not a
-refusal.
+A trigger that would have lit the room but was blocked by a gate names the
+trigger and the gate. A trigger arriving while the light is on is not
+blocked.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ async def _setup(hass, entry, **states) -> list[dict]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", [OCC, DOOR], ids=["occupancy", "door"])
-async def test_bright_refuses_a_trigger(hass, trigger: str) -> None:
+async def test_bright_blocks_a_trigger(hass, trigger: str) -> None:
     records = await _setup(
         hass,
         make_light_entry(
@@ -77,7 +77,7 @@ async def test_bright_refuses_a_trigger(hass, trigger: str) -> None:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("trigger", [OCC, DOOR], ids=["occupancy", "door"])
-async def test_a_gate_window_refuses_a_trigger(hass, trigger: str) -> None:
+async def test_a_gate_window_blocks_a_trigger(hass, trigger: str) -> None:
     records = await _setup(
         hass,
         make_light_entry(
@@ -101,8 +101,8 @@ async def test_a_gate_window_refuses_a_trigger(hass, trigger: str) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_going_dark_outside_a_gate_window_is_refused(hass) -> None:
-    """The dark edge with presence is a trigger too, and the window refuses it."""
+async def test_going_dark_outside_a_gate_window_is_blocked(hass) -> None:
+    """The dark edge with presence is a trigger too, and the window blocks it."""
     records = await _setup(
         hass,
         make_light_entry(
@@ -130,8 +130,8 @@ async def test_going_dark_outside_a_gate_window_is_refused(hass) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_trigger_while_the_light_is_on_is_no_refusal(hass) -> None:
-    """Nothing was refused when the room was already lit."""
+async def test_a_trigger_while_the_light_is_on_is_not_blocked(hass) -> None:
+    """Nothing was blocked when the room was already lit."""
     records = await _setup(
         hass,
         make_light_entry(

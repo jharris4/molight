@@ -368,11 +368,11 @@ async def test_release_while_occupied_stays_occupied(
 
 
 @pytest.mark.asyncio
-async def test_release_while_occupied_and_bright_in_gate_mode_stays_occupied(
+async def test_release_while_occupied_and_bright_in_gate_only_mode_stays_occupied(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright in gate mode only stops an off light turning on, so occupancy
-    holds the on light through the hold and its release, with no timer."""
+    """Bright in illuminance Gate only mode only stops an off light turning on, so
+    occupancy holds the on light through the hold and its release, with no timer."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(ILLUM, "off")
     await setup_entries(

@@ -379,11 +379,11 @@ STAGE_WARN = "warn"
 STAGE_CANCELLED = "cancelled"
 
 # How the light's illuminance sensor affects it:
-#   control:  dark gates turn-ons AND going bright forces the lights off
-#   gate:     dark gates turn-ons only; bright never turns the lights off.
-#             Use when the lux sensor can see the virtual light's member
-#             lights, which would otherwise oscillate (lights on → bright →
-#             forced off → dark → on ...).
+#   Control:    dark gates turn-ons AND going bright forces the lights off
+#   Gate only:  dark gates turn-ons only; bright never turns the lights off.
+#               Use when the lux sensor can see the virtual light's member
+#               lights, which would otherwise oscillate (lights on → bright →
+#               forced off → dark → on ...).
 CONF_ILLUMINANCE_MODE = "illuminance_mode"
 ILLUMINANCE_MODE_CONTROL = "control"
 ILLUMINANCE_MODE_GATE = "gate"
@@ -457,13 +457,13 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 # Opening the door is a turn-on trigger, gated by illuminance/schedule exactly
 # like occupancy (only lights up when dark and inside a gate-mode window).
 # door_mode controls what the door state does after that:
-#   open:        opening turns the lights on with the turn-off timer; the door
-#                is otherwise ignored (closing does nothing). A momentary
-#                trigger, like a light switch that pops back out.
-#   open_close:  the open door holds the lights on (no timer) while it stays
-#                open, and closing starts the turn-off timer, deferring to
-#                occupancy/keep-on holds (a closed door never cuts the lights
-#                over someone the occupancy sensor still sees).
+#   On open:       opening turns the lights on with the turn-off timer; the door
+#                  is otherwise ignored (closing does nothing). A momentary
+#                  trigger, like a light switch that pops back out.
+#   Open & close:  the open door holds the lights on (no timer) while it stays
+#                  open, and closing starts the turn-off timer, deferring to
+#                  occupancy/keep-on holds (a closed door never cuts the lights
+#                  over someone the occupancy sensor still sees).
 CONF_DOOR_ENTITY = "door_entity"
 CONF_DOOR_MODE = "door_mode"
 DOOR_MODE_OPEN = "open"
@@ -482,8 +482,8 @@ RELOAD_GRACE = 10
 # A Virtual Remote entry drives one or more lights from the buttons of a
 # remote control (a Lutron Pico, an IKEA Bilresa, ...). Buttons are the
 # `event` entities Home Assistant creates per physical button; every binding
-# is a (button, click) -> action pair, stored as the flat keys below. Each
-# press is a light service call, so a bound press on a virtual light
+# is a (button, click) pair bound to a remote action, stored as the flat keys
+# below. Each click is a light service call, so a bound click on a virtual light
 # gets full manual-control semantics (never gated, cancels an off warning
 # sequence, restarts the timer).
 #
@@ -491,9 +491,9 @@ RELOAD_GRACE = 10
 # ecosystem and is resolved per button from the event_types its event
 # entity has (see remote.py).
 CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
-# Percent step applied per brightness up/down press (one step per click; a
-# step below the minimum turns the light off, per the light domain's own
-# brightness_step handling, and a step on an off light turns it on dim).
+# Brightness step, in percent, applied once per brightness up/down click (a step
+# below the minimum turns the light off, per the light domain's own brightness_step
+# handling, and a step on an off light turns it on dim).
 CONF_DIM_STEP = "dim_step"
 DEFAULT_DIM_STEP = 10
 
@@ -534,7 +534,7 @@ REMOTE_ACTION_BRIGHTNESS_DOWN = "brightness_down"
 REMOTE_ACTION_PRESET_1 = "preset_1"
 REMOTE_ACTION_PRESET_2 = "preset_2"
 
-# (single-click key, double-click key, action) per bindable action slot:
+# (single-click key, double-click key, action) per bindable remote action:
 # the one table the config and options flows, the runtime, and the cleanup all iterate.
 REMOTE_ACTION_FIELDS = (
     (CONF_ON_BUTTONS_SINGLE, CONF_ON_BUTTONS_DOUBLE, REMOTE_ACTION_ON),

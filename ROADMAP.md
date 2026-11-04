@@ -124,7 +124,7 @@ Requests that existing blocks answer:
   lets the two share a light.
 - Controlling `switch` entities directly: Home Assistant's Switch as X helper wraps one as a light.
 - Services to extend or hold the timer: a Timer helper does it, and "turn off and stay off" is item 1.
-- Remote hold to dim, more remote actions, targets per binding: the remote binds clicks to light
+- Remote hold to dim, more remote actions, targets per binding: the remote binds clicks to remote
   actions and no more; hold-to-dim doubles the per-ecosystem vocabulary re-checked on every Home
   Assistant bump, and the rest is one automation or a second remote entry.
 - A re-trigger cooldown after an automatic turn-off: the sensor's hold time means it has rarely cleared by

@@ -7,7 +7,7 @@ suppressed earlier by bright/window), or when the gate suppressing it lifts
 already on, the light must adopt it as OCCUPIED; otherwise a timer finishes
 despite presence and the steady-on sensor produces no event that could ever
 rescue the light. Adoption is gated like a turn-on (bright or outside a
-gate-mode window suppress it), except that bright in illuminance gate mode
+gate-mode window suppress it), except that bright in illuminance Gate only mode
 only gates an off light; the maintain entity stays ungated.
 """
 
@@ -111,11 +111,12 @@ async def test_physical_on_adopts_active_occupancy(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["virtual", "physical"])
 @pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
-async def test_turn_on_while_bright_adopts_occupancy_only_in_gate_mode(
+async def test_turn_on_while_bright_adopts_occupancy_only_in_gate_only_mode(
     hass: HomeAssistant, freezer, mode: str, source: str
 ) -> None:
-    """Bright in control mode keeps the timer running over a turn-on; in gate
-    mode it only stops occupancy lighting an off light, so it holds this one."""
+    """Bright in control mode keeps the timer running over a turn-on; in
+    illuminance Gate only mode it only stops occupancy lighting an off light, so it
+    holds this one."""
     await setup_entries(
         hass, make_light_entry(occupancy=OCC, illuminance=ILLUM, illuminance_mode=mode)
     )
@@ -148,8 +149,9 @@ async def test_dark_adopts_active_occupancy_into_on_light(
     hass: HomeAssistant, freezer, standing: str
 ) -> None:
     """Illuminance going dark lifts the gate: an on light becomes OCCUPIED,
-    for an occupied sensor or an open open_close door alike. Control mode: in
-    gate mode a bright reading never keeps presence from holding an on light."""
+    for an occupied sensor or an open Open & close door alike. Control mode: in
+    illuminance Gate only mode a bright reading never keeps presence from holding
+    an on light."""
     await setup_entries(
         hass,
         make_light_entry(
@@ -207,7 +209,7 @@ async def test_gate_window_start_adopts_active_occupancy(
     hass: HomeAssistant, freezer, standing: str
 ) -> None:
     """A gate-mode window start over an on light adopts an occupied sensor or
-    an open open_close door."""
+    an open Open & close door."""
     await setup_entries(
         hass,
         make_light_entry(
@@ -274,8 +276,9 @@ async def test_dark_mid_warning_adopts_occupancy_and_restores(
     assert _state(hass).state == "on"
 
 
-async def _setup_gate_mode(hass: HomeAssistant, **kwargs) -> None:
-    """A lit light whose gate-mode lux sensor sees it and reads bright."""
+async def _setup_gate_only_mode(hass: HomeAssistant, **kwargs) -> None:
+    """A lit light in illuminance Gate only mode whose lux sensor sees it and reads
+    bright."""
     await setup_entries(
         hass,
         make_light_entry(
@@ -294,11 +297,11 @@ async def _setup_gate_mode(hass: HomeAssistant, **kwargs) -> None:
 
 
 @pytest.mark.asyncio
-async def test_gate_mode_occupancy_rehold_while_bright(
+async def test_gate_only_mode_occupancy_rehold_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
     """Moving again while the timer runs holds the light the lamp makes bright."""
-    await _setup_gate_mode(hass, timeout=300)
+    await _setup_gate_only_mode(hass, timeout=300)
     hass.states.async_set(
         OCC, "off", {"latest_occupied_time": dt_util.utcnow().isoformat()}
     )
@@ -314,7 +317,7 @@ async def test_gate_mode_occupancy_rehold_while_bright(
 
 
 @pytest.mark.asyncio
-async def test_gate_mode_occupancy_cancels_a_warning_while_bright(
+async def test_gate_only_mode_occupancy_cancels_a_warning_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
     """Occupancy cancels the warning of a light the lamp makes bright."""
@@ -343,7 +346,7 @@ async def test_gate_mode_occupancy_cancels_a_warning_while_bright(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("door_mode", [DOOR_MODE_OPEN, DOOR_MODE_OPEN_CLOSE])
-async def test_gate_mode_door_opening_retriggers_an_on_light_while_bright(
+async def test_gate_only_mode_door_opening_retriggers_an_on_light_while_bright(
     hass: HomeAssistant, freezer, door_mode: str
 ) -> None:
     """Bright stops a door lighting an off light, not re-triggering an on one."""
@@ -383,10 +386,11 @@ async def test_gate_mode_door_opening_retriggers_an_on_light_while_bright(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
-async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_mode(
+async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_only_mode(
     hass: HomeAssistant, mode: str
 ) -> None:
-    """At startup a lit light in a bright occupied room is held in gate mode."""
+    """At startup a lit light in a bright occupied room is held in illuminance Gate only
+    mode."""
     hass.states.async_set(REAL, "on", {"brightness": 200})
     hass.states.async_set(ILLUM, "on")
     hass.states.async_set(OCC, "on")
@@ -400,7 +404,7 @@ async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_mode(
 
 
 @pytest.mark.asyncio
-async def test_gate_mode_occupancy_recovering_holds_a_bright_light_lit_meanwhile(
+async def test_gate_only_mode_occupancy_recovering_holds_a_bright_light_lit_meanwhile(
     hass: HomeAssistant, freezer
 ) -> None:
     """Occupancy back from an outage holds a light turned on during it."""
@@ -433,7 +437,7 @@ async def test_gate_switch_end_keeps_occupancy_holding_a_bright_light(
 ) -> None:
     """A Gate and switch state end leaves occupancy holding the lit light."""
     hass.states.async_set(SCHED, "on")
-    await _setup_gate_mode(
+    await _setup_gate_only_mode(
         hass, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_SWITCH
     )
     hass.states.async_set(SCHED, "off")

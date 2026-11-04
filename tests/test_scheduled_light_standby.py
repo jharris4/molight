@@ -885,10 +885,11 @@ async def test_raising_standby_manually_is_held_by_presence_already_there(
     manual raise."""
     sensor = "binary_sensor.presence"
     illuminance = "binary_sensor.porch_bright"
-    # Bright in gate mode keeps the door or occupancy from raising standby.
+    # Bright in illuminance Gate only mode keeps the door or occupancy from raising
+    # standby.
     hass.states.async_set(illuminance, "on")
     hass.states.async_set(sensor, "on")
-    gate = {
+    gate_only = {
         CONF_ILLUMINANCE_ENTITY: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
     }
@@ -897,9 +898,9 @@ async def test_raising_standby_manually_is_held_by_presence_already_there(
         "door": {
             CONF_DOOR_ENTITY: sensor,
             CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-            **gate,
+            **gate_only,
         },
-        "occupancy": {CONF_OCCUPANCY_ENTITY: sensor, **gate},
+        "occupancy": {CONF_OCCUPANCY_ENTITY: sensor, **gate_only},
     }[presence]
     await _setup_porch(hass, _porch(inside=inside))
     await _echo_standby(hass)
@@ -1046,7 +1047,7 @@ async def test_maintain_leaves_standby_alone_but_the_door_raises_it(
 async def test_door_raises_standby_and_closing_returns_to_it(
     hass: HomeAssistant, freezer
 ) -> None:
-    """An open-and-close door holds the raised light, then counts down."""
+    """An Open & close door holds the raised light, then counts down."""
     door = "binary_sensor.front_door"
     hass.states.async_set(door, "off")
     await _setup_porch(
@@ -1066,7 +1067,7 @@ async def test_door_raises_standby_and_closing_returns_to_it(
 async def test_illuminance_gate_blocks_the_raise_but_not_standby(
     hass: HomeAssistant,
 ) -> None:
-    """Gate mode only gates turn-ons above standby."""
+    """Illuminance Gate only mode gates only turn-ons above standby."""
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(illuminance, "on")
     await _setup_porch(

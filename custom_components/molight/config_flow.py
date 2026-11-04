@@ -1483,7 +1483,7 @@ def _light_setting_fields(
     Only the turn-off timeout stays top-level; everything else is grouped:
     Turn-on & turn-off behavior and the off warning sequence collapsed (defaults are
     fine to start with), the sensor references expanded since they are the point of
-    a virtual light. Each mode dropdown sits next to its entity picker. The
+    a virtual light. Each mode field sits next to its entity picker. The
     standby section is for a Virtual Scheduled Light's inside-schedule settings.
     """
     sensor_fields: dict = {
@@ -1660,7 +1660,7 @@ def _turn_on_selection_fields(select_entity: str) -> dict:
 
 
 def _remote_top_fields() -> dict:
-    """Top-level Virtual Remote fields: the target lights and the dim step."""
+    """Top-level Virtual Remote fields: the target lights and the brightness step."""
     return {
         vol.Required(CONF_TARGET_LIGHTS): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="light", multiple=True)
@@ -4255,7 +4255,7 @@ class MoLightConfigFlow(
             if removed:
                 errors["base"] = "reference_removed"
             if not errors:
-                # Drop empty pickers/values so unbound slots stay absent from
+                # Drop empty pickers/values so unbound keys stay absent from
                 # the entry rather than being stored as [] or None.
                 data = {k: v for k, v in flat.items() if v not in (None, [])}
                 return self.async_create_entry(

@@ -2955,7 +2955,7 @@ async def test_light_flow_stores_occupancy_turn_on(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
+async def test_light_options_can_clear_door_sensor(hass: HomeAssistant) -> None:
     """Removing the door reference in options clears it (replace, not merge)."""
     light = MockConfigEntry(
         domain=DOMAIN,
@@ -2980,7 +2980,7 @@ async def test_light_options_can_clear_door_entity(hass: HomeAssistant) -> None:
             CONF_NAME: "Pantry",
             CONF_LIGHTS: ["light.pantry_real"],
             CONF_LIGHT_TIMEOUT: 120,
-            # Door entity intentionally omitted; the user cleared it.
+            # Door sensor intentionally omitted; the user cleared it.
         },
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY

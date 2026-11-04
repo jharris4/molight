@@ -645,7 +645,7 @@ Drives lights from the buttons of a remote control: a Lutron Pico, an IKEA Bilre
 
 > **Lutron Caséta Picos and keypads:** Home Assistant's `lutron_caseta` integration doesn't create `event` entities for its buttons, so out of the box Picos won't appear in the pickers. Install the separate [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) integration. It exposes every Caséta button as an `event` entity on the remote's own device page, and they work here like any other button.
 
-Each press calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound press on a virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running off warning sequence (restoring the pre-warning brightness), and it restarts the turn-off timer. During that warning, **Brightness up** and **Brightness down** step from the pre-warning brightness, never below 1%, rather than from the effect or warn brightness the light shows. Targets are usually virtual lights, but any `light` entity works.
+Each click calls `light.turn_on`, `light.turn_off` or `light.toggle`, so a bound click on a virtual light gets full **manual-control semantics**: it is never gated by darkness or a schedule window, it cancels a running off warning sequence (restoring the pre-warning brightness), and it restarts the turn-off timer. During that warning, **Brightness up** and **Brightness down** step from the pre-warning brightness, never below 1%, rather than from the effect or warn brightness the light shows. Targets are usually virtual lights, but any `light` entity works.
 
 Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is the last action the remote executed: `turn_on`, `turn_off`, `toggle`, `brightness_up`, `brightness_down`, `preset_1` or `preset_2`. Its attributes are `button` (the event entity that fired), `click` (the resolved `single` or `double`), `event_type` (the raw event type) and `time` (when the action ran). It's the link between "a button fired" (visible on the source event entity) and "a light changed" (visible on the virtual light): watch it while setting up bindings to confirm they do what you meant, and check its logbook history to answer "why did that light turn on?". It deliberately starts `unknown` after a restart, since a pre-restart action shown as current would be misleading.
 
@@ -677,10 +677,10 @@ Long, held and triple presses never fire a binding. A click whose spelling a but
 
 Two things worth knowing:
 
-- On a multi-press-capable button, the device only confirms a *single* click after its multi-press wait (~half a second) ends, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico presses are instant.
-- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh press. A press made since the button went unavailable still counts, even when it arrives together with the recovery. The guards you'd otherwise write as `trigger.from_state` template conditions are built in.
+- On a multi-press-capable button, the device only confirms a *single* click after its multi-press wait (~half a second) ends, so single clicks on a Bilresa have inherent latency. That's a device property, not something software can fix; Pico clicks are instant.
+- A button's first sighting after startup, and its recovery from `unavailable`, both carry the last (stale) event and are never replayed as a fresh click. A click made since the button went unavailable still counts, even when it arrives together with the recovery. The guards you'd otherwise write as `trigger.from_state` template conditions are built in.
 
-Deleting a virtual light removes it from every remote's target list, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
+Deleting a virtual light removes it from every remote's target lights, like any other reference. For worked examples (a 5-button Pico and a 2-button Bilresa), see [EXAMPLES.md](EXAMPLES.md).
 
 ## Design notes
 

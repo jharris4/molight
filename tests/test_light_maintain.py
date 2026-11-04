@@ -581,11 +581,11 @@ async def test_maintain_only_false_clear_gets_turn_off_timer(
 
 
 @pytest.mark.asyncio
-async def test_maintain_clear_defers_to_occupancy_while_bright_in_gate_mode(
+async def test_maintain_clear_defers_to_occupancy_while_bright_in_gate_only_mode(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright in gate mode does not keep occupancy from holding an on light,
-    so the maintain entity clearing over it starts no timer."""
+    """Bright in illuminance Gate only mode does not keep occupancy from holding an
+    on light, so the maintain entity clearing over it starts no timer."""
     hass.states.async_set(ILLUM, "on")  # bright
     hass.states.async_set(OCC, "on")
     hass.states.async_set(MAINT, "on")

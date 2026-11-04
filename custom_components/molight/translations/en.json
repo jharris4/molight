@@ -83,7 +83,7 @@
           "illuminance_mode": "Illuminance mode"
         },
         "data_description": {
-          "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate."
+          "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate."
         }
       },
       "assign_schedule": {
@@ -265,7 +265,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -561,7 +561,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -693,7 +693,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -785,7 +785,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -891,7 +891,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Presses count as manual control on a virtual light: never gated, and they cancel a running off warning sequence.",
+        "description": "Drive lights with any remote whose buttons appear as event entities (an IKEA Bilresa, a Hue dimmer, ...); Lutron Caséta Picos need the lutron-caseta-events integration. Bind single or double clicks to actions; which clicks a button supports is read from the button itself. Clicks count as manual control on a virtual light: never gated, and they cancel a running off warning sequence.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
@@ -956,7 +956,7 @@
           },
           "brightness_up": {
             "name": "Brightness up",
-            "description": "Buttons that step the brightness up by the brightness step. A press while the lights are off turns them on dim.",
+            "description": "Buttons that step the brightness up by the brightness step. A click while the lights are off turns them on dim.",
             "data": {
               "brightness_up_buttons_single": "Single-click buttons",
               "brightness_up_buttons_double": "Double-click buttons"
@@ -1259,7 +1259,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1351,7 +1351,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
@@ -1612,7 +1612,7 @@
               "occupancy_turn_on": "MoLight: MoLight turns the light on. Its own system: the light's own system (Lutron, Hue) turns it on from the same sensor, and MoLight runs the rest. Its own system, then MoLight: as Its own system, and MoLight turns the light on if it is still off a second later.",
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
-              "illuminance_mode": "Control: going bright also forces the lights off. Gate: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
+              "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
@@ -1697,7 +1697,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Bind single or double clicks of remote-control buttons (their event entities) to light actions. Whether a button supports double clicks is read from the button itself.",
+        "description": "Bind single or double clicks of remote-control buttons (their event entities) to remote actions. Whether a button supports double clicks is read from the button itself.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
@@ -1762,7 +1762,7 @@
           },
           "brightness_up": {
             "name": "Brightness up",
-            "description": "Buttons that step the brightness up by the brightness step. A press while the lights are off turns them on dim.",
+            "description": "Buttons that step the brightness up by the brightness step. A click while the lights are off turns them on dim.",
             "data": {
               "brightness_up_buttons_single": "Single-click buttons",
               "brightness_up_buttons_double": "Double-click buttons"
