@@ -2421,7 +2421,7 @@ async def test_attribute_only_change_does_not_restart_timer(
 
 @pytest.mark.asyncio
 async def test_brightness_zero_on_one_light_keeps_running(hass: HomeAssistant) -> None:
-    """Brightness 0 is an off in disguise, but other lit lights keep us on."""
+    """Brightness 0 counts as off, but other lit lights keep us on."""
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
 
     hass.states.async_set(REAL, "on", {"brightness": 100})
@@ -2448,7 +2448,7 @@ async def test_brightness_zero_on_one_light_keeps_running(hass: HomeAssistant) -
 
 @pytest.mark.asyncio
 async def test_physical_on_at_brightness_zero_stays_off(hass: HomeAssistant) -> None:
-    """A physical off→on at brightness 0 is an off in disguise.
+    """A physical off→on at brightness 0 counts as off.
 
     The virtual light must stay off without attributing a turn-on or starting
     a timer, matching how a dim to 0, _all_lights_off and the startup seed

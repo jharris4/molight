@@ -198,7 +198,7 @@ replying late.
 ### Added
 
 - The effect and warn stages accept a **white color temperature** as their
-  color, not just an RGB color, so temperature-only bulbs can show a color
+  color, not just an RGB color, so color-temperature-only bulbs can show a color
   during them too.
 
 ### Fixed
@@ -265,7 +265,7 @@ longer needs a custom repository.
 ### Fixed
 
 - Slow and chatty bulbs: replies that arrive late, in parts (power first, then
-  level or color), quantized, or as fade steps are recognized as MoLight's own
+  brightness or color), quantized, or as fade steps are recognized as MoLight's own
   echo, while a wall switch or dimmer used right after a MoLight command is no
   longer mistaken for one.
 - Restarts: occupancy already in progress at startup is no longer misread as a
@@ -311,7 +311,7 @@ longer needs a custom repository.
 
 ### Added
 
-- Color support for virtual lights, including automatic-on, effect and warn
+- Color support for virtual lights, including auto-on, effect and warn
   colors.
 - Door sensor support: with the door mode set to *Open & close*, a door can
   turn a light on and hold it.
@@ -353,7 +353,7 @@ longer needs a custom repository.
   configurable effect and warn durations, instead of sudden darkness.
 - Transition options for automatic turn-ons, automatic turn-offs and the effect
   and warn stages.
-- Automatic-on brightness; leaving it blank keeps the light's existing
+- Auto-on brightness; leaving it blank keeps the light's existing
   brightness.
 
 ### Changed

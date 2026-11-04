@@ -128,7 +128,7 @@ Warn duration:           20       # then 20s at current brightness to re-trigger
 Warn color:              255, 0, 0   # red: bulbs that can show color turn red for it
 ```
 
-Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → the turn-off timer starts only once **both** sensors are clear. Before turning off you get a quick blink, then a 20s warn stage to wave and cancel, shown in red on any color-capable bulb (brightness-only bulbs just hold their level). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
+Behavior: motion + it's dark → lights on at 60%. Sit still → mmWave keeps them on even after the PIR clears. Leave → the turn-off timer starts only once **both** sensors are clear. Before turning off you get a quick blink, then a 20s warn stage to wave and cancel, shown in red on any color-capable bulb (brightness-only bulbs just hold their brightness). Get up during those 20 seconds and it's as if nothing happened: original brightness and color restored, no trace.
 
 Each time MoLight turns the light on, the current value of `input_select.living_theme` is copied into the WLED preset select first. A Home Assistant automation can set that helper to a holiday, game-night, or everyday theme. If the helper is unavailable or its value is not one of WLED's current options, `Warm White Solid` is used instead. Want the same preset every time? Leave **Option source entity** blank, and `Warm White Solid` is used on every turn-on.
 
@@ -297,7 +297,7 @@ Auto-on color temperature: 2200                  # warm night light
 
 At 23:00 the schedule turns on and the light silently switches to the inside settings; the next motion turns it on dim and warm for a minute. At 06:30 it switches back. Things worth knowing:
 
-- With this example's **Keep state** choice and settings, ending the schedule does not restyle or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a timer already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
+- With this example's **Keep state** choice and settings, ending the schedule does not change or force off a light that is already on: brightness and color only apply on the *next* automatic turn-on, and a timer already running keeps its original duration. Incoming settings with bright illuminance in **Control** mode can still force off under the normal rules.
 - Choose **Switch state** to recalculate an on light's state and timer from the outside settings' current sensors, `latest_occupied_time` and 300-second timeout, or **Turn off** when the end of the night schedule window itself should be an automatic turn-off boundary.
 - Every setting can differ inside and outside the schedule, not just brightness: sensors, illuminance mode, off warning sequence, transitions, keep-on entities and the turn-on selection. Leave the occupancy sensor out of one of them and motion simply does nothing there.
 - The `active_settings` attribute (`outside_schedule` / `inside_schedule`) shows which settings set is active; **Configure** walks the same three forms again to edit either settings set.
@@ -426,7 +426,7 @@ Standby:                                         # collapsed section; expand it
 With no occupancy sensor in the outside settings, motion does nothing in the daytime. Things worth knowing:
 
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
-- Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
+- Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays off and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - For no standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form rejects a standby color without a brightness.
 - See the [reference](REFERENCE.md#standby) for how standby works with illuminance, auto-off holds, the other **At schedule end** choices, and restarts.
 

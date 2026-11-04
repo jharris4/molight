@@ -602,7 +602,7 @@ async def test_selection_reapplied_when_turning_on_during_a_blink_off(
     hass: HomeAssistant, freezer
 ) -> None:
     """An effect stage blinking fully off leaves the virtual light logically on
-    while the real lights are dark, so a turn-on there must still re-apply
+    while the real lights are off, so a turn-on there must still re-apply
     the selection."""
     selected: list[str] = []
 
@@ -922,11 +922,11 @@ async def _drain(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["occupancy", "door"])
-async def test_wall_turn_on_during_slow_selection_keeps_its_level(
+async def test_wall_turn_on_during_slow_selection_keeps_its_brightness(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
     """A turn-on at the wall overtakes an automatic one still waiting for its
-    selection: the light stays at the level it was turned on at, and the
+    selection: the light stays at the brightness it was turned on at, and the
     on-period is the user's."""
     select = _SlowSelect(hass)
     sensor = f"binary_sensor.{trigger}"
@@ -972,7 +972,7 @@ async def test_wall_turn_on_during_a_waiting_follow_window_start_stands(
     hass: HomeAssistant,
 ) -> None:
     """The window still owns a light turned on at the wall while its start
-    waited for the selection, at the level it was turned on at."""
+    waited for the selection, at the brightness it was turned on at."""
     select = _SlowSelect(hass)
     hass.states.async_set("binary_sensor.sched", "off")
     hass.states.async_set("light.ambient", "off")
@@ -1016,14 +1016,14 @@ async def _begin_virtual_turn_on(hass: HomeAssistant, select: _SlowSelect):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wall", ["turn_on", "dim_from_0"])
-async def test_wall_change_during_a_waiting_virtual_on_keeps_its_level(
+async def test_wall_change_during_a_waiting_virtual_on_keeps_its_brightness(
     hass: HomeAssistant, freezer, wall: str
 ) -> None:
     """A turn-on or dim at the wall is the later action: it overtakes a virtual
     turn-on still waiting for its selection, as it does an automatic one."""
     select = _SlowSelect(hass)
-    dark = ("on", {"brightness": 0}) if wall == "dim_from_0" else ("off", {})
-    hass.states.async_set("light.ambient", *dark)
+    not_lit = ("on", {"brightness": 0}) if wall == "dim_from_0" else ("off", {})
+    hass.states.async_set("light.ambient", *not_lit)
     await setup_entries(hass, _selection_entry())
     calls = _light_calls(hass)
     turn_on = await _begin_virtual_turn_on(hass, select)
@@ -1055,7 +1055,7 @@ async def test_wall_turn_on_during_a_waiting_virtual_on_rejoins_the_window(
     hass: HomeAssistant,
 ) -> None:
     """Inside a follow window the wall turn-on that overtook the virtual one
-    rejoins the window, at the level set at the wall."""
+    rejoins the window, at the brightness set at the wall."""
     select = _SlowSelect(hass)
     select.release.set()  # the window's own start goes straight through
     hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
@@ -1381,7 +1381,7 @@ async def test_uninterrupted_slow_selection_still_turns_on(
     assert hass.states.get("light.selection_light").state == "on"
 
 
-_LEVEL = {"virtual": 200, "occupancy": 102, "door": 102}
+_BRIGHTNESS = {"virtual": 200, "occupancy": 102, "door": 102}
 
 
 class _FailingSelect(_SlowSelect):
@@ -1442,10 +1442,10 @@ async def _begin_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["virtual", "occupancy"])
-async def test_waiting_turn_on_reports_on_at_its_level(
+async def test_waiting_turn_on_reports_on_at_its_brightness(
     hass: HomeAssistant, trigger: str
 ) -> None:
-    """The virtual light is on, at the level asked for, from the moment it
+    """The virtual light is on, at the brightness asked for, from the moment it
     accepts a turn-on, not only once the select call has finished."""
     select = _SlowSelect(hass)
     calls = _light_calls(hass)
@@ -1453,7 +1453,7 @@ async def test_waiting_turn_on_reports_on_at_its_level(
 
     state = hass.states.get("light.selection_light")
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert calls == []
     select.release.set()
     if turn_on:
@@ -1461,9 +1461,9 @@ async def test_waiting_turn_on_reports_on_at_its_level(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert calls == [("turn_on", _BRIGHTNESS[trigger])]
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
 
 
 @pytest.mark.asyncio
@@ -1490,9 +1490,9 @@ async def test_waiting_turn_on_whose_selection_fails_still_lights_the_room(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert calls == [("turn_on", _BRIGHTNESS[trigger])]
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert "Unable to apply turn-on selection" in caplog.text
 
 
@@ -1541,10 +1541,10 @@ async def test_select_call_that_never_answers_still_lights_the_room(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert calls == [("turn_on", _BRIGHTNESS[trigger])]
     assert select.cancelled == 1
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert state.attributes["molight_state"] == (
         "occupied" if trigger == "occupancy" else "active"
     )
@@ -1743,24 +1743,26 @@ async def test_waiting_turn_on_cancelled_by_an_off_reports_off(
     assert state.attributes["molight_state"] == "idle"
 
 
-async def _run_script(hass: HomeAssistant, level: int) -> None:
-    """Start a script that turns the virtual light on at a level."""
+async def _run_script(hass: HomeAssistant, brightness: int) -> None:
+    """Start a script that turns the virtual light on at a brightness."""
     if not hass.services.has_service("script", "lights_on"):
         turn_on = {
             "action": "light.turn_on",
             "target": {"entity_id": "light.selection_light"},
-            "data": {"brightness": "{{ level }}"},
+            "data": {"brightness": "{{ brightness }}"},
         }
         config = {"lights_on": {"mode": "restart", "sequence": [turn_on]}}
         assert await async_setup_component(hass, "script", {"script": config})
     await hass.services.async_call(
         "script",
         "turn_on",
-        {"entity_id": "script.lights_on", "variables": {"level": level}},
+        {"entity_id": "script.lights_on", "variables": {"brightness": brightness}},
         blocking=True,
     )
     await _drain(hass)
-    assert hass.states.get("light.selection_light").attributes["brightness"] == level
+    assert (
+        hass.states.get("light.selection_light").attributes["brightness"] == brightness
+    )
 
 
 async def _stop_script(hass: HomeAssistant) -> None:
@@ -1813,7 +1815,7 @@ async def test_script_stopped_during_the_wait_leaves_a_newer_turn_on(
     hass: HomeAssistant,
 ) -> None:
     """A turn-on made after the script's replaces it and is not stopped with
-    the script: it lights the room at its own level."""
+    the script: it lights the room at its own brightness."""
     select = _SlowSelect(hass)
     hass.states.async_set("light.ambient", "off")
     await setup_entries(hass, _selection_entry())
@@ -1845,7 +1847,7 @@ async def test_script_stopped_during_the_wait_leaves_occupancy_its_lights(
     hass: HomeAssistant,
 ) -> None:
     """The script's turn-on replaced one occupancy had waiting. Stopped, it
-    sends nothing, and the room someone is in is lit at the auto-on level."""
+    sends nothing, and the room someone is in is lit at the auto-on brightness."""
     select = await _park_automatic_turn_on(hass, auto_on_brightness=40)
     calls = _light_calls(hass)
     await _run_script(hass, 200)
@@ -2001,7 +2003,7 @@ async def test_member_reporting_off_after_a_waited_turn_on_turns_the_light_off(
     if turn_on:
         await turn_on
     await settle(hass)
-    hass.states.async_set("light.ambient", "on", {"brightness": _LEVEL[trigger]})
+    hass.states.async_set("light.ambient", "on", {"brightness": _BRIGHTNESS[trigger]})
     await settle(hass)
     assert hass.states.get("light.selection_light").state == "on"
 
@@ -2038,9 +2040,9 @@ async def test_member_reporting_in_off_during_the_wait_gets_the_turn_on(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert calls == [("turn_on", _BRIGHTNESS[trigger])]
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert state.attributes["molight_state"] == (
         "occupied" if trigger == "occupancy" else "active"
     )
@@ -2093,7 +2095,7 @@ async def test_members_reporting_in_off_after_the_turn_on_get_it_again(
         hass.states.async_set("binary_sensor.occ", "on")
     await settle(hass)
     for member in members:
-        hass.states.async_set(member, "on", {"brightness": _LEVEL[trigger]})
+        hass.states.async_set(member, "on", {"brightness": _BRIGHTNESS[trigger]})
     await settle(hass)
     calls = record_service_calls(hass)
 
@@ -2196,7 +2198,7 @@ async def test_select_on_device_is_not_a_wall_turn_on(
     calls = _light_calls(hass)
     turn_on = await _begin_turn_on(hass, select, trigger)
 
-    # The preset turns the light on, then sets its level.
+    # The preset turns the light on, then sets its brightness.
     for brightness in (77, 90):
         hass.states.async_set("light.ambient", "on", {"brightness": brightness})
         await _drain(hass)
@@ -2207,9 +2209,9 @@ async def test_select_on_device_is_not_a_wall_turn_on(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert calls == [("turn_on", _LEVEL[trigger])]
+    assert calls == [("turn_on", _BRIGHTNESS[trigger])]
     assert state.state == "on"
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert state.attributes["last_on_physical"] is None
     assert state.attributes["last_brightness_change_physical"] is None
     if trigger != "occupancy":
@@ -2264,7 +2266,7 @@ async def test_select_on_device_does_not_drop_a_window_start(
     hass: HomeAssistant,
 ) -> None:
     """A follow window start whose preset lights the light still sends its
-    own level."""
+    own brightness."""
     _one_device(hass, "select.ambient_theme", "light.ambient")
     select = _SlowSelect(hass)
     hass.states.async_set("binary_sensor.sched", "off")
@@ -2896,7 +2898,7 @@ async def test_automatic_turn_on_waiting_into_a_stage_sends_the_stage(
 ) -> None:
     """Motion lights the room, a false detection ends it and its off delay
     reaches the warning while the select call still runs: the warning is
-    what the lights show, not the level motion asked for."""
+    what the lights show, not the brightness motion asked for."""
     select = await _park_automatic_turn_on(
         hass,
         auto_on_brightness=40,
@@ -2932,7 +2934,7 @@ async def test_resend_started_in_a_stage_yields_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
     """A warning that ends at standby while a re-send waits leaves the lights
-    at standby: the level chosen last stands, and is sent again once the
+    at standby: the brightness chosen last stands, and is sent again once the
     select call ends, in case its preset landed on top."""
     select = _SlowSelect(hass)
     select.release.set()
@@ -2996,7 +2998,7 @@ async def test_resend_started_in_a_stage_yields_to_standby(
 # the command. These use a real light and select on one device.
 # ---------------------------------------------------------------------------
 
-PRESET_LEVEL = 128
+PRESET_BRIGHTNESS = 128
 WALL_TIMESTAMPS = (
     "last_on_physical",
     "last_brightness_change_physical",
@@ -3008,7 +3010,7 @@ WALL_TIMESTAMPS = (
 class _PresetSelect(RealSelect):
     """A registered select whose options are presets of its device's light.
 
-    A select call waits until released, then sets the light's level, which
+    A select call waits until released, then sets the light's brightness, which
     the light reports itself, as a WLED preset does.
     """
 
@@ -3024,7 +3026,7 @@ class _PresetSelect(RealSelect):
         await self.release.wait()
         await super().async_select_option(option)
         if self._light.available:
-            self._light.wall(brightness=PRESET_LEVEL)
+            self._light.wall(brightness=PRESET_BRIGHTNESS)
 
 
 async def _preset_strip(
@@ -3063,7 +3065,7 @@ def _wall_timestamps(hass: HomeAssistant) -> dict:
 
 
 async def _land_preset(hass: HomeAssistant, select: _PresetSelect) -> None:
-    """Let the select call finish: its preset sets the strip's level."""
+    """Let the select call finish: its preset sets the strip's brightness."""
     select.release.set()
     await settle(hass)
 
@@ -3074,7 +3076,7 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
     hass: HomeAssistant, freezer
 ) -> None:
     """A warning ends at standby while a re-send's select call still runs.
-    The preset then sets the strip to its own level: standby is sent again,
+    The preset then sets the strip to its own brightness: standby is sent again,
     and the preset is no dim at the wall that would leave standby."""
     light, select = await _preset_strip(hass)
     hass.states.async_set(_SCHEDULE, "on")
@@ -3118,7 +3120,7 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
 
 
 class _ScenePreset(_PresetSelect):
-    """A select whose options run a scene: it sets the light's level through
+    """A select whose options run a scene: it sets the light's brightness through
     Home Assistant, under the select call's context."""
 
     async def async_select_option(self, option: str) -> None:
@@ -3128,7 +3130,7 @@ class _ScenePreset(_PresetSelect):
         await self.hass.services.async_call(
             "light",
             "turn_on",
-            {"entity_id": "light.ambient", "brightness": PRESET_LEVEL},
+            {"entity_id": "light.ambient", "brightness": PRESET_BRIGHTNESS},
             blocking=True,
             context=self._context,
         )
@@ -3138,7 +3140,7 @@ async def _standby_coming_on(
     hass: HomeAssistant, reported: str
 ) -> tuple[FadingLight, _PresetSelect]:
     """A Virtual Scheduled Light whose window starts: its turn-on at standby waits
-    for the select call. The preset's level is reported by a push of the
+    for the select call. The preset's brightness is reported by a push of the
     strip's own, or under the select call by a light on another device."""
     if reported == "push":
         light, select = await _preset_strip(hass)
@@ -3174,8 +3176,8 @@ async def _off_then_preset(hass: HomeAssistant, reported: str) -> FadingLight:
     assert (state.state, state.attributes[ATTR_STANDBY_SUPPRESSED]) == ("off", True)
     await _land_preset(hass, select)
     state = hass.states.get("light.selection_light")
-    assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
-    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+    assert (light.is_on, light.brightness) == (True, PRESET_BRIGHTNESS)
+    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_BRIGHTNESS)
     assert state.attributes["molight_state"] == "active"
     return light
 
@@ -3273,12 +3275,12 @@ async def _lit_pair(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("command", ["level", "restore", "stage", "blink"])
+@pytest.mark.parametrize("command", ["brightness", "restore", "stage", "blink"])
 async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
     hass: HomeAssistant, freezer, command: str
 ) -> None:
     """The strip's re-send waits for its select call when a turn-on through
-    the light replaces it: a new level, or the pre-warning one restored. A
+    the light replaces it: a new brightness, or the pre-warning one restored. A
     stage the timer then reaches is sent during the call too, and may blink
     the lights off. Whichever was sent last is what the strip shows once the
     preset has landed."""
@@ -3298,8 +3300,8 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
         "light", "turn_on", {"entity_id": "light.selection_light", **data}
     )
     await _drain(hass)
-    level = 200 if command == "restore" else 100
-    assert (light.brightness, other.brightness) == (level, level)
+    brightness = 200 if command == "restore" else 100
+    assert (light.brightness, other.brightness) == (brightness, brightness)
     machine_state = "active"
     if command in ("stage", "blink"):
         await _pass(hass, freezer, 6)
@@ -3314,9 +3316,9 @@ async def test_command_sent_during_a_replaced_select_call_outlasts_its_preset(
         assert (light.is_on, other.is_on, state.state) == (False, False, "on")
         return
     if command == "stage":
-        level = 51
-    assert (light.brightness, other.brightness) == (level, level)
-    assert state.attributes["brightness"] == level
+        brightness = 51
+    assert (light.brightness, other.brightness) == (brightness, brightness)
+    assert state.attributes["brightness"] == brightness
 
     # The strip dimmed at the wall afterwards is a person again.
     light.wall(brightness=77)
@@ -3368,12 +3370,14 @@ async def test_raise_sent_during_a_replaced_standby_select_outlasts_its_preset(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("first", [None, "level"], ids=["alone", "after_a_level"])
+@pytest.mark.parametrize(
+    "first", [None, "brightness"], ids=["alone", "after_a_brightness"]
+)
 async def test_wall_change_during_a_replaced_select_call_is_not_sent_again(
     hass: HomeAssistant, first: str | None
 ) -> None:
     """The other real light dimmed at the wall replaces the re-send too, also
-    after a new level did. Real lights are not kept in step, so nothing is
+    after a new brightness did. Real lights are not kept in step, so nothing is
     sent after the preset."""
     light, other, select = await _lit_pair(hass)
     await _park_real_resend(hass, light, select)
@@ -3421,8 +3425,8 @@ async def test_stage_after_a_wall_change_during_a_select_call_is_sent_again(
 async def test_off_at_the_wall_after_a_command_during_a_select_call_stands(
     hass: HomeAssistant,
 ) -> None:
-    """A new level replaces the re-send, then both real lights are switched
-    off at the wall: the level is not sent again over that. The preset still
+    """A new brightness replaces the re-send, then both real lights are switched
+    off at the wall: the brightness is not sent again over that. The preset still
     lights the strip, which the light reports as any lit room."""
     light, other, select = await _lit_pair(hass)
     await _park_real_resend(hass, light, select)
@@ -3441,8 +3445,8 @@ async def test_off_at_the_wall_after_a_command_during_a_select_call_stands(
     state = hass.states.get("light.selection_light")
     assert light_targets(commands, "turn_on") == []
     assert not other.is_on
-    assert (light.is_on, light.brightness) == (True, PRESET_LEVEL)
-    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_LEVEL)
+    assert (light.is_on, light.brightness) == (True, PRESET_BRIGHTNESS)
+    assert (state.state, state.attributes["brightness"]) == ("on", PRESET_BRIGHTNESS)
 
 
 def _select_contexts(hass: HomeAssistant) -> list[Context]:
@@ -3534,8 +3538,8 @@ async def test_named_command_to_the_strip_replaces_a_waiting_turn_on(
         assert light_targets(commands, "turn_on") == []
         assert state.attributes["last_on_physical"] is not None
         assert (light.brightness, state.attributes["brightness"]) == (
-            PRESET_LEVEL,
-            PRESET_LEVEL,
+            PRESET_BRIGHTNESS,
+            PRESET_BRIGHTNESS,
         )
     else:
         assert light_targets(commands, "turn_on") == [["light.ambient"]]
@@ -3563,7 +3567,7 @@ async def test_named_command_to_the_strip_replaces_a_waiting_re_send(
     if theirs:
         assert light_targets(commands, "turn_on") == []
         assert state.attributes["last_on_physical"] is not None
-        assert (light.brightness, other.brightness) == (PRESET_LEVEL, 200)
+        assert (light.brightness, other.brightness) == (PRESET_BRIGHTNESS, 200)
     else:
         assert light_targets(commands, "turn_on") == [["light.ambient", "light.other"]]
         assert state.attributes["last_on_physical"] is None
@@ -3587,11 +3591,11 @@ async def _tear_down(hass: HomeAssistant, teardown: str) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("teardown", ["unload", "reload", "disable", "remove"])
-@pytest.mark.parametrize("armed_by", ["level", "stage", "blink"])
+@pytest.mark.parametrize("armed_by", ["brightness", "stage", "blink"])
 async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
     hass: HomeAssistant, freezer, teardown: str, armed_by: str
 ) -> None:
-    """A new level or a stage sent during a select call is sent again when
+    """A new brightness or a stage sent during a select call is sent again when
     the call ends, but not by a light that was unloaded, reloaded, disabled
     or removed meanwhile: an off at the wall after that stands."""
     stage = {"warn_timeout": 8, "warn_brightness": 20}
@@ -3599,7 +3603,7 @@ async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
         stage = {"effect_timeout": 8, "effect_brightness": 0}
     light, other, select = await _lit_pair(hass, timeout=5, **stage)
     await _park_real_resend(hass, light, select)
-    if armed_by == "level":
+    if armed_by == "brightness":
         await hass.services.async_call(
             "light",
             "turn_on",
@@ -3629,11 +3633,11 @@ async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
 
 
 @pytest.mark.asyncio
-async def test_reloaded_light_keeps_its_level_over_the_old_select_call(
+async def test_reloaded_light_keeps_its_brightness_over_the_old_select_call(
     hass: HomeAssistant,
 ) -> None:
-    """The light set up in place of an unloaded one sends a level of its own.
-    The old one's select call then ends: nothing is sent over that level."""
+    """The light set up in place of an unloaded one sends a brightness of its own.
+    The old one's select call then ends: nothing is sent over that brightness."""
     light, other, select = await _lit_pair(hass)
     await _park_real_resend(hass, light, select)
     await hass.services.async_call(
@@ -3742,7 +3746,7 @@ async def test_select_on_device_as_the_select_call_returns_is_no_wall_turn_on(
     await settle(hass)
 
     state = hass.states.get("light.selection_light")
-    assert light.brightness == _LEVEL[trigger]
-    assert state.attributes["brightness"] == _LEVEL[trigger]
+    assert light.brightness == _BRIGHTNESS[trigger]
+    assert state.attributes["brightness"] == _BRIGHTNESS[trigger]
     assert state.attributes["last_turn_on_selection_option"] == "Cozy"
     assert _wall_timestamps(hass) == {}

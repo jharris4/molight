@@ -172,7 +172,7 @@ async def test_a_virtual_turn_on_cancels_the_warning_with_its_own_look(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_a_warning_ending_at_standby_says_so(hass, freezer) -> None:
-    """standby is set when the sequence ends at standby rather than dark."""
+    """standby is set when the sequence ends at standby rather than off."""
     hass.states.async_set(SCHED, "on")
     records = await _setup(
         hass,

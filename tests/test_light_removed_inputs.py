@@ -447,7 +447,7 @@ async def test_light_whose_last_lit_real_light_goes_missing_is_off(
 
 
 @pytest.mark.parametrize("how", GONE)
-async def test_light_stays_on_when_a_dark_or_spare_real_light_goes_missing(
+async def test_light_stays_on_when_an_off_or_spare_real_light_goes_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str
 ) -> None:
     """A real light leaving changes nothing while another is still lit."""
@@ -473,7 +473,7 @@ async def test_light_stays_on_when_a_dark_or_spare_real_light_goes_missing(
 async def test_real_light_going_missing_does_not_cancel_a_blink_off(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """Real lights dark for an effect stage are not a light that went off."""
+    """Real lights blinked off for an effect stage are not a light that went off."""
     first = RealLight("real_1", on=True)
     second = RealLight("real_2", on=True)
     await add_real(hass, first, second)
@@ -617,7 +617,7 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
 ) -> None:
     """A turn-on waiting for its selection still lights the lights that remain.
 
-    One real light comes back dark and is being sent the settings again,
+    One real light comes back off and is being sent the settings again,
     behind a slow select call, when the lit one is deleted.
     """
     started = asyncio.Event()
@@ -644,7 +644,7 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
     await settle(hass)
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
 
-    # The second real light reboots and comes back dark.
+    # The second real light reboots and comes back off.
     second._attr_available = False
     second.async_write_ha_state()
     await settle(hass)
@@ -666,7 +666,7 @@ async def test_real_light_going_missing_does_not_cancel_a_waiting_resend(
     assert attrs(hass)["last_off_manual"] is None
 
 
-@pytest.mark.parametrize("others", ["none", "dark", "lit"])
+@pytest.mark.parametrize("others", ["none", "off", "lit"])
 async def test_light_whose_last_lit_real_lights_entry_is_disabled_is_off(
     hass: HomeAssistant, virtual_light_behavior_variant, others: str
 ) -> None:

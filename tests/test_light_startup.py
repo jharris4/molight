@@ -96,7 +96,7 @@ OCC = "binary_sensor.occ"
 MARKER = "2026-01-14T09:00:00-08:00"
 MARKER2 = "2026-01-14T11:00:00-08:00"
 HS_CAPS = {"supported_color_modes": ["hs"]}
-CT_CAPS = {
+COLOR_TEMP_CAPS = {
     "supported_color_modes": ["color_temp"],
     "min_color_temp_kelvin": 2700,
     "max_color_temp_kelvin": 6500,
@@ -240,11 +240,11 @@ async def test_colored_light_reports_its_restored_state_until_it_seeds(
 
 
 @pytest.mark.asyncio
-async def test_color_temp_light_reports_a_kelvin_range_until_it_seeds(
+async def test_color_temp_light_reports_a_color_temp_range_until_it_seeds(
     hass: HomeAssistant, caplog
 ) -> None:
     """Home Assistant 2026.1 has no default range and warns of mireds without one."""
-    real = _Members(hass, [REAL], CT_CAPS)
+    real = _Members(hass, [REAL], COLOR_TEMP_CAPS)
     entry = make_light_entry()
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -1331,10 +1331,12 @@ async def _light_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("data", "level"), [({"brightness": 200}, 200), ({}, 204)], ids=["level", "plain"]
+    ("data", "brightness"),
+    [({"brightness": 200}, 200), ({}, 204)],
+    ids=["brightness", "plain"],
 )
 async def test_raise_before_the_seed_replaces_a_restored_standby(
-    hass: HomeAssistant, freezer, data: dict, level: int
+    hass: HomeAssistant, freezer, data: dict, brightness: int
 ) -> None:
     """The raise stands, and its timer drops the light back to standby."""
     _Members(hass, [REAL], {})
@@ -1346,13 +1348,13 @@ async def test_raise_before_the_seed_replaces_a_restored_standby(
         "light", "turn_on", {"entity_id": VIRTUAL, **data}, blocking=True
     )
     await settle(hass)
-    assert hass.states.get(REAL).attributes["brightness"] == level
+    assert hass.states.get(REAL).attributes["brightness"] == brightness
     calls = record_service_calls(hass)
     await finish_startup(hass)
     await settle(hass)
     assert _turn_ons(calls) == []
-    assert hass.states.get(REAL).attributes["brightness"] == level
-    assert _attrs(hass)["brightness"] == level
+    assert hass.states.get(REAL).attributes["brightness"] == brightness
+    assert _attrs(hass)["brightness"] == brightness
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
 
     await _tick(hass, freezer, 61)
@@ -1394,7 +1396,7 @@ async def test_raise_waiting_for_its_selection_at_the_seed_replaces_standby(
     select = _ParkedSelect(hass)
 
     await restart_entries(hass, entry, started=False)
-    # A light that restarts dark selects before the raise is sent.
+    # A light that restarts off selects before the raise is sent.
     real.boot(REAL, "off")
     hass.async_create_task(
         hass.services.async_call(
@@ -1499,7 +1501,7 @@ async def test_member_switched_off_during_an_early_fade_is_read_as_it_is(
 async def test_member_reporting_in_before_the_seed_still_owes_an_early_command(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """A member that loads dark has not been switched: the turn-on stands."""
+    """A member that loads off has not been switched: the turn-on stands."""
     real = _Members(hass, [REAL], {})
     entry = make_light_entry()
     await setup_entries(hass, entry)

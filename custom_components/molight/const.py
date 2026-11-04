@@ -192,7 +192,7 @@ CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 CONF_AUTO_ON_COLOR_TEMP = "auto_on_color_temp"
 CONF_AUTO_ON_RGB_COLOR = "auto_on_rgb_color"
 # A Virtual Scheduled Light's inside-schedule settings can stay at a standby
-# level instead of turning off: an off light comes on at it on switching to those
+# brightness instead of turning off: an off light comes on at it on switching to those
 # settings, and a finished timer drops back to it rather than off.
 # The brightness (percent, 1-100) enables standby; the optional color is one
 # of a color temperature or an [r, g, b], like the auto-on color.
@@ -249,9 +249,9 @@ CONF_WARN_BRIGHTNESS = "warn_brightness"
 # Optional colors for the effect and warn stages, e.g. a red warn stage is
 # much harder to miss than a dim. Like the auto-on color, each stage takes a
 # color temperature (Kelvin) OR an [r, g, b] color (mutually exclusive keys,
-# enforced by the config/options flows), so temp-only bulbs can show a color
-# too. Color-capable members show the color; brightness-only members just show
-# the stage brightness. An effect color requires effect_brightness > 0 (a blink
+# enforced by the config/options flows), so color-temperature-only bulbs can show
+# a color too. Color-capable members show the color; brightness-only members just
+# show the stage brightness. An effect color requires effect_brightness > 0 (a blink
 # fully off has no color to show; enforced by the config/options flows). Any
 # re-trigger restores the pre-warning brightness AND color.
 CONF_EFFECT_COLOR_TEMP = "effect_color_temp"
@@ -569,8 +569,8 @@ REMOTE_ACTION_FIELDS = (
 # event_type, and the time.
 SIGNAL_REMOTE_ACTION = DOMAIN + "_remote_action_{}"
 
-# Preset action -> its (brightness, color temp, rgb color) value keys.
-# (brightness, color temp, rgb) keys of the actions that take values. Turn on
+# Preset action -> its (brightness, color temperature, rgb color) value keys.
+# (brightness, color temperature, rgb) keys of the actions that take values. Turn on
 # works with none; a preset with buttons needs at least one.
 REMOTE_ACTION_VALUE_KEYS = {
     REMOTE_ACTION_ON: (CONF_ON_BRIGHTNESS, CONF_ON_COLOR_TEMP, CONF_ON_RGB_COLOR),
@@ -592,6 +592,6 @@ STATE_ACTIVE = "active"  # lights on, timer running (no occupancy / not occupied
 STATE_OCCUPIED = "occupied"  # lights on, occupied, no timer
 STATE_COUNTDOWN = "countdown"  # occupancy cleared, turn-off timer running
 STATE_SCHEDULED = "scheduled"  # lights on, inside a follow-mode window, no timer
-STATE_STANDBY = "standby"  # lights at the standby level, no timer
+STATE_STANDBY = "standby"  # lights at the standby brightness, no timer
 STATE_EFFECT = "effect"  # automatic turn-off imminent, effect stage
 STATE_WARN = "warn"  # automatic turn-off imminent, warn stage

@@ -341,7 +341,7 @@ async def test_auto_on_brightness_not_applied_on_virtual_on(
     state = hass.states.get("light.bright_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_ACTIVE
-    # No brightness was requested and none is forced; the auto-on value is
+    # No brightness was requested and none is forced; the auto-on brightness is
     # reserved for automatic turn-ons.
     assert state.attributes.get("brightness") is None
 
@@ -449,7 +449,7 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
     state = hass.states.get("light.bright_gated_light")
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
-    # The restored brightness is preserved; no auto-on value overrode it.
+    # The restored brightness is preserved; no auto-on brightness overrode it.
     assert state.attributes["brightness"] == 143
 
 

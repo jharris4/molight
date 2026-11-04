@@ -363,16 +363,16 @@ test("a light with a turn-on selection gets the selection step", async ({ page }
   await startCreate(page, "Virtual Light");
   await expectFlowTitle(page, "Virtual Light");
   await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Selected");
-  await pickEntity(page, page, "Lights to control", "E2E CT Light");
+  await pickEntity(page, page, "Lights to control", "E2E Color Temperature Light");
   const behavior = await sectionPanel(page, "Turn-on & turn-off behavior");
   await pickEntity(page, behavior, "Turn-on selection entity", "E2E Target Mode");
   await submit(page);
   await expectFlowTitle(page, "Turn-on selection");
   await selectHaOption(page, "Fixed/fallback option", "Cozy");
   await submit(page);
-  // Discovery above wrapped E2E CT Light, so the pick is that virtual light.
+  // Discovery above wrapped E2E Color Temperature Light, so the pick is that virtual light.
   await expectFlowTitle(page, "Wrapped virtual lights");
-  await expect(page.getByText(/are virtual lights: E2E CT Light\./)).toBeVisible();
+  await expect(page.getByText(/are virtual lights: E2E Color Temperature Light\./)).toBeVisible();
   await submit(page);
   await finishCreated(page, "Browser Selected");
   const state = await entityState(page, "light.browser_selected");

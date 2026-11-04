@@ -67,7 +67,7 @@ if TYPE_CHECKING:
 MEMBER = "light.living_room"
 VIRTUAL = "light.test_light"
 
-HS_TEMP_CAPS = {
+HS_COLOR_TEMP_CAPS = {
     "supported_color_modes": ["hs", "color_temp"],
     "min_color_temp_kelvin": 2202,
     "max_color_temp_kelvin": 6535,
@@ -77,7 +77,7 @@ HS_TEMP_CAPS = {
 async def _setup_color(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     """Set up with a color-capable member so color commands reach the light."""
     await _setup(hass, entry)
-    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    hass.states.async_set(MEMBER, "off", HS_COLOR_TEMP_CAPS)
     await settle(hass)
 
 
@@ -142,7 +142,7 @@ async def test_matching_echo_is_not_physical(
 async def test_on_at_brightness_zero_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A dimmer echoing `on` at brightness 0 must not read as an off in disguise."""
+    """A dimmer echoing `on` at brightness 0 must not read as an off."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on")
@@ -237,7 +237,8 @@ async def test_dim_away_from_target_while_settling_is_physical(
 async def test_power_only_reply_then_fade_steps_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A bulb replying power first with no level, then fade steps, stays our echo."""
+    """A bulb replying power first with no brightness, then fade steps, stays our
+    echo."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=204, transition=2)
@@ -253,7 +254,7 @@ async def test_power_only_reply_then_fade_steps_is_not_physical(
 async def test_late_power_only_reply_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An on/off-only member's late reply carries no level and is its full echo."""
+    """An on/off-only member's late reply carries no brightness and is its full echo."""
     await _setup(hass, light_entry)
     await _virtual(hass, "turn_on", brightness=153)
     _age_expectations(hass, 10)
@@ -326,7 +327,7 @@ async def test_kelvin_echo_within_tolerance_is_not_physical(
         brightness=153,
         color_mode="color_temp",
         color_temp_kelvin=2900,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -349,7 +350,7 @@ async def test_hue_wraparound_echo_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[3, 75],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -372,7 +373,7 @@ async def test_near_white_echo_ignores_hue(
         brightness=153,
         color_mode="hs",
         hs_color=[200, 2],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -396,7 +397,7 @@ async def test_kelvin_command_echoed_as_hs_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=list(hs),
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -419,7 +420,7 @@ async def test_kelvin_fade_step_toward_target_is_not_physical(
         brightness=153,
         color_mode="color_temp",
         color_temp_kelvin=4000,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", color_temp_kelvin=3000, transition=4)
 
@@ -431,7 +432,7 @@ async def test_kelvin_fade_step_toward_target_is_not_physical(
             brightness=153,
             color_mode="color_temp",
             color_temp_kelvin=kelvin,
-            **HS_TEMP_CAPS,
+            **HS_COLOR_TEMP_CAPS,
         )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -453,7 +454,7 @@ async def test_kelvin_step_away_from_target_while_settling_is_physical(
         brightness=153,
         color_mode="color_temp",
         color_temp_kelvin=4000,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", color_temp_kelvin=3000, transition=4)
 
@@ -464,7 +465,7 @@ async def test_kelvin_step_away_from_target_while_settling_is_physical(
         brightness=153,
         color_mode="color_temp",
         color_temp_kelvin=4500,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is not None
@@ -486,7 +487,7 @@ async def test_hue_fade_step_along_the_arc_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[100, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", hs_color=[240, 80], transition=4)
 
@@ -497,7 +498,7 @@ async def test_hue_fade_step_along_the_arc_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[170, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -513,9 +514,9 @@ async def test_member_clamped_kelvin_reply_is_not_physical(
     warmer = "light.warmer"
     entry = make_light_entry(name="Test Light", lights=[MEMBER, warmer])
     await _setup(hass, entry)
-    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    hass.states.async_set(MEMBER, "off", HS_COLOR_TEMP_CAPS)
     hass.states.async_set(
-        warmer, "off", {**HS_TEMP_CAPS, "min_color_temp_kelvin": 2000}
+        warmer, "off", {**HS_COLOR_TEMP_CAPS, "min_color_temp_kelvin": 2000}
     )
     await settle(hass)
     assert _attrs(hass)["min_color_temp_kelvin"] == 2000
@@ -529,7 +530,7 @@ async def test_member_clamped_kelvin_reply_is_not_physical(
         brightness=153,
         color_mode="color_temp",
         color_temp_kelvin=2202,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -550,9 +551,11 @@ async def test_late_kelvin_reply_is_judged_against_the_member_range(
     wider = "light.wider"
     entry = make_light_entry(name="Test Light", lights=[MEMBER, wider])
     await _setup(hass, entry)
-    narrow = {**HS_TEMP_CAPS, "max_color_temp_kelvin": 6000}
+    narrow = {**HS_COLOR_TEMP_CAPS, "max_color_temp_kelvin": 6000}
     hass.states.async_set(MEMBER, "off", narrow)
-    hass.states.async_set(wider, "off", {**HS_TEMP_CAPS, "min_color_temp_kelvin": 2000})
+    hass.states.async_set(
+        wider, "off", {**HS_COLOR_TEMP_CAPS, "min_color_temp_kelvin": 2000}
+    )
     await settle(hass)
 
     await _virtual(hass, "turn_on", brightness=153, color_temp_kelvin=commanded)
@@ -588,7 +591,7 @@ async def test_effect_kelvin_fade_reply_keeps_the_sequence(
         warn_timeout=0,
     )
     await _setup(hass, entry)
-    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    hass.states.async_set(MEMBER, "off", HS_COLOR_TEMP_CAPS)
     await settle(hass)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=200, color_temp_kelvin=4000)
@@ -599,7 +602,7 @@ async def test_effect_kelvin_fade_reply_keeps_the_sequence(
         brightness=200,
         color_mode="color_temp",
         color_temp_kelvin=4000,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     freezer.tick(timedelta(seconds=61))
@@ -614,7 +617,7 @@ async def test_effect_kelvin_fade_reply_keeps_the_sequence(
         brightness=204,
         color_mode="color_temp",
         color_temp_kelvin=3500,
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     assert _attrs(hass)["molight_state"] == STATE_EFFECT
 
@@ -639,7 +642,7 @@ async def test_recolor_while_settling_is_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[100, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
 
@@ -650,7 +653,7 @@ async def test_recolor_while_settling_is_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[10, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is not None
@@ -672,7 +675,7 @@ async def test_stale_color_while_recolor_settles_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[100, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
 
@@ -684,7 +687,7 @@ async def test_stale_color_while_recolor_settles_is_not_physical(
             brightness=153,
             color_mode="hs",
             hs_color=hs,
-            **HS_TEMP_CAPS,
+            **HS_COLOR_TEMP_CAPS,
         )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -708,7 +711,7 @@ async def test_late_color_contradiction_is_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[100, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     # Treated as a real change: the member's color is mirrored, not ours kept.
@@ -719,11 +722,11 @@ async def test_late_color_contradiction_is_physical(
 async def test_color_after_brightness_two_part_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A bulb replying power and level first, then its color, stays our echo."""
+    """A bulb replying power and brightness first, then its color, stays our echo."""
     await _setup_color(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
-    await _write(hass, "on", contexts[-1], brightness=153, **HS_TEMP_CAPS)
+    await _write(hass, "on", contexts[-1], brightness=153, **HS_COLOR_TEMP_CAPS)
     await _write(
         hass,
         "on",
@@ -731,7 +734,7 @@ async def test_color_after_brightness_two_part_echo_is_not_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[240, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is None
@@ -887,7 +890,7 @@ _LATE_AGES = pytest.mark.parametrize("age", [4, 29])
 async def test_late_matching_turn_on_naming_its_author_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, author, physical, age
 ) -> None:
-    """A silent member turned on, at the level we asked for, by a command
+    """A silent member turned on, at the brightness we asked for, by a command
     that names a user or an automation was turned on by them: only a report
     of the bulb's own passes as its slow reply."""
     await _setup(hass, light_entry)
@@ -928,7 +931,7 @@ async def test_late_matching_turn_off_naming_its_author_is_physical(
 async def test_late_matching_dim_naming_its_author_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, author, physical, age
 ) -> None:
-    """The same for a new level the member did not answer."""
+    """The same for a new brightness the member did not answer."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=200)
@@ -954,11 +957,11 @@ async def test_late_matching_recolor_naming_its_author_is_physical(
     red = {"brightness": 153, "color_mode": "hs", "hs_color": [0, 80]}
     blue = {**red, "hs_color": [240, 80]}
     await _virtual(hass, "turn_on", brightness=153, hs_color=[0, 80])
-    await _write(hass, "on", contexts[-1], **red, **HS_TEMP_CAPS)
+    await _write(hass, "on", contexts[-1], **red, **HS_COLOR_TEMP_CAPS)
     await _virtual(hass, "turn_on", hs_color=[240, 80])
     _age_expectations(hass, age)
 
-    await _write(hass, "on", _named(author), **blue, **HS_TEMP_CAPS)
+    await _write(hass, "on", _named(author), **blue, **HS_COLOR_TEMP_CAPS)
 
     assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
     assert (_attrs(hass)["last_color_change_physical"] is not None) is physical
@@ -984,7 +987,7 @@ async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timer(
     hass: HomeAssistant, freezer, hass_admin_user, delay: int
 ) -> None:
     """A real light misses our turn-on, and a user turns it on from its own
-    card at the same level, while our command settles, in the 30 s after,
+    card at the same brightness, while our command settles, in the 30 s after,
     or later. Each time that is the user's turn-on, and the light stays on
     for the full timeout from then."""
     lamp = _LostFirstLight("lamp")
@@ -1060,7 +1063,7 @@ async def test_desaturation_while_settling_is_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[240, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
     await _virtual(hass, "turn_on", brightness=153, hs_color=[240, 80])
 
@@ -1071,7 +1074,7 @@ async def test_desaturation_while_settling_is_physical(
         brightness=153,
         color_mode="hs",
         hs_color=[240, 10],  # same hue, drained saturation
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["last_color_change_physical"] is not None
@@ -1082,7 +1085,7 @@ async def test_desaturation_while_settling_is_physical(
 async def test_plain_turn_on_echo_mirrors_member_brightness(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A turn-on naming no level reports the level the member came on at."""
+    """A turn-on naming no brightness reports the brightness the member came on at."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on")
@@ -1098,7 +1101,7 @@ async def test_plain_turn_on_echo_mirrors_member_brightness(
 async def test_plain_turn_on_echo_replaces_stale_brightness(
     hass: HomeAssistant,
 ) -> None:
-    """An occupancy turn-on naming no level drops the last commanded one."""
+    """An occupancy turn-on naming no brightness drops the last commanded one."""
     hass.states.async_set("binary_sensor.occ", "off")
     entry = make_light_entry(
         name="Test Light", lights=[MEMBER], occupancy="binary_sensor.occ"
@@ -1123,7 +1126,8 @@ async def test_plain_turn_on_echo_replaces_stale_brightness(
 async def test_plain_turn_on_echo_at_brightness_zero_keeps_brightness(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A dimmer echoing `on` with no level yet leaves the reported level alone."""
+    """A dimmer echoing `on` with no brightness yet leaves the reported brightness
+    alone."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1153,7 +1157,7 @@ async def test_plain_turn_on_echo_mirrors_member_color(
         brightness=153,
         color_mode="hs",
         hs_color=[240, 80],
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert tuple(_attrs(hass)["hs_color"]) == (240, 80)
@@ -1165,7 +1169,7 @@ async def test_plain_turn_on_echo_mirrors_member_color(
 async def test_turn_off_echo_mirrors_nothing(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An off echo in disguise (on at brightness 0) is not read as a level."""
+    """An off echo (on at brightness 0) is not read as a brightness."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1346,7 +1350,7 @@ async def test_late_reply_to_restore_after_warn_is_not_physical(
 async def test_reply_to_newest_command_settles_the_older_ones(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Once the newest command is answered, an older level is a physical dim."""
+    """Once the newest command is answered, an older brightness is a physical dim."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=100)
@@ -1363,7 +1367,7 @@ async def test_reply_to_newest_command_settles_the_older_ones(
 async def test_change_contradicting_every_command_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A level matching none of the unanswered commands is a physical dim, and
+    """A brightness matching none of the unanswered commands is a physical dim, and
     it settles them all."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
@@ -1384,7 +1388,7 @@ async def test_change_contradicting_every_command_is_physical(
 async def test_late_plain_reply_keeps_newer_commanded_brightness(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A plain turn-on's late reply does not overwrite a newer commanded level."""
+    """A plain turn-on's late reply does not overwrite a newer commanded brightness."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on")
@@ -1421,10 +1425,10 @@ async def test_dim_after_unanswered_plain_turn_on_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_turn_on_after_unanswered_turn_off_of_dark_member_is_physical(
+async def test_turn_on_after_unanswered_turn_off_of_member_already_off_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A turn-off changes nothing on a dark member, so a later off in disguise
+    """A turn-off changes nothing on an off member, so a later report on at brightness 0
     is not awaited as its reply."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
@@ -1467,7 +1471,7 @@ async def test_plain_turn_on_of_unreadable_member_awaits_its_reply(
 async def test_plain_turn_on_of_member_on_at_zero_awaits_its_reply(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A member on at brightness 0 is dark, so a plain turn-on changes it."""
+    """A member on at brightness 0 counts as off, so a plain turn-on changes it."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _write(hass, "on", Context(), brightness=0)
@@ -1480,10 +1484,10 @@ async def test_plain_turn_on_of_member_on_at_zero_awaits_its_reply(
 
 
 @pytest.mark.asyncio
-async def test_plain_turn_on_awaits_only_the_dark_member(
+async def test_plain_turn_on_awaits_only_the_off_member(
     hass: HomeAssistant,
 ) -> None:
-    """With one member lit and one dark, only the dark one owes a reply."""
+    """With one member lit and one off, only the off one owes a reply."""
     other = "light.kitchen"
     entry = make_light_entry(name="Test Light", lights=[MEMBER, other])
     await _setup(hass, entry)
@@ -1578,7 +1582,9 @@ async def test_late_reply_outside_color_tolerance_is_physical(
     await _virtual(hass, "turn_on", brightness=153, **command)
     _age_expectations(hass, 10)
 
-    await _write(hass, "on", contexts[-1], brightness=153, **reply, **HS_TEMP_CAPS)
+    await _write(
+        hass, "on", contexts[-1], brightness=153, **reply, **HS_COLOR_TEMP_CAPS
+    )
 
     if "hs_color" in reply:
         assert tuple(_attrs(hass)["hs_color"]) == tuple(reply["hs_color"])
@@ -1701,7 +1707,7 @@ class _FadingMember:
         commands, self._commands = self._commands, []
         for command in commands:
             if command.data["service"] == "turn_off":
-                await _write(self._hass, "off", command.context, **HS_TEMP_CAPS)
+                await _write(self._hass, "off", command.context, **HS_COLOR_TEMP_CAPS)
                 continue
             data = command.data["service_data"]
             was_on = self._hass.states.get(MEMBER).state == "on"
@@ -1722,7 +1728,7 @@ class _FadingMember:
                     command.context,
                     brightness=self._brightness,
                     **color,
-                    **HS_TEMP_CAPS,
+                    **HS_COLOR_TEMP_CAPS,
                 )
 
     @staticmethod
@@ -1878,7 +1884,7 @@ async def test_recolor_beside_a_stage_fade_still_cancels_the_warning(
     await _tick(hass, freezer, 61)
     assert _attrs(hass)["molight_state"] == STATE_WARN
     step = {"color_mode": "hs", "hs_color": BLENDS[blend](RED, CYAN, 0.25)}
-    await _write(hass, "on", contexts[-1], brightness=201, **step, **HS_TEMP_CAPS)
+    await _write(hass, "on", contexts[-1], brightness=201, **step, **HS_COLOR_TEMP_CAPS)
     assert _attrs(hass)["molight_state"] == STATE_WARN
 
     await _write(
@@ -1888,7 +1894,7 @@ async def test_recolor_beside_a_stage_fade_still_cancels_the_warning(
         brightness=201,
         color_mode="hs",
         hs_color=(300, 50),
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
     )
 
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
@@ -1921,7 +1927,7 @@ async def test_standby_and_auto_on_color_fades_are_not_recolors(
     )
     hass.states.async_set(schedule, "on")
     hass.states.async_set(occupancy, "off")
-    hass.states.async_set(MEMBER, "off", HS_TEMP_CAPS)
+    hass.states.async_set(MEMBER, "off", HS_COLOR_TEMP_CAPS)
     member = _FadingMember(hass, blend)
     entry.add_to_hass(hass)
     await hass.config_entries.async_setup(entry.entry_id)
@@ -1990,7 +1996,9 @@ async def _light_group(hass: HomeAssistant, member: Entity) -> str:
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("member", ["instant", "instant_group", "after_the_call"])
-@pytest.mark.parametrize("trigger", ["virtual", "virtual_level", "occupancy", "level"])
+@pytest.mark.parametrize(
+    "trigger", ["virtual", "virtual_brightness", "occupancy", "brightness"]
+)
 async def test_reply_inside_the_turn_on_call_never_reports_off(
     hass: HomeAssistant, member: str, trigger: str
 ) -> None:
@@ -2009,13 +2017,13 @@ async def test_reply_inside_the_turn_on_call_never_reports_off(
         make_light_entry(
             lights=lights,
             occupancy="binary_sensor.occ",
-            auto_on_brightness=40 if trigger == "level" else None,
+            auto_on_brightness=40 if trigger == "brightness" else None,
         ),
     )
     seen = _reports_of(hass, INSTANT)
 
-    if trigger in ("virtual", "virtual_level"):
-        data = {"brightness": 200} if trigger == "virtual_level" else {}
+    if trigger in ("virtual", "virtual_brightness"):
+        data = {"brightness": 200} if trigger == "virtual_brightness" else {}
         await hass.services.async_call(
             "light", "turn_on", {"entity_id": INSTANT, **data}, blocking=True
         )
@@ -2069,11 +2077,11 @@ async def test_reply_inside_the_standby_call_never_reports_off(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("stage", ["effect", "warn"])
-async def test_reply_inside_a_stage_call_reports_the_stage_level_only(
+async def test_reply_inside_a_stage_call_reports_the_stage_brightness_only(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
-    """A stage's level is mirrored before its command is sent, so a color
-    mirrored from a reply inside the call is not reported at the old level."""
+    """A stage's brightness is mirrored before its command is sent, so a color
+    mirrored from a reply inside the call is not reported at the old brightness."""
     member = InstantLight("real_1", kelvin=3000)
     await add_real(hass, member)
     await setup_entries(
@@ -2347,7 +2355,8 @@ async def test_caller_fade_is_not_a_change_at_the_wall(
 async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """A turn-on during the warning restores the old level over its own transition."""
+    """A turn-on during the warning restores the old brightness over its own
+    transition."""
     member = await _fading_light(
         hass, make_light_entry(warn_timeout=30, warn_brightness=20)
     )
@@ -2501,13 +2510,13 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
 
 
 # ---------------------------------------------------------------------------
-# A bulb that reports power first at the level it remembered
+# A bulb that reports power first at the brightness it remembered
 #
-# Such a bulb says it is on at the level it was last on at, then brightens
-# from dark in steps. When the turn-on carried a transition, that first report is
+# Such a bulb says it is on at the brightness it was last on at, then brightens
+# from off in steps. When the turn-on carried a transition, that first report is
 # neither the command's answer nor the echo anchor for the step after it, for the
 # fade's length from that report; after that, or when the turn-on carried no
-# transition, a lower level is a dim at the wall as before.
+# transition, a lower brightness is a dim at the wall as before.
 # ---------------------------------------------------------------------------
 
 REMEMBERED = [204, 100]  # at the 80% target the tests send, and off it
@@ -2518,7 +2527,7 @@ OCC = "binary_sensor.occ"
 async def _remembering_light(
     hass: HomeAssistant, entry: MockConfigEntry, *, remembered: int = 204, **member
 ) -> FadingLight:
-    """Set up the light over an off member that remembers a level."""
+    """Set up the light over an off member that remembers a brightness."""
     light = FadingLight(
         "real_1", brightness=remembered, power_first=True, **{"steps": STEPS, **member}
     )
@@ -2532,7 +2541,7 @@ async def _occupied(hass: HomeAssistant) -> None:
     await settle(hass)
 
 
-def _levels(seen: list[tuple[str, int | None]]) -> set[int | None]:
+def _brightnesses(seen: list[tuple[str, int | None]]) -> set[int | None]:
     return {brightness for _, brightness in seen}
 
 
@@ -2540,10 +2549,10 @@ def _levels(seen: list[tuple[str, int | None]]) -> set[int | None]:
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("remembered", REMEMBERED)
-async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
+async def test_auto_on_power_first_at_remembered_brightness_is_not_a_dim(
     hass: HomeAssistant, freezer, fade: int, remembered: int
 ) -> None:
-    """Power first at the remembered level, then steps up from dark."""
+    """Power first at the remembered brightness, then steps up from off."""
     hass.states.async_set(OCC, "off")
     member = await _remembering_light(
         hass,
@@ -2558,17 +2567,17 @@ async def test_auto_on_power_first_at_remembered_level_is_not_a_dim(
 
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
-    assert _levels(seen) == {204}
+    assert _brightnesses(seen) == {204}
     assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("remembered", REMEMBERED)
-async def test_virtual_fade_power_first_at_remembered_level_is_not_a_dim(
+async def test_virtual_fade_power_first_at_remembered_brightness_is_not_a_dim(
     hass: HomeAssistant, freezer, remembered: int
 ) -> None:
-    """A caller's transition to a level, answered power first at the old one."""
+    """A caller's transition to a brightness, answered power first at the old one."""
     member = await _remembering_light(hass, make_light_entry(), remembered=remembered)
     seen = _reports_of(hass, INSTANT)
 
@@ -2582,14 +2591,14 @@ async def test_virtual_fade_power_first_at_remembered_level_is_not_a_dim(
 
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
-    assert _levels(seen) == {204}
+    assert _brightnesses(seen) == {204}
     assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("remembered", [51, 204])
-async def test_standby_power_first_at_remembered_level_is_not_a_dim(
+async def test_standby_power_first_at_remembered_brightness_is_not_a_dim(
     hass: HomeAssistant, freezer, fade: int, remembered: int
 ) -> None:
     """Coming on at standby when the window starts, answered power first."""
@@ -2615,14 +2624,14 @@ async def test_standby_power_first_at_remembered_level_is_not_a_dim(
 
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_STANDBY
-    assert _levels(seen) == {51}
+    assert _brightnesses(seen) == {51}
     assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("remembered", REMEMBERED)
-async def test_follow_window_start_power_first_at_remembered_level_is_not_a_dim(
+async def test_follow_window_start_power_first_at_remembered_brightness_is_not_a_dim(
     hass: HomeAssistant, freezer, fade: int, remembered: int
 ) -> None:
     """A follow window lighting the room, answered power first."""
@@ -2646,21 +2655,21 @@ async def test_follow_window_start_power_first_at_remembered_level_is_not_a_dim(
 
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_SCHEDULED
-    assert _levels(seen) == {204}
+    assert _brightnesses(seen) == {204}
     assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-@pytest.mark.parametrize("level", [200, 51])
-async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
-    hass: HomeAssistant, freezer, fade: int, level: int
+@pytest.mark.parametrize("brightness", [200, 51])
+async def test_warn_after_blink_off_power_first_at_old_brightness_is_not_a_dim(
+    hass: HomeAssistant, freezer, fade: int, brightness: int
 ) -> None:
     """The warn stage after a blink-off effect turns the member on again from off,
-    which answers power first at the level the effect took away."""
+    which answers power first at the brightness the effect took away."""
     member = FadingLight(
-        "real_1", on=True, brightness=level, power_first=True, steps=STEPS
+        "real_1", on=True, brightness=brightness, power_first=True, steps=STEPS
     )
     await add_real(hass, member)
     await setup_entries(
@@ -2684,7 +2693,7 @@ async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
 
     assert member.brightness == 51
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
-    assert _levels(seen) == {51}
+    assert _brightnesses(seen) == {51}
     assert _timestamps(hass) == {}
 
 
@@ -2694,7 +2703,7 @@ async def test_warn_after_blink_off_power_first_at_old_level_is_not_a_dim(
 async def test_auto_on_power_first_at_remembered_color_is_not_a_recolor(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """Power first at the remembered level and color, then steps of both."""
+    """Power first at the remembered brightness and color, then steps of both."""
     hass.states.async_set(OCC, "off")
     member = await _remembering_light(
         hass,
@@ -2715,17 +2724,17 @@ async def test_auto_on_power_first_at_remembered_color_is_not_a_recolor(
     assert member.brightness == 204
     assert member.hs_color == CYAN
     assert tuple(_attrs_of(hass, INSTANT)["hs_color"]) == CYAN
-    assert _levels(seen) == {204}
+    assert _brightnesses(seen) == {204}
     assert _timestamps(hass) == {}
 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_auto_on_without_a_level_power_first_then_steps_is_not_a_dim(
+async def test_auto_on_without_a_brightness_power_first_then_steps_is_not_a_dim(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
-    """With no auto-on brightness, the member's remembered level is where
+    """With no auto-on brightness, the member's remembered brightness is where
     its fade ends, and the one the virtual light reports."""
     hass.states.async_set(OCC, "off")
     member = await _remembering_light(
@@ -2740,7 +2749,7 @@ async def test_auto_on_without_a_level_power_first_then_steps_is_not_a_dim(
     assert member.brightness == 204
     assert _attrs_of(hass, INSTANT)["brightness"] == 204
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_OCCUPIED
-    assert not _levels(seen) & {51, 102, 153}
+    assert not _brightnesses(seen) & {51, 102, 153}
     assert _timestamps(hass) == {}
 
 
@@ -2775,7 +2784,7 @@ async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
     hass: HomeAssistant, freezer
 ) -> None:
     """A bulb answering power first at the target and nothing more: a lower
-    level once the fade has run its length is a person's."""
+    brightness once the fade has run its length is a person's."""
     hass.states.async_set(OCC, "off")
     member = await _remembering_light(
         hass,
@@ -2798,7 +2807,7 @@ async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
 async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Only the report after the power-first one goes unjudged: a level that
+    """Only the report after the power-first one goes unjudged: a brightness that
     backs away from the step before it is a person's, fade or no fade."""
     hass.states.async_set(OCC, "off")
     member = await _remembering_light(
@@ -2841,7 +2850,7 @@ async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
 async def test_power_first_then_a_step_without_a_transition_is_a_dim(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A turn-on that carried no transition has no steps to expect: a lower level
+    """A turn-on that carried no transition has no steps to expect: a lower brightness
     after the first report is a dim at the wall, as before."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
@@ -2960,7 +2969,7 @@ async def test_late_other_color_temperature_after_a_color_is_physical(
 
     attrs = _attrs_of(hass, INSTANT)
     if source in ("auto_on", "standby"):
-        # The member was dark until then: a turn-on at the wall.
+        # The member was off until then: a turn-on at the wall.
         assert list(_timestamps(hass)) == ["last_on_physical"]
         assert attrs["color_temp_kelvin"] == 4000
     else:

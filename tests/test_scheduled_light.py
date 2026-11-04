@@ -89,7 +89,7 @@ VIRTUAL = "light.scheduled_light"
 async def test_schedule_selects_settings_for_automatic_turn_on(
     hass: HomeAssistant,
 ) -> None:
-    """Each settings set supplies its own sensors and appearance."""
+    """Each settings set supplies its own sensors and auto-on brightness."""
     outside_occupancy = "binary_sensor.outside_occupancy"
     inside_occupancy = "binary_sensor.inside_occupancy"
     hass.states.async_set(REAL, "off")
@@ -753,7 +753,7 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
     ],
 )
 @pytest.mark.parametrize("crossed", ["live", "while_down"])
-async def test_schedule_end_off_ends_an_on_period_brightness_had_cut_short(
+async def test_schedule_end_off_ends_an_on_period_going_bright_had_cut_short(
     hass: HomeAssistant, freezer, schedule_end_action: str, resumes: bool, crossed: str
 ) -> None:
     """A Turn off end crossed while going bright has the light off ends that
@@ -1377,10 +1377,10 @@ async def test_schedule_change_releases_the_hold_of_a_removed_keep_on_entity(
 
 
 @pytest.mark.asyncio
-async def test_schedule_change_does_not_restyle_an_on_light(
+async def test_schedule_change_does_not_change_the_look_of_an_on_light(
     hass: HomeAssistant,
 ) -> None:
-    """Selecting settings alone does not apply their turn-on appearance."""
+    """Selecting settings alone does not apply their auto-on brightness and color."""
     hass.states.async_set(REAL, "on", {"brightness": 180})
     hass.states.async_set(SCHEDULE, "off")
     entry = make_scheduled_light_entry(
@@ -3134,7 +3134,7 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
 ) -> None:
     """A real light back from unavailable after a keep boundary gets the
     effect still running, judged by that stage and not by the new settings'
-    effect: a dim one turns it on again, a blackout leaves it dark. The effect
+    effect: a dim one turns it on again, a blink fully off leaves it off. The effect
     still ends at its own finish time."""
     lamp = RealLight("real_1")
     await add_real(hass, lamp)

@@ -266,7 +266,7 @@ CONF_ON_COLOR_MODE = "on_color_mode"
 CONF_PRESET_1_COLOR_MODE = "preset_1_color_mode"
 CONF_PRESET_2_COLOR_MODE = "preset_2_color_mode"
 
-# The (mode, color temp, rgb) key triplets of each form's color pairs.
+# The (mode, color temperature, rgb) key triplets of each form's color pairs.
 _LIGHT_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = (
     (CONF_AUTO_ON_COLOR_MODE, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR),
     (CONF_EFFECT_COLOR_MODE, CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR),
@@ -279,8 +279,8 @@ _ACTION_COLOR_MODE_KEYS: dict[str, tuple[str, ...]] = {
     REMOTE_ACTION_PRESET_2: (CONF_PRESET_2_COLOR_MODE,),
 }
 _REMOTE_COLOR_GROUPS: tuple[tuple[str, str, str], ...] = tuple(
-    (_ACTION_COLOR_MODE_KEYS[action][0], temp_key, rgb_key)
-    for action, (_, temp_key, rgb_key) in REMOTE_ACTION_VALUE_KEYS.items()
+    (_ACTION_COLOR_MODE_KEYS[action][0], color_temp_key, rgb_key)
+    for action, (_, color_temp_key, rgb_key) in REMOTE_ACTION_VALUE_KEYS.items()
 )
 
 # ---------------------------------------------------------------------------
@@ -427,12 +427,12 @@ def _apply_color_modes(
     field, or a programmatic submission) leaves the pair as submitted;
     the conflict validations then catch a double submission.
     """
-    for mode_key, temp_key, rgb_key in groups:
+    for mode_key, color_temp_key, rgb_key in groups:
         mode = flat.pop(mode_key, None)
         if mode is None:
             continue
         if mode != COLOR_MODE_TEMP:
-            flat.pop(temp_key, None)
+            flat.pop(color_temp_key, None)
         if mode != COLOR_MODE_RGB:
             flat.pop(rgb_key, None)
     return flat
@@ -448,8 +448,8 @@ def _derive_color_modes(
     beside it, so the field starts blank until a color exists.
     """
     derived = dict(values)
-    for mode_key, temp_key, rgb_key in groups:
-        if values.get(temp_key):
+    for mode_key, color_temp_key, rgb_key in groups:
+        if values.get(color_temp_key):
             derived[mode_key] = COLOR_MODE_TEMP
         elif values.get(rgb_key):
             derived[mode_key] = COLOR_MODE_RGB
@@ -1232,13 +1232,13 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     stage-transition rule. Reported as base errors: the fields live inside
     collapsed sections, where the frontend can't anchor a field error.
     """
-    for temp_key, rgb_key, error in (
+    for color_temp_key, rgb_key, error in (
         (CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR, "auto_on_color_conflict"),
         (CONF_EFFECT_COLOR_TEMP, CONF_EFFECT_RGB_COLOR, "effect_color_conflict"),
         (CONF_WARN_COLOR_TEMP, CONF_WARN_RGB_COLOR, "warn_color_conflict"),
         (CONF_STANDBY_COLOR_TEMP, CONF_STANDBY_RGB_COLOR, "standby_color_conflict"),
     ):
-        if user_input.get(temp_key) and user_input.get(rgb_key):
+        if user_input.get(color_temp_key) and user_input.get(rgb_key):
             return {"base": error}
     if (
         user_input.get(CONF_STANDBY_COLOR_TEMP)
@@ -1324,14 +1324,14 @@ def _validate_color_support(
     transition check: only a positive "none of them can" rejects, and a mixed group
     passes on the strength of one capable member, which is the documented case.
     """
-    temp_keys = (
+    color_temp_keys = (
         CONF_AUTO_ON_COLOR_TEMP,
         CONF_EFFECT_COLOR_TEMP,
         CONF_WARN_COLOR_TEMP,
         CONF_STANDBY_COLOR_TEMP,
     )
     if (
-        any(user_input.get(key) for key in temp_keys)
+        any(user_input.get(key) for key in color_temp_keys)
         and lights_support_color_temp(hass, lights) is False
     ):
         return {"base": "color_temp_unsupported"}

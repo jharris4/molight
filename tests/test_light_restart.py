@@ -87,7 +87,7 @@ def _state(hass: HomeAssistant):
 
 
 @pytest.mark.asyncio
-async def test_restart_adopts_burning_lights_with_timer(
+async def test_restart_adopts_lit_lights_with_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """Real lights already on at startup are adopted as ACTIVE; their timer still
@@ -173,7 +173,7 @@ async def test_restart_occupied_and_dark_lights_the_room(
 async def test_restart_occupied_but_bright_adopts_active(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright at startup suppresses occupancy; burning lights get the timer."""
+    """Bright at startup suppresses occupancy; lit lights get the timer."""
     hass.states.async_set(OCC, "on")
     hass.states.async_set(ILLUM, "on")
     hass.states.async_set(REAL, "on")

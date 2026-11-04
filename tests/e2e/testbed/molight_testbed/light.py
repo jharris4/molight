@@ -36,7 +36,7 @@ from homeassistant.util import color as color_util
 from . import controller_for_entry
 from .const import (
     DEFAULT_BEHAVIOR,
-    LIGHT_CT,
+    LIGHT_COLOR_TEMP,
     LIGHT_MAIN,
     LIGHT_MULTI_DIMMER,
     LIGHT_MULTI_ON_OFF,
@@ -275,7 +275,7 @@ class TestbedLight(TestbedEntity, LightEntity):
         self._schedule_reports(start, kwargs.get(ATTR_TRANSITION))
 
     def _fade_start(self) -> dict[str, Any]:
-        """Return what the light shows before a command: dark when it is off."""
+        """Return what the light shows before a command: at brightness 0 when off."""
         attributes = self.record["attributes"]
         start = {key: deepcopy(attributes[key]) for key in FADED if key in attributes}
         if self.record["state"] != "on":
@@ -322,8 +322,8 @@ class TestbedLight(TestbedEntity, LightEntity):
         due = latency
         fade = self._fade_steps(start, steps) if steps else []
         if piecewise:
-            # Power first, at the level and color last reported: a bulb fading
-            # in from dark still shows what it remembered.
+            # Power first, at the brightness and color last reported: a bulb fading
+            # in from off still shows what it remembered.
             reports.append((due, {"state": "on"}))
             due += REPORT_STEP_GAP
         for index, attributes in enumerate(fade, 1):
@@ -424,9 +424,9 @@ async def async_setup_entry(
             ),
             TestbedLight(
                 controller,
-                LIGHT_CT,
-                "light.e2e_ct",
-                "E2E CT Light",
+                LIGHT_COLOR_TEMP,
+                "light.e2e_color_temp",
+                "E2E Color Temperature Light",
                 color_modes={ColorMode.COLOR_TEMP},
                 features=LightEntityFeature.TRANSITION,
             ),

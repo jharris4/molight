@@ -520,7 +520,7 @@ async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
     hass: HomeAssistant,
 ) -> None:
     """A second raise click while the first one's turn-on still waits for its
-    selection builds on that click's level instead of replacing it."""
+    selection builds on that click's brightness instead of replacing it."""
     select = _SlowSelect(hass)
     hass.states.async_set("select.scene", "Day")
     hass.states.async_set("light.living_room", "off")
@@ -633,7 +633,7 @@ async def test_brightness_step_up_and_down(
 
 
 # Stage settings for a brightness step mid-warning: (light kwargs, the stage
-# state, the level the light reports during it).
+# state, the brightness the light reports during it).
 STAGES = {
     "warn": ({"warn_timeout": 30, "warn_brightness": 10}, STATE_WARN, 26),
     "effect": ({"effect_timeout": 10, "effect_brightness": 30}, STATE_EFFECT, 76),
@@ -656,7 +656,7 @@ async def _step_mid_warning(
 ) -> list[dict]:
     """Bring light.matrix_light into a stage from `before`, click `button`, and
     return the remote's service calls."""
-    light_kwargs, stage_state, stage_level = STAGES[stage]
+    light_kwargs, stage_state, stage_brightness = STAGES[stage]
     hass.states.async_set("light.real_1", "off")
     remote = _remote_entry(
         **{
@@ -683,9 +683,9 @@ async def _step_mid_warning(
     assert state.attributes["molight_state"] == stage_state
     assert state.attributes["warning_active"] is True
     assert state.attributes["pre_warn_brightness"] == before
-    if stage_level is not None:
-        # The light still reports its stage level; only the step changes.
-        assert state.attributes["brightness"] == stage_level
+    if stage_brightness is not None:
+        # The light still reports its stage brightness; only the step changes.
+        assert state.attributes["brightness"] == stage_brightness
 
     calls = _record_service_calls(hass)
     _fire(hass, button, "press", PICO_TYPES)
@@ -864,7 +864,7 @@ async def test_brightness_steps_add_up_while_a_click_ends_a_warning(
 async def test_brightness_step_mid_warning_leaves_other_targets_stepping(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Only the virtual light mid-warning gets a fixed level: another light,
+    """Only the virtual light mid-warning gets a fixed brightness: another light,
     even one carrying look-alike attributes, still takes the plain step."""
     hass.states.async_set(
         "light.other",
@@ -952,7 +952,7 @@ async def test_preset_turns_on_with_values(
     _fire(hass, "event.pico_fav", "press", PICO_TYPES)
     await settle(hass)
     assert _vlight(hass).state == "on"
-    # 60% -> 153/255; the color temp is filtered out by HA for this
+    # 60% -> 153/255; the color temperature is filtered out by HA for this
     # brightness-only virtual light, but the remote's service call carries it.
     assert _vlight(hass).attributes["brightness"] == 153
     preset_calls = [
@@ -1300,7 +1300,7 @@ async def test_last_action_sensor_is_diagnostic(
 async def test_preset_with_rgb_color(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """An RGB preset carries rgb_color (and never a color temp)."""
+    """An RGB preset carries rgb_color (and never a color temperature)."""
     remote = _remote_entry(
         **{
             CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_fav"],
@@ -1806,8 +1806,8 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
 async def test_remote_flow_color_mode_picks_one_of_a_pair(
     hass: HomeAssistant,
 ) -> None:
-    """A submitted preset Color mode field resolves a temp+rgb double submission
-    instead of the preset_color_conflict error."""
+    """A submitted preset Color mode field resolves a color temperature and RGB color
+    double submission instead of the preset_color_conflict error."""
     _seed(hass, "event.pico_on", PICO_TYPES)
     result = await _start_remote_create(hass)
     result = await hass.config_entries.flow.async_configure(

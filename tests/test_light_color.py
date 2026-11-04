@@ -45,7 +45,7 @@ REAL_2 = "light.real_2"
 VIRTUAL = "light.matrix_light"
 
 HS_CAPS = {"supported_color_modes": ["hs"]}
-HS_TEMP_CAPS = {
+HS_COLOR_TEMP_CAPS = {
     "supported_color_modes": ["hs", "color_temp"],
     "min_color_temp_kelvin": 2202,
     "max_color_temp_kelvin": 6535,
@@ -90,8 +90,8 @@ async def _turn_on_virtual(hass: HomeAssistant, **data) -> None:
 @pytest.mark.asyncio
 async def test_capabilities_derived_from_members(hass: HomeAssistant) -> None:
     """A color-capable member gives the virtual light hs/color_temp modes and
-    the member's kelvin range."""
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    the member's color temperature range."""
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(hass, make_light_entry())
 
     attrs = _state(hass).attributes
@@ -126,7 +126,7 @@ async def test_capabilities_appear_when_member_does(hass: HomeAssistant) -> None
     await setup_entries(hass, make_light_entry())
     assert _state(hass).attributes["supported_color_modes"] == ["brightness"]
 
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await settle(hass)
     assert set(_state(hass).attributes["supported_color_modes"]) == {
         "hs",
@@ -177,7 +177,7 @@ async def test_turn_on_forwards_hs_color(hass: HomeAssistant, freezer) -> None:
 
 @pytest.mark.asyncio
 async def test_turn_on_forwards_color_temp(hass: HomeAssistant) -> None:
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(hass, make_light_entry())
 
     calls = _record_service_calls(hass)
@@ -276,7 +276,7 @@ async def test_auto_on_color_temp_applied_to_automatic_turn_ons_only(
 ) -> None:
     """auto_on_color_temp colors occupancy turn-ons; virtual turn-ons are
     untouched, mirroring auto_on_brightness."""
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_color_temp=3000))
 
     calls = _record_service_calls(hass)
@@ -450,8 +450,8 @@ async def test_plain_warn_stage_undoes_effect_recolor(
 @pytest.mark.asyncio
 async def test_stage_color_temps_sent_as_kelvin(hass: HomeAssistant, freezer) -> None:
     """The effect and warn stages take a color temperature instead of an rgb
-    color, for temp-only bulbs."""
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    color, for color-temperature-only bulbs."""
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(
         hass,
         make_light_entry(
@@ -536,7 +536,7 @@ async def test_restored_color_dropped_without_color_members(
 
 @pytest.mark.asyncio
 async def test_color_temp_restored_after_restart(hass: HomeAssistant) -> None:
-    """A color-temp state restores by its color_mode: the derived hs_color HA
+    """A color-temperature state restores by its color_mode: the derived hs_color HA
     stores alongside must not be mistaken for the authoritative color."""
     mock_restore_cache(
         hass,
@@ -554,7 +554,7 @@ async def test_color_temp_restored_after_restart(hass: HomeAssistant) -> None:
             )
         ],
     )
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(hass, make_light_entry())
 
     await _turn_on_virtual(hass)
@@ -618,7 +618,7 @@ async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
     startup and on a physical recolor) even though it also carries a
     derived hs_color."""
     member = {
-        **HS_TEMP_CAPS,
+        **HS_COLOR_TEMP_CAPS,
         "color_mode": "color_temp",
         "color_temp_kelvin": 3000,
         "hs_color": [27.0, 47.0],  # derived by HA; the mode decides
@@ -642,9 +642,9 @@ async def test_member_color_temp_mirrored(hass: HomeAssistant) -> None:
 async def test_pre_warning_snapshot_keeps_color_temp(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A color-temp light entering the warning snapshots its kelvin, and a
+    """A color-temperature light entering the warning snapshots its kelvin, and a
     re-trigger with no color of its own restores it."""
-    hass.states.async_set(REAL, "off", HS_TEMP_CAPS)
+    hass.states.async_set(REAL, "off", HS_COLOR_TEMP_CAPS)
     await setup_entries(
         hass, make_light_entry(warn_timeout=15, warn_rgb_color=[255, 0, 0])
     )
@@ -673,7 +673,7 @@ async def test_pre_warning_snapshot_keeps_color_temp(
 async def test_capability_shift_to_color_temp_only_member(
     hass: HomeAssistant,
 ) -> None:
-    """A color-temp-only member appearing moves a brightness-only virtual
+    """A color-temperature-only member appearing moves a brightness-only virtual
     light onto the color_temp mode."""
     await setup_entries(hass, make_light_entry())
     assert _state(hass).attributes["supported_color_modes"] == ["brightness"]
@@ -887,7 +887,7 @@ async def test_reported_color_temp_stays_in_the_offered_range(
 async def test_reported_standby_color_temp_stays_in_the_offered_range(
     hass: HomeAssistant, kelvin: int, reported: int
 ) -> None:
-    """Standby is one more level with a color temperature of its own."""
+    """Standby is one more setting with a color temperature of its own."""
     hass.states.async_set(REAL, "off", NARROW_CAPS)
     hass.states.async_set("binary_sensor.settings_schedule", "on")
     calls = _record_service_calls(hass)

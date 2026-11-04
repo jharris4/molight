@@ -117,7 +117,7 @@ class FadingLight(RealLight):
     length), then where it ends. With hs it shows a color and blends that
     too; with kelvin it shows a color temperature only, within KELVINS. Every
     report comes latency seconds late. With power_first, a fade in from off
-    first reports on at the level and color the light remembered, as a bulb
+    first reports on at the brightness and color the light remembered, as a bulb
     that reports power before it has started to brighten.
     """
 
@@ -182,7 +182,7 @@ class FadingLight(RealLight):
         length: float | None,
     ) -> None:
         self._cancel_reports()
-        # Off keeps the level to come back on at.
+        # Off keeps the brightness to come back on at.
         rest, start_hs = self._attr_brightness, self._attr_hs_color
         start = rest if self._attr_is_on else 0
         start_kelvin = self._attr_color_temp_kelvin
@@ -195,7 +195,7 @@ class FadingLight(RealLight):
             else:
                 remembered(None)
         for fraction in (*self._steps, 1) if length else (1,):
-            level = round(start + (brightness - start) * fraction)
+            step_brightness = round(start + (brightness - start) * fraction)
             color = hs
             if hs is not None and start_hs is not None:
                 turn = (hs[0] - start_hs[0] + 180) % 360 - 180
@@ -203,10 +203,16 @@ class FadingLight(RealLight):
                     (start_hs[0] + turn * fraction) % 360,
                     start_hs[1] + (hs[1] - start_hs[1]) * fraction,
                 )
-            warmth = kelvin
+            step_kelvin = kelvin
             if kelvin is not None and start_kelvin is not None:
-                warmth = round(start_kelvin + (kelvin - start_kelvin) * fraction)
-            report = partial(self._report, level or rest, color, warmth, on=bool(level))
+                step_kelvin = round(start_kelvin + (kelvin - start_kelvin) * fraction)
+            report = partial(
+                self._report,
+                step_brightness or rest,
+                color,
+                step_kelvin,
+                on=bool(step_brightness),
+            )
             delay = self._latency + (length or 0) * fraction
             if not delay:
                 report(None)

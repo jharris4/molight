@@ -231,7 +231,7 @@ async def test_real_light_recovery_mirrors_color(hass: HomeAssistant) -> None:
 
 
 _NOT_LOADED = [None, "unavailable", "unknown", "restored"]
-_LEVEL = {"occupancy": 102, "virtual": 200, "door": 102}
+_BRIGHTNESS = {"occupancy": 102, "virtual": 200, "door": 102}
 
 
 async def _light_up(
@@ -285,7 +285,9 @@ async def test_real_light_reporting_in_off_while_on_is_sent_its_settings(
         STATE_OCCUPIED if trigger == "occupancy" else STATE_ACTIVE
     )
     assert state.attributes["last_off_manual"] is None
-    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [_LEVEL[trigger]]
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [
+        _BRIGHTNESS[trigger]
+    ]
     if trigger == "occupancy":
         return
     freezer.tick(timedelta(seconds=31))
@@ -323,7 +325,7 @@ async def test_real_light_reporting_in_off_while_off_sends_nothing(
 async def test_one_of_two_real_lights_reporting_in_off_is_turned_on_again(
     hass: HomeAssistant,
 ) -> None:
-    """A member rebooting dark beside one still on gets the settings again."""
+    """A member that comes back off beside one still on gets the settings again."""
     calls = _record_calls(hass)
     await setup_entries(hass, make_light_entry(lights=[REAL, REAL2]))
     hass.states.async_set(REAL, "on", {"brightness": 150})
@@ -460,7 +462,9 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_off_manual"] is None
-    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [_LEVEL[trigger]]
+    assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [
+        _BRIGHTNESS[trigger]
+    ]
     assert f"Unable to turn on {REAL}" in caplog.text
 
     member.error = None
@@ -472,7 +476,7 @@ async def test_failed_turn_on_does_not_leave_the_light_on_with_nothing_lit(
 
     assert _state(hass).state == "on"
     assert [c["brightness"] for c in _real_calls(calls, "turn_on")] == [
-        _LEVEL[trigger]
+        _BRIGHTNESS[trigger]
     ] * 2
 
 
@@ -482,7 +486,7 @@ async def test_failed_turn_on_that_lit_one_member_leaves_the_light_on(
     hass: HomeAssistant, caplog
 ) -> None:
     """A turn-on that lit one member before failing for another leaves the
-    light on; the member still dark is no longer taken to be answering."""
+    light on; the member still off is no longer taken to be answering."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
     hass.states.async_set(REAL2, "off")
@@ -618,7 +622,7 @@ async def test_failed_group_turn_on_nobody_answers_goes_idle_once_settled(
 async def test_slow_member_answering_after_another_rejected_the_turn_off_keeps_it_off(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """The mirror: the lit member took the timer's turn-off that a dark
+    """The mirror: the lit member took the timer's turn-off that an off
     member's integration rejected, and reports off a moment later. The
     light does not come back on meanwhile, and the off is its own."""
     hass.states.async_set(OCC, "off")
@@ -697,8 +701,8 @@ async def test_failed_stage_turn_on_with_nothing_lit_ends_the_on_period(
 async def test_failed_turn_off_leaves_the_light_reporting_on_until_sent_again(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A member whose integration raises at the timer's turn-off still
-    burns: the light reports on, not off over a lit room, and sends the off
+    """A member whose integration raises at the timer's turn-off is still
+    lit: the light reports on, not off over a lit room, and sends the off
     again after another timeout."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
@@ -739,7 +743,7 @@ async def test_failed_manual_turn_off_leaves_the_light_reporting_on(
     hass: HomeAssistant, caplog
 ) -> None:
     """A turn-off through this entity that a member's integration rejects
-    leaves that member burning: the light reports on again."""
+    leaves that member lit: the light reports on again."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")
     await setup_entries(hass, make_light_entry(occupancy=OCC, auto_on_brightness=40))
@@ -2017,7 +2021,7 @@ async def test_registered_light_with_no_state_never_counts_as_off(
 
     # REAL2 is registered but has no state: its integration has not loaded
     # (yet); turning REAL off must not release the virtual light, since REAL2
-    # may well still be burning.
+    # may well still be lit.
     hass.states.async_set(REAL, "off")
     await settle(hass)
     state = _state(hass)
@@ -2137,7 +2141,7 @@ async def test_follow_member_recovery_mid_window_reasserts_window(
 ) -> None:
     """A member rebooting mid-window is turned on again with the scheduled settings.
 
-    Whatever it boots into (dark, or lit at its own defaults) is not human
+    Whatever it boots into (off, or lit at its own defaults) is not human
     activity: the window still owns the lights, so the auto-on brightness is
     re-sent and the machine stays SCHEDULED.
     """
@@ -2203,10 +2207,10 @@ async def test_follow_member_recovers_lit_outside_window_is_turned_off(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_member_recovers_dark_outside_window_sends_nothing(
+async def test_follow_member_comes_back_off_outside_window_sends_nothing(
     hass: HomeAssistant,
 ) -> None:
-    """A member booting dark outside the window already matches: no command."""
+    """A member that comes back off outside the window already matches: no command."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
@@ -2427,13 +2431,13 @@ async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> 
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_one_of_two_members_recovering_dark_turns_all_on_again(
+async def test_follow_one_of_two_members_coming_back_off_turns_all_on_again(
     hass: HomeAssistant,
 ) -> None:
-    """One of two member lights rebooting dark mid-window is turned on again.
+    """One of two member lights coming back off mid-window is turned on again.
 
     Previously nothing happened: the sibling still on meant the virtual light
-    never saw an off, and the dark member stayed dark until the next window.
+    never saw an off, and the off member stayed off until the next window.
     """
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -2465,7 +2469,7 @@ async def test_follow_one_of_two_members_recovering_dark_turns_all_on_again(
 async def test_follow_member_recovery_with_schedule_unavailable_falls_through(
     hass: HomeAssistant,
 ) -> None:
-    """With no valid schedule to follow, a member recovering dark is sent the
+    """With no valid schedule to follow, a member that comes back off is sent the
     light's settings again, as for any light that is on."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})

@@ -276,7 +276,7 @@ async def test_occupancy_raises_standby_and_the_timer_returns_to_it(
 async def test_occupancy_without_an_auto_on_brightness_holds_standby_as_it_is(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A blank auto-on brightness names no level to rise to."""
+    """A blank auto-on brightness names no brightness to rise to."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_BRIGHTNESS: None}))
     await _echo_standby(hass)
 
@@ -324,10 +324,10 @@ async def test_effect_and_warn_stages_lead_into_standby(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("asked", [None, 4000], ids=["plain", "color"])
-async def test_turn_on_without_a_level_raises_standby(
+async def test_turn_on_without_a_brightness_raises_standby(
     hass: HomeAssistant, freezer, asked: int | None
 ) -> None:
-    """A turn-on with no brightness raises standby to the auto-on level and
+    """A turn-on with no brightness raises standby to the auto-on brightness and
     color, as presence would, keeping a color it names; the timer then
     drops it back to standby."""
     modes = {"supported_color_modes": ["color_temp"]}
@@ -369,11 +369,11 @@ async def test_turn_on_without_a_level_raises_standby(
 
 
 @pytest.mark.asyncio
-async def test_turn_on_without_a_level_and_no_auto_on_level_keeps_standby_level(
+async def test_turn_on_without_a_brightness_and_no_auto_on_one_keeps_standby_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With no auto-on brightness there is no level to raise to, as with
-    presence: the turn-on runs a timer back to standby at the same level."""
+    """With no auto-on brightness there is no brightness to raise to, as with
+    presence: the turn-on runs a timer back to standby at the same brightness."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_BRIGHTNESS: None}))
     await _echo_standby(hass)
     calls.clear()
@@ -404,7 +404,7 @@ async def test_turn_on_without_a_level_and_no_auto_on_level_keeps_standby_level(
 async def test_standby_without_a_color_restores_the_pre_warning_color(
     hass: HomeAssistant, freezer, stage: dict
 ) -> None:
-    """A colored effect or warn stage must not become the standby appearance."""
+    """A colored effect or warn stage must not become the standby color."""
     hass.states.async_set(REAL, "off", {"supported_color_modes": ["color_temp"]})
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off")
@@ -862,7 +862,7 @@ async def test_bright_sensor_that_is_also_a_keep_on_entity_keeps_standby(
 async def test_physical_dim_at_standby_runs_a_timer_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Brightening at the wall is activity, not a new standby level."""
+    """Brightening at the wall is activity, not a new standby brightness."""
     await _setup_porch(hass, _porch())
     await _echo_standby(hass)
     _assert_standby(hass)
@@ -975,9 +975,9 @@ async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
     assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
 
     await _tick(hass, freezer, 2)
-    level = 200 if change == "brightness" else BOOST
+    brightness = 200 if change == "brightness" else BOOST
     changed = {} if change == "brightness" else {"hs_color": (200.0, 50.0)}
-    await _set(hass, REAL, "on", brightness=level, **changed)
+    await _set(hass, REAL, "on", brightness=brightness, **changed)
     await _set(
         hass,
         OCCUPANCY,
@@ -988,7 +988,7 @@ async def test_false_detection_does_not_cut_short_a_raise_changed_at_the_wall(
 
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     await _tick(hass, freezer, 28)
-    assert _attrs(hass)["brightness"] == level
+    assert _attrs(hass)["brightness"] == brightness
     await _tick(hass, freezer, 3)
     _assert_standby(hass)
 
@@ -1129,7 +1129,7 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("maintained", [True, False], ids=["maintained", "timed"])
 @pytest.mark.parametrize("standby", [True, False], ids=["standby", "no_standby"])
-async def test_raised_on_period_cut_short_by_brightness_resumes_when_dark(
+async def test_raised_on_period_going_bright_cut_short_resumes_when_dark(
     hass: HomeAssistant, freezer, maintained: bool, standby: bool
 ) -> None:
     """Going dark resumes a recent raised on-period, with or without standby."""
@@ -1206,7 +1206,7 @@ async def test_timer_while_bright_in_control_mode_ends_in_off(
 
 
 @pytest.mark.asyncio
-async def test_hold_freezes_the_raised_level_and_release_times_back_to_standby(
+async def test_hold_freezes_the_raised_brightness_and_release_times_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
     """An auto-off hold stops the drop; releasing it starts a fresh timer."""
@@ -1488,7 +1488,7 @@ async def test_hold_release_after_a_keep_end_starts_a_timer_that_going_dark_resu
 
 
 @pytest.mark.asyncio
-async def test_maintain_timer_cut_short_by_brightness_resumes_when_dark(
+async def test_maintain_timer_going_bright_cut_short_resumes_when_dark(
     hass: HomeAssistant, freezer
 ) -> None:
     """A maintain occupancy sensor's timer resumes raised, and still ends at standby."""
@@ -1526,7 +1526,7 @@ async def test_maintain_timer_cut_short_by_brightness_resumes_when_dark(
     await _tick(hass, freezer, 2)
     await _set(hass, illuminance, "off")
 
-    # 46 s of the timer are left, at the auto-on level.
+    # 46 s of the timer are left, at the auto-on brightness.
     assert _attrs(hass)["molight_state"] == STATE_COUNTDOWN
     assert _attrs(hass)["brightness"] == BOOST
     await _tick(hass, freezer, 45)
@@ -1781,7 +1781,7 @@ async def test_member_reporting_in_off_while_raised_is_sent_the_raise(
     hass: HomeAssistant, freezer, placeholder: dict
 ) -> None:
     """A member reporting in as off while occupancy has the light raised is
-    sent the raised level again; standby is not suppressed, so the light drops
+    sent the raised brightness again; standby is not suppressed, so the light drops
     back to standby once the room clears."""
     calls = await _setup_porch(hass, _porch())
     await _echo_standby(hass)
@@ -1806,10 +1806,10 @@ async def test_member_reporting_in_off_while_raised_is_sent_the_raise(
 @pytest.mark.parametrize(
     "acknowledged", [True, False], ids=["acknowledged", "unanswered_command"]
 )
-async def test_rebooted_member_at_the_standby_level_is_selected_again(
+async def test_rebooted_member_at_the_standby_brightness_is_selected_again(
     hass: HomeAssistant, freezer, acknowledged: bool
 ) -> None:
-    """A member back at the right level may still have lost its selection."""
+    """A member back at the right brightness may still have lost its selection."""
     selected: list[str] = []
 
     async def select_option(call: ServiceCall) -> None:
@@ -1838,7 +1838,7 @@ async def test_rebooted_member_at_the_standby_level_is_selected_again(
 @pytest.mark.parametrize(
     ("recovered", "attrs"),
     [("off", {}), ("on", {"brightness": 200})],
-    ids=["off", "on_at_another_level"],
+    ids=["off", "on_at_another_brightness"],
 )
 async def test_recovered_member_is_selected_before_it_is_commanded(
     hass: HomeAssistant, recovered: str, attrs: dict
@@ -1905,8 +1905,10 @@ async def test_restart_puts_a_standby_light_back_at_standby(
 
 
 @pytest.mark.asyncio
-async def test_options_edit_applies_a_new_standby_level(hass: HomeAssistant) -> None:
-    """The reload after an edit re-sends the edited standby level."""
+async def test_options_edit_applies_a_new_standby_brightness(
+    hass: HomeAssistant,
+) -> None:
+    """The reload after an edit re-sends the edited standby brightness."""
     entry = _porch()
     calls = await _setup_porch(hass, entry)
     await _echo_standby(hass)
@@ -2294,7 +2296,7 @@ async def test_startup_inside_the_window_lights_standby(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("illuminance", "state", "level"),
+    ("illuminance", "state", "brightness"),
     [
         (None, STATE_OCCUPIED, BOOST),
         (ILLUMINANCE_MODE_GATE, STATE_STANDBY, STANDBY),
@@ -2307,7 +2309,7 @@ async def test_startup_with_the_door_already_open_raises_standby(
     freezer,
     illuminance: str | None,
     state: str,
-    level: int | None,
+    brightness: int | None,
 ) -> None:
     """A door open at startup sends no opening edge, so the seed raises the light."""
     door = "binary_sensor.front_door"
@@ -2320,10 +2322,10 @@ async def test_startup_with_the_door_already_open_raises_standby(
     calls = await _setup_porch(hass, _porch(inside=inside))
 
     assert _attrs(hass)["molight_state"] == state
-    if level is None:
+    if brightness is None:
         assert _light_calls(calls, "turn_on") == []
         return
-    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == brightness
     if state != STATE_OCCUPIED:
         return
     # The open door holds the raised light; closing it starts the timer.
@@ -2366,7 +2368,7 @@ async def test_restart_with_presence_raises_a_standby_light(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("illuminance", "bright", "held", "state", "level"),
+    ("illuminance", "bright", "held", "state", "brightness"),
     [
         (ILLUMINANCE_MODE_GATE, False, False, STATE_OCCUPIED, BOOST),
         (ILLUMINANCE_MODE_GATE, True, False, STATE_STANDBY, STANDBY),
@@ -2382,7 +2384,7 @@ async def test_restart_with_the_door_open_raises_standby_only_when_dark(
     bright: bool,
     held: bool,
     state: str,
-    level: int,
+    brightness: int,
 ) -> None:
     """A door opened while down raises restored standby, unless it is bright."""
     door = "binary_sensor.front_door"
@@ -2424,7 +2426,7 @@ async def test_restart_with_the_door_open_raises_standby_only_when_dark(
     await settle(hass)
 
     assert _attrs(hass)["molight_state"] == state
-    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == brightness
 
 
 @pytest.mark.asyncio
@@ -2611,7 +2613,7 @@ async def _drain(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_raise_during_a_waiting_standby_keeps_the_raised_level(
+async def test_raise_during_a_waiting_standby_keeps_the_raised_brightness(
     hass: HomeAssistant,
 ) -> None:
     """A standby still waiting for its selection does not undo a later raise,
@@ -2660,7 +2662,7 @@ async def test_standby_during_a_waiting_raise_keeps_standby(
 
 
 @pytest.mark.asyncio
-async def test_wall_turn_on_during_a_waiting_standby_keeps_its_level(
+async def test_wall_turn_on_during_a_waiting_standby_keeps_its_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A standby still waiting for its selection does not undo a turn-on at
@@ -2699,25 +2701,25 @@ async def test_wall_change_during_a_waiting_standby_resend_keeps_it(
     await asyncio.wait_for(select.started.wait(), 2)
     sent = len(_light_calls(calls, "turn_on"))
 
-    level = 200 if change == "brightness" else STANDBY
+    brightness = 200 if change == "brightness" else STANDBY
     changed = {} if change == "brightness" else {"hs_color": (200.0, 50.0)}
-    hass.states.async_set(REAL, "on", {"brightness": level, **changed})
+    hass.states.async_set(REAL, "on", {"brightness": brightness, **changed})
     await _drain(hass)
     select.release.set()
     await settle(hass)
 
     assert len(_light_calls(calls, "turn_on")) == sent
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
-    assert _attrs(hass)["brightness"] == level
+    assert _attrs(hass)["brightness"] == brightness
     assert _attrs(hass)["last_color_change_physical" if changed else "brightness"]
 
 
 @pytest.mark.asyncio
-async def test_wall_turn_on_during_a_waiting_virtual_on_keeps_its_level(
+async def test_wall_turn_on_during_a_waiting_virtual_on_keeps_its_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """After a manual off, a turn-on at the wall overtakes a virtual turn-on
-    still waiting for its selection: the wall level stands, standby is
+    still waiting for its selection: the wall brightness stands, standby is
     rejoined, and the timer finishes back at it."""
     select = _ParkedSelect(hass, park=2)
     calls = await _setup_porch(hass, _porch(inside=_SCENE))
@@ -2788,7 +2790,7 @@ async def test_selection_lighting_the_light_does_not_take_standby_over(
     await asyncio.wait_for(select.started.wait(), 2)
 
     context = None if reported == "by_the_device" else select_calls[-1]
-    for brightness in (200, 180):  # on, then the preset's level
+    for brightness in (200, 180):  # on, then the preset's brightness
         hass.states.async_set(REAL, "on", {"brightness": brightness}, context=context)
         await _drain(hass)
     select.release.set()
@@ -2808,7 +2810,7 @@ async def test_member_reporting_in_off_during_a_waiting_turn_on_gets_it(
 ) -> None:
     """A real light that loads, or comes back, as off while standby or a raise
     waits for its selection was not turned off manually: standby stays on and
-    the level waited for is sent."""
+    the brightness waited for is sent."""
     select = _ParkedSelect(hass, park=1 if waiting == "standby" else 2)
     hass.states.async_set(REAL, "unavailable", placeholder)
     hass.states.async_set(SCHEDULE, "off" if waiting == "standby" else "on")
@@ -2824,13 +2826,13 @@ async def test_member_reporting_in_off_during_a_waiting_turn_on_gets_it(
     select.release.set()
     await settle(hass)
 
-    level = STANDBY if waiting == "standby" else BOOST
+    brightness = STANDBY if waiting == "standby" else BOOST
     assert hass.states.get(VIRTUAL).state == "on"
     assert _attrs(hass)["molight_state"] == (
         STATE_STANDBY if waiting == "standby" else STATE_OCCUPIED
     )
-    assert _attrs(hass)["brightness"] == level
-    assert _light_calls(calls, "turn_on")[-1]["brightness"] == level
+    assert _attrs(hass)["brightness"] == brightness
+    assert _light_calls(calls, "turn_on")[-1]["brightness"] == brightness
     assert _attrs(hass)[ATTR_STANDBY_SUPPRESSED] is False
     assert _attrs(hass)["last_off_manual"] is None
 
@@ -2853,10 +2855,10 @@ async def test_what_the_inside_settings_come_on_at(
     control: bool,
     held: bool,
 ) -> None:
-    """Startup, the start boundary and a restart at standby agree on the level.
+    """Startup, the start boundary and a restart at standby agree on the brightness.
 
     Bright blocks a rise, and in control mode keeps standby off unless a hold
-    keeps a restored level; occupancy or an open door raise a dark light; the
+    keeps a restored brightness; occupancy or an open door raise a dark light; the
     maintain occupancy sensor alone never does.
     """
     door = "binary_sensor.front_door"

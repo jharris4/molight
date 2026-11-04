@@ -2801,7 +2801,7 @@ async def test_light_flow_rejects_color_conflicts(
     expected_error: str,
 ) -> None:
     """A turn-on can only carry one color: with no Color mode field submitted to
-    arbitrate, a temp and rgb together are rejected."""
+    arbitrate, a color temperature and RGB color together are rejected."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT}
@@ -6714,8 +6714,8 @@ async def test_discover_light_defaults_reject_transition_one_pick_cannot_apply(
 # separately: a tunable-white bulb has one and not the other.
 # ---------------------------------------------------------------------------
 
-WHITE = "light.white"  # dimmable only, no color, no color temp
-TUNABLE = "light.tunable"  # color temp, but cannot show a color
+WHITE = "light.white"  # dimmable only, no color, no color temperature
+TUNABLE = "light.tunable"  # color temperature, but cannot show a color
 RGB = "light.rgb"  # full color
 
 
@@ -6802,7 +6802,7 @@ async def test_light_flow_rejects_color_no_light_can_show(hass: HomeAssistant) -
 async def test_light_flow_allows_color_temp_on_a_tunable_light(
     hass: HomeAssistant,
 ) -> None:
-    """The same light that can't show a color still accepts a color temp."""
+    """The same light that can't show a color still accepts a color temperature."""
     _modes(hass, TUNABLE, ["color_temp"])
     result = await _submit_light_create_colors(
         hass, [TUNABLE], {CONF_AUTO_ON_COLOR_TEMP: 2700}
@@ -9747,7 +9747,7 @@ async def test_scheduled_light_standby_validation(
 async def test_scheduled_light_standby_needs_a_dimmable_light(
     hass: HomeAssistant,
 ) -> None:
-    """A standby level is rejected when no member can dim."""
+    """A standby brightness is rejected when no member can dim."""
     hass.states.async_set(
         "light.porch_real", "off", {"supported_color_modes": ["onoff"]}
     )
@@ -11335,7 +11335,13 @@ async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
         ({CONF_STANDBY_COLOR_TEMP: 3000}, ["color_temp"], None),
         ({CONF_STANDBY_RGB_COLOR: [255, 0, 0]}, ["rgb"], None),
     ],
-    ids=["temp_on_dimmer", "rgb_on_dimmer", "rgb_on_tunable", "temp", "rgb"],
+    ids=[
+        "color_temp_on_dimmer",
+        "rgb_on_dimmer",
+        "rgb_on_tunable",
+        "color_temp",
+        "rgb",
+    ],
 )
 async def test_standby_color_needs_a_light_that_can_show_it(
     hass: HomeAssistant, flow: str, standby: dict, modes: list[str], error: str | None

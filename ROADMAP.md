@@ -112,7 +112,7 @@ Requests that existing virtual entities answer:
   a keep-on entity.
 - Weekdays only: a workday sensor and a combined All schedule, until item 2 lands.
 - One remote driving two rooms: two remote entries on different buttons of the same remote.
-- Different levels per lamp from one trigger: two virtual lights sharing the sensors.
+- Different brightness per lamp from one trigger: two virtual lights sharing the sensors.
 - A notification or spoken warning before an automatic turn-off: an Event received trigger on the Events
   entity.
 

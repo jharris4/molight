@@ -199,7 +199,7 @@ async def test_effect_dim_stage_commands_stage_brightness(
 
 
 @pytest.mark.asyncio
-async def test_warn_brightness_below_one_percent_keeps_the_level(
+async def test_warn_brightness_below_one_percent_keeps_the_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
     """A warn brightness that truncates to 0% is unset, not a blink off."""
@@ -853,7 +853,7 @@ async def test_physical_recolor_during_warning_without_a_brightness_to_restore(
 
 
 # ---------------------------------------------------------------------------
-# A turn-on naming no brightness: the warning uses the level the real light
+# A turn-on naming no brightness: the warning uses the brightness the real light
 # came on at
 # ---------------------------------------------------------------------------
 
@@ -877,7 +877,7 @@ def _record_real_contexts(hass: HomeAssistant) -> list:
 async def test_warn_after_plain_turn_on_keeps_real_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A warn stage with no brightness of its own keeps the level the real
+    """A warn stage with no brightness of its own keeps the brightness the real
     light came on at instead of jumping to full brightness."""
     entry = make_light_entry(warn_timeout=20)
     await setup_entries(hass, entry)
@@ -901,7 +901,7 @@ async def test_warn_after_plain_turn_on_keeps_real_brightness(
 async def test_retrigger_after_plain_auto_on_restores_real_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Occupancy returning mid-warn brings back the level the real light came
+    """Occupancy returning mid-warn brings back the brightness the real light came
     on at instead of leaving the room at the warn brightness."""
     hass.states.async_set(OCC, "off")
     entry = make_light_entry(occupancy=OCC, warn_timeout=30, warn_brightness=20)
@@ -989,7 +989,7 @@ async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
     hass: HomeAssistant, freezer, touched: int
 ) -> None:
     """One switch flipped back on during the blink: the other light comes
-    back at its pre-warning look, not left dark for the new on-period."""
+    back at its pre-warning look, not left off for the new on-period."""
     one, other, calls = await _pair_in_stage(
         hass, freezer, touched, effect_timeout=10, effect_brightness=0
     )
@@ -1175,7 +1175,7 @@ async def test_stage_leaves_a_real_light_that_was_off_alone(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
     """The stage drives the real lights that were lit; a blank warn stage
-    keeps each one's own level, and the light that was off is never lit."""
+    keeps each one's own brightness, and the light that was off is never lit."""
     lights, calls, _ = await _mixed_in_stage(hass, freezer, stage)
 
     shown = _shown(lights)
@@ -1278,7 +1278,7 @@ async def test_real_light_switched_off_mid_warning_stays_off_on_retrigger(
     hass: HomeAssistant, freezer, stage: str, off: dict
 ) -> None:
     """A real light switched off at the wall during the warning was not
-    darkened by it: the re-trigger leaves it off."""
+    turned off by it: the re-trigger leaves it off."""
     lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
 
     lights["b"].wall(**off)
@@ -1335,7 +1335,7 @@ async def test_reload_mid_blink_turns_on_only_the_real_lights_found_lit(
     """A reload finding one real light lit mid blink-off restores that one
     to its own look; the ones the blink left off stay off."""
     lights, _, entry = await _mixed_in_stage(hass, freezer, "blink")
-    lights["b"].wall(on=False)  # still dark, as the blink left it
+    lights["b"].wall(on=False)  # still off, as the blink left it
     await settle(hass)
     await hass.config_entries.async_unload(entry.entry_id)
     await settle(hass)

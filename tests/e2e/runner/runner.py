@@ -27,7 +27,7 @@ WAIT_TIMEOUT = 90
 
 RAW_LIGHT = "light.e2e_main"
 RAW_TIMER_LIGHT = "light.e2e_timer_target"
-RAW_CT = "light.e2e_ct"
+RAW_COLOR_TEMP = "light.e2e_color_temp"
 RAW_MULTI_ON_OFF = "light.e2e_multi_on_off"
 RAW_MULTI_DIMMER = "light.e2e_multi_dimmer"
 RAW_MULTI_RGB = "light.e2e_multi_rgb"
@@ -121,9 +121,9 @@ COMBO_BOOT_SOURCE = "binary_sensor.e2e_combo_boot_source"
 COMBO_BOOT_WINDOW = "binary_sensor.e2e_combo_boot_window"
 COMBO_BOOT = "binary_sensor.e2e_combo_boot"
 COMBO_BOOT_LIGHT = "light.e2e_combo_boot_light"
-CT_LIGHT = "light.e2e_ct_virtual"
-CT_MIX_LIGHT = "light.e2e_ct_mix"
-CT_REMOTE_LAST_ACTION = "sensor.e2e_ct_remote_last_action"
+COLOR_TEMP_LIGHT = "light.e2e_color_temp_virtual"
+COLOR_TEMP_MIX_LIGHT = "light.e2e_color_temp_mix"
+COLOR_TEMP_REMOTE_LAST_ACTION = "sensor.e2e_color_temperature_remote_last_action"
 VOCAB_LIGHT = "light.e2e_vocab"
 VOCAB_REMOTE_LAST_ACTION = "sensor.e2e_vocab_remote_last_action"
 DUSK_ILLUMINANCE = "binary_sensor.e2e_dusk_illuminance"
@@ -1999,7 +1999,7 @@ def run_timeout_warning_scenario(
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
-        "on at the configured automatic brightness",
+        "on at the configured auto-on brightness",
     )
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", VIRTUAL_TIMER_LIGHT)
@@ -3051,7 +3051,7 @@ def run_remote_step_and_preset_scenarios(client: HomeAssistantClient) -> None:
         "light", "turn_on", {"entity_id": VIRTUAL_MULTI_LIGHT, "brightness": 128}
     )
     wait_multi_brightness(client, 128)
-    # HA steps in whole percent of the current level: 50 % -> 30 % -> 10 % -> off.
+    # HA steps in whole percent of the current brightness: 50 % -> 30 % -> 10 % -> off.
     for expected in (pct(30), pct(10)):
         client.fire_event(EVENT_BUTTON, "short_release")
         wait_remote_action(
@@ -4281,7 +4281,7 @@ def run_restart_warning_prepare() -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
-        "on at the configured automatic brightness",
+        "on at the configured auto-on brightness",
     )
     set_timer_motion(client, False)
     wait_machine_state(client, "countdown", VIRTUAL_RESTART_WARNING_LIGHT)
@@ -4811,7 +4811,7 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
         lambda state: (
             state["state"] == "on" and state["attributes"].get("brightness") == pct(60)
         ),
-        "on at the automatic brightness",
+        "on at the auto-on brightness",
     )
     # Give the light a known color before the sequence so the undo is visible.
     client.call_service(
@@ -4910,7 +4910,8 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
         lambda state: state["attributes"].get("last_color_change_virtual") is None,
         "attributing the auto-on color to automation, not a virtual change",
     )
-    # Leave the member blue and off, then a virtual turn-on: no auto-on values.
+    # Leave the member blue and off, then a virtual turn-on: no auto-on brightness
+    # or color.
     client.call_service(
         "light", "turn_on", {"entity_id": AUTO_COLOR_LIGHT, "hs_color": [240, 100]}
     )
@@ -5282,7 +5283,7 @@ def run_follow_restart_prepare() -> None:
         "light",
         {
             "name": "E2E Cycle",
-            "lights": [RAW_CT],
+            "lights": [RAW_COLOR_TEMP],
             "light_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
@@ -5297,7 +5298,7 @@ def run_follow_restart_prepare() -> None:
     wait_entry_loaded(client, cycle_schedule_entry_id)
     wait_entry_loaded(client, cycle_light_entry_id)
     client.wait_state(CYCLE_SCHEDULE, lambda state: state["state"] == "off", "off")
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
     schedule_downtime(window_start, cycle_end)
     FOLLOW_RESTART_SNAPSHOT.write_text(
         json.dumps(
@@ -5370,7 +5371,7 @@ def run_follow_restart_verify() -> None:
     )
     assert_state_stays(
         client,
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: state["state"] == "off",
         "off: no catch-up for a window that both started and ended while down",
         duration=4,
@@ -5591,7 +5592,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
             lambda state: (
                 state["state"] == "on" and state["attributes"].get("brightness") == 51
             ),
-            "at the 20 % standby level",
+            "at the 20 % standby brightness",
             timeout=10,
         )
 
@@ -5601,7 +5602,7 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: state["attributes"].get("brightness") == 255,
-        "raised to the auto-on level",
+        "raised to the auto-on brightness",
     )
     set_timer_motion(client, False)
     at_standby()
@@ -6499,7 +6500,7 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
 
 
 def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
-    """Brightness 0 at the wall is off in disguise; 0 -> non-zero is a turn-on."""
+    """Brightness 0 at the wall counts as off; 0 -> non-zero is a turn-on."""
     entry_id = create_entry(
         client,
         "light",
@@ -6526,7 +6527,7 @@ def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
         "active after a wall turn-on of one member",
     )["attributes"]["last_on_physical"]
 
-    # A member reporting on at brightness 0 is off in disguise; with the other
+    # A member reporting on at brightness 0 counts as off; with the other
     # member off, every real light is off and the virtual light goes idle.
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 0})
     client.wait_state(
@@ -6609,7 +6610,7 @@ def run_restart_effect_prepare() -> None:
         "light",
         {
             "name": "E2E Restart Effect Late",
-            "lights": [RAW_CT],
+            "lights": [RAW_COLOR_TEMP],
             "light_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
@@ -6624,10 +6625,10 @@ def run_restart_effect_prepare() -> None:
         "Late restart-effect light",
     )
     wait_entry_loaded(client, late_entry_id)
-    client.set_startup_delay(RAW_CT, UNREADABLE_MEMBER_DELAY)
+    client.set_startup_delay(RAW_COLOR_TEMP, UNREADABLE_MEMBER_DELAY)
     set_timer_motion(client, True)
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
-    client.wait_state(RAW_CT, lambda state: state["state"] == "on", "on")
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "on", "on")
     client.call_service(
         "light", "turn_on", {"entity_id": RESTART_EFFECT_LIGHT, "hs_color": [240, 100]}
     )
@@ -6637,7 +6638,7 @@ def run_restart_effect_prepare() -> None:
         {"entity_id": RESTART_EFFECT_LATE_LIGHT, "color_temp_kelvin": 3000},
     )
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["attributes"].get("brightness") == pct(60)
             and state["attributes"].get("color_temp_kelvin") == 3000
@@ -6665,7 +6666,7 @@ def run_restart_effect_prepare() -> None:
             )
             and abs(hs[0] - 240) < 1
         ),
-        "in its effect stage with the pre-warning appearance saved",
+        "in its effect stage with the pre-warning look saved",
     )
     client.wait_state(
         RAW_MULTI_RGB,
@@ -6676,7 +6677,7 @@ def run_restart_effect_prepare() -> None:
         "showing the effect brightness and red",
     )
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["attributes"].get("brightness") == pct(20)
             and state["attributes"].get("color_temp_kelvin") == 5000
@@ -6689,7 +6690,7 @@ def run_restart_effect_prepare() -> None:
             state["attributes"].get("molight_state") == "effect"
             and state["attributes"].get("pre_warn_brightness") == pct(60)
         ),
-        "in its effect stage with the pre-warning appearance saved",
+        "in its effect stage with the pre-warning look saved",
     )
     RESTART_EFFECT_SNAPSHOT.write_text(
         json.dumps({"entry_id": entry_id, "late_entry_id": late_entry_id})
@@ -6719,10 +6720,10 @@ def run_restart_effect_verify() -> None:
             )
             == 3000
         ),
-        "off with the pre-warning appearance kept for the unreadable member",
+        "off with the pre-warning look kept for the unreadable member",
         timeout=WAIT_TIMEOUT,
     )
-    expect_still_loading(client, RAW_CT)
+    expect_still_loading(client, RAW_COLOR_TEMP)
     client.wait_state(
         RESTART_EFFECT_LIGHT,
         lambda state: (
@@ -6772,7 +6773,7 @@ def run_restart_effect_verify() -> None:
 
     # The unreadable member reports in still showing the effect stage.
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("brightness") == pct(60)
@@ -6792,7 +6793,9 @@ def run_restart_effect_verify() -> None:
         ),
         "on at the pre-warning look with the interrupted effect undone",
     )
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off", timeout=30)
+    client.wait_state(
+        RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off", timeout=30
+    )
     wait_machine_state(client, "idle", RESTART_EFFECT_LATE_LIGHT)
     remove_entry_and_entity(
         client, snapshot["late_entry_id"], RESTART_EFFECT_LATE_LIGHT
@@ -7820,7 +7823,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
 
     # One member rejects every command, one applies them silently. The light
     # stays on for the member that lit (a plain turn-on would leave the real light
-    # at its stored brightness 0, which counts as dark).
+    # at its stored brightness 0, which counts as off).
     client.set_behavior(RAW_MULTI_ON_OFF, reject=True)
     client.set_behavior(RAW_MULTI_DIMMER, silent=True)
     client.call_service(
@@ -7874,7 +7877,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
     wait_machine_state(client, "idle", FAULTY_LIGHT)
     checkpoint("a silent member's late contradicting report was adopted")
 
-    # A lit member that rejects the turn-off still burns: the light reports
+    # A lit member that rejects the turn-off is still lit: the light reports
     # on again, not off over a lit room.
     client.call_service(
         "light", "turn_on", {"entity_id": FAULTY_LIGHT, "brightness": 150}
@@ -8608,20 +8611,20 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         client,
         "light",
         {
-            "name": "E2E CT Virtual",
-            "lights": [RAW_CT],
+            "name": "E2E Color Temperature Virtual",
+            "lights": [RAW_COLOR_TEMP],
             "light_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "auto_on_color_temp": 3000},
-            "advanced": {"entity_id": "e2e_ct_virtual"},
+            "advanced": {"entity_id": "e2e_color_temp_virtual"},
         },
-        "CT light",
+        "Color temperature light",
     )
     assert_entry_loaded(client, entry_id)
     set_timer_motion(client, True)
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("brightness") == pct(60)
@@ -8631,7 +8634,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         "on at the auto-on brightness and color temperature",
     )
     client.wait_state(
-        CT_LIGHT,
+        COLOR_TEMP_LIGHT,
         lambda state: (
             state["attributes"].get("color_mode") == "color_temp"
             and state["attributes"].get("color_temp_kelvin") == 3000
@@ -8639,13 +8642,15 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         "reporting the commanded color temperature",
     )
     set_timer_motion(client, False)
-    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
-    # A physical turn-on at another temperature is mirrored; a virtual turn-on
+    client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_LIGHT})
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
+    # A physical turn-on at another color temperature is mirrored; a virtual turn-on
     # applies no auto-on color temperature.
-    client.set_state(RAW_CT, "on", {"brightness": 100, "color_temp_kelvin": 5000})
+    client.set_state(
+        RAW_COLOR_TEMP, "on", {"brightness": 100, "color_temp_kelvin": 5000}
+    )
     client.wait_state(
-        CT_LIGHT,
+        COLOR_TEMP_LIGHT,
         lambda state: (
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("color_temp_kelvin") == 5000
@@ -8653,11 +8658,11 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         ),
         "mirroring the wall-set color temperature and brightness",
     )
-    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
-    client.call_service("light", "turn_on", {"entity_id": CT_LIGHT})
+    client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_LIGHT})
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_on", {"entity_id": COLOR_TEMP_LIGHT})
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["state"] == "on"
             and "color_temp_kelvin" not in command_data(state)
@@ -8665,16 +8670,16 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         ),
         "on after a virtual turn-on with no auto-on color temperature applied",
     )
-    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_LIGHT})
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
 
     # A remote preset delivers its color temperature natively.
     remote_id = create_entry(
         client,
         "remote",
         {
-            "name": "E2E CT Remote",
-            "target_lights": [CT_LIGHT],
+            "name": "E2E Color Temperature Remote",
+            "target_lights": [COLOR_TEMP_LIGHT],
             "dim_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "preset_1": {
@@ -8683,15 +8688,15 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
                 "preset_1_color_temp": 4000,
             },
         },
-        "CT remote",
+        "Color temperature remote",
     )
     assert_entry_loaded(client, remote_id)
     client.fire_event(EVENT_BUTTON, "short_release")
     wait_remote_action(
-        client, "preset_1", "single", "short_release", CT_REMOTE_LAST_ACTION
+        client, "preset_1", "single", "short_release", COLOR_TEMP_REMOTE_LAST_ACTION
     )
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("brightness") == pct(50)
@@ -8699,30 +8704,31 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         ),
         "on at the preset brightness with the preset color temperature",
     )
-    client.call_service("light", "turn_off", {"entity_id": CT_LIGHT})
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_LIGHT})
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
     client.remove_entry(remote_id)
-    wait_entity_absent(client, CT_REMOTE_LAST_ACTION)
-    wait_entry_removed(client, remote_id, "Temporary CT remote")
-    remove_entry_and_entity(client, entry_id, CT_LIGHT)
+    wait_entity_absent(client, COLOR_TEMP_REMOTE_LAST_ACTION)
+    wait_entry_removed(client, remote_id, "Temporary color temperature remote")
+    remove_entry_and_entity(client, entry_id, COLOR_TEMP_LIGHT)
 
-    # Mixed members: kelvin goes natively to the CT member and converted to the
-    # RGB one; a color goes natively to the RGB member and converted to the CT.
+    # Mixed members: kelvin goes natively to the color temperature member and
+    # converted to the RGB one; a color goes natively to the RGB member and converted
+    # to the color temperature one.
     mix_id = create_entry(
         client,
         "light",
         {
-            "name": "E2E CT Mix",
-            "lights": [RAW_CT, RAW_MULTI_RGB],
+            "name": "E2E Color Temperature Mix",
+            "lights": [RAW_COLOR_TEMP, RAW_MULTI_RGB],
             "light_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "advanced": {"entity_id": "e2e_ct_mix"},
+            "advanced": {"entity_id": "e2e_color_temp_mix"},
         },
-        "CT mix light",
+        "Color temperature mix light",
     )
     assert_entry_loaded(client, mix_id)
     client.wait_state(
-        CT_MIX_LIGHT,
+        COLOR_TEMP_MIX_LIGHT,
         lambda state: (
             {"color_temp", "hs"}
             <= set(state["attributes"].get("supported_color_modes", []))
@@ -8732,10 +8738,14 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
     client.call_service(
         "light",
         "turn_on",
-        {"entity_id": CT_MIX_LIGHT, "brightness": 128, "color_temp_kelvin": 3500},
+        {
+            "entity_id": COLOR_TEMP_MIX_LIGHT,
+            "brightness": 128,
+            "color_temp_kelvin": 3500,
+        },
     )
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: command_data(state).get("color_temp_kelvin") == 3500,
         "receiving the color temperature natively",
     )
@@ -8749,7 +8759,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         "receiving the color temperature converted to a color",
     )
     client.call_service(
-        "light", "turn_on", {"entity_id": CT_MIX_LIGHT, "hs_color": [120, 50]}
+        "light", "turn_on", {"entity_id": COLOR_TEMP_MIX_LIGHT, "hs_color": [120, 50]}
     )
     client.wait_state(
         RAW_MULTI_RGB,
@@ -8759,7 +8769,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         "receiving the color natively",
     )
     client.wait_state(
-        RAW_CT,
+        RAW_COLOR_TEMP,
         lambda state: (
             "color_temp_kelvin" in command_data(state)
             and not has_color_command(
@@ -8772,10 +8782,10 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         ),
         "receiving the color converted to a color temperature",
     )
-    client.call_service("light", "turn_off", {"entity_id": CT_MIX_LIGHT})
-    client.wait_state(RAW_CT, lambda state: state["state"] == "off", "off")
+    client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_MIX_LIGHT})
+    client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "off", "off")
-    remove_entry_and_entity(client, mix_id, CT_MIX_LIGHT)
+    remove_entry_and_entity(client, mix_id, COLOR_TEMP_MIX_LIGHT)
     print("PASS: color temperature auto-on, mirror, preset, and mixed routing")
 
 
@@ -8951,7 +8961,7 @@ def run_own_system_turn_on_scenarios(client: HomeAssistantClient) -> None:
             state["attributes"].get("brightness") == pct(60)
             and state["attributes"]["testbed_commands"] == commands + 1
         ),
-        "on: raised to the auto-on level by one MoLight command",
+        "on: raised to the auto-on brightness by one MoLight command",
     )
     assert_state_stays(
         client,
@@ -9474,8 +9484,8 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     checkpoint("a warning that began during a recovery re-send stayed on the lights")
 
     # The strip goes unavailable and comes back off; its re-send waits for the select
-    # call when a new level through the light replaces it. The preset then
-    # sets the strip's own level, on top: the new level is sent again.
+    # call when a new brightness through the light replaces it. The preset then
+    # sets the strip's own brightness, on top: the new brightness is sent again.
     client.call_service(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
     )
@@ -9500,7 +9510,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 90})
     wait_member(client, RAW_MULTI_DIMMER, 90)
 
-    def at_the_new_level(state: dict[str, Any]) -> bool:
+    def at_the_new_brightness(state: dict[str, Any]) -> bool:
         return (
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("brightness") == 100
@@ -9510,25 +9520,25 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     assert_state_stays(
         client,
         PARK_LIGHT,
-        at_the_new_level,
-        "active at 100: the preset's level is no dim at the wall",
+        at_the_new_brightness,
+        "active at 100: the preset's brightness is no dim at the wall",
         duration=1,
     )
     release_select(client)
     state = wait_member(client, RAW_MULTI_DIMMER, 100)
     if state["attributes"]["testbed_commands"] != commands + 1:
-        raise AssertionError(f"The new level was not sent again once: {state}")
+        raise AssertionError(f"The new brightness was not sent again once: {state}")
     assert_state_stays(
         client,
         PARK_LIGHT,
-        at_the_new_level,
+        at_the_new_brightness,
         "active at 100 after the select call finished",
         duration=1,
     )
     park_light_off(client, PARK_LIGHT, *members)
     remove_entry_and_entity(client, entry_id, PARK_LIGHT)
     checkpoint(
-        "a level sent during a replaced re-send's select call outlasted its preset"
+        "a brightness sent during a replaced re-send's select call outlasted its preset"
     )
 
     # A Virtual Scheduled Light switches settings while the preset of the settings it
@@ -9585,7 +9595,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         "select", "select_option", {"entity_id": TARGET_SELECT, "option": option_before}
     )
     print(
-        "PASS: offs, newer turn-ons, wall changes, a warning, a new level and a "
+        "PASS: offs, newer turn-ons, wall changes, a warning, a new brightness and a "
         "settings switch during a select call"
     )
 

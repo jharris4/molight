@@ -12,7 +12,7 @@ State machine
   OCCUPIED   lights on, occupied, timer suspended
   COUNTDOWN  occupancy just cleared, turn-off timer running
   SCHEDULED  lights on inside a follow-mode schedule window, no timer
-  STANDBY    lights at a Virtual Scheduled Light's standby level, no timer
+  STANDBY    lights at a Virtual Scheduled Light's standby brightness, no timer
   EFFECT     automatic turn-off imminent, showing the effect stage
   WARN       automatic turn-off imminent, showing the warn stage
 
@@ -77,13 +77,13 @@ Standby (Virtual Scheduled Light inside-schedule settings only)
     keeps standby off while bright; illuminance Gate only mode never touches it).
     A raised on-period that going bright cut short is resumed first, as without
     standby.
-  - Occupancy and the door raise it to the auto-on level like any turn-on
+  - Occupancy and the door raise it to the auto-on brightness like any turn-on
     (the maintain occupancy sensor only holds a raised light); when the timer finishes,
     the effect and warn stages run and the last step drops to standby, not off
     (at the pre-warning color when standby has no color of its own).
   - A physical dim or a virtual turn-on from standby runs a timer that ends
     back at standby; a turn-on with no brightness first raises it to the
-    auto-on level and color, as presence would. A manual off keeps standby off
+    auto-on brightness and color, as presence would. A manual off keeps standby off
     until the next schedule boundary; turning the light back on rejoins it.
   - Leaving the inside settings while at standby hands the light to the At
     schedule end field: turn off, switch state, or keep state (a fresh timer).
@@ -546,13 +546,13 @@ def _opt_rgb_color(value: list | None) -> dict | None:
     return {ATTR_RGB_COLOR: tuple(int(c) for c in value)} if value else None
 
 
-def _opt_color(cfg: dict[str, Any], temp_key: str, rgb_key: str) -> dict | None:
+def _opt_color(cfg: dict[str, Any], color_temp_key: str, rgb_key: str) -> dict | None:
     """Convert a stored color-pair to turn-on service data; absent = None.
 
     The keys are mutually exclusive (enforced by the config/options flows);
-    the temp wins if both somehow appear, matching the remote presets.
+    the color temperature wins if both somehow appear, matching the remote presets.
     """
-    if kelvin := cfg.get(temp_key):
+    if kelvin := cfg.get(color_temp_key):
         return {ATTR_COLOR_TEMP_KELVIN: int(kelvin)}
     return _opt_rgb_color(cfg.get(rgb_key))
 
@@ -615,7 +615,7 @@ def _window_moved(old_state: State, new_state: State) -> bool:
 def _state_color(state: State) -> tuple[ColorMode, tuple] | None:
     """Return the color a real light's state reports, in canonical terms.
 
-    A color-temp member also carries a derived hs_color, so its own
+    A color-temperature member also carries a derived hs_color, so its own
     color_mode decides which attribute is authoritative.
     """
     attrs = state.attributes
@@ -825,17 +825,17 @@ class _EchoExpectation:
     # A command to only some members leaves what it did not name as reported.
     mirror: bool = True
     # Age of the member's first report after off, while a command with a transition
-    # settled: a bulb that reports power first shows the level and color it
+    # settled: a bulb that reports power first shows the brightness and color it
     # remembered, and its fade runs on from that report.
     came_on: float | None = None
-    # Where a command that named no level ends: what the member came on at.
+    # Where a command that named no brightness ends: what the member came on at.
     remembered_brightness: int | None = None
     # The command's context, so a call that fails can take its expectation back.
     context_id: str | None = None
 
     @property
     def target_brightness(self) -> int | None:
-        """The level the member should end at, if one is known."""
+        """The brightness the member should end at, if one is known."""
         if self.brightness is not None:
             return self.brightness
         return self.remembered_brightness
@@ -868,26 +868,26 @@ class _EchoExpectation:
         a member's first report after off settles nothing, and is no echo
         anchor for the report after it while the fade runs on from it: a bulb that
         reports power first shows what it remembered, not where its fade is,
-        so a level at the target may still be followed by steps up from
-        dark. Once the fade has run its length, the report is judged against
+        so a report at the target may still be followed by steps up from
+        off. Once the fade has run its length, the report is judged against
         it like any other.
         """
         attrs = new_state.attributes
         powered = new_state.state == "on"
         was_on = old_state is not None and old_state.state == "on"
         if not self.on:
-            # On at brightness 0 is off in disguise, as the state machine reads it.
+            # On at brightness 0 counts as off, as the state machine reads it.
             new_b = attrs.get(ATTR_BRIGHTNESS)
             if not powered or new_b == 0:
                 return "match"
-            # A fade to off reports dimmer levels on its way there.
+            # A fade to off reports lower brightness on its way there.
             old_b = old_state.attributes.get(ATTR_BRIGHTNESS) if was_on else None
             if settling and old_b and new_b and new_b < old_b:
                 return "pending"
             return "contradiction"
         if not powered:
             return "contradiction"
-        # A member may report on at brightness 0 first (a dimmer with no level
+        # A member may report on at brightness 0 first (a dimmer with no brightness
         # yet): only power contradicts an on command; brightness is judged below.
         # Before the member was on we cannot judge its attributes: a bulb that
         # reports power first still carries its previous brightness and color.
@@ -901,7 +901,7 @@ class _EchoExpectation:
             self.remembered_brightness = new_b
         if (target := self.target_brightness) is not None:
             if not new_b:
-                # A power-only reply shows no level: while settling the level
+                # A power-only reply shows no brightness: while settling the brightness
                 # may still be coming (two-part repliers), so keep waiting;
                 # late, this is an on/off-only member's complete reply.
                 if settling:
@@ -912,7 +912,7 @@ class _EchoExpectation:
                     new_b == old_b or _toward(old_b, new_b, target)
                 ):
                     return "contradiction"
-                # Without an old level there is no direction to judge: a
+                # Without an old brightness there is no direction to judge: a
                 # power-first bulb's fade step must not read as a physical dim.
                 settled = False
         if self.color is not None:
@@ -968,8 +968,8 @@ class _WaitingTurnOn:
 
     # The command generation it was issued at.
     generation: int
-    # Its level generation; None for a virtual turn-on.
-    auto_level: int | None
+    # Its brightness generation; None for a virtual turn-on.
+    auto_brightness_generation: int | None
     # Device of the select entity it called, whatever the settings are now.
     device_id: str | None
 
@@ -1180,9 +1180,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # Turn-ons waiting for their selection, by the context of the select
         # call.
         self._waiting_turn_ons: dict[str, _WaitingTurnOn] = {}
-        # Counts automatic turn-ons at the auto-on or standby level, so one
-        # that waited for its selection yields to the level chosen since.
-        self._auto_level_generation = 0
+        # Counts automatic turn-ons at the auto-on or standby brightness, so one
+        # that waited for its selection yields to the brightness chosen since.
+        self._auto_brightness_generation = 0
         # Brightness, transition, color and per-member looks of the stage shown
         # last: an automatic turn-on that waited for its selection into a
         # stage sends these.
@@ -1233,7 +1233,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._auto_on_color = _opt_color(
             cfg, CONF_AUTO_ON_COLOR_TEMP, CONF_AUTO_ON_RGB_COLOR
         )
-        # Level a finished timer drops to instead of off; None disables
+        # Brightness a finished timer drops to instead of off; None disables
         # standby. Only a Virtual Scheduled Light's inside settings can set it.
         standby_pct = int(cfg.get(CONF_STANDBY_BRIGHTNESS) or 0)
         self._standby_brightness = (
@@ -2229,9 +2229,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Apply standby at startup. Returns True if handled.
 
         A light that was at standby goes back there, re-sent so an
-        edited standby level applies; any other lit light is adopted as usual
+        edited standby brightness applies; any other lit light is adopted as usual
         and its timer finishes at standby. An off light comes on at standby
-        unless occupancy or a held-open door lights it at the auto-on level.
+        unless occupancy or a held-open door lights it at the auto-on brightness.
         """
         if not self._standby_applies():
             return False
@@ -2410,7 +2410,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._occupancy_lit_lights = False  # the user owns this on-period now
         brightness = kwargs.get(ATTR_BRIGHTNESS)
         # HA has already narrowed any color request to the modes we offer,
-        # so only the canonical hs/color-temp attributes can arrive here.
+        # so only the canonical hs/color-temperature attributes can arrive here.
         color: dict | None = {
             k: kwargs[k] for k in (ATTR_HS_COLOR, ATTR_COLOR_TEMP_KELVIN) if k in kwargs
         } or None
@@ -2434,7 +2434,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if brightness is not None:
                 self._attr_brightness = brightness
         elif at_standby:
-            # No level: raise standby to the auto-on look, as presence would.
+            # No brightness: raise standby to the auto-on brightness and color, as
+            # presence would.
             brightness = self._auto_on_brightness
             if brightness is not None:
                 self._attr_brightness = brightness
@@ -2585,7 +2586,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 own_context=own_context,
                 unprompted=unprompted,
             ):
-                # A member back at the level an unanswered command asked for
+                # A member back at the brightness an unanswered command asked for
                 # may still have lost its selection: re-send like any other.
                 if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
                     self._reconcile_recovered_member()
@@ -2595,7 +2596,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     and not own_context
                     and self._machine_state != STATE_IDLE
                 ):
-                    # A late reply on at brightness 0 is still dark.
+                    # A late reply on at brightness 0 still counts as off.
                     self._resend_on_settings()
                 return  # echo of our own service call; call sites manage state
             # A member our own select call changed was not changed at the wall.
@@ -2635,8 +2636,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             if resend and self._reconcile_recovered_member():
                 return
             if member_recovered and not lit and self._turn_on_waiting():
-                # Reporting in dark while a turn-on waits for its selection
-                # is no off: the turn-on is about to light this member.
+                # A member that comes back not lit while a turn-on waits for its
+                # selection is no off: the turn-on is about to light this member.
                 return
             if member_recovered and not lit and self._machine_state != STATE_IDLE:
                 # Nor while the light is on: the member missed its command.
@@ -2854,7 +2855,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if entity_id in self._lights:
             if self._owed is not None and entity_id in self._owed.members:
                 self._settle_owed(entity_id, lit=False)
-            # Only the real light that was lit can have left the light dark;
+            # Only the real light that was lit can have left them all off;
             # a stage that blinks them off, or a turn-on on its way, has not.
             # One that went by way of a placeholder is judged as last read.
             was_lit = entity_id in self._members_lit
@@ -3004,7 +3005,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """
         reason = REASON_PHYSICAL if human else REASON_WRAPPED
         if state == "on" and brightness == 0:
-            # "On" at brightness 0 is an off in disguise, matching the dimming
+            # "On" at brightness 0 counts as off, matching the dimming
             # path, _all_lights_off and the startup seed. A later 0 → non-zero
             # dim is then handled as the turn-on (in _on_light_attrs_change).
             if self._all_lights_off():
@@ -3060,8 +3061,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Handle a physical brightness/color change on an on real light.
 
         Dimming or recoloring is human activity: record it and restart any
-        running timer with the full timeout. Brightness 0 means off in
-        disguise. claim is False for a change our own select call caused;
+        running timer with the full timeout. Brightness 0 counts as off. claim
+        is False for a change our own select call caused;
         human is False for a wrapped virtual light's own stage or standby,
         which is shown but not acted on. retrigger is a person's turn-on of
         a wrapped virtual light that was on, which changes neither.
@@ -3259,7 +3260,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             state = self.hass.states.get(entity_id)
             if state is None:
                 # Registered but stateless: an integration that hasn't loaded
-                # (yet); the bulb may still be burning, so don't assume off.
+                # (yet); the bulb may still be lit, so don't assume off.
                 # A deleted or disabled member can never report again;
                 # counting it as "maybe on" would pin the virtual light on
                 # forever.
@@ -3325,20 +3326,20 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             )
 
         changed = supported != self._attr_supported_color_modes
-        # Most permissive envelope; each member clamps to its own range. Track
-        # and reset it (to HA's defaults) so a member recovering with a
+        # Most permissive color temperature range; each member clamps to its own
+        # range. Track and reset it (to HA's defaults) so a member recovering with a
         # different range doesn't leave the virtual light offering kelvins
         # no member can hit.
-        envelope = (
+        color_temp_range = (
             min(min_kelvins) if min_kelvins else DEFAULT_MIN_KELVIN,
             max(max_kelvins) if max_kelvins else DEFAULT_MAX_KELVIN,
         )
-        if envelope != (
+        if color_temp_range != (
             self._attr_min_color_temp_kelvin,
             self._attr_max_color_temp_kelvin,
         ):
-            self._attr_min_color_temp_kelvin = envelope[0]
-            self._attr_max_color_temp_kelvin = envelope[1]
+            self._attr_min_color_temp_kelvin = color_temp_range[0]
+            self._attr_max_color_temp_kelvin = color_temp_range[1]
             changed = True
 
         # Fail open like the floor above: an unreadable member must not cost the
@@ -3520,8 +3521,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     def _overtaken(self, waiting: _WaitingTurnOn) -> bool:
         """Return True when a newer command replaced a waiting turn-on."""
         return waiting.generation != self._command_generation or (
-            waiting.auto_level is not None
-            and waiting.auto_level != self._auto_level_generation
+            waiting.auto_brightness_generation is not None
+            and waiting.auto_brightness_generation != self._auto_brightness_generation
         )
 
     def _turn_on_waiting(self, *, virtual: bool = False) -> bool:
@@ -3532,7 +3533,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return any(
             not self._overtaken(waiting)
             for waiting in self._waiting_turn_ons.values()
-            if waiting.auto_level is None or not virtual
+            if waiting.auto_brightness_generation is None or not virtual
         )
 
     def _note_member(self, entity_id: str) -> None:
@@ -4089,7 +4090,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return True
 
     def _resend_on_settings(self) -> None:
-        """Send the light's current settings again, with its turn-on selection.
+        """Send the current brightness and color again, with the turn-on selection.
 
         Every member gets them, so one reporting in while the select call
         runs is lit too. A stage that blinks the lights off has none to send.
@@ -4454,7 +4455,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         the lights are already on (ACTIVE/COUNTDOWN/EFFECT/WARN) with a
         presence hold. Not a turn-on: attribution and the occupancy-lit
         flag are left untouched, so the user still owns a manual on-period.
-        A light at standby is brought up to the auto-on level, which
+        A light at standby is brought up to the auto-on brightness, which
         occupancy then owns like any raise from standby.
         """
         was_warning = self._in_warning()
@@ -5216,12 +5217,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         force_selection: bool = False,
         reason: str | None = None,
     ) -> None:
-        """Go to the standby level: lights on, no timer.
+        """Go to the standby brightness: lights on, no timer.
 
         Callers pass the transition: auto-on when coming on from off (with the
-        turn-on selection), auto-off when dropping from a higher level.
+        turn-on selection), auto-off when dropping from a higher brightness.
         Without a standby color, an effect or warn stage's recolor is undone. reason
-        says why, and is None for a re-send of the level the light is at.
+        says why, and is None for a re-send of the brightness the light is at.
         """
         if reason is not None and self._attr_is_on:
             self._send_event(EVENT_TURNED_OFF, reason=reason, standby=True)
@@ -5255,7 +5256,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 color=color,
                 apply_turn_on_selection=selection,
                 force_selection=force_selection,
-                auto_level=True,
+                auto_brightness=True,
                 looks=looks,
             )
         )
@@ -5380,7 +5381,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             color=self._auto_on_color,
             apply_turn_on_selection=True,
             force_selection=force_selection,
-            auto_level=True,
+            auto_brightness=True,
         )
 
     def _auto_lights_off(self) -> Coroutine[Any, Any, bool]:
@@ -5407,7 +5408,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         apply_turn_on_selection: bool = False,
         force_selection: bool = False,
         virtual: bool = False,
-        auto_level: bool = False,
+        auto_brightness: bool = False,
         members: list[str] | None = None,
         mirror: bool = True,
         looks: dict[str, _Look | None] | None = None,
@@ -5420,8 +5421,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         lights the room with the user's settings; an automatic turn-on, or a
         re-send, sends that stage instead of the look it was issued with. An
         automatic turn-on issued while a virtual one waits is dropped. An
-        automatic turn-on at the auto-on or standby level (auto_level) also
-        overtakes an older automatic one still waiting, so the level chosen
+        automatic turn-on at the auto-on or standby brightness (auto_brightness) also
+        overtakes an older automatic one still waiting, so the brightness chosen
         last is the one the lights end at. members limits the command to some
         of the real lights; without mirror, the virtual light does not report
         the brightness and color it names. looks gives some real lights a
@@ -5430,7 +5431,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if self._removed:
             return False
         # A blink-fully-off leaves the light logically on while the members
-        # are dark, so this is still a turn-on for them.
+        # are off, so this is still a turn-on for them.
         was_off = not self._attr_is_on or self._all_lights_off()
         if on:
             self._clear_bright_forced_off()
@@ -5450,20 +5451,20 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if not on or virtual:
             self._command_generation += 1
         generation = self._command_generation
-        if on and auto_level:
-            self._auto_level_generation += 1
-        auto_level_generation = self._auto_level_generation
+        if on and auto_brightness:
+            self._auto_brightness_generation += 1
+        auto_brightness_generation = self._auto_brightness_generation
         if on and apply_turn_on_selection and (was_off or force_selection):
             if not virtual and self._turn_on_waiting(virtual=True):
                 self._occupancy_lit_lights = False  # the user's on-period
                 return False
             waiting = _WaitingTurnOn(
                 generation,
-                None if virtual else auto_level_generation,
+                None if virtual else auto_brightness_generation,
                 self._turn_on_select_device(),
             )
             self._waiting_turn_ons[context.id] = waiting
-            # Reported on, at the level asked for, while the select call
+            # Reported on, at the brightness asked for, while the select call
             # runs; a re-send during a stage leaves the stage reported.
             if virtual or not self._in_warning():
                 if brightness is not None:
@@ -5483,8 +5484,8 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             finally:
                 self._waiting_turn_ons.pop(context.id, None)
             if self._overtaken(waiting):
-                # An off, a newer virtual command, a newer automatic level or
-                # a physical change landed while the select call was
+                # An off, a newer virtual command, a newer auto-on or standby
+                # brightness or a physical change landed while the select call was
                 # awaited; it stands.
                 await self._resend_look_after_select()
                 return False
@@ -5607,7 +5608,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         reply would have settled; a reply that came meanwhile stands. A
         member a newer command has reached since is left to that one. With
         nothing lit, a light reporting on goes idle, as it does when its lit
-        member is deleted; one reporting off while a member still burns
+        member is deleted; one reporting off while a member is still lit
         adopts it, as it would a bulb lit by nobody.
         """
         for entity_id in group:

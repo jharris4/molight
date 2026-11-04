@@ -192,7 +192,9 @@ def _action_call(
     return ("turn_on", data)
 
 
-def _warning_step_level(hass: HomeAssistant, entity_id: str, step: int) -> int | None:
+def _warning_step_brightness(
+    hass: HomeAssistant, entity_id: str, step: int
+) -> int | None:
     """Return the brightness % a step lands on for a virtual light mid-warning.
 
     The light reports the effect or warn brightness, which Home Assistant would
@@ -218,11 +220,13 @@ def _brightness_step_calls(
     stepping: list[str] = []
     calls: list[tuple[list[str], dict[str, Any]]] = []
     for entity_id in targets:
-        level = _warning_step_level(hass, entity_id, data["brightness_step_pct"])
-        if level is None:
+        brightness_pct = _warning_step_brightness(
+            hass, entity_id, data["brightness_step_pct"]
+        )
+        if brightness_pct is None:
             stepping.append(entity_id)
         else:
-            calls.append(([entity_id], {"brightness_pct": level}))
+            calls.append(([entity_id], {"brightness_pct": brightness_pct}))
     if stepping:
         calls.insert(0, (stepping, data))
     return calls

@@ -23,7 +23,7 @@ pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 REAL = "light.real_1"
 VIRTUAL = "light.hall"
 EVENTS = "event.hall_events"
-TEMP_CAPS = {
+COLOR_TEMP_CAPS = {
     "supported_color_modes": ["color_temp"],
     "color_mode": "color_temp",
     "min_color_temp_kelvin": 2000,
@@ -42,7 +42,7 @@ def _adjusted(reason: str, **look) -> dict:
 
 
 async def _setup_lit(hass) -> list[dict]:
-    hass.states.async_set(REAL, "off", TEMP_CAPS)
+    hass.states.async_set(REAL, "off", COLOR_TEMP_CAPS)
     await setup_entries(hass, make_light_entry(name="Hall", auto_on_brightness=50))
     await settle(hass)
     records = record_events(hass, EVENTS)
@@ -50,7 +50,7 @@ async def _setup_lit(hass) -> list[dict]:
         "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
     )
     hass.states.async_set(
-        REAL, "on", {**TEMP_CAPS, "brightness": 200, "color_temp_kelvin": 4000}
+        REAL, "on", {**COLOR_TEMP_CAPS, "brightness": 200, "color_temp_kelvin": 4000}
     )
     await settle(hass)
     assert [r["event_type"] for r in records] == [EVENT_TURNED_ON]
@@ -90,7 +90,7 @@ async def test_a_dim_at_the_wall(hass) -> None:
     records = await _setup_lit(hass)
 
     hass.states.async_set(
-        REAL, "on", {**TEMP_CAPS, "brightness": 100, "color_temp_kelvin": 4000}
+        REAL, "on", {**COLOR_TEMP_CAPS, "brightness": 100, "color_temp_kelvin": 4000}
     )
     await settle(hass)
 
@@ -102,7 +102,7 @@ async def test_a_recolor_at_the_wall(hass) -> None:
     records = await _setup_lit(hass)
 
     hass.states.async_set(
-        REAL, "on", {**TEMP_CAPS, "brightness": 200, "color_temp_kelvin": 3000}
+        REAL, "on", {**COLOR_TEMP_CAPS, "brightness": 200, "color_temp_kelvin": 3000}
     )
     await settle(hass)
 

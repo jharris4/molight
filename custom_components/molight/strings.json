@@ -23,7 +23,7 @@
       },
       "convert_to_scheduled": {
         "title": "Convert regular Virtual Lights",
-        "description": "Select one or more regular Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain occupancy, illuminance or door sensors.",
+        "description": "Select one or more regular Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, brightness and color, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain occupancy, illuminance or door sensors.",
         "data": {
           "convert_lights": "Regular Virtual Lights"
         },
@@ -849,7 +849,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Stay at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
+            "description": "Stay at a low brightness instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on brightness for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -857,7 +857,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on brightness.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
@@ -1415,7 +1415,7 @@
           },
           "standby": {
             "name": "Standby",
-            "description": "Stay at a low level instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on level for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
+            "description": "Stay at a low brightness instead of turning off while these inside-schedule settings are active: on at standby when the schedule starts, up to the auto-on brightness for occupancy or the door, and back to standby when the timer finishes. A manual off turns standby off until the next schedule boundary. For no standby, leave the brightness blank and set the Standby color mode field to None.",
             "data": {
               "standby_brightness": "Standby brightness",
               "standby_color_mode": "Standby color mode",
@@ -1423,7 +1423,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on level.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the rise to the auto-on brightness.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."

@@ -266,7 +266,7 @@ async def test_window_end_missed_during_a_restart(hass) -> None:
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 async def test_timer_finishes_at_standby(hass, freezer) -> None:
-    """A raised standby light's timer finishes at standby, not dark."""
+    """A raised standby light's timer finishes at standby, not off."""
     records = await _setup(
         hass,
         make_scheduled_light_entry(
