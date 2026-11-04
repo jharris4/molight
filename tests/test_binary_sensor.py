@@ -1350,7 +1350,7 @@ async def test_illuminance_first_reading_in_band_uses_bare_threshold(
 async def test_combined_trigger_maintain_and_lot(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """Trigger starts, maintain sustains but never starts, lot is the max."""
+    """Trigger starts, maintain extends but never starts, lot is the max."""
     for entry in (occupancy_entry, _occupancy2_entry(), _combined_entry()):
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -1366,7 +1366,7 @@ async def test_combined_trigger_maintain_and_lot(
     await settle(hass)
     assert hass.states.get("binary_sensor.combined_occupancy").state == "on"
 
-    # Trigger clears: the maintain sensor keeps occupancy alive.
+    # Trigger clears: the maintain sensor extends occupancy.
     freezer.tick(timedelta(seconds=10))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await settle(hass)
@@ -1907,8 +1907,8 @@ async def _genuine_trigger_then_maintain_hold(hass: HomeAssistant, freezer) -> s
     return lot
 
 
-async def _false_maintain_clear(hass: HomeAssistant, lot: str) -> None:
-    """The maintain sensor's false clear adds no newer detection than lot."""
+async def _false_detection_maintain_clear(hass: HomeAssistant, lot: str) -> None:
+    """The maintain sensor's false-detection clear adds no newer detection than lot."""
     attrs = {"last_clear_false_detection": True}
     hass.states.async_set("binary_sensor.m2", "off", attrs)
     await settle(hass)
@@ -1937,7 +1937,7 @@ async def test_genuine_combined_visit_survives_a_reload(
         await restart_entries(hass, entry)
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
-    await _false_maintain_clear(hass, lot)
+    await _false_detection_maintain_clear(hass, lot)
 
 
 @pytest.mark.asyncio
@@ -1960,7 +1960,7 @@ async def test_genuine_combined_visit_survives_a_reload_with_a_late_maintain(
     hass.states.async_set("binary_sensor.m2", "on")
     await settle(hass)
     assert hass.states.get("binary_sensor.seed_combined").state == "on"
-    await _false_maintain_clear(hass, lot)
+    await _false_detection_maintain_clear(hass, lot)
 
 
 @pytest.mark.asyncio
@@ -2025,7 +2025,7 @@ async def test_combined_carry_survives_a_second_restart(
     await settle(hass)
     assert hass.states.get(combined).state == "on"
     await finish_startup(hass)
-    await _false_maintain_clear(hass, lot)
+    await _false_detection_maintain_clear(hass, lot)
 
 
 @pytest.mark.asyncio
@@ -2059,7 +2059,7 @@ async def test_combined_carry_is_not_saved_once_startup_has_settled(
     ("via", "kept"),
     [("reload", True), ("restart", True), ("added", False), ("roles", False)],
 )
-async def test_combined_false_clear_survives_a_reload(
+async def test_combined_false_detection_clear_survives_a_reload(
     hass: HomeAssistant, freezer, via: str, kept: bool
 ) -> None:
     """A combined clear's classification stands across a reload or restart;
@@ -3179,7 +3179,7 @@ async def test_occupancy_source_swap_does_not_carry_over_an_occupied_old_source(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("via", ["reload", "restart", "source_swap"])
-async def test_occupancy_false_clear_survives_a_reload(
+async def test_occupancy_false_detection_clear_survives_a_reload(
     hass: HomeAssistant, freezer, via: str
 ) -> None:
     """A clear's classification stands until the next clear, across a reload
@@ -3218,8 +3218,9 @@ async def test_occupancy_false_clear_survives_a_reload(
 async def test_light_false_off_delay_survives_an_occupancy_reload(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A regular sensor's false clear reloaded away while the maintain sensor
-    still held the light would cost the light its false-detection off delay."""
+    """A regular sensor's false-detection clear reloaded away while the maintain
+    occupancy sensor still held the light would cost the light its false-detection
+    off delay."""
     hass.set_state(CoreState.running)
 
     def occupancy(name: str, source: str) -> MockConfigEntry:
@@ -3273,7 +3274,7 @@ async def test_light_false_off_delay_survives_an_occupancy_reload(
 async def test_light_false_off_delay_survives_a_combined_occupancy_reload(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The same for a combined sensor's false clear reloaded away."""
+    """The same for a combined sensor's false-detection clear reloaded away."""
     hass.set_state(CoreState.running)
     combined = MockConfigEntry(
         domain=DOMAIN,
@@ -3473,7 +3474,7 @@ async def test_combined_judges_a_clear_by_the_constituent_that_cleared(
 ) -> None:
     """A genuine clear counts even when its back-dated departure is older than
     history another constituent brought along, which hides it in the max. A
-    false clear stays false."""
+    false-detection clear stays false."""
     newer = (datetime.now(UTC) - timedelta(seconds=10)).isoformat()
     older = (datetime.now(UTC) - timedelta(seconds=20)).isoformat()
     hass.states.async_set("binary_sensor.m1", "on")
@@ -3554,9 +3555,9 @@ async def test_combined_keeps_an_occupied_constituent_that_dropped_out(
     hass: HomeAssistant, freezer, nested: bool, survivor: str, gone: str
 ) -> None:
     """A constituent that disappears while occupied saw someone up
-    to then, even though another keeps the sensor on: the survivor's false
-    clear ends a genuine visit and the light counts down from the dropout.
-    One that was clear when it disappeared adds nothing."""
+    to then, even though another keeps the sensor on: the survivor's
+    false-detection clear ends a genuine visit and the light counts down from
+    the dropout. One that was clear when it disappeared adds nothing."""
     lamp, motion_a, motion_b = RealLight("lamp"), RealBinary("a"), RealBinary("b")
     await add_real(hass, lamp, motion_a, motion_b)
 

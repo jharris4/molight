@@ -4,8 +4,8 @@ test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and
 WARN states: attribute invariance while the warning drives the real lights,
 forced offs (manual, physical, bright, gate window end), the maintain
-entity, follow-mode schedule windows adopting the light mid-warning, and the
-pre-warn brightness restore on every kind of re-trigger.
+occupancy sensor, follow-mode schedule windows adopting the light mid-warning,
+and the pre-warn brightness restore on every kind of re-trigger.
 """
 
 from __future__ import annotations
@@ -440,7 +440,7 @@ async def test_virtual_on_during_warn_restores_pre_warn_brightness(
 async def test_maintain_on_during_warn_restores_and_occupies(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The maintain entity turning on mid-warn adopts the light as OCCUPIED
+    """The maintain occupancy sensor turning on mid-warn adopts the light as OCCUPIED
     and undoes the warn stage."""
     entry = make_light_entry(maintain=MAINTAIN, warn_timeout=30, warn_brightness=100)
     hass.states.async_set(MAINTAIN, "off")

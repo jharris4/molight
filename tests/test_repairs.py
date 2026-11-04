@@ -53,7 +53,7 @@ async def test_rejected_keep_on_entities_raise_one_issue_each(
 ) -> None:
     """Each names the light, the entity, and why it never holds."""
     hass.states.async_set(REAL, "off")
-    entry = make_light_entry(name="Room", lights=[REAL], hold_entities=[REAL, TV])
+    entry = make_light_entry(name="Room", lights=[REAL], keep_on_entities=[REAL, TV])
     await setup_entries(hass, entry)
     await settle(hass)
 
@@ -70,7 +70,7 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
 ) -> None:
     """An edit that keeps the problem raises it again; one that fixes it does not."""
     hass.states.async_set(REAL, "off")
-    entry = make_light_entry(name="Room", lights=[REAL], hold_entities=[TV])
+    entry = make_light_entry(name="Room", lights=[REAL], keep_on_entities=[TV])
     await setup_entries(hass, entry)
     await settle(hass)
     assert list(molight_issues(hass, entry.entry_id)) == [f"hold_never_on_{TV}"]

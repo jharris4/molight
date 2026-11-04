@@ -49,7 +49,7 @@ pytestmark = pytest.mark.usefixtures("virtual_light_behavior_variant")
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
 DOOR = "binary_sensor.door"
-HOLD = "input_boolean.hold"
+KEEP_ON = "input_boolean.keep_on"
 MAINT = "binary_sensor.maint"
 MOTION = "binary_sensor.motion_1"
 FD_OCC = "binary_sensor.fd_occupancy"
@@ -186,16 +186,18 @@ async def test_door_turns_the_light_on_without_a_timer(
 
 @pytest.mark.asyncio
 async def test_hold_release_starts_no_timer(hass: HomeAssistant, freezer) -> None:
-    """Releasing a keep-on hold leaves the light on, as the hold did."""
-    hass.states.async_set(HOLD, "off")
-    await setup_entries(hass, make_light_entry(timeout=None, hold_entities=[HOLD]))
+    """Releasing an auto-off hold leaves the light on, as the hold did."""
+    hass.states.async_set(KEEP_ON, "off")
+    await setup_entries(
+        hass, make_light_entry(timeout=None, keep_on_entities=[KEEP_ON])
+    )
     calls = record_service_calls(hass)
 
     await _turn_on(hass)
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is True
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is False
     await _assert_stays_on(hass, freezer, calls)
@@ -214,7 +216,7 @@ async def test_restart_adopts_a_lit_light_without_a_timer(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("lit_by", ["hand", "occupancy"])
+@pytest.mark.parametrize("lit_by", ["manual", "occupancy"])
 @pytest.mark.parametrize("restart", [False, True], ids=["live", "restart"])
 async def test_bright_off_resumes_whenever_dark(
     hass: HomeAssistant, freezer, lit_by: str, restart: bool
@@ -230,7 +232,7 @@ async def test_bright_off_resumes_whenever_dark(
     )
     await setup_entries(hass, entry)
 
-    if lit_by == "hand":
+    if lit_by == "manual":
         await _turn_on(hass)
     else:
         hass.states.async_set(OCC, "on")
@@ -287,7 +289,7 @@ async def test_manual_off_while_bright_ends_the_on_period(
 
 @pytest.mark.asyncio
 async def test_maintain_clear_leaves_the_light_on(hass: HomeAssistant, freezer) -> None:
-    """The maintain sensor holds a lit light; its clearing starts no timer."""
+    """The maintain occupancy sensor holds a lit light; its clearing starts no timer."""
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, make_light_entry(timeout=None, maintain=MAINT))
     calls = record_service_calls(hass)
@@ -349,24 +351,24 @@ async def test_hold_release_while_bright_pauses_until_dark(
     """A hold release into daylight turns the light off; dark brings it back, no
     timer."""
     hass.states.async_set(ILLUM, "off")  # dark
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(
         hass,
         make_light_entry(
             timeout=None,
             illuminance=ILLUM,
             illuminance_mode=ILLUMINANCE_MODE_CONTROL,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await _turn_on(hass)
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).state == "on"  # held through the daylight
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "off"
     assert _state(hass).attributes["bright_forced_off"] is True

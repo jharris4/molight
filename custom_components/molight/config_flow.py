@@ -162,7 +162,7 @@ from .const import (
     SUN_EVENTS,
 )
 from .helpers import (
-    HOLD_ENTITY_DOMAINS as _HOLD_ENTITY_DOMAINS,
+    KEEP_ON_ENTITY_DOMAINS as _KEEP_ON_ENTITY_DOMAINS,
     VIRTUAL_LIGHT_TYPES as _VIRTUAL_LIGHT_TYPES,
     entity_id_changed_to,
     entry_settings as _entry_settings,
@@ -594,13 +594,14 @@ def _schedule_edge_fields() -> dict:
 
 
 # Pickers for a virtual light's optional sensor references and keep-on entities.
-# The occupancy, maintain, illuminance and schedule sensors are MoLight virtual
-# sensors (integration=DOMAIN). Schedule sensors have no suitable device_class, so
-# their picker is built dynamically below from MoLight schedule config entries.
+# The occupancy, maintain occupancy, illuminance and schedule sensors are
+# MoLight virtual sensors (integration=DOMAIN). Schedule sensors have no suitable
+# device_class, so their picker is built dynamically below from MoLight schedule
+# config entries.
 # The door sensor is a plain real contact sensor or cover, so its picker is
 # not restricted to MoLight, only to door-ish device classes.
 # Keep-on entities can be anything with an on/off state, so that picker is
-# narrowed only to the domains in HOLD_ENTITY_DOMAINS.
+# narrowed only to the domains in KEEP_ON_ENTITY_DOMAINS.
 _LIGHT_REF_SELECTORS = {
     CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
         integration=DOMAIN,
@@ -631,7 +632,7 @@ _LIGHT_REF_SELECTORS = {
         multiple=False,
     ),
     CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(
-        filter={"domain": _HOLD_ENTITY_DOMAINS}, multiple=True
+        filter={"domain": _KEEP_ON_ENTITY_DOMAINS}, multiple=True
     ),
 }
 
@@ -686,7 +687,7 @@ def _effective_occupancy_timeout(
     return None
 
 
-def _molight_occupancy_entity_ids(hass: HomeAssistant) -> list[str]:
+def _molight_occupancy_sensor_ids(hass: HomeAssistant) -> list[str]:
     """Entity IDs created by MoLight occupancy and combined-occupancy entries."""
     registry = er.async_get(hass)
     entity_ids: list[str] = []
@@ -720,8 +721,8 @@ def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
     )
 
 
-def _molight_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | None:
-    """Return the MoLight entity type backing an entity, if any."""
+def _virtual_entity_type(hass: HomeAssistant, entity_id: str | None) -> str | None:
+    """Return the virtual entity type backing an entity, if any."""
     if not entity_id:
         return None
     reg_entry = _registry_entry(hass, entity_id)
@@ -780,7 +781,7 @@ def _schedule_entity_is_allowed(
     """Return whether a schedule sensor is valid or legacy."""
     if not entity_id:
         return True
-    entity_type = _molight_entity_type(hass, entity_id)
+    entity_type = _virtual_entity_type(hass, entity_id)
     return entity_type in _SCHEDULE_ENTITY_TYPES or (
         entity_id == legacy_entity and entity_type is not None
     )
@@ -790,7 +791,7 @@ def _schedule_source_is_molight_schedule(
     hass: HomeAssistant, entity_id: str | None
 ) -> bool:
     """Return whether an entity is backed by a MoLight schedule entry."""
-    return _molight_entity_type(hass, entity_id) in _SCHEDULE_ENTITY_TYPES
+    return _virtual_entity_type(hass, entity_id) in _SCHEDULE_ENTITY_TYPES
 
 
 def _entry_entity_ids(
@@ -985,8 +986,8 @@ def _validate_light_timeout(
 ) -> dict[str, str]:
     """Check light_timeout >= any occupancy sensor's timeout.
 
-    The maintain entity's latest_occupied_time feeds the turn-off timer the same
-    way the occupancy sensor's does, so both are checked. A blank
+    The maintain occupancy sensor's latest_occupied_time feeds the turn-off timer the
+    same way the occupancy sensor's does, so both are checked. A blank
     timeout runs no timer, so it passes that check but allows no effect or
     warn stage: they only ever warn of a timer off.
     """
@@ -1036,7 +1037,7 @@ def _stale_light_settings(
         members = data.get(CONF_LIGHTS, [])
 
     def _errors(settings: dict[str, Any]) -> dict[str, str]:
-        return _validate_light_timeout(hass, settings) or _validate_hold_entities(
+        return _validate_light_timeout(hass, settings) or _validate_keep_on_entities(
             hass, settings, own_entities, members
         )
 
@@ -1144,7 +1145,7 @@ def _validate_occupancy_source(
     contain.
     """
     source = user_input.get(CONF_OCCUPANCY_SENSOR)
-    if source in _molight_occupancy_entity_ids(hass):
+    if source in _molight_occupancy_sensor_ids(hass):
         return {CONF_OCCUPANCY_SENSOR: "occupancy_source_molight"}
     if source and own and _sensors_depend_on(hass, [source], own):
         return {CONF_OCCUPANCY_SENSOR: "occupancy_source_cycle"}
@@ -1476,7 +1477,7 @@ def _light_setting_fields(
     with_schedule: bool = True,
     with_standby: bool = False,
     legacy_schedule: str | None = None,
-    hold_exclusions: Sequence[str] = (),
+    keep_on_exclusions: Sequence[str] = (),
 ) -> dict:
     """Sectioned settings of a virtual light.
 
@@ -1553,7 +1554,7 @@ def _light_setting_fields(
             vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
                 {
                     **_LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES],
-                    "exclude_entities": list(hold_exclusions),
+                    "exclude_entities": list(keep_on_exclusions),
                 }
             ),
         }
@@ -2042,7 +2043,7 @@ def _picker_exclusions(
     return [entity_id for entity_id in exclusions if entity_id not in (stored or ())]
 
 
-def _hold_picker_exclusions(
+def _keep_on_picker_exclusions(
     hass: HomeAssistant, own_entities: Sequence[str], members: Sequence[str]
 ) -> list[str]:
     """Entities that would hold the light whenever it is lit."""
@@ -2052,19 +2053,21 @@ def _hold_picker_exclusions(
     )
 
 
-def _validate_hold_entities(
+def _validate_keep_on_entities(
     hass: HomeAssistant,
     settings: dict[str, Any],
     own_entities: Sequence[str],
     members: Sequence[str],
 ) -> dict[str, str]:
     """Reject keep-on entities that are on whenever the light is, or never on."""
-    holds = settings.get(CONF_HOLD_ENTITIES) or []
-    if set(holds) & _lights_lit_with(hass, own_entities, members, holds).union(
-        own_entities
-    ):
+    keep_on_entities = settings.get(CONF_HOLD_ENTITIES) or []
+    if set(keep_on_entities) & _lights_lit_with(
+        hass, own_entities, members, keep_on_entities
+    ).union(own_entities):
         return {"base": "hold_entity_own"}
-    if any(split_entity_id(e)[0] not in _HOLD_ENTITY_DOMAINS for e in holds):
+    if any(
+        split_entity_id(e)[0] not in _KEEP_ON_ENTITY_DOMAINS for e in keep_on_entities
+    ):
         return {"base": "hold_entity_never_on"}
     return {}
 
@@ -2143,7 +2146,7 @@ class _ScheduledLightSettingsSteps:
         """Return what a settings set's form starts from before anything was entered."""
         raise NotImplementedError
 
-    def _hold_exclusions(self) -> list[str]:
+    def _keep_on_exclusions(self) -> list[str]:
         """Entities the light itself provides, which can't keep it on."""
         return []
 
@@ -2179,10 +2182,10 @@ class _ScheduledLightSettingsSteps:
                 (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
             )
             errors.update(
-                _validate_hold_entities(
+                _validate_keep_on_entities(
                     self.hass,
                     flat,
-                    self._hold_exclusions(),
+                    self._keep_on_exclusions(),
                     (self._scheduled_light_shared or {}).get(CONF_LIGHTS, []),
                 )
             )
@@ -2220,10 +2223,10 @@ class _ScheduledLightSettingsSteps:
                         self.hass,
                         with_schedule=False,
                         with_standby=settings_set == CONF_INSIDE_SCHEDULE_SETTINGS,
-                        hold_exclusions=_picker_exclusions(
-                            _hold_picker_exclusions(
+                        keep_on_exclusions=_picker_exclusions(
+                            _keep_on_picker_exclusions(
                                 self.hass,
-                                self._hold_exclusions(),
+                                self._keep_on_exclusions(),
                                 (self._scheduled_light_shared or {}).get(
                                     CONF_LIGHTS, []
                                 ),
@@ -3032,7 +3035,7 @@ class MoLightConfigFlow(
             errors.update(_validate_stage_transitions(flat))
             errors.update(_validate_colors(flat))
             errors.update(
-                _validate_hold_entities(
+                _validate_keep_on_entities(
                     self.hass,
                     flat,
                     self._discovery_light_ids(),
@@ -3612,7 +3615,7 @@ class MoLightConfigFlow(
                 if result is not None:
                     return result
 
-        source_exclusions = _molight_occupancy_entity_ids(self.hass)
+        source_exclusions = _molight_occupancy_sensor_ids(self.hass)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME): str,
@@ -3975,7 +3978,7 @@ class MoLightConfigFlow(
         """Configure a regular Virtual Light.
 
         Constraint: light_timeout >= occupancy_timeout of any referenced
-        occupancy entity (enforced here and in the options flow).
+        occupancy sensor (enforced here and in the options flow).
         """
         errors: dict[str, str] = {}
 
@@ -3988,7 +3991,7 @@ class MoLightConfigFlow(
                 errors.update(_validate_match_schedule_after_restart(flat))
             errors.update(_validate_name(flat))
             errors.update(
-                _validate_hold_entities(
+                _validate_keep_on_entities(
                     self.hass,
                     flat,
                     self._new_light_ids(flat),
@@ -4192,7 +4195,7 @@ class MoLightConfigFlow(
             return self._scheduled_light_settings[CONF_OUTSIDE_SCHEDULE_SETTINGS]
         return None
 
-    def _hold_exclusions(self) -> list[str]:
+    def _keep_on_exclusions(self) -> list[str]:
         """Return the new light's own entity ID, from the shared first form."""
         return self._new_light_ids(self._scheduled_light_shared or {})
 
@@ -4210,7 +4213,7 @@ class MoLightConfigFlow(
                     settings_set, None, {"base": "reference_removed"}
                 )
         settings_set, errors = _stale_light_settings(
-            self.hass, data, self._hold_exclusions()
+            self.hass, data, self._keep_on_exclusions()
         )
         if errors:
             # An occupancy timeout or keep-on group changed while a later page was open.
@@ -4278,12 +4281,12 @@ class MoLightConfigFlow(
 
 
 # ---------------------------------------------------------------------------
-# Options flow: edit an existing MoLight entity
+# Options flow: edit an existing virtual entity
 # ---------------------------------------------------------------------------
 
 
 class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlow):
-    """Allow editing a MoLight entity's settings after creation."""
+    """Allow editing a virtual entity's settings after creation."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         """Initialize the options flow for the given entry."""
@@ -4309,7 +4312,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             CONF_SCHEDULE_DEFINITION, SCHEDULE_DEFINITION_TIME
         )
 
-    def _hold_exclusions(self) -> list[str]:
+    def _keep_on_exclusions(self) -> list[str]:
         """Entities the light itself provides, which can't keep it on."""
         return _own_entity_ids(self.hass, self._entry)
 
@@ -4370,7 +4373,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         if errors := _stale_light_settings(
             self.hass,
             {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **data},
-            self._hold_exclusions(),
+            self._keep_on_exclusions(),
         )[1]:
             return self._show_light_form(_nest_light(data), errors)
         return self._finish(data)
@@ -4423,7 +4426,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     return self._finish(flat)
 
         cfg = self._cfg
-        source_exclusions = _molight_occupancy_entity_ids(self.hass)
+        source_exclusions = _molight_occupancy_sensor_ids(self.hass)
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,
@@ -4757,8 +4760,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 elif _groups_with_virtual_lights(self.hass, flat[CONF_LIGHTS]):
                     errors[CONF_LIGHTS] = "light_group_virtual"
             errors.update(
-                _validate_hold_entities(
-                    self.hass, flat, self._hold_exclusions(), flat.get(CONF_LIGHTS, [])
+                _validate_keep_on_entities(
+                    self.hass,
+                    flat,
+                    self._keep_on_exclusions(),
+                    flat.get(CONF_LIGHTS, []),
                 )
             )
             errors.update(_validate_name(flat))
@@ -4820,9 +4826,11 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 **_light_setting_fields(
                     self.hass,
                     legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY),
-                    hold_exclusions=_picker_exclusions(
-                        _hold_picker_exclusions(
-                            self.hass, self._hold_exclusions(), cfg.get(CONF_LIGHTS, [])
+                    keep_on_exclusions=_picker_exclusions(
+                        _keep_on_picker_exclusions(
+                            self.hass,
+                            self._keep_on_exclusions(),
+                            cfg.get(CONF_LIGHTS, []),
                         ),
                         cfg.get(CONF_HOLD_ENTITIES),
                     ),
@@ -4852,7 +4860,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors := _stale_light_settings(
                     self.hass,
                     {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, **flat},
-                    self._hold_exclusions(),
+                    self._keep_on_exclusions(),
                 )[1]
             ):
                 # An occupancy timeout or keep-on group changed with this step open.
@@ -4964,7 +4972,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         settings_set, errors = _stale_light_settings(
             self.hass,
             {CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT, **data},
-            self._hold_exclusions(),
+            self._keep_on_exclusions(),
         )
         if errors:
             # An occupancy timeout or keep-on group changed while a later page was open.

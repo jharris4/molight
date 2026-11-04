@@ -8,7 +8,7 @@ already on, the light must adopt it as OCCUPIED; otherwise a timer finishes
 despite presence and the steady-on sensor produces no event that could ever
 rescue the light. Adoption is gated like a turn-on (bright or outside a
 gate-mode window suppress it), except that bright in illuminance Gate only mode
-only gates an off light; the maintain entity stays ungated.
+only gates an off light; the maintain occupancy sensor stays ungated.
 """
 
 from __future__ import annotations
@@ -448,16 +448,16 @@ async def test_gate_switch_end_keeps_occupancy_holding_a_bright_light(
 
 
 MAINT = "binary_sensor.maint"
-HOLD = "input_boolean.keep_on"
+KEEP_ON = "input_boolean.keep_on"
 SWITCH = "switch.matrix_light_auto_off"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fresh", ["door", "auto_off", "keep_on", "reload", "turn_on"])
-@pytest.mark.parametrize("pulse", ["occupancy", "maintain"])
+@pytest.mark.parametrize("blip", ["occupancy", "maintain"])
 @pytest.mark.parametrize("warned", [False, True])
-async def test_false_pulse_does_not_shorten_a_fresh_timer(
-    hass: HomeAssistant, freezer, fresh: str, pulse: str, warned: bool
+async def test_false_detection_does_not_shorten_a_fresh_timer(
+    hass: HomeAssistant, freezer, fresh: str, blip: str, warned: bool
 ) -> None:
     """A fresh timer, as a hold releasing or the door closing starts,
     outlives a false detection: the sensors' old latest_occupied_time is no
@@ -468,13 +468,13 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
     hass.states.async_set(OCC, "off", sensor_attrs)
     hass.states.async_set(MAINT, "off", sensor_attrs)
     hass.states.async_set(DOOR, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     entry = make_light_entry(
         occupancy=OCC,
         maintain=MAINT,
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
-        hold_entities=[HOLD],
+        keep_on_entities=[KEEP_ON],
         timeout=60,
         false_off_delay=5,
         warn_timeout=10 if warned else None,
@@ -503,7 +503,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
     if fresh == "auto_off":
         await switch("turn_off")
     elif fresh == "keep_on":
-        hass.states.async_set(HOLD, "on")
+        hass.states.async_set(KEEP_ON, "on")
         await settle(hass)
     await _tick(hass, freezer, 70 if fresh not in ("reload", "turn_on") else 40)
     assert _state(hass).state == "on"
@@ -512,7 +512,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
     elif fresh == "auto_off":
         await switch("turn_on")
     elif fresh == "keep_on":
-        hass.states.async_set(HOLD, "off")
+        hass.states.async_set(KEEP_ON, "off")
     elif fresh == "reload":
         assert await hass.config_entries.async_reload(entry.entry_id)
     else:
@@ -520,7 +520,7 @@ async def test_false_pulse_does_not_shorten_a_fresh_timer(
     await settle(hass)
 
     await _tick(hass, freezer, 1)
-    sensor = OCC if pulse == "occupancy" else MAINT
+    sensor = OCC if blip == "occupancy" else MAINT
     hass.states.async_set(sensor, "on", sensor_attrs)
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED

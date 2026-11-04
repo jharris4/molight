@@ -1,6 +1,6 @@
-"""Tests for a virtual light's maintain occupancy entity.
+"""Tests for a virtual light's maintain occupancy sensor.
 
-The maintain entity holds an already-on light on while it is on; it never
+The maintain occupancy sensor holds an already-on light on while it is on; it never
 turns the light on. Unlike the combined sensor's maintain_sensors (which only
 extend occupancy started by a trigger sensor), it holds the light regardless
 of how it was lit: virtual, physical, or occupancy. The watched sensors are
@@ -41,7 +41,7 @@ OCC = "binary_sensor.occ"
 MAINT = "binary_sensor.maint"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
-HOLD = "input_boolean.hold"
+KEEP_ON = "input_boolean.keep_on"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
@@ -210,7 +210,7 @@ async def test_maintain_clear_held_by_occupancy(hass: HomeAssistant) -> None:
 async def test_maintain_clear_timer_anchors_to_latest_occupied_time(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The turn-off timer after a maintain clear honors the maintain entity's
+    """The turn-off timer after a maintain clear honors the maintain occupancy sensor's
     latest_occupied_time (base + remaining, here 60 - 30 = 30s)."""
     entry = make_light_entry(maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
@@ -279,8 +279,8 @@ async def test_timer_anchors_to_the_later_of_occupancy_and_maintain(
 async def test_no_off_delay_when_maintain_clear_genuine(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A false occupancy clear followed by a genuine maintain clear runs the
-    turn-off timer: the maintain sensor saw a genuine detection."""
+    """A false-detection occupancy clear followed by a genuine maintain clear runs the
+    turn-off timer: the maintain occupancy sensor saw a genuine detection."""
     entry = make_light_entry(occupancy=OCC, maintain=MAINT, timeout=60)
     hass.states.async_set(MAINT, "off")
     await setup_entries(hass, entry)
@@ -439,21 +439,21 @@ async def test_scheduled_ignores_maintain(hass: HomeAssistant) -> None:
 async def test_hold_release_respects_maintain(hass: HomeAssistant, freezer) -> None:
     """Releasing an auto-off hold with maintain on keeps the light OCCUPIED
     without arming a timer."""
-    entry = make_light_entry(maintain=MAINT, hold_entities=[HOLD], timeout=60)
+    entry = make_light_entry(maintain=MAINT, keep_on_entities=[KEEP_ON], timeout=60)
     hass.states.async_set(MAINT, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(hass, entry)
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await hass.async_block_till_done()
 
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
     hass.states.async_set(MAINT, "on")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
@@ -496,7 +496,8 @@ async def test_same_entity_as_occupancy_and_maintain(
 async def test_illuminance_turn_back_on_adopted_by_maintain(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Turning back on when dark while the maintain entity is on is held, not timed."""
+    """Turning back on when dark while the maintain occupancy sensor is on is held, not
+    timed."""
     entry = make_light_entry(maintain=MAINT, illuminance=ILLUM)
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(MAINT, "off")
@@ -514,7 +515,7 @@ async def test_illuminance_turn_back_on_adopted_by_maintain(
     assert _state(hass).state == "off"  # maintain never turns lights on
 
     # Dark again with time left on the original on-period: the light turned
-    # on again is adopted by the maintain entity instead of running the timer.
+    # on again is adopted by the maintain occupancy sensor instead of running the timer.
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass)
     hass.states.async_set(ILLUM, "off")
@@ -536,8 +537,10 @@ async def test_illuminance_turn_back_on_adopted_by_maintain(
 
 
 @pytest.mark.asyncio
-async def test_timer_with_absent_maintain_entity(hass: HomeAssistant, freezer) -> None:
-    """A maintain entity with no state yet doesn't break the timer math."""
+async def test_timer_with_absent_maintain_occupancy_sensor(
+    hass: HomeAssistant, freezer
+) -> None:
+    """A maintain occupancy sensor with no state yet doesn't break the timer math."""
     await setup_entries(hass, make_light_entry(occupancy=OCC, maintain=MAINT))
     hass.states.async_set(OCC, "on")
     await settle(hass)
@@ -552,10 +555,10 @@ async def test_timer_with_absent_maintain_entity(hass: HomeAssistant, freezer) -
 
 
 @pytest.mark.asyncio
-async def test_maintain_only_false_clear_gets_turn_off_timer(
+async def test_maintain_only_false_detection_clear_gets_turn_off_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """With no occupancy sensor a false-flagged maintain clear still
+    """With no occupancy sensor a false-detection maintain clear still
     earns the turn-off timer: the off delay only cuts short occupancy-lit
     lights, and without an occupancy sensor no light is ever occupancy-lit."""
     entry = make_light_entry(maintain=MAINT, timeout=60)
@@ -585,7 +588,7 @@ async def test_maintain_clear_defers_to_occupancy_while_bright_in_gate_only_mode
     hass: HomeAssistant, freezer
 ) -> None:
     """Bright in illuminance Gate only mode does not keep occupancy from holding an
-    on light, so the maintain entity clearing over it starts no timer."""
+    on light, so the maintain occupancy sensor clearing over it starts no timer."""
     hass.states.async_set(ILLUM, "on")  # bright
     hass.states.async_set(OCC, "on")
     hass.states.async_set(MAINT, "on")
@@ -616,7 +619,7 @@ async def test_maintain_clear_ignores_gated_occupancy(
     hass: HomeAssistant, freezer, gate: str
 ) -> None:
     """Occupancy that a gate keeps from holding the light cannot hold it
-    after the maintain entity clears: the turn-off timer starts."""
+    after the maintain occupancy sensor clears: the turn-off timer starts."""
     if gate == "bright":
         entry = make_light_entry(
             occupancy=OCC, maintain=MAINT, illuminance=ILLUM, timeout=10

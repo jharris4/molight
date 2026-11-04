@@ -55,8 +55,8 @@ OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
-HOLD = "input_boolean.guest_mode"
-HOLD2 = "input_boolean.party_mode"
+KEEP_ON = "input_boolean.guest_mode"
+KEEP_ON_2 = "input_boolean.party_mode"
 MAINT = "binary_sensor.maint"
 VIRTUAL = "light.matrix_light"
 SWITCH = "switch.matrix_light_auto_off"
@@ -174,23 +174,23 @@ async def test_switch_non_off_restore_defaults_to_enabled(
 
 
 @pytest.mark.asyncio
-async def test_hold_entity_holds_and_release_restarts_timer(
+async def test_keep_on_entity_holds_and_release_restarts_timer(
     hass: HomeAssistant, freezer
 ) -> None:
     """A keep-on entity going on suspends the timer; off starts a fresh one."""
-    hass.states.async_set(HOLD, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
+    hass.states.async_set(KEEP_ON, "off")
+    await setup_entries(hass, make_light_entry(keep_on_entities=[KEEP_ON]))
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is True
 
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is False
     await _tick(hass, freezer, 59)
@@ -200,11 +200,11 @@ async def test_hold_entity_holds_and_release_restarts_timer(
 
 
 @pytest.mark.asyncio
-async def test_hold_entity_on_at_startup(hass: HomeAssistant, freezer) -> None:
+async def test_keep_on_entity_on_at_startup(hass: HomeAssistant, freezer) -> None:
     """A keep-on entity already on when the light seeds holds from the start."""
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set("light.real_1", "on")
-    await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
+    await setup_entries(hass, make_light_entry(keep_on_entities=[KEEP_ON]))
     await settle(hass)
 
     assert _state(hass).attributes["auto_off_held"] is True
@@ -215,17 +215,17 @@ async def test_hold_entity_on_at_startup(hass: HomeAssistant, freezer) -> None:
 @pytest.mark.asyncio
 async def test_all_holds_must_release(hass: HomeAssistant, freezer) -> None:
     """Auto-off resumes only when the switch is on and every entity is off."""
-    hass.states.async_set(HOLD, "off")
-    hass.states.async_set(HOLD2, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[HOLD, HOLD2]))
+    hass.states.async_set(KEEP_ON, "off")
+    hass.states.async_set(KEEP_ON_2, "off")
+    await setup_entries(hass, make_light_entry(keep_on_entities=[KEEP_ON, KEEP_ON_2]))
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
-    hass.states.async_set(HOLD, "on")
-    hass.states.async_set(HOLD2, "on")
+    hass.states.async_set(KEEP_ON, "on")
+    hass.states.async_set(KEEP_ON_2, "on")
     await _switch(hass, on=False)
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is True
     await _switch(hass, on=True)
@@ -233,7 +233,7 @@ async def test_all_holds_must_release(hass: HomeAssistant, freezer) -> None:
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    hass.states.async_set(HOLD2, "off")
+    hass.states.async_set(KEEP_ON_2, "off")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is False
     await _tick(hass, freezer, 61)
@@ -241,25 +241,25 @@ async def test_all_holds_must_release(hass: HomeAssistant, freezer) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hold_entity_unavailable_keeps_last_value(
+async def test_keep_on_entity_unavailable_keeps_last_value(
     hass: HomeAssistant, freezer
 ) -> None:
     """A keep-on entity dropping to unavailable keeps holding."""
-    hass.states.async_set(HOLD, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
+    hass.states.async_set(KEEP_ON, "off")
+    await setup_entries(hass, make_light_entry(keep_on_entities=[KEEP_ON]))
 
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
-    hass.states.async_set(HOLD, "unavailable")
+    hass.states.async_set(KEEP_ON, "unavailable")
     await settle(hass)
 
     assert _state(hass).attributes["auto_off_held"] is True
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     await _tick(hass, freezer, 61)
     assert _state(hass).state == "off"
@@ -457,7 +457,7 @@ async def test_release_into_brightness_while_maintained_resumes_until_they_left(
 
 
 @pytest.mark.asyncio
-async def test_bright_sensor_that_is_also_a_hold_keeps_the_light_on(
+async def test_bright_sensor_that_is_also_a_keep_on_entity_keeps_the_light_on(
     hass: HomeAssistant, freezer
 ) -> None:
     """A sensor that is both the light's illuminance sensor and a keep-on entity holds
@@ -468,7 +468,7 @@ async def test_bright_sensor_that_is_also_a_hold_keeps_the_light_on(
         make_light_entry(
             illuminance=ILLUM,
             illuminance_mode=ILLUMINANCE_MODE_CONTROL,
-            hold_entities=[ILLUM],
+            keep_on_entities=[ILLUM],
         ),
     )
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -526,11 +526,13 @@ async def _hold_through_window_end(hass: HomeAssistant) -> None:
     """Light lit by a follow window whose schedule end off the Auto-off switch left
     pending."""
     hass.states.async_set(SCHED, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(
         hass,
         make_light_entry(
-            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            keep_on_entities=[KEEP_ON],
         ),
     )
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -547,9 +549,9 @@ async def _assert_on_period_survives_a_hold_cycle(hass: HomeAssistant) -> None:
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -611,11 +613,13 @@ async def test_window_end_while_held_with_light_off_drops_the_window(
 ) -> None:
     """A hold leaves a schedule end off pending only for a light that is still on."""
     hass.states.async_set(SCHED, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(
         hass,
         make_light_entry(
-            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            keep_on_entities=[KEEP_ON],
         ),
     )
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
@@ -713,7 +717,7 @@ async def _hold(hass: HomeAssistant, hold: str, *, on: bool) -> None:
     if hold == "switch":
         await _switch(hass, on=not on)
     else:
-        hass.states.async_set(HOLD, "on" if on else "off")
+        hass.states.async_set(KEEP_ON, "on" if on else "off")
         await settle(hass)
 
 
@@ -721,9 +725,9 @@ async def _hold_through_gate_end(hass: HomeAssistant, hold: str):
     """A light turned on manually in a Gate and turn off window that ended
     while held."""
     hass.states.async_set(SCHED, "on")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     entry = make_light_entry(
-        schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, hold_entities=[HOLD]
+        schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE, keep_on_entities=[KEEP_ON]
     )
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -760,10 +764,12 @@ async def test_release_outside_a_gate_window_runs_a_fresh_timer(
     """Turned on manually outside a gate-mode window: no window ended while
     held, so the release starts a fresh timer."""
     hass.states.async_set(SCHED, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(
         hass,
-        make_light_entry(schedule=SCHED, schedule_mode=mode, hold_entities=[HOLD]),
+        make_light_entry(
+            schedule=SCHED, schedule_mode=mode, keep_on_entities=[KEEP_ON]
+        ),
     )
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
@@ -849,7 +855,7 @@ async def test_restart_after_the_hold_released_applies_a_held_gate_end(
     hass.states.async_set(REAL, "on")
     await settle(hass)
     await restore_state.async_get(hass).async_dump_states()
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     calls = record_service_calls(hass)
     await crash_entries(hass, entry)
     await settle(hass)
@@ -902,14 +908,14 @@ async def test_gate_switch_end_into_bright_control_respects_a_hold(
     control mode keeps it on; releasing the hold applies the brightness."""
     hass.states.async_set(SCHED, "on")
     hass.states.async_set(ILLUM, "on")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await setup_entries(
         hass,
         make_light_entry(
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_GATE_SWITCH,
             illuminance=ILLUM,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await hass.services.async_call(
@@ -922,7 +928,7 @@ async def test_gate_switch_end_into_bright_control_respects_a_hold(
     assert light_targets(calls, "turn_off") == []
     assert _state(hass).state == "on"
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
@@ -964,11 +970,13 @@ async def test_startup_hold_keeps_missed_window_end_marker(
     )
     hass.states.async_set("light.real_1", "on")
     hass.states.async_set(SCHED, "off")  # the window ended during downtime
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await setup_entries(
         hass,
         make_light_entry(
-            schedule=SCHED, schedule_mode=SCHEDULE_MODE_FOLLOW, hold_entities=[HOLD]
+            schedule=SCHED,
+            schedule_mode=SCHEDULE_MODE_FOLLOW,
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await settle(hass)
@@ -979,7 +987,7 @@ async def test_startup_hold_keeps_missed_window_end_marker(
     assert state.attributes["schedule_window_start"] == MARKER
 
     # Releasing the hold applies the missed window end.
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     state = _state(hass)
     assert state.state == "off"
@@ -1050,12 +1058,12 @@ async def test_hold_engaged_as_timer_finishes(hass: HomeAssistant, freezer) -> N
     hold before acting. Driven white-box because the ordering can't be
     arranged deterministically through the event loop.
     """
-    await setup_entries(hass, make_light_entry(hold_entities=[HOLD]))
+    await setup_entries(hass, make_light_entry(keep_on_entities=[KEEP_ON]))
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
 
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
     assert _state(hass).attributes["auto_off_held"] is True
 
@@ -1082,7 +1090,7 @@ _ALWAYS = "is on whenever this light is"
 _NEVER = "never reads on"
 
 
-def _rejected_holds(caplog: pytest.LogCaptureFixture) -> list[tuple]:
+def _rejected_keep_on_entities(caplog: pytest.LogCaptureFixture) -> list[tuple]:
     """The (light, keep-on entity, reason) of each rejected keep-on warning."""
     return [
         record.args
@@ -1099,23 +1107,23 @@ async def test_load_warns_about_keep_on_entities_the_form_now_rejects(
     """Each is named once, with why it never acts as a keep-on entity."""
     hass.states.async_set(REAL, "off")
     hass.states.async_set("light.downstairs", "off", {"entity_id": [REAL, "light.x"]})
-    hass.states.async_set("group.room", "off", {"entity_id": [REAL, HOLD]})
+    hass.states.async_set("group.room", "off", {"entity_id": [REAL, KEEP_ON]})
     outer = make_light_entry(name="Outer", lights=[VIRTUAL])
-    holds = [
+    keep_on_entities = [
         REAL,
         "light.downstairs",
         "group.room",
         "light.outer",
         "media_player.tv",
-        HOLD,
+        KEEP_ON,
     ]
     # At startup every entry has loaded before the lights start watching.
     await setup_entries(
-        hass, outer, make_light_entry(lights=[REAL], hold_entities=holds)
+        hass, outer, make_light_entry(lights=[REAL], keep_on_entities=keep_on_entities)
     )
     await settle(hass)
 
-    assert _rejected_holds(caplog) == [
+    assert _rejected_keep_on_entities(caplog) == [
         (VIRTUAL, REAL, _ALWAYS),
         (VIRTUAL, "light.downstairs", _ALWAYS),
         (VIRTUAL, "group.room", _ALWAYS),
@@ -1131,10 +1139,12 @@ async def test_load_warns_once_for_a_keep_on_entity_in_both_settings_sets(
 ) -> None:
     """A Virtual Scheduled Light checks both settings sets, naming each entity once."""
     hass.states.async_set(REAL, "off")
-    hold = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
+    keep_on = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
     await setup_entries(
-        hass, make_scheduled_light_entry(lights=[REAL], outside=hold, inside=hold)
+        hass, make_scheduled_light_entry(lights=[REAL], outside=keep_on, inside=keep_on)
     )
     await settle(hass)
 
-    assert _rejected_holds(caplog) == [("light.scheduled_light", "person.alex", _NEVER)]
+    assert _rejected_keep_on_entities(caplog) == [
+        ("light.scheduled_light", "person.alex", _NEVER)
+    ]

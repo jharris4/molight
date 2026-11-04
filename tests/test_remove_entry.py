@@ -1,4 +1,4 @@
-"""Config-entry removal (teardown) tests for every MoLight virtual device type.
+"""Config-entry removal (teardown) tests for every MoLight virtual entity type.
 
 Removing an entry unloads its entities, firing every async_on_remove cleanup.
 These tests pin that teardown down for each device type: the entry unloads,
@@ -234,7 +234,7 @@ async def _remove_and_assert_clean(
     ],
 )
 async def test_remove_entry_is_clean(hass: HomeAssistant, caplog, make_entry) -> None:
-    """Each virtual device type removes cleanly once HA is running."""
+    """Each virtual entity type removes cleanly once HA is running."""
     entry = make_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -361,7 +361,7 @@ async def test_remove_entry_removes_references_from_surviving_entries(
         occupancy="binary_sensor.rm_occupancy",
         schedule="binary_sensor.rm_schedule",
         schedule_mode=SCHEDULE_MODE_GATE,
-        hold_entities=["binary_sensor.rm_occupancy", "input_boolean.guest"],
+        keep_on_entities=["binary_sensor.rm_occupancy", "input_boolean.guest"],
     )
     for entry in (occupancy, schedule, combined, light):
         entry.add_to_hass(hass)

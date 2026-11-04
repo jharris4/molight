@@ -164,7 +164,7 @@ _LIGHT_REFERENCES = {
     CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.maintain",
     CONF_ILLUMINANCE_ENTITY: "binary_sensor.bright",
     CONF_DOOR_ENTITY: "binary_sensor.door",
-    CONF_HOLD_ENTITIES: ["switch.hold_a", "switch.hold_b"],
+    CONF_HOLD_ENTITIES: ["switch.keep_on_a", "switch.keep_on_b"],
     CONF_TURN_ON_SELECT_ENTITY: "select.target",
     CONF_TURN_ON_SELECT_OPTION: "Cozy",
     CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.source",
@@ -189,7 +189,7 @@ _REFERENCING_SETTINGS = {
             CONF_LIGHT_TIMEOUT: 60,
             **_LIGHT_REFERENCES,
             CONF_DOOR_ENTITY: "binary_sensor.inner_door",
-            CONF_HOLD_ENTITIES: ["switch.hold_b", "switch.hold_c"],
+            CONF_HOLD_ENTITIES: ["switch.keep_on_b", "switch.keep_on_c"],
         },
     },
     "occupancy": {
@@ -460,11 +460,11 @@ async def test_keep_on_entity_with_changed_entity_id_keeps_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
     """A hold is kept through its entity ID change and released under the new one."""
-    hold = RealToggle("guest_mode", on=True)
+    keep_on = RealToggle("guest_mode", on=True)
     member = RealLight("real_1")
-    await add_real(hass, hold, member)
+    await add_real(hass, keep_on, member)
     await setup_entries(
-        hass, make_light_entry(hold_entities=["switch.guest_mode"], timeout=60)
+        hass, make_light_entry(keep_on_entities=["switch.guest_mode"], timeout=60)
     )
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
@@ -477,7 +477,7 @@ async def test_keep_on_entity_with_changed_entity_id_keeps_holding(
     await tick(hass, freezer, 3600)
     assert hass.states.get(VIRTUAL).state == "on"
 
-    hold.set(False)
+    keep_on.set(False)
     await settle(hass)
     assert attrs(hass)["auto_off_held"] is False
     await tick(hass, freezer, 61)
@@ -517,10 +517,11 @@ async def test_door_with_changed_entity_id_keeps_holding_and_closing(
     assert hass.states.get(VIRTUAL).state == "off"
 
 
-async def test_maintain_and_illuminance_sensors_keep_their_roles_on_new_entity_ids(
+async def test_maintain_occupancy_and_illuminance_sensors_keep_roles_on_new_entity_ids(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """The maintain sensor still holds and the illuminance sensor still gates."""
+    """The maintain occupancy sensor still holds and the illuminance sensor still
+    gates."""
     motion = RealBinary("motion")
     lux = RealLux("lux", 500)
     member = RealLight("real_1")
@@ -553,7 +554,7 @@ async def test_maintain_and_illuminance_sensors_keep_their_roles_on_new_entity_i
     motion.set(True)
     await settle(hass)
     assert hass.states.get(VIRTUAL).state == "off"
-    # Dark: it does, and the maintain sensor holds the light.
+    # Dark: it does, and the maintain occupancy sensor holds the light.
     lux.set(1)
     await settle(hass)
     assert attrs(hass)["molight_state"] == "occupied"
@@ -1212,7 +1213,9 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
     registry = er.async_get(hass)
     old, new = f"{domain}.original", f"{domain}.new_id"
     registry.async_get_or_create(domain, "test", "a", suggested_object_id="original")
-    keeper = make_light_entry(name="Keeper", lights=["light.lamp"], hold_entities=[old])
+    keeper = make_light_entry(
+        name="Keeper", lights=["light.lamp"], keep_on_entities=[old]
+    )
     wrapper = make_light_entry(name="Wrapper", lights=["light.bulb"])
     await setup_entries(hass, keeper, *([wrapper] if saved_by == "options" else []))
     registry.async_update_entity(old, new_entity_id=new)
@@ -1288,7 +1291,7 @@ async def test_timeout_check_and_removal_follow_a_sensor_whose_entity_id_changed
 
 
 # ---------------------------------------------------------------------------
-# MoLight entities whose entity ID changes
+# Virtual entities and Auto-off switches whose entity ID changes
 # ---------------------------------------------------------------------------
 
 SWITCH = "switch.matrix_light_auto_off"

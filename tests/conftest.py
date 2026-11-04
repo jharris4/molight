@@ -160,7 +160,7 @@ def make_light_entry(
     match_schedule_after_restart: str | None = None,
     door: str | None = None,
     door_mode: str | None = None,
-    hold_entities: list[str] | None = None,
+    keep_on_entities: list[str] | None = None,
     auto_on_brightness: int | None = None,
     auto_on_color_temp: int | None = None,
     auto_on_rgb_color: list[int] | None = None,
@@ -214,8 +214,8 @@ def make_light_entry(
         data[CONF_DOOR_ENTITY] = door
     if door_mode:
         data[CONF_DOOR_MODE] = door_mode
-    if hold_entities:
-        data[CONF_HOLD_ENTITIES] = hold_entities
+    if keep_on_entities:
+        data[CONF_HOLD_ENTITIES] = keep_on_entities
     if auto_on_brightness is not None:
         data[CONF_AUTO_ON_BRIGHTNESS] = auto_on_brightness
     if auto_on_color_temp is not None:

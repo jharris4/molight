@@ -83,7 +83,7 @@ echo "Stopping across a Virtual Scheduled Light's turn_off window end..."
 downtime
 compose run --rm runner python runner.py end-restart-verify maintain-restart-prepare
 
-echo "Restarting with a light held by its maintain sensor..."
+echo "Restarting with a light held by its maintain occupancy sensor..."
 compose restart homeassistant
 compose run --rm runner python runner.py maintain-restart-verify door-restart-prepare
 

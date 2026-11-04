@@ -86,7 +86,7 @@ SCHED = "binary_sensor.sched"
 REAL = "light.real_1"
 REAL2 = "light.real_2"
 VIRTUAL = "light.matrix_light"
-HOLD = "input_boolean.hold"
+KEEP_ON = "input_boolean.keep_on"
 MARKER = "2026-07-02T21:00:00+00:00"
 
 
@@ -1788,20 +1788,20 @@ async def test_follow_schedule_outage_is_not_window_end_on_hold_release(
 ) -> None:
     """Releasing an auto-off hold during an outage keeps the applied window."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await setup_entries(
         hass,
         make_light_entry(
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
 
     hass.states.async_set(SCHED, "unavailable")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_SCHEDULED
@@ -1816,14 +1816,14 @@ async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
     the off came while the schedule was unavailable: a later virtual on is not
     turned off when the hold releases."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(REAL, "off")
     await setup_entries(
         hass,
         make_light_entry(
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await settle(hass)
@@ -1850,7 +1850,7 @@ async def test_manual_off_during_outage_forgets_a_window_that_ended_under_hold(
     )
     hass.states.async_set(REAL, "on")
     await settle(hass)
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -1864,20 +1864,20 @@ async def test_gate_and_turn_off_outage_does_not_force_off_on_hold_release(
     """An unavailable Gate and turn off schedule blocks new starts without forcing an
     on light off."""
     hass.states.async_set(SCHED, "on")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await setup_entries(
         hass,
         make_light_entry(
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_GATE,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     hass.states.async_set(REAL, "on")
     await settle(hass)
 
     hass.states.async_set(SCHED, "unavailable")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_ACTIVE
@@ -2498,14 +2498,14 @@ async def test_follow_member_recovery_outside_window_respects_hold(
     """A held light is not turned off by a member reboot outside the window."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "off")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(REAL, "off")
     await setup_entries(
         hass,
         make_light_entry(
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
     )
     await hass.services.async_call(
@@ -2633,10 +2633,10 @@ async def test_bright_control_ends_an_on_period_held_through_a_reload(
 ) -> None:
     """Hold release during an illuminance reload still reads the room bright."""
     hass.states.async_set(LUX, "1000")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(REAL, "off")
     daylight = _daylight_entry()
-    light = make_light_entry(illuminance=DAYLIGHT, hold_entities=[HOLD])
+    light = make_light_entry(illuminance=DAYLIGHT, keep_on_entities=[KEEP_ON])
     await setup_entries(hass, daylight, light)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
@@ -2646,7 +2646,7 @@ async def test_bright_control_ends_an_on_period_held_through_a_reload(
 
     assert await hass.config_entries.async_unload(daylight.entry_id)
     await settle(hass)
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "off"
 
@@ -2671,7 +2671,8 @@ def _virtual_occupancy_entry() -> MockConfigEntry:
 async def _held_room_loses_sensor(
     hass: HomeAssistant, role: str, how: str
 ) -> MockConfigEntry:
-    """Light a room held by occupancy and maintain sensors, then make one unreadable.
+    """Light a room held by occupancy and maintain occupancy sensors, then make one
+    unreadable.
 
     The door is open and a keep-on entity holds too. Returns the entry of
     the unreadable sensor, a real Virtual Occupancy Sensor.
@@ -2679,12 +2680,12 @@ async def _held_room_loses_sensor(
     hass.states.async_set(MOTION, "on")
     hass.states.async_set(OCC, "on")
     hass.states.async_set(DOOR, "on")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(REAL, "off")
     sensor = _virtual_occupancy_entry()
     roles = {"occupancy": OCC, "maintain": OCC, role: VIRTUAL_OCC}
     light = make_light_entry(
-        **roles, door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, hold_entities=[HOLD]
+        **roles, door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, keep_on_entities=[KEEP_ON]
     )
     await setup_entries(hass, sensor, light)
     await settle(hass)
@@ -2701,7 +2702,7 @@ async def _held_room_loses_sensor(
 
 async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
     """Clear every hold but the unreadable sensor's and wait past the timeout."""
-    for entity_id in (OCC, DOOR, HOLD):
+    for entity_id in (OCC, DOOR, KEEP_ON):
         hass.states.async_set(entity_id, "off")
         await settle(hass)
         assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -2717,7 +2718,8 @@ async def _release_other_holds(hass: HomeAssistant, freezer) -> None:
 async def test_unreadable_sensor_keeps_its_hold_while_other_holds_release(
     hass: HomeAssistant, freezer, role: str, how: str, back: str
 ) -> None:
-    """An occupancy or maintain sensor that reloads or goes unavailable keeps its hold.
+    """An occupancy or maintain occupancy sensor that reloads or goes unavailable
+    keeps its hold.
 
     The other of the two sensors clearing, the door closing and a keep-on entity
     releasing meanwhile start no timer; what the sensor reports when it
@@ -2808,7 +2810,7 @@ async def _occupied_room_loses_gate(
     """Hold a schedule-gated room by occupancy, maintain, door and keep-on; drop the
     gate."""
     hass.states.async_set(WINDOW_SOURCE, window)
-    for entity_id in (OCC, "binary_sensor.maintain", DOOR, HOLD):
+    for entity_id in (OCC, "binary_sensor.maintain", DOOR, KEEP_ON):
         hass.states.async_set(entity_id, "on")
     hass.states.async_set(REAL, "off")
     schedule = _window_entry()
@@ -2817,7 +2819,7 @@ async def _occupied_room_loses_gate(
         maintain="binary_sensor.maintain",
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
-        hold_entities=[HOLD],
+        keep_on_entities=[KEEP_ON],
         schedule=WINDOW,
         schedule_mode=mode,
     )
@@ -2855,7 +2857,7 @@ async def test_gate_outage_keeps_the_hold_of_an_occupied_room(
     the window that returns finds the room still lit.
     """
     schedule = await _occupied_room_loses_gate(hass, mode, how)
-    for entity_id in ("binary_sensor.maintain", DOOR, HOLD):
+    for entity_id in ("binary_sensor.maintain", DOOR, KEEP_ON):
         hass.states.async_set(entity_id, "off")
         await settle(hass)
         assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
@@ -2883,7 +2885,7 @@ async def test_gate_window_that_ended_during_its_outage_turns_the_room_off(
     """A Gate and turn off schedule back off is a real window end, whoever is in the
     room."""
     await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert _state(hass).state == "on"
 
@@ -2902,7 +2904,7 @@ async def test_gate_outage_outside_the_window_keeps_occupancy_gated(
     """Last known outside its window, an unreadable Gate and turn off schedule still
     gates."""
     await _occupied_room_loses_gate(hass, SCHEDULE_MODE_GATE, "source", window="off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     hass.states.async_set(DOOR, "off")
     await settle(hass)
     hass.states.async_set("binary_sensor.maintain", "off")

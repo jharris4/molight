@@ -373,20 +373,22 @@ async def test_dark_edge_resumes_after_bright_off_at_hold_release(
 ) -> None:
     """A hold release while bright resumes the timer that it would have started."""
     hass.states.async_set(ILLUM, "off")  # dark
-    hass.states.async_set("input_boolean.hold", "off")
-    entry = make_light_entry(illuminance=ILLUM, hold_entities=["input_boolean.hold"])
+    hass.states.async_set("input_boolean.keep_on", "off")
+    entry = make_light_entry(
+        illuminance=ILLUM, keep_on_entities=["input_boolean.keep_on"]
+    )
     await setup_entries(hass, entry)
 
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
     )
-    hass.states.async_set("input_boolean.hold", "on")
+    hass.states.async_set("input_boolean.keep_on", "on")
     await settle(hass)
     hass.states.async_set(ILLUM, "on")
     await settle(hass)
     assert _state(hass).state == "on"  # held
     await _tick(hass, freezer, held_for)
-    hass.states.async_set("input_boolean.hold", "off")
+    hass.states.async_set("input_boolean.keep_on", "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_IDLE
     assert _state(hass).attributes["bright_forced_off"] is True
@@ -755,7 +757,7 @@ async def test_dark_edge_resumes_the_timer_a_hold_release_started(
 
     async def _hold(held: bool) -> None:
         if hold == "keep_on_entity":
-            hass.states.async_set(HOLD, "on" if held else "off")
+            hass.states.async_set(KEEP_ON, "on" if held else "off")
         else:
             await hass.services.async_call(
                 "switch", "turn_off" if held else "turn_on", {"entity_id": SWITCH}
@@ -764,9 +766,9 @@ async def test_dark_edge_resumes_the_timer_a_hold_release_started(
 
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     _real_light_reports(hass)
-    entry = make_light_entry(illuminance=ILLUM, hold_entities=[HOLD])
+    entry = make_light_entry(illuminance=ILLUM, keep_on_entities=[KEEP_ON])
     await setup_entries(hass, entry)
     await _turn_on_by(hass, "virtual")
     await _hold(True)
@@ -788,10 +790,10 @@ async def test_dark_edge_resumes_the_timer_a_hold_release_started(
 
 
 @pytest.mark.asyncio
-async def test_dark_edge_resumes_a_maintain_sensors_timer(
+async def test_dark_edge_resumes_a_maintain_occupancy_sensors_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The timer a maintain sensor's clear started is resumed like any."""
+    """The timer a maintain occupancy sensor's clear started is resumed like any."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(MAINT, "off")
     hass.states.async_set(REAL, "off")
@@ -935,7 +937,7 @@ async def test_dark_edge_resume_lasts_until_a_timeout_after_a_later_visit(
 
 DOOR = "binary_sensor.door"
 MAINT = "binary_sensor.maint"
-HOLD = "input_boolean.hold"
+KEEP_ON = "input_boolean.keep_on"
 SWITCH = "switch.matrix_light_auto_off"
 LAST_ON_KEYS = (
     "last_on_physical",
@@ -1855,7 +1857,7 @@ async def test_occupancy_adopts_manual_light(hass: HomeAssistant, freezer) -> No
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hold", ["occupancy", "maintain"])
 @pytest.mark.parametrize("turn_on", ["virtual", "physical", "door"])
-async def test_false_clear_keeps_the_timer_of_the_users_turn_on(
+async def test_false_detection_clear_keeps_the_timer_of_the_users_turn_on(
     hass: HomeAssistant, freezer, turn_on: str, hold: str
 ) -> None:
     """A false detection must not time the user's light from an earlier visit."""
@@ -1901,10 +1903,10 @@ async def test_false_clear_keeps_the_timer_of_the_users_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["brightness", "color"])
-async def test_false_clear_keeps_the_timer_of_a_change_at_the_wall(
+async def test_false_detection_clear_keeps_the_timer_of_a_change_at_the_wall(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """A dim or recolor at the wall restarts the timer; false motion keeps it."""
+    """A dim or recolor at the wall restarts the timer; a false detection keeps it."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     attrs = {"brightness": 100, "hs_color": (10.0, 50.0)}
     hass.states.async_set(REAL, "off")
@@ -1941,7 +1943,7 @@ async def test_false_clear_keeps_the_timer_of_a_change_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hold", ["occupancy", "maintain"])
 @pytest.mark.parametrize("change", ["brightness", "color", "second_light"])
-async def test_false_clear_leaves_a_light_changed_at_the_wall_its_timer(
+async def test_false_detection_clear_leaves_a_light_changed_at_the_wall_its_timer(
     hass: HomeAssistant, freezer, change: str, hold: str
 ) -> None:
     """A dim, recolor or turn-on at the wall while motion has the light on
@@ -2127,11 +2129,11 @@ async def test_false_off_delay_never_outlasts_the_turn_off_timeout(
 
 
 @pytest.mark.asyncio
-async def test_false_clear_after_genuine_maintain_presence_keeps_its_timer(
+async def test_false_detection_clear_after_genuine_maintain_presence_keeps_its_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A blip lights the room, the maintain sensor then sees someone for
-    real: the blip's false clear no longer owns the light."""
+    """A blip lights the room, the maintain occupancy sensor then sees someone for
+    real: the blip's false-detection clear no longer owns the light."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     _real_light_reports(hass)
     hass.states.async_set(REAL, "off")
@@ -2162,10 +2164,13 @@ async def test_false_clear_after_genuine_maintain_presence_keeps_its_timer(
 async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timer(
     hass: HomeAssistant, freezer, when: str, door_mode: str
 ) -> None:
-    """A door opened while a blip has the light on is a person: a false clear
+    """A door opened while a blip has the light on is a person: a false-detection clear
     then runs the full timeout from the opening, not the off delay."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
-    false_clear = {"latest_occupied_time": old, "last_clear_false_detection": True}
+    false_detection_clear = {
+        "latest_occupied_time": old,
+        "last_clear_false_detection": True,
+    }
     _real_light_reports(hass)
     hass.states.async_set(REAL, "off")
     hass.states.async_set(OCC, "off", {"latest_occupied_time": old})
@@ -2178,7 +2183,7 @@ async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timer(
 
     if when == "countdown":
         freezer.tick(timedelta(seconds=31))
-        hass.states.async_set(OCC, "off", false_clear)  # off delay armed
+        hass.states.async_set(OCC, "off", false_detection_clear)  # off delay armed
         await settle(hass)
         freezer.tick(timedelta(seconds=2))  # T0+33
     else:
@@ -2194,7 +2199,8 @@ async def test_door_opened_after_a_false_blip_lit_the_light_keeps_its_timer(
         assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
     freezer.tick(timedelta(seconds=31 if when == "countdown" else 21))
-    hass.states.async_set(OCC, "off", false_clear)  # door opened 38 / 21 s ago
+    # Door opened 38 / 21 s ago.
+    hass.states.async_set(OCC, "off", false_detection_clear)
     await settle(hass)
     await _assert_resumed_for(hass, freezer, 22 if when == "countdown" else 39)
 

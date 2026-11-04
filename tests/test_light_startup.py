@@ -464,7 +464,7 @@ async def test_nested_follow_light_applies_a_missed_end_in_either_order(
 # ---------------------------------------------------------------------------
 
 REAL2 = "light.real_2"
-HOLD = "input_boolean.keep_on"
+KEEP_ON = "input_boolean.keep_on"
 RED = (0.0, 100.0)
 
 # How a member unreadable when the light seeds can look.
@@ -493,11 +493,11 @@ def _end_entry(mode: str, members: list[str], *, hold: bool = False):
             lights=members,
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=[HOLD] if hold else None,
+            keep_on_entities=[KEEP_ON] if hold else None,
         )
     settings = {CONF_LIGHT_TIMEOUT: 60}
     if hold:
-        settings[CONF_HOLD_ENTITIES] = [HOLD]
+        settings[CONF_HOLD_ENTITIES] = [KEEP_ON]
     return make_scheduled_light_entry(
         name="Matrix Light",
         lights=members,
@@ -514,7 +514,7 @@ async def _lit_in_window(
     """Set the light up inside its window with every member on."""
     real = _Members(hass, members, {})
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await setup_entries(hass, entry)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL}, blocking=True
@@ -537,7 +537,7 @@ async def _restart_across_end(
     await restart_entries(hass, entry, started=False)
     hass.states.async_set(SCHED, "off")
     if hold:
-        hass.states.async_set(HOLD, "on")
+        hass.states.async_set(KEEP_ON, "on")
     for member, how in boots.items():
         real.boot(member, how)
     calls = record_service_calls(hass)
@@ -653,7 +653,7 @@ async def test_held_missed_end_adopts_an_unreadable_member_until_release(
     )
     assert _end_owed(hass, mode)
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert light_targets(calls, "turn_off") == [[REAL]]
     assert _state(hass).state == "off"
@@ -675,7 +675,7 @@ async def test_held_missed_end_is_dropped_when_the_unreadable_member_is_off(
     await settle(hass)
     assert not _end_owed(hass, mode)
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert light_targets(calls, "turn_off") == []
     assert _state(hass).state == "off"
@@ -1136,7 +1136,7 @@ async def _restart_then_turn_on(
     await restart_entries(hass, entry, started=False)
     hass.states.async_set(SCHED, "off")
     if hold:
-        hass.states.async_set(HOLD, "on")
+        hass.states.async_set(KEEP_ON, "on")
     real.boot(REAL, boot)
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}, blocking=True
@@ -1213,7 +1213,7 @@ async def test_turn_on_before_the_seed_replaces_a_missed_end_under_a_hold(
     assert _state(hass).state == "on"
     assert not _end_owed(hass, mode)
 
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
     assert light_targets(calls, "turn_off") == []
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE

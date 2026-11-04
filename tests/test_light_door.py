@@ -8,7 +8,7 @@ occupancy. door_mode then decides what the door state does afterwards:
                 otherwise ignored (a momentary trigger, closing does nothing).
   Open & close: the open door holds the light on (OCCUPIED, no timer) while it
                 stays open; closing starts the turn-off timer, deferring to any
-                occupied occupancy/maintain sensor or keep-on hold.
+                occupied occupancy/maintain occupancy sensor or auto-off hold.
 
 The watched entities are plain states set via hass.states.async_set; the
 light only reads their state, so these stay independent of the real
@@ -50,7 +50,7 @@ OCC = "binary_sensor.occ"
 MAINT = "binary_sensor.maint"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
-HOLD = "input_boolean.guest"
+KEEP_ON = "input_boolean.guest"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 MARKER = "2026-07-02T21:00:00+00:00"
@@ -327,12 +327,12 @@ async def test_open_close_occupancy_clear_defers_to_open_door(
 
 
 @pytest.mark.asyncio
-async def test_open_close_close_defers_to_hold_entity(hass: HomeAssistant) -> None:
-    """A keep-on hold suspends the closing door's turn-off."""
+async def test_open_close_close_defers_to_auto_off_hold(hass: HomeAssistant) -> None:
+    """An auto-off hold suspends the closing door's turn-off."""
     entry = make_light_entry(
-        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, hold_entities=[HOLD]
+        door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, keep_on_entities=[KEEP_ON]
     )
-    hass.states.async_set(HOLD, "on")  # auto-off held
+    hass.states.async_set(KEEP_ON, "on")  # auto-off held
     await setup_entries(hass, entry)
 
     hass.states.async_set(DOOR, OPEN)

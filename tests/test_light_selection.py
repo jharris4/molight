@@ -1247,14 +1247,14 @@ async def test_held_follow_window_end_keeps_a_waiting_virtual_turn_on(
     select = _SlowSelect(hass)
     select.release.set()  # the window's own turn-on at startup goes through
     hass.states.async_set("binary_sensor.sched", "on", {"current_window_start": "w1"})
-    hass.states.async_set("input_boolean.hold", "on")
+    hass.states.async_set("input_boolean.keep_on", "on")
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
         hass,
         _selection_entry(
             schedule="binary_sensor.sched",
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=["input_boolean.hold"],
+            keep_on_entities=["input_boolean.keep_on"],
         ),
     )
     await settle(hass)
@@ -1280,7 +1280,7 @@ async def test_held_follow_window_end_keeps_a_waiting_virtual_turn_on(
     assert calls == [("turn_on", None)]
     assert hass.states.get("light.selection_light").state == "on"
 
-    hass.states.async_set("input_boolean.hold", "off")
+    hass.states.async_set("input_boolean.keep_on", "off")
     await settle(hass)
     state = hass.states.get("light.selection_light")
     assert calls == [("turn_on", None), ("turn_off", None)]
@@ -1336,11 +1336,13 @@ async def test_hold_released_during_slow_selection_still_starts_the_timer(
     select = _SlowSelect(hass)
     sensor = f"binary_sensor.{trigger}"
     hass.states.async_set(sensor, "off")
-    hass.states.async_set("input_boolean.hold", "on")
+    hass.states.async_set("input_boolean.keep_on", "on")
     hass.states.async_set("light.ambient", "off")
     await setup_entries(
         hass,
-        _selection_entry(hold_entities=["input_boolean.hold"], **{trigger: sensor}),
+        _selection_entry(
+            keep_on_entities=["input_boolean.keep_on"], **{trigger: sensor}
+        ),
     )
     calls = _light_calls(hass)
 
@@ -1350,7 +1352,7 @@ async def test_hold_released_during_slow_selection_still_starts_the_timer(
         # They left again before the light came on: a timer, held.
         hass.states.async_set(sensor, "off")
         await _drain(hass)
-    hass.states.async_set("input_boolean.hold", "off")
+    hass.states.async_set("input_boolean.keep_on", "off")
     await _drain(hass)
     select.release.set()
     await settle(hass)

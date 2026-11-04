@@ -951,7 +951,7 @@ async def test_schedule_pickers_exclude_other_molight_binary_sensors(
 
 
 @pytest.mark.asyncio
-async def test_light_flows_reject_non_schedule_molight_sensor(
+async def test_light_flows_reject_non_schedule_virtual_sensor(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
     """A stale or crafted submission cannot bypass schedule picker filtering."""
@@ -8214,7 +8214,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     assert len(hass.config_entries.async_entries(DOMAIN)) == 3
 
 
-_HOLD_FINAL_PAGES = [
+_KEEP_ON_FINAL_PAGES = [
     "create_selection",
     "create_wrapped_notice",
     "create_collision",
@@ -8232,7 +8232,7 @@ _HOLD_FINAL_PAGES = [
 @pytest.mark.parametrize(
     "edited", ["member", "own_id", None], ids=["group_edited", "own_id", "control"]
 )
-@pytest.mark.parametrize("last_page", _HOLD_FINAL_PAGES)
+@pytest.mark.parametrize("last_page", _KEEP_ON_FINAL_PAGES)
 async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     hass: HomeAssistant, last_page: str, edited: str | None
 ) -> None:
@@ -8258,7 +8258,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     if entry is not None:
         await setup_entries(hass, entry)
         flow = hass.config_entries.options
-    hold = {SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["light.keep"]}}
+    keep_on = {SECTION_SENSORS: {CONF_HOLD_ENTITIES: ["light.keep"]}}
     select = {SECTION_BEHAVIOR: {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}}
     settings_set = {**EMPTY_LIGHT_SECTIONS, CONF_LIGHT_TIMEOUT: 60}
     members = [member, "light.inner"] if "wrapped" in last_page else [member]
@@ -8269,7 +8269,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             result["flow_id"], {CONF_SELECTED_ENTITIES: [member]}
         )
         result = await flow.async_configure(
-            result["flow_id"], {**settings_set, **hold, **select}
+            result["flow_id"], {**settings_set, **keep_on, **select}
         )
     elif scheduled:
         if entry is None:
@@ -8290,7 +8290,9 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
                 CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             },
         )
-        result = await flow.async_configure(result["flow_id"], {**settings_set, **hold})
+        result = await flow.async_configure(
+            result["flow_id"], {**settings_set, **keep_on}
+        )
         assert result["step_id"] == "scheduled_light_inside"
         if not last_page.endswith("inside"):
             inside = {**settings_set, SECTION_STANDBY: {}}
@@ -8308,7 +8310,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             result = await flow.async_init(entry.entry_id)
             page = {}
         page.update(
-            {**settings_set, **hold, CONF_NAME: "Subject", CONF_LIGHTS: members}
+            {**settings_set, **keep_on, CONF_NAME: "Subject", CONF_LIGHTS: members}
         )
         if last_page.endswith("selection"):
             page.update(select)
@@ -9208,7 +9210,7 @@ _SHARED_LIGHT_CASES = {
         },
         {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"},
     ),
-    # A maintain sensor's visits feed the turn-off timer the same way.
+    # A maintain occupancy sensor's visits feed the turn-off timer the same way.
     "maintain_timeout": (
         _ALL_MODES,
         LightEntityFeature.TRANSITION,
@@ -10907,7 +10909,7 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("form", _LIGHT_FORMS)
 @pytest.mark.parametrize(
-    ("hold", "error"),
+    ("keep_on", "error"),
     [
         (SUBJECT_MEMBER, "hold_entity_own"),
         ("group.room", "hold_entity_own"),
@@ -10917,7 +10919,7 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
     ids=["member", "generic_group_with_member", "media_player", "person"],
 )
 async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
-    hass: HomeAssistant, form: str, hold: str, error: str
+    hass: HomeAssistant, form: str, keep_on: str, error: str
 ) -> None:
     """A member, or a group with it, is on whenever the light is; a media
     player never reads on."""
@@ -10930,7 +10932,7 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
         "exclude_entities"
     ]
 
-    if hold in excluded:
+    if keep_on in excluded:
         # Where the members are known by now, the picker leaves them out.
         assert form not in ("create", "discovery")
     else:
@@ -10938,7 +10940,7 @@ async def test_light_forms_reject_keep_on_entities_that_cannot_hold(
             hass,
             form,
             result,
-            {CONF_LIGHT_TIMEOUT: 300, SECTION_SENSORS: {CONF_HOLD_ENTITIES: [hold]}},
+            {CONF_LIGHT_TIMEOUT: 300, SECTION_SENSORS: {CONF_HOLD_ENTITIES: [keep_on]}},
         )
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == step_id
@@ -11094,14 +11096,14 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
     assert {"input_boolean", "switch", "binary_sensor", "light"} <= set(domains)
     assert not {"media_player", "person", "climate"} & set(domains)
 
-    for hold in lit_with:
+    for keep_on in lit_with:
         # Saved before the check existed: the picker still offers what is stored.
         hass.config_entries.async_update_entry(
             hall,
             options={
                 k: v for k, v in entry_settings(hall).items() if k != CONF_ENTITY_TYPE
             }
-            | ({} if scheduled else {CONF_HOLD_ENTITIES: [hold]}),
+            | ({} if scheduled else {CONF_HOLD_ENTITIES: [keep_on]}),
         )
         if scheduled:
             hass.config_entries.async_update_entry(
@@ -11110,7 +11112,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
                     **hall.options,
                     CONF_INSIDE_SCHEDULE_SETTINGS: {
                         CONF_LIGHT_TIMEOUT: 60,
-                        CONF_HOLD_ENTITIES: [hold],
+                        CONF_HOLD_ENTITIES: [keep_on],
                     },
                 },
             )
@@ -11129,7 +11131,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
                 {
                     **EMPTY_INSIDE_LIGHT_SECTIONS,
                     CONF_LIGHT_TIMEOUT: 300,
-                    SECTION_SENSORS: {CONF_HOLD_ENTITIES: [hold]},
+                    SECTION_SENSORS: {CONF_HOLD_ENTITIES: [keep_on]},
                 },
             )
         else:
@@ -11137,9 +11139,9 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
                 hass,
                 opened,
                 ["light.hall_real", "light.inner"],
-                {CONF_HOLD_ENTITIES: [hold]},
+                {CONF_HOLD_ENTITIES: [keep_on]},
             )
-        assert submitted["errors"] == {"base": "hold_entity_own"}, hold
+        assert submitted["errors"] == {"base": "hold_entity_own"}, keep_on
 
 
 # ---------------------------------------------------------------------------

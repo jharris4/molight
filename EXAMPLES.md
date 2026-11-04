@@ -1,6 +1,6 @@
 # MoLight configuration examples
 
-MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios, from the simplest case to the full toolbox.
+MoLight is configured entirely from the UI, so these examples show the actual field values you'd type for common scenarios, from the simplest case to lights that use most of their settings.
 
 ## How to use these examples
 
@@ -14,7 +14,7 @@ The examples build on each other:
 
 1. [Just a turn-off timer](#example-1-just-a-turn-off-timer-the-simplest-case): no sensors at all
 2. [Simple occupancy](#example-2-simple-occupancy-case): one motion sensor
-3. [Living room](#example-3-living-room-the-whole-toolbox): occupancy + maintain + illuminance + an off warning sequence + a turn-on selection
+3. [Living room](#example-3-living-room-most-settings-together): occupancy + maintain + illuminance + an off warning sequence + a turn-on selection
 4. [Porch light](#example-4-porch-light-schedule-follow-mode): a schedule window
 5. [Home-only lighting](#example-5-home-only-lighting-inverted-binary-sensor-schedule): an inverted schedule derived from an away-mode binary sensor
 6. [Stairs night light](#example-6-stairs-night-light-gate-and-keep-state): a schedule that gates motion without cutting a timer short
@@ -76,7 +76,7 @@ Walk in → lights on. Room empties → 60s turn-off timer anchored to when you 
 
 ---
 
-### Example 3: Living room (the whole toolbox)
+### Example 3: Living room (most settings together)
 
 Motion for triggering, an mmWave sensor to *hold* while you sit still, only when it's dark, and an off warning sequence before it drops you into darkness.
 
@@ -428,7 +428,7 @@ With no occupancy sensor in the outside settings, motion does nothing in the day
 - Set the auto-on brightness above the standby brightness. If it's left blank, motion holds the light at standby without brightening it.
 - Switching the back porch off manually turns standby off for the rest of the schedule window, so it stays dark and visitors bring it up to 100% and then back to off. Turning it back on rejoins standby, and the next window starts with standby again.
 - For no standby, clear **Standby brightness** and set the **Standby color mode** field to *None*. The form rejects a standby color without a brightness.
-- See the [reference](REFERENCE.md#standby) for how standby works with illuminance, Auto-off holds, the other **At schedule end** choices, and restarts.
+- See the [reference](REFERENCE.md#standby) for how standby works with illuminance, auto-off holds, the other **At schedule end** choices, and restarts.
 
 ---
 
@@ -469,9 +469,9 @@ Turn-off timeout:  180                         # must be >= 120, the largest con
 Occupancy sensor:  binary_sensor.kitchen_occupancy
 ```
 
-Either PIR starts occupancy; someone sitting at the table keeps it going after both PIRs clear; the turn-off timer starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
+Either PIR starts occupancy; someone sitting at the table extends it after both PIRs clear; the turn-off timer starts once every constituent is clear, anchored to the latest `latest_occupied_time` of the three, so each sensor's occupancy timeout is respected.
 
-Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on manually: a light's maintain sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a manually lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
+Compare Example 3, which puts the mmWave on the light as its **Maintain occupancy sensor** instead. The difference shows for a light turned on manually: a light's maintain occupancy sensor holds it however it was lit, while a combined sensor's maintain sensors only extend occupancy that a trigger sensor started, so here the mmWave alone never keeps a manually lit room on. Use the combined sensor when several lights should share one room's occupancy, or when the room needs more than one trigger.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Virtual binary sensor platform for MoLight.
+"""Binary sensor platform for MoLight.
 
 Provides five sensor types, all created via the config flow:
 
@@ -591,7 +591,7 @@ class VirtualCombinedOccupancySensor(
 ):
     """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
 
-    Trigger sensors start occupancy; maintain sensors keep it alive once started.
+    Trigger sensors start occupancy; maintain sensors extend it once started.
     latest_occupied_time is the max of all constituents' latest_occupied_time
     attributes, propagated whenever a constituent turns off.
 
@@ -2090,7 +2090,7 @@ class _ScheduleTree:
         return node
 
     def _new_node(self, entity_id: str, path: frozenset[str]) -> _ScheduleNode | None:
-        """Expand an input not reached before; None for a loop back into path."""
+        """Expand an input not reached before; None for a reference cycle into path."""
         reg_entry = er.async_get(self.hass).async_get(entity_id)
         entry = (
             self.hass.config_entries.async_get_entry(reg_entry.config_entry_id)
@@ -2106,9 +2106,10 @@ class _ScheduleTree:
         cfg = entry_settings(entry)
         entity_type = cfg[CONF_ENTITY_TYPE]
         if entry.entry_id in path:
-            # The config and options flows reject loops; this guards hand-edited or
-            # concurrently saved entry settings against infinite expansion. Not an
-            # input to track: the root's own updates already reload it.
+            # The config and options flows reject reference cycles; this guards
+            # hand-edited or concurrently saved entry settings against infinite
+            # expansion. Not an input to track: the root's own updates already
+            # reload it.
             _LOGGER.warning(
                 "Combined schedule %s includes itself; treating it as unknown",
                 entity_id,

@@ -43,7 +43,7 @@ async function openAddFlow(page) {
   });
   await expect(visibleText(page, "Do you want to set up MoLight?")).toBeVisible();
   await page.getByRole("button", { name: "OK", exact: true }).click();
-  await expect(visibleText(page, "Add MoLight entities")).toBeVisible();
+  await expect(visibleText(page, "Add virtual entities")).toBeVisible();
 }
 
 async function expectFlowTitle(page, title) {
@@ -311,7 +311,7 @@ test("discover sensors and lights in bulk", async ({ page }) => {
   await submit(page);
   await expectFlowTitle(page, "Occupancy sensor defaults");
   await submit(page);
-  await closeAbort(page, /Created 1 virtual MoLight entit/);
+  await closeAbort(page, /Created 1 virtual entit/);
 
   // Lights: every unwrapped light is offered; the Virtual Scheduled Light's member is not.
   await openAddFlow(page);
@@ -325,7 +325,7 @@ test("discover sensors and lights in bulk", async ({ page }) => {
   await submit(page);
   await expectFlowTitle(page, "Light defaults");
   await submit(page);
-  await closeAbort(page, /Created 5 virtual MoLight entit/);
+  await closeAbort(page, /Created 5 virtual entit/);
   const wrapped = await entityState(page, "light.e2e_timer_target_2");
   expect(wrapped.attributes.friendly_name).toBe("E2E Timer Target");
 });

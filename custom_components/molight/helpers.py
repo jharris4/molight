@@ -562,7 +562,7 @@ def shared_lights(
 
 
 # A keep-on entity holds while it is "on", so only these domains can hold.
-HOLD_ENTITY_DOMAINS = [
+KEEP_ON_ENTITY_DOMAINS = [
     "alert",
     "automation",
     "binary_sensor",

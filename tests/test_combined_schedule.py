@@ -1122,30 +1122,30 @@ async def test_unload_drops_an_input_change_still_waiting_to_be_counted(
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_loop_is_unknown_instead_of_hanging(
+async def test_reference_cycle_is_unknown_instead_of_hanging(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
-    """A loop the config and options flows would reject (e.g. a hand edit) is
+    """A reference cycle the config and options flows would reject (e.g. a hand edit) is
     contained."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
-    loop_a = _combined("Loop A", ["binary_sensor.loop_b"])
-    loop_b = _combined("Loop B", ["binary_sensor.loop_a"])
+    cycle_a = _combined("Cycle A", ["binary_sensor.cycle_b"])
+    cycle_b = _combined("Cycle B", ["binary_sensor.cycle_a"])
     with caplog.at_level(logging.WARNING):
-        await _setup(hass, loop_a, loop_b)
-        assert await hass.config_entries.async_reload(loop_a.entry_id)
+        await _setup(hass, cycle_a, cycle_b)
+        assert await hass.config_entries.async_reload(cycle_a.entry_id)
         await settle(hass)
         # An edit of the root reaches its own entry-change handler too.
         hass.config_entries.async_update_entry(
-            loop_a, options={**entry_settings(loop_a), CONF_NAME: "Loop A2"}
+            cycle_a, options={**entry_settings(cycle_a), CONF_NAME: "Cycle A2"}
         )
         await settle(hass)
 
     assert "includes itself" in caplog.text
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
     for entry, entity_id in (
-        (loop_a, "binary_sensor.loop_a"),
-        (loop_b, "binary_sensor.loop_b"),
+        (cycle_a, "binary_sensor.cycle_a"),
+        (cycle_b, "binary_sensor.cycle_b"),
     ):
         assert molight_issues(hass, entry.entry_id) == {
             f"combined_schedule_cycle_{entity_id}": {
@@ -1153,8 +1153,8 @@ async def test_loop_is_unknown_instead_of_hanging(
                 "loop": entity_id,
             }
         }
-    assert hass.states.get("binary_sensor.loop_a").state == "unavailable"
-    assert hass.states.get("binary_sensor.loop_b").state == "unavailable"
+    assert hass.states.get("binary_sensor.cycle_a").state == "unavailable"
+    assert hass.states.get("binary_sensor.cycle_b").state == "unavailable"
 
 
 @pytest.mark.asyncio

@@ -70,7 +70,7 @@ DOOR = "binary_sensor.door"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
 SCHED_B = "binary_sensor.sched_b"
-HOLD = "input_boolean.keep_on"
+KEEP_ON = "input_boolean.keep_on"
 REAL = "light.real_1"
 VIRTUAL = "light.matrix_light"
 EVENTS = "event.matrix_light_events"
@@ -467,8 +467,8 @@ async def test_manual_off_stands_over_combined_presence_that_loads_late(
 async def test_member_first_seen_off_is_not_a_manual_off(
     hass: HomeAssistant, late: str
 ) -> None:
-    """A member that reports off only after startup was not turned off by
-    hand, so a late occupancy sensor still lights the room."""
+    """A member that reports off only after startup was not turned off
+    manually, so a late occupancy sensor still lights the room."""
     hass.states.async_set(OCC, "unavailable", {"restored": True})
     if late == "placeholder":
         hass.states.async_set(REAL, "unavailable", {"restored": True})
@@ -683,12 +683,12 @@ async def test_restart_missed_window_end_held_with_lights_off_drops_the_window(
     mock_restore_cache(hass, [State(VIRTUAL, "on", {"schedule_window_start": MARKER})])
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "off")
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(OCC, "off")
     entry = make_light_entry(
         schedule=SCHED,
         schedule_mode=SCHEDULE_MODE_FOLLOW,
-        hold_entities=[HOLD],
+        keep_on_entities=[KEEP_ON],
         occupancy=OCC,
     )
     await setup_entries(hass, entry)
@@ -1281,15 +1281,15 @@ async def test_turn_on_while_starting_wins_over_match_outside(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_a_keep_on_hold_keeps_a_light_match_outside_would_turn_off(
+async def test_an_auto_off_hold_keeps_a_light_match_outside_would_turn_off(
     hass: HomeAssistant,
 ) -> None:
     """A hold suspends the restart's turn-off like every automatic turn-off."""
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(REAL, "on")
     calls = record_service_calls(hass)
-    await setup_entries(hass, _match_entry(BOTH, hold_entities=[HOLD]))
+    await setup_entries(hass, _match_entry(BOTH, keep_on_entities=[KEEP_ON]))
     await settle(hass)
 
     assert light_targets(calls, "turn_off") == []

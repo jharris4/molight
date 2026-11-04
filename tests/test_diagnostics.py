@@ -56,7 +56,7 @@ async def test_light_diagnostics_hold_its_settings_entities_and_references(
     hass.states.async_set(PIR, "off")
     occupancy = _occupancy()
     light = make_light_entry(
-        name="Hall", lights=[REAL], occupancy=MOTION, hold_entities=[GUEST]
+        name="Hall", lights=[REAL], occupancy=MOTION, keep_on_entities=[GUEST]
     )
     await setup_entries(hass, occupancy, light)
     await settle(hass)

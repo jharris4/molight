@@ -1532,12 +1532,12 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
             cfg.get("maintain_occupancy_entity") == "binary_sensor.e2e_slow_occupancy"
             and not cfg.get("occupancy_entity")
         ),
-        "assigned the slow occupancy sensor as its maintain sensor only",
+        "assigned the slow occupancy sensor as its maintain occupancy sensor only",
     )
     wait_stored_entry(
         light_b,
         lambda cfg: not cfg.get("maintain_occupancy_entity"),
-        "left without a maintain sensor (timeout check)",
+        "left without a maintain occupancy sensor (timeout check)",
     )
     summary = assign(
         "assign_occupancy",
@@ -1552,7 +1552,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_a,
         lambda cfg: not cfg.get("maintain_occupancy_entity"),
-        "without its maintain sensor",
+        "without its maintain occupancy sensor",
     )
 
     summary = assign(
@@ -1608,7 +1608,7 @@ def set_hold(client: HomeAssistantClient, on: bool) -> None:
     )
 
 
-def run_hold_entity_scenarios(client: HomeAssistantClient) -> None:
+def run_keep_on_entity_scenarios(client: HomeAssistantClient) -> None:
     """A keep-on entity suspends automatic turn-offs; release re-evaluates the rules."""
     entry_id = create_entry(
         client,
@@ -2646,7 +2646,8 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
     for entry_id in (trigger_entry_id, combined_entry_id, light_entry_id):
         assert_entry_loaded(client, entry_id)
 
-    # A maintain sensor alone neither starts occupancy nor turns the light on.
+    # A sensor in both maintain fields alone neither starts occupancy nor turns the
+    # light on.
     set_timer_motion(client, True)
     assert_state_stays(
         client,
@@ -2658,10 +2659,10 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "off",
-        "off: a maintain sensor never turns the light on",
+        "off: a maintain occupancy sensor never turns the light on",
     )
 
-    # The trigger starts both; clearing it leaves the maintain sensor holding.
+    # The trigger starts both; clearing it leaves that sensor holding.
     set_trigger_motion(client, True)
     client.wait_state(COMBINED_OCCUPANCY, lambda state: state["state"] == "on", "on")
     client.wait_state(RAW_MULTI_RGB, lambda state: state["state"] == "on", "on")
@@ -2677,7 +2678,7 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_MULTI_RGB,
         lambda state: state["state"] == "on",
-        "on past the timeout while the maintain sensor holds it",
+        "on past the timeout while the maintain occupancy sensor holds it",
         duration=5,
     )
     wait_machine_state(client, "occupied", MAINTAIN_LIGHT)
@@ -7079,7 +7080,8 @@ def set_source(client: HomeAssistantClient, raw: str, virtual: str, on: bool) ->
 
 
 def run_maintain_scenarios(client: HomeAssistantClient) -> None:
-    """Maintain holds a manually lit light; only both-false clears get the off delay."""
+    """Maintain holds a manually lit light; only false-detection clears from both
+    sensors get the off delay."""
     manual_entry_id = create_entry(
         client,
         "light",
@@ -7104,7 +7106,7 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on past the timeout: the maintain sensor holds a manually lit light",
+        "on past the timeout: the maintain occupancy sensor holds a manually lit light",
         duration=5,
     )
     set_timer_motion(client, False)
@@ -7154,7 +7156,8 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         client,
         GRACE_BOTH_LIGHT,
         lambda state: state["attributes"].get("molight_state") == "occupied",
-        "occupied: the maintain sensor still holds after the trigger's false clear",
+        "occupied: the maintain occupancy sensor still holds after the trigger's "
+        "false-detection clear",
     )
     set_source(client, RAW_REMOVAL_MOTION, GRACE_MAINTAIN, False)
     client.wait_state(
@@ -7201,13 +7204,14 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
     print(
-        "PASS: maintain holds a manual light; only both-false clears get the "
-        "false-detection off delay"
+        "PASS: maintain holds a manual light; only false-detection clears from both "
+        "sensors get the false-detection off delay"
     )
 
 
 def run_maintain_restart_prepare() -> None:
-    """Leave a manually lit light held by its maintain sensor across a restart."""
+    """Leave a manually lit light held by its maintain occupancy sensor across a
+    restart."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -7236,7 +7240,8 @@ def run_maintain_restart_prepare() -> None:
 
 
 def run_maintain_restart_verify() -> None:
-    """A light on with its maintain sensor on at startup is occupied, not timed."""
+    """A light on with its maintain occupancy sensor on at startup is occupied, not
+    timed."""
     client = HomeAssistantClient()
     client.wait_ready()
     client.authenticate()
@@ -7248,7 +7253,7 @@ def run_maintain_restart_verify() -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "occupied"
         ),
-        "restored occupied by the maintain sensor",
+        "restored occupied by the maintain occupancy sensor",
         timeout=WAIT_TIMEOUT,
     )
     assert_state_stays(
@@ -7967,7 +7972,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
-    """Nested combined sensors, their form rejections, and an all-false visit."""
+    """Nested combined sensors, their form rejections, and a false-detection visit."""
     trigger_id = create_grace_occupancy(
         client, "E2E Grace Trigger", RAW_MOTION, "e2e_grace_trigger"
     )
@@ -8027,7 +8032,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
     else:
         expect_rejection(client, result, "combined_occupancy_cycle", options=True)
 
-    # A genuine visit propagates through both levels; an all-false visit is
+    # A genuine visit propagates through both levels; a false-detection visit is
     # flagged on the combined sensors just like on the Virtual Occupancy Sensor.
     set_source(client, RAW_MOTION, GRACE_TRIGGER, True)
     client.wait_state(NEST_INNER, lambda state: state["state"] == "on", "on")
@@ -8056,7 +8061,7 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
                 and state["attributes"].get("last_clear_false_detection") is True
                 and state["attributes"].get("false_detection_count") == 1
             ),
-            "flagging the all-false visit",
+            "flagging the false-detection visit",
         )
     for entry_id, entity_id in (
         (outer_id, NEST_OUTER),
@@ -8064,7 +8069,9 @@ def run_combined_extras_scenarios(client: HomeAssistantClient) -> None:
         (trigger_id, GRACE_TRIGGER),
     ):
         remove_entry_and_entity(client, entry_id, entity_id)
-    print("PASS: nested combined sensors, their rejections, and all-false flagging")
+    print(
+        "PASS: nested combined sensors, their rejections, and false-detection flagging"
+    )
 
 
 def run_combined_restart_prepare() -> None:
@@ -9605,7 +9612,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_schedule_end_action_scenarios,
         run_schedule_mode_scenarios,
         run_combined_and_maintain_scenarios,
-        run_hold_entity_scenarios,
+        run_keep_on_entity_scenarios,
         run_maintain_scenarios,
         run_combined_extras_scenarios,
         run_combined_schedule_scenarios,

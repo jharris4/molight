@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add MoLight entities",
+        "title": "Add virtual entities",
         "description": "Create a virtual entity, discover entities to wrap in bulk, assign one sensor to several lights, or convert existing virtual lights.",
         "menu_options": {
           "create": "Create a single entity",
@@ -23,7 +23,7 @@
       },
       "convert_to_scheduled": {
         "title": "Convert regular Virtual Lights",
-        "description": "Select one or more regular Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain, illuminance or door sensors.",
+        "description": "Select one or more regular Virtual Lights whose Schedule mode is a Gate mode. Each light keeps its own schedule. Its current settings become the inside-schedule settings. The outside-schedule settings keep the light's timing, appearance, warnings, turn-on selection and keep-on entities, but start without occupancy, maintain occupancy, illuminance or door sensors.",
         "data": {
           "convert_lights": "Regular Virtual Lights"
         },
@@ -371,7 +371,7 @@
         },
         "data_description": {
           "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
-          "maintain_sensors": "Optional. Sensors that keep occupancy alive once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
+          "maintain_sensors": "Optional. Sensors that extend occupancy once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         },
         "sections": {
           "advanced": {
@@ -1038,7 +1038,7 @@
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a real occupancy sensor, not an occupancy sensor created by MoLight.",
-      "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
+      "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another virtual sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
@@ -1048,7 +1048,7 @@
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
       "window_never_opens": "This window never opens at your home location: its end comes before its start on every day of the year. To run from a sun event past midnight to a time in the same half of the day (sunrise until 01:00), invert the opposite window (01:00 to sunrise). Also check that Home Assistant's time zone matches its location.",
       "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule Sensor.",
-      "schedule_source_cycle": "This binary sensor is computed from this schedule itself, through a group or another MoLight sensor. Select a source that does not include the schedule.",
+      "schedule_source_cycle": "This binary sensor is computed from this schedule itself, through a group or another virtual sensor. Select a source that does not include the schedule.",
       "combined_occupancy_cycle": "Combined occupancy sensors cannot reference themselves, directly, through another combined sensor, or through an occupancy sensor whose source includes them.",
       "combined_schedule_cycle": "Combined schedules cannot include themselves, directly, through another combined schedule, or through a schedule whose source includes them.",
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
@@ -1101,9 +1101,9 @@
       "hold_entity_never_on": "A keep-on entity holds only while its state is on. A media player, person, climate or other entity whose state is never on would never hold; use an on/off entity such as a switch, input boolean or binary sensor, or wrap it in a template binary sensor."
     },
     "abort": {
-      "no_candidates": "No new entities were found. Everything eligible is already wrapped by a MoLight entity (or is disabled).",
-      "discovery_done": "Created {count} virtual MoLight entities. Edit any of them further via its Configure button.",
-      "discovery_done_skipped": "Created {count} virtual MoLight entities. Skipped {skipped} that MoLight already wraps, or that were disabled or deleted, since you picked them. Edit any of them further via its Configure button.",
+      "no_candidates": "No new entities were found. Everything eligible is already wrapped by a virtual entity (or is disabled).",
+      "discovery_done": "Created {count} virtual entities. Edit any of them further via its Configure button.",
+      "discovery_done_skipped": "Created {count} virtual entities. Skipped {skipped} that MoLight already wraps, or that were disabled or deleted, since you picked them. Edit any of them further via its Configure button.",
       "no_lights": "There are no regular Virtual Lights to assign this sensor to. A Virtual Scheduled Light can't be assigned in bulk, since each of its two settings sets has its own sensors: set them in its Configure form, or create a regular Virtual Light first.",
       "assign_done": "Assigned the sensor to {assigned} light(s) and removed it from {removed}.",
       "assign_done_skipped": "Assigned the sensor to {assigned} light(s) and removed it from {removed}. Skipped (turn-off timeout shorter than the sensor's occupancy timeout): {skipped}.",
@@ -1480,7 +1480,7 @@
         },
         "data_description": {
           "trigger_sensors": "Virtual occupancy sensors that can start occupancy. Any one turning on starts it.",
-          "maintain_sensors": "Optional. Sensors that keep occupancy alive once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
+          "maintain_sensors": "Optional. Sensors that extend occupancy once started but can never start it, e.g. a sensitive mmWave sensor that would false-trigger on its own."
         }
       },
       "illuminance": {
@@ -1838,7 +1838,7 @@
       "schedule_inputs_required": "Select at least one schedule.",
       "occupancy_sensor_role_overlap": "An occupancy sensor cannot be both a trigger sensor and a maintain sensor.",
       "occupancy_source_molight": "Select a real occupancy sensor, not an occupancy sensor created by MoLight.",
-      "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another MoLight sensor. Select a source that does not include the occupancy sensor.",
+      "occupancy_source_cycle": "This sensor is computed from this occupancy sensor itself, through a group or another virtual sensor. Select a source that does not include the occupancy sensor.",
       "name_required": "A name is required.",
       "lights_required": "At least one light is required.",
       "light_timeout_too_short": "The turn-off timeout must be at least the occupancy timeout of the selected occupancy and maintain occupancy sensors.",
@@ -1849,7 +1849,7 @@
       "offset_requires_sun": "A sun offset only shifts a sun event: choose a sun event for that edge, or set its offset to 0.",
       "window_never_opens": "This window never opens at your home location: its end comes before its start on every day of the year. To run from a sun event past midnight to a time in the same half of the day (sunrise until 01:00), invert the opposite window (01:00 to sunrise). Also check that Home Assistant's time zone matches its location.",
       "schedule_source_molight_schedule": "Select a binary sensor that is not a Virtual Schedule Sensor or Virtual Combined Schedule Sensor.",
-      "schedule_source_cycle": "This binary sensor is computed from this schedule itself, through a group or another MoLight sensor. Select a source that does not include the schedule.",
+      "schedule_source_cycle": "This binary sensor is computed from this schedule itself, through a group or another virtual sensor. Select a source that does not include the schedule.",
       "schedule_entity_not_schedule": "Select a Virtual Schedule Sensor or Virtual Combined Schedule Sensor created by MoLight.",
       "match_schedule_after_restart_needs_follow": "Matching the schedule after a restart needs a schedule sensor in Follow mode.",
       "effect_transition_too_long": "The effect transition must not exceed the effect duration (and the effect stage must be enabled).",
@@ -1894,7 +1894,7 @@
   "issues": {
     "combined_schedule_cycle": {
       "title": "{entity} includes itself",
-      "description": "The inputs of {entity} lead back to {loop}, so the combination cannot be resolved and the schedule is unavailable. Remove the schedule that closes the loop from the inputs in Configure."
+      "description": "The inputs of {entity} lead back to {loop}, so the combination cannot be resolved and the schedule is unavailable. Remove the schedule that closes the reference cycle from the inputs in Configure."
     },
     "hold_always_on": {
       "title": "{hold} cannot hold {entity} on",

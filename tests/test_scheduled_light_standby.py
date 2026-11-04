@@ -835,7 +835,7 @@ async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
 
 
 @pytest.mark.asyncio
-async def test_bright_sensor_that_is_also_a_hold_keeps_standby(
+async def test_bright_sensor_that_is_also_a_keep_on_entity_keeps_standby(
     hass: HomeAssistant,
 ) -> None:
     """Going bright holds standby when the illuminance sensor is also a
@@ -927,7 +927,7 @@ async def test_raising_standby_manually_is_held_by_presence_already_there(
 async def test_false_detection_does_not_cut_a_manual_raise_short(
     hass: HomeAssistant, freezer, source: str
 ) -> None:
-    """False motion against an old visit leaves a manual raise its timer."""
+    """A false detection against an old visit leaves a manual raise its timer."""
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     await _setup_porch(hass, _porch())
     await _echo_standby(hass)
@@ -1020,7 +1020,7 @@ async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_finishe
 async def test_maintain_leaves_standby_alone_but_the_door_raises_it(
     hass: HomeAssistant,
 ) -> None:
-    """The maintain sensor never turns a light up; a door opening does."""
+    """The maintain occupancy sensor never turns a light up; a door opening does."""
     maintain = "binary_sensor.porch_presence"
     door = "binary_sensor.front_door"
     hass.states.async_set(maintain, "off")
@@ -1209,25 +1209,25 @@ async def test_timer_while_bright_in_control_mode_ends_in_off(
 async def test_hold_freezes_the_raised_level_and_release_times_back_to_standby(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A keep-on hold stops the drop; releasing it starts a fresh timer."""
-    hold = "input_boolean.guests"
-    hass.states.async_set(hold, "off")
-    calls = await _setup_porch(hass, _porch(inside={CONF_HOLD_ENTITIES: [hold]}))
+    """An auto-off hold stops the drop; releasing it starts a fresh timer."""
+    keep_on = "input_boolean.guests"
+    hass.states.async_set(keep_on, "off")
+    calls = await _setup_porch(hass, _porch(inside={CONF_HOLD_ENTITIES: [keep_on]}))
 
     # Holding and releasing at standby leaves it there, with nothing re-sent.
     sent = len(_light_calls(calls, "turn_on"))
-    await _set(hass, hold, "on")
-    await _set(hass, hold, "off")
+    await _set(hass, keep_on, "on")
+    await _set(hass, keep_on, "off")
     _assert_standby(hass)
     assert len(_light_calls(calls, "turn_on")) == sent
 
-    await _set(hass, hold, "on")
+    await _set(hass, keep_on, "on")
     await _set(hass, OCCUPANCY, "on")
     await _set(hass, OCCUPANCY, "off")
     await _tick(hass, freezer, 120)
     assert _attrs(hass)["brightness"] == BOOST
 
-    await _set(hass, hold, "off")
+    await _set(hass, keep_on, "off")
     assert _attrs(hass)["molight_state"] == STATE_ACTIVE
     await _tick(hass, freezer, 29)
     assert _attrs(hass)["brightness"] == BOOST
@@ -1449,13 +1449,13 @@ async def test_hold_release_after_a_keep_end_starts_a_timer_that_going_dark_resu
     hass: HomeAssistant, freezer
 ) -> None:
     """A hold outlasting the boundary's timer releases into a fresh one."""
-    hold = "input_boolean.guests"
+    keep_on = "input_boolean.guests"
     illuminance = "binary_sensor.yard_bright"
-    hass.states.async_set(hold, "on")
+    hass.states.async_set(keep_on, "on")
     hass.states.async_set(illuminance, "off")
     settings = {
         CONF_LIGHT_TIMEOUT: 60,
-        CONF_HOLD_ENTITIES: [hold],
+        CONF_HOLD_ENTITIES: [keep_on],
         CONF_ILLUMINANCE_ENTITY: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
@@ -1470,7 +1470,7 @@ async def test_hold_release_after_a_keep_end_starts_a_timer_that_going_dark_resu
     await _echo_standby(hass)
     await _set(hass, SCHEDULE, "off")
     await _tick(hass, freezer, 3600)
-    await _set(hass, hold, "off")
+    await _set(hass, keep_on, "off")
     assert hass.states.get(VIRTUAL).state == "on"
 
     await _tick(hass, freezer, 2)
@@ -1491,7 +1491,7 @@ async def test_hold_release_after_a_keep_end_starts_a_timer_that_going_dark_resu
 async def test_maintain_timer_cut_short_by_brightness_resumes_when_dark(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A maintain sensor's timer resumes raised, and still ends at standby."""
+    """A maintain occupancy sensor's timer resumes raised, and still ends at standby."""
     maintain = "binary_sensor.porch_maintain"
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(maintain, "off")
@@ -1539,7 +1539,7 @@ async def test_maintain_timer_cut_short_by_brightness_resumes_when_dark(
 async def test_schedule_end_timer_from_standby_survives_a_false_detection(
     hass: HomeAssistant, freezer
 ) -> None:
-    """False motion against an old visit does not cut the fresh timer short."""
+    """A false detection against an old visit does not cut the fresh timer short."""
     yard = "binary_sensor.yard_occupancy"
     visit = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     hass.states.async_set(yard, "off", {"latest_occupied_time": visit})
@@ -2387,10 +2387,10 @@ async def test_restart_with_the_door_open_raises_standby_only_when_dark(
     """A door opened while down raises restored standby, unless it is bright."""
     door = "binary_sensor.front_door"
     lux = "binary_sensor.bright"
-    hold = "input_boolean.guests"
+    keep_on = "input_boolean.guests"
     hass.states.async_set(door, "on")
     hass.states.async_set(lux, "on" if bright else "off")
-    hass.states.async_set(hold, "on" if held else "off")
+    hass.states.async_set(keep_on, "on" if held else "off")
     mock_restore_cache(
         hass,
         [
@@ -2417,7 +2417,7 @@ async def test_restart_with_the_door_open_raises_standby_only_when_dark(
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
                 CONF_ILLUMINANCE_ENTITY: lux,
                 CONF_ILLUMINANCE_MODE: illuminance,
-                CONF_HOLD_ENTITIES: [hold],
+                CONF_HOLD_ENTITIES: [keep_on],
             }
         ),
     )
@@ -2857,12 +2857,12 @@ async def test_what_the_inside_settings_come_on_at(
 
     Bright blocks a rise, and in control mode keeps standby off unless a hold
     keeps a restored level; occupancy or an open door raise a dark light; the
-    maintain sensor alone never does.
+    maintain occupancy sensor alone never does.
     """
     door = "binary_sensor.front_door"
     maintain = "binary_sensor.porch_maintain"
     illuminance = "binary_sensor.porch_bright"
-    hold = "input_boolean.guests"
+    keep_on = "input_boolean.guests"
     restored = route == "restored"
     hass.states.async_set(REAL, "on" if restored else "off", {"brightness": STANDBY})
     hass.states.async_set(SCHEDULE, "off" if route == "boundary" else "on")
@@ -2871,7 +2871,7 @@ async def test_what_the_inside_settings_come_on_at(
         (door, door_open),
         (maintain, maintained),
         (illuminance, bright),
-        (hold, held),
+        (keep_on, held),
     ):
         hass.states.async_set(entity_id, "on" if on else "off")
     if restored:
@@ -2901,7 +2901,7 @@ async def test_what_the_inside_settings_come_on_at(
                 CONF_ILLUMINANCE_MODE: (
                     ILLUMINANCE_MODE_CONTROL if control else ILLUMINANCE_MODE_GATE
                 ),
-                CONF_HOLD_ENTITIES: [hold],
+                CONF_HOLD_ENTITIES: [keep_on],
             }
         ),
     )
@@ -3028,7 +3028,7 @@ async def test_manual_off_stands_through_a_time_zone_change(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reload", [False, True])
-async def test_false_pulse_keeps_the_timer_a_standby_end_started(
+async def test_false_detection_keeps_the_timer_a_standby_end_started(
     hass: HomeAssistant, freezer, reload: bool
 ) -> None:
     """Keep state gives a light leaving standby a fresh timer. A false

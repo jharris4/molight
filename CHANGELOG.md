@@ -171,7 +171,7 @@ replying late.
 - False detections: a combined sensor keeps its visit's genuine detection
   across a reload and inherits its constituents' `latest_occupied_time`, and a
   light turned on manually or by a door keeps its full timeout.
-- A maintain sensor clearing or a door closing while a bright reading or a gate-mode
+- A maintain occupancy sensor clearing or a door closing while a bright reading or a gate-mode
   schedule window blocks occupancy starts the turn-off timer instead of leaving the
   light on with no timer.
 - Slow and chatty bulbs: late replies, mid-fade colors and clamped color
@@ -280,7 +280,7 @@ longer needs a custom repository.
 - A physical dim during the off warning sequence restores the color the warning
   replaced.
 - Schedules switch in the right order on the night the clocks change.
-- Options flows: clearing a combined sensor's maintain list now sticks, a
+- Options flows: clearing a combined sensor's maintain sensors now sticks, a
   rename reloads the entry once instead of twice, and an entity ID with no
   usable characters is rejected instead of silently dropped.
 - A member light deleted from Home Assistant outright no longer pins its
@@ -394,7 +394,7 @@ Initial release.
 - **Virtual Light**: controls N real lights from an occupancy-, illuminance- and
   schedule-aware state machine (including the illuminance Control and Gate only
   modes and schedule follow-vs-gate modes), with virtual brightness controls, an optional
-  maintain-occupancy sensor, and a companion Auto-off switch for holding
+  maintain occupancy sensor, and a companion Auto-off switch for holding
   automatic turn-offs.
 - State restored across Home Assistant restarts throughout, including timestamps,
   with startup-specific handling for lights, occupancy and illuminance.

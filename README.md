@@ -1,10 +1,10 @@
 # MoLight: Smart virtual light control for Home Assistant
 
-A [HACS](https://hacs.xyz) custom integration that provides composable virtual building blocks for lighting automation: wrap your real sensors and lights in virtual entities, pick what each one references from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
+A [HACS](https://hacs.xyz) custom integration that provides composable virtual entities for lighting automation: wrap your real sensors and lights in them, pick what each one references from the UI, and get occupancy-, daylight-, and schedule-aware lighting without writing a single automation.
 
-Writing these automations by hand is tedious, and the complexity grows fast once you account for real-world behavior: sensors that stay on for different lengths of time after the last motion, sensors that are good at *triggering* occupancy but not *maintaining* it (or vice versa), schedules that mix fixed times with sun events, Home Assistant restarts, and sources that drop to `unavailable` at the worst moment. MoLight handles all of that in a small set of reusable entities.
+Writing these automations by hand is tedious, and the complexity grows fast once you account for real-world behavior: sensors that stay on for different lengths of time after the last motion, sensors that are good at *triggering* occupancy but not *maintaining* it (or vice versa), schedules that mix fixed times with sun events, Home Assistant restarts, and sources that drop to `unavailable` at the worst moment. MoLight handles all of that in a small set of virtual entities.
 
-**The building blocks** (each is its own config entry, so create as many as you like):
+**The virtual entities** (each is its own config entry, so create as many as you like):
 
 | Entity | What it does |
 |---|---|
@@ -23,7 +23,7 @@ Each of these is a *virtual entity*: it stands in front of real devices (sensors
 
 - Lights turn off a configurable time after the person *actually left*: turn-off timers anchor to each sensor's occupancy timeout, not the moment it happens to clear (see [Virtual Occupancy Sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 - Occupancy adopts manually turned-on lights, so they still turn off after the room empties, but false detections (a fly, a heat blip) are classified: a light that only a blip lit goes off after a short false-detection off delay, and a light the user turned on is never cut short (see [State machine](https://github.com/jharris4/molight/blob/main/REFERENCE.md#state-machine)).
-- A light's own [maintain sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on, however the light was lit, even manually.
+- A light's own [maintain occupancy sensor](https://github.com/jharris4/molight/blob/main/REFERENCE.md#maintain-occupancy-sensor), such as an over-sensitive mmWave sensor, holds a lit room while someone sits still but never turns it on, however the light was lit, even manually.
 - Turn-ons can be gated on [darkness](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-illuminance-sensor) and/or a [schedule window](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes); going bright can force lights off (or not, for lux sensors that can see the virtual light's member lights).
 - A schedule can own a light or gate it (see [Schedule modes](https://github.com/jharris4/molight/blob/main/REFERENCE.md#schedule-modes)). **Follow** gives porch-light behavior (on at schedule window start, off at window end) while respecting manual changes mid-window; the three **Gate** modes let motion and the door turn the light on only inside the window, and differ in what the window's end does to a light that is still on.
 - A [Virtual Scheduled Light](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-scheduled-light) switches between two settings sets inside and outside a schedule, optionally staying at a dim [standby](https://github.com/jharris4/molight/blob/main/REFERENCE.md#standby) level instead of turning off.
@@ -63,7 +63,7 @@ Everything is configured from the UI, with no YAML. Adding an entry (the first v
 
 The usual order:
 
-1. Create the virtual **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. Everything downstream depends on it, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
+1. Create the MoLight **sensors** you want lights to react to (all optional): an occupancy sensor per real motion/presence sensor, a combined sensor to merge several, an illuminance sensor, a schedule sensor. When you create an occupancy sensor, take care to set its **occupancy timeout** to match the real sensor's own hold time. Everything downstream depends on it, and MoLight can't read it for you (see [the note in the reference](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-occupancy-sensor)).
 2. Create a **Virtual Light** per room or light group, with the real `light` entities as its member lights, referencing any of the sensors from step 1. Use a **Virtual Scheduled Light** instead when every setting may differ inside and outside a schedule. A virtual light with no sensors is still useful: it turns its lights off on a timer.
 3. Optionally create a **Virtual Remote** entry per remote to drive lights from its buttons (see [Virtual Remote](https://github.com/jharris4/molight/blob/main/REFERENCE.md#virtual-remote)).
 4. Use the virtual light in dashboards and voice assistants instead of the real lights.
@@ -108,7 +108,7 @@ The field only appears when creating. Renaming later works through each entry's 
 
 ### Bulk discovery
 
-The three **Discover** actions scan your existing entities and create a virtual wrapper for each pick:
+The three **Discover** actions scan your existing entities and create a virtual entity for each pick:
 
 - **Discover occupancy sensors**: every `binary_sensor` with device class `occupancy`, `motion`, or `presence`.
 - **Discover lux sensors**: every `sensor` with device class `illuminance`.

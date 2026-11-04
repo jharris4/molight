@@ -59,7 +59,7 @@ CONF_FILTER_LABELS = "filter_labels"
 CONF_PRESELECT_ALL = "preselect_all"
 
 # Multiselect field in the discovery config-flow steps: the real entities the
-# user picked to wrap in virtual MoLight entities (created with defaults).
+# user picked to wrap in virtual entities (created with defaults).
 CONF_SELECTED_ENTITIES = "selected_entities"
 # Optional text prepended/appended to each discovered entity, applied verbatim
 # (so include your own separator, e.g. a trailing/leading space). The affix
@@ -110,7 +110,7 @@ DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT = 60
 # --- Virtual Combined Occupancy Sensor ---
 # trigger_sensors: any one going ON starts occupancy
 CONF_TRIGGER_SENSORS = "trigger_sensors"
-# maintain_sensors: keep occupancy alive once started, but cannot start it
+# maintain_sensors: extend occupancy once started, but cannot start it
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
 # --- Virtual Illuminance Sensor ---
@@ -297,7 +297,7 @@ OCCUPANCY_TURN_ON_CHOICES = [
 ]
 DEFAULT_OCCUPANCY_TURN_ON = OCCUPANCY_TURN_ON_MOLIGHT
 OCCUPANCY_TURN_ON_WAIT = 1.0
-# Maintain occupancy entity: keeps an already-on light on while it is on, but
+# Maintain occupancy sensor: keeps an already-on light on while it is on, but
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
 # light regardless of how it was lit: virtual, physical, or occupancy.
@@ -462,7 +462,7 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 #                  trigger, like a light switch that pops back out.
 #   Open & close:  the open door holds the lights on (no timer) while it stays
 #                  open, and closing starts the turn-off timer, deferring to
-#                  occupancy/keep-on holds (a closed door never cuts the lights
+#                  occupancy/auto-off holds (a closed door never cuts the lights
 #                  over someone the occupancy sensor still sees).
 CONF_DOOR_ENTITY = "door_entity"
 CONF_DOOR_MODE = "door_mode"

@@ -2,7 +2,7 @@
 
 The wrapped light's own on and off start and end the outer light's on-period,
 so they fire there with reason wrapped. Its own look changes fire nothing at
-the outer light, and a person's change on its bulb is still physical.
+the outer light, and a manual change on its bulb is still physical.
 """
 
 from __future__ import annotations

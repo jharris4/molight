@@ -58,7 +58,7 @@ EVENTS = "event.hall_events"
 OCC = "binary_sensor.occ"
 ILLUM = "binary_sensor.illum"
 SCHED = "binary_sensor.sched"
-HOLD = "input_boolean.guest"
+KEEP_ON = "input_boolean.guest"
 MARKER = "2026-01-14T18:00:00+00:00"
 
 
@@ -223,20 +223,20 @@ async def test_window_end_held_by_auto_off_hold_fires_at_release(hass) -> None:
             name="Hall",
             schedule=SCHED,
             schedule_mode=SCHEDULE_MODE_FOLLOW,
-            hold_entities=[HOLD],
+            keep_on_entities=[KEEP_ON],
         ),
         binary_sensor__sched="off",
         input_boolean__guest="off",
     )
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await settle(hass)
-    hass.states.async_set(HOLD, "on")
+    hass.states.async_set(KEEP_ON, "on")
     await settle(hass)
 
     hass.states.async_set(SCHED, "off")
     await settle(hass)
     assert _offs(records) == []
-    hass.states.async_set(HOLD, "off")
+    hass.states.async_set(KEEP_ON, "off")
     await settle(hass)
 
     assert _offs(records) == [_turned_off(REASON_SCHEDULE_END)]

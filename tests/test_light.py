@@ -879,7 +879,7 @@ async def test_false_detection_off_delay_is_configurable(
 async def test_false_detection_never_cuts_manual_lights(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A false clear must not shorten lights the user turned on themselves."""
+    """A false-detection clear must not shorten lights the user turned on themselves."""
     await _setup_entries(hass, _fd_occupancy_entry(), _fd_light_entry())
 
     # User turns the light on; occupancy blips on afterwards.
@@ -890,7 +890,7 @@ async def test_false_detection_never_cuts_manual_lights(
     attrs = hass.states.get("light.fd_light").attributes
     assert attrs["molight_state"] == STATE_OCCUPIED
 
-    # False clear, but occupancy didn't light these lights, so the normal
+    # False-detection clear, but occupancy didn't light these lights, so the normal
     # timer (60s here, lot never advanced) applies, not the 5s off delay.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
@@ -912,7 +912,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     """Occupancy ownership must not survive a force-off into a user on-period.
 
     Regression: the illuminance force-off left the occupancy-ownership flag
-    set, so a later user-initiated on-period could be cut short by a false
+    set, so a later user-initiated on-period could be cut short by a false-detection
     occupancy clear.
     """
     light = MockConfigEntry(
@@ -933,7 +933,7 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     await _settle(hass)
     assert hass.states.get("light.fd_light").state == "on"
 
-    # False-blip clear, then bright forces everything off.
+    # False-detection clear, then bright forces everything off.
     freezer.tick(timedelta(seconds=31))
     hass.states.async_set("binary_sensor.motion_1", "off")
     await _settle(hass)
@@ -948,7 +948,8 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
     hass.states.async_set("sensor.lux_1", "5")
     await _settle(hass)
 
-    # A fresh occupancy blip arrives and false-clears over the user's lights.
+    # A fresh occupancy blip arrives and clears as a false detection over the
+    # user's lights.
     hass.states.async_set("binary_sensor.motion_1", "on")
     await _settle(hass)
     freezer.tick(timedelta(seconds=31))
@@ -1112,7 +1113,7 @@ async def _start_follow_light_with_schedule_unreadable(
     marker: str,
     unreadable: str,
     *,
-    hold: str | None = None,
+    keep_on: str | None = None,
 ) -> None:
     """Start HA with the schedule unavailable, unknown or absent entirely."""
     mock_restore_cache(
@@ -1122,9 +1123,9 @@ async def _start_follow_light_with_schedule_unreadable(
     if unreadable != "absent":
         hass.states.async_set("binary_sensor.night_schedule", unreadable)
     entry = _follow_light_entry()
-    if hold:
+    if keep_on:
         entry = MockConfigEntry(
-            domain=DOMAIN, data={**entry.data, CONF_HOLD_ENTITIES: [hold]}
+            domain=DOMAIN, data={**entry.data, CONF_HOLD_ENTITIES: [keep_on]}
         )
     hass.set_state(CoreState.starting)
     await _setup_entries(hass, entry)
@@ -1227,9 +1228,9 @@ async def test_follow_mode_unreadable_schedule_at_startup_respects_hold(
     the missed off boundary applies when the hold releases."""
     marker = "2026-07-02T21:00:00+00:00"
     hass.states.async_set("light.porch_real", "on", {"brightness": 200})
-    hass.states.async_set("input_boolean.hold", "on")
+    hass.states.async_set("input_boolean.keep_on", "on")
     await _start_follow_light_with_schedule_unreadable(
-        hass, "on", marker, "unavailable", hold="input_boolean.hold"
+        hass, "on", marker, "unavailable", keep_on="input_boolean.keep_on"
     )
     state = hass.states.get("light.porch_light")
     assert state.attributes["molight_state"] == STATE_SCHEDULED
@@ -1240,7 +1241,7 @@ async def test_follow_mode_unreadable_schedule_at_startup_respects_hold(
     assert state.state == "on"
     assert state.attributes["schedule_window_start"] == marker
 
-    hass.states.async_set("input_boolean.hold", "off")
+    hass.states.async_set("input_boolean.keep_on", "off")
     await _settle(hass)
     state = hass.states.get("light.porch_light")
     assert state.state == "off"
@@ -1436,7 +1437,7 @@ def _warn_light_entry(
     warn_timeout: int = 0,
     warn_brightness: int | None = None,
     occupancy: str | None = None,
-    hold_entities: list[str] | None = None,
+    keep_on_entities: list[str] | None = None,
     timeout: int = 60,
 ) -> MockConfigEntry:
     """A virtual light configured with an off warning sequence."""
@@ -1453,8 +1454,8 @@ def _warn_light_entry(
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
     if occupancy:
         data[CONF_OCCUPANCY_ENTITY] = occupancy
-    if hold_entities:
-        data[CONF_HOLD_ENTITIES] = hold_entities
+    if keep_on_entities:
+        data[CONF_HOLD_ENTITIES] = keep_on_entities
     return virtual_light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 
@@ -1663,7 +1664,7 @@ async def test_hold_during_warn_cancels(hass: HomeAssistant, freezer) -> None:
     """Auto-off becoming held during the warn stage cancels the warning, restores
     the brightness, and keeps the light on with no timer."""
     entry = _warn_light_entry(
-        warn_timeout=30, warn_brightness=100, hold_entities=["binary_sensor.keep_on"]
+        warn_timeout=30, warn_brightness=100, keep_on_entities=["binary_sensor.keep_on"]
     )
     entry.add_to_hass(hass)
     hass.states.async_set("binary_sensor.keep_on", "off")

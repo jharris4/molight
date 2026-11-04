@@ -2,7 +2,7 @@
 
 Such an entity leaves the state machine and can never report again. Startup
 counts a missing keep-on entity as not holding, a missing door as closed, a
-missing occupancy or maintain sensor as clear and a missing real light as
+missing occupancy or maintain occupancy sensor as clear and a missing real light as
 not there; the same
 has to hold when the entity goes missing at runtime, or it would keep its
 last known value until the next restart.
@@ -144,7 +144,7 @@ async def test_keep_on_entity_that_goes_missing_stops_holding(
     """A keep-on entity that was on when it left no longer holds the light."""
     await provide(hass, how, RealBinary("input", on=True))
     hass.states.async_set(MEMBER, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[INPUT], timeout=60))
+    await setup_entries(hass, make_light_entry(keep_on_entities=[INPUT], timeout=60))
     await turn_on(hass)
     assert attrs(hass)["auto_off_held"] is True
     await tick(hass, freezer, 3600)
@@ -240,7 +240,8 @@ async def test_first_schedule_reading_while_open_door_awaits_its_reload(
 async def test_sensor_that_goes_missing_counts_as_clear(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, how: str, role: str
 ) -> None:
-    """An occupancy or maintain sensor that left while on stops holding the light.
+    """An occupancy or maintain occupancy sensor that left while on stops holding the
+    light.
 
     The person may still be there, so the light gets a full timeout, as a
     restart would give it.
@@ -294,7 +295,8 @@ async def test_door_back_open_after_going_missing_is_a_first_sighting(
 async def test_sensor_that_remains_keeps_holding_when_another_goes_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
-    """Only the missing sensor stops counting: the maintain sensor still holds."""
+    """Only the missing sensor stops counting: the maintain occupancy sensor still
+    holds."""
     hass.states.async_set(INPUT, "on")
     hass.states.async_set("binary_sensor.desk", "on")
     hass.states.async_set(MEMBER, "off")
@@ -342,7 +344,7 @@ async def test_registered_entity_without_a_state_keeps_its_last_value(
     )
     hass.states.async_set(INPUT, "on")
     hass.states.async_set(MEMBER, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[INPUT], timeout=60))
+    await setup_entries(hass, make_light_entry(keep_on_entities=[INPUT], timeout=60))
     await turn_on(hass)
 
     hass.states.async_remove(INPUT)
@@ -352,7 +354,7 @@ async def test_registered_entity_without_a_state_keeps_its_last_value(
     assert hass.states.get(VIRTUAL).state == "on"
 
 
-@pytest.mark.parametrize("role", ["hold", "door", "occupancy", "maintain"])
+@pytest.mark.parametrize("role", ["keep_on", "door", "occupancy", "maintain"])
 async def test_entity_slow_to_return_after_an_entity_id_change_has_not_gone_missing(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
 ) -> None:
@@ -365,7 +367,7 @@ async def test_entity_slow_to_return_after_an_entity_id_change_has_not_gone_miss
         make_light_entry(
             timeout=60,
             **{
-                "hold": {"hold_entities": [INPUT]},
+                "keep_on": {"keep_on_entities": [INPUT]},
                 "door": {"door": INPUT, "door_mode": DOOR_MODE_OPEN_CLOSE},
                 "occupancy": {"occupancy": INPUT},
                 "maintain": {"maintain": INPUT},
@@ -374,9 +376,9 @@ async def test_entity_slow_to_return_after_an_entity_id_change_has_not_gone_miss
     )
     await settle(hass)
     before = dict(attrs(hass))
-    assert before["auto_off_held"] is (role == "hold")
+    assert before["auto_off_held"] is (role == "keep_on")
     assert before["molight_state"] == (
-        STATE_ACTIVE if role == "hold" else STATE_OCCUPIED
+        STATE_ACTIVE if role == "keep_on" else STATE_OCCUPIED
     )
 
     await start_slow_entity_id_change(hass, sensor, "binary_sensor.new_id")
@@ -755,7 +757,7 @@ async def reload_unregistered(hass: HomeAssistant, freezer, entity_id: str) -> N
     await settle(hass)
 
 
-@pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
+@pytest.mark.parametrize("role", ["occupancy", "maintain", "keep_on", "door"])
 async def test_unregistered_sensor_reloading_keeps_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
 ) -> None:
@@ -765,7 +767,7 @@ async def test_unregistered_sensor_reloading_keeps_holding(
     config = {
         "occupancy": {"occupancy": INPUT},
         "maintain": {"maintain": INPUT},
-        "hold": {"hold_entities": [INPUT]},
+        "keep_on": {"keep_on_entities": [INPUT]},
         "door": {"door": INPUT, "door_mode": DOOR_MODE_OPEN_CLOSE},
     }[role]
     await setup_entries(hass, make_light_entry(**config, timeout=60))
@@ -813,7 +815,7 @@ async def test_unregistered_entity_removed_again_is_judged_once(
     """Reloads leave nothing behind, and a removal that stays is judged once."""
     hass.states.async_set(INPUT, "on")
     hass.states.async_set(MEMBER, "off")
-    await setup_entries(hass, make_light_entry(hold_entities=[INPUT], timeout=60))
+    await setup_entries(hass, make_light_entry(keep_on_entities=[INPUT], timeout=60))
     await turn_on(hass)
     light = hass.data["entity_components"]["light"].get_entity(VIRTUAL)
     cleanups = len(light._on_remove)
@@ -833,7 +835,7 @@ async def test_unregistered_entity_removed_again_is_judged_once(
     await expect_fresh_timer(hass, freezer)
 
 
-@pytest.mark.parametrize("role", ["occupancy", "maintain", "hold", "door"])
+@pytest.mark.parametrize("role", ["occupancy", "maintain", "keep_on", "door"])
 async def test_sensor_whose_entry_is_disabled_stops_holding(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant, role: str
 ) -> None:
@@ -856,14 +858,16 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
     )
     presence = "binary_sensor.room_occupancy"
     reference = {
-        "hold": {"hold_entities": [presence]},
+        "keep_on": {"keep_on_entities": [presence]},
         "door": {"door": presence, "door_mode": DOOR_MODE_OPEN_CLOSE},
     }.get(role, {role: presence})
     await setup_entries(hass, sensor, make_light_entry(**reference, timeout=60))
     await settle(hass)
     held = dict(attrs(hass))
-    assert held["auto_off_held"] is (role == "hold")
-    assert held["molight_state"] == (STATE_ACTIVE if role == "hold" else STATE_OCCUPIED)
+    assert held["auto_off_held"] is (role == "keep_on")
+    assert held["molight_state"] == (
+        STATE_ACTIVE if role == "keep_on" else STATE_OCCUPIED
+    )
 
     await hass.config_entries.async_unload(sensor.entry_id)
     await settle(hass)
