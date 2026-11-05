@@ -908,9 +908,9 @@ async def test_false_detection_never_cuts_manual_lights(
 async def test_stale_occupancy_ownership_never_cuts_user_lights(
     hass: HomeAssistant, illuminance_entry: MockConfigEntry, freezer
 ) -> None:
-    """Occupancy ownership must not survive a force-off into a user on-period.
+    """Occupancy ownership must not survive a bright off into a user on-period.
 
-    Regression: the illuminance force-off left the occupancy-ownership flag
+    Regression: the bright off left the occupancy-ownership flag
     set, so a later user-initiated on-period could be cut short by a false-detection
     occupancy clear.
     """

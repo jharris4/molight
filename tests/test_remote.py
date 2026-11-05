@@ -522,8 +522,8 @@ async def test_click_arriving_with_availability_recovery(
 async def test_brightness_steps_add_up_while_the_turn_on_selection_waits(
     hass: HomeAssistant,
 ) -> None:
-    """A second raise click while the first one's turn-on still waits for its
-    selection builds on that click's brightness instead of replacing it."""
+    """A second brightness step while the first one's turn-on still waits for its
+    selection builds on that step's brightness instead of replacing it."""
     select = _SlowSelect(hass)
     hass.states.async_set("select.scene", "Day")
     hass.states.async_set("light.living_room", "off")

@@ -1377,7 +1377,7 @@ async def test_switching_gate_adopts_active_occupancy_at_window_end(
 async def test_state_preserving_gate_keeps_on_period_at_window_end(
     hass: HomeAssistant, freezer, origin: str
 ) -> None:
-    """The soft gate preserves every running state and its existing timer."""
+    """Gate and keep state preserves every running state and its existing timer."""
     entry = make_light_entry(
         occupancy=OCC, schedule=SCHED, schedule_mode=SCHEDULE_MODE_GATE_KEEP
     )

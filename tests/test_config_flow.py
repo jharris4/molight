@@ -812,7 +812,7 @@ async def test_binary_sensor_schedule_options_reject_schedule_source(
     )
 
     # The form's exclusion list is frozen, so a newly created schedule reaches
-    # the backend guard when submitted from this already-open options flow.
+    # the submit check from this already-open options flow.
     await setup_entries(hass, schedule_entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -5382,7 +5382,7 @@ async def test_combined_options_reject_indirect_cycle(
     ]
 
     # The form was rendered while Inner was safe. Make Inner reference Outer
-    # before submitting to prove the flow-level validation catches stale forms.
+    # before submitting to prove the submit check catches stale forms.
     hass.config_entries.async_update_entry(
         inner,
         options={
@@ -7701,7 +7701,7 @@ async def _submit_light_options(
     )
 
 
-async def _pass_wrapped_notice(
+async def _pass_wrapped_lights(
     hass: HomeAssistant, result: dict, *, options: bool = True
 ) -> dict:
     """Submit the step that names the virtual lights a light now wraps."""
@@ -7738,7 +7738,7 @@ async def test_light_options_picker_excludes_member_cycles(
     # A virtual light outside the cycle that no other light wraps is a valid
     # member; the light it wraps is hidden, since it belongs to it alone.
     result = await _submit_light_options(hass, result, ["light.other"])
-    result = await _pass_wrapped_notice(hass, result)
+    result = await _pass_wrapped_lights(hass, result)
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -7816,7 +7816,7 @@ async def test_light_options_final_page_rejects_cycle_closed_meanwhile(
         other["flow_id"],
         {**settings_set, CONF_NAME: "Outer", CONF_LIGHTS: ["light.hall"]},
     )
-    other = await _pass_wrapped_notice(hass, other)
+    other = await _pass_wrapped_lights(hass, other)
     assert other["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
@@ -8009,7 +8009,7 @@ async def test_light_options_reject_a_light_another_virtual_light_controls(
     assert result["errors"] == {CONF_LIGHTS: "light_shared"}
 
     result = await _submit_light_options(hass, result, ["light.other"])
-    result = await _pass_wrapped_notice(hass, result)
+    result = await _pass_wrapped_lights(hass, result)
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
@@ -8114,7 +8114,7 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     [
         "selection",
         "collision",
-        "wrapped_notice",
+        "wrapped_lights",
         "scheduled_inside",
         "scheduled_collision",
     ],
@@ -8168,14 +8168,14 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         }
         if last_step == "selection":
             user_input[SECTION_BEHAVIOR] = {CONF_TURN_ON_SELECT_ENTITY: "select.scene"}
-        elif last_step == "wrapped_notice":
+        elif last_step == "wrapped_lights":
             user_input[CONF_LIGHTS] = [member, "light.inner"]
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], user_input
         )
     expected_step = {
         "selection": "light_selection",
-        "wrapped_notice": "confirm_wrapped_lights",
+        "wrapped_lights": "confirm_wrapped_lights",
         "scheduled_inside": "scheduled_light_inside",
     }.get(last_step, "confirm_entity_id")
     assert result["step_id"] == expected_step
@@ -8203,7 +8203,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
     elif last_step == "scheduled_inside":
         user_input = {**settings_set, SECTION_STANDBY: {}}
-    elif last_step == "wrapped_notice":
+    elif last_step == "wrapped_lights":
         user_input = {}
     else:
         user_input = {"next_step_id": "entity_id_proceed"}
@@ -8222,12 +8222,12 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
 
 _KEEP_ON_FINAL_PAGES = [
     "create_selection",
-    "create_wrapped_notice",
+    "create_wrapped_lights",
     "create_collision",
     "scheduled_create_inside",
     "scheduled_create_collision",
     "options_selection",
-    "options_wrapped_notice",
+    "options_wrapped_lights",
     "scheduled_options_inside",
     "scheduled_options_selection",
     "discovery_selection",
@@ -8327,7 +8327,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
             "selection": (
                 "scheduled_light_selection" if scheduled else "light_selection"
             ),
-            "notice": "confirm_wrapped_lights",
+            "lights": "confirm_wrapped_lights",
             "collision": "confirm_entity_id",
             "inside": "scheduled_light_inside",
         }[last_step.rsplit("_", 1)[-1]]
@@ -8550,7 +8550,7 @@ async def test_light_forms_point_out_a_wrapped_virtual_light(
     assert result["step_id"] == "confirm_wrapped_lights"
     assert result["description_placeholders"] == {"lights": "Other"}
     assert result["data_schema"].schema == {}
-    result = await _pass_wrapped_notice(hass, result, options=options)
+    result = await _pass_wrapped_lights(hass, result, options=options)
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     saved = result["data"] if options else dict(result["result"].data)
@@ -8600,7 +8600,7 @@ async def test_light_options_point_out_only_a_newly_wrapped_light(
     result = await _submit_wrap_form(hass, form, result, ["light.other", "light.third"])
     assert result["step_id"] == "confirm_wrapped_lights"
     assert result["description_placeholders"] == {"lights": "Third"}
-    result = await _pass_wrapped_notice(hass, result)
+    result = await _pass_wrapped_lights(hass, result)
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_LIGHTS] == ["light.other", "light.third"]
 
@@ -8616,7 +8616,7 @@ async def test_light_create_points_out_a_wrapped_light_once(
 
     result = await _open_wrap_form(hass, "create")
     result = await _submit_wrap_form(hass, "create", result, ["light.other"])
-    result = await _pass_wrapped_notice(hass, result, options=False)
+    result = await _pass_wrapped_lights(hass, result, options=False)
     assert result["step_id"] == "confirm_entity_id"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "entity_id_change"}
@@ -8656,7 +8656,7 @@ async def test_wrapped_light_page_follows_a_light_changed_while_open(
             "light.other", new_entity_id="light.new_id"
         )
     await settle(hass)
-    result = await _pass_wrapped_notice(hass, result, options=options)
+    result = await _pass_wrapped_lights(hass, result, options=options)
     await settle(hass)
 
     if change == "entity_id_changed":
@@ -8705,7 +8705,7 @@ async def test_light_forms_reject_a_group_holding_a_virtual_light(
     assert "light.other" not in excluded
 
     result = await _submit_wrap_form(hass, form, result, ["light.lamp", "light.other"])
-    result = await _pass_wrapped_notice(hass, result, options="options" in form)
+    result = await _pass_wrapped_lights(hass, result, options="options" in form)
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
