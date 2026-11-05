@@ -1361,10 +1361,11 @@ async def test_bright_turns_light_off(
 
 
 @pytest.mark.asyncio
-async def test_light_restore_ignores_corrupt_attributes(
+async def test_light_restore_ignores_unparsable_attributes(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """Garbage restored timestamps/brightness are dropped instead of failing setup."""
+    """Unparsable restored timestamps/brightness are dropped instead of failing
+    setup."""
     mock_restore_cache(
         hass,
         [

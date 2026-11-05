@@ -2616,7 +2616,7 @@ async def test_occupancy_classifies_short_visit_from_restored_last_on_time(
 
 
 @pytest.mark.asyncio
-async def test_occupancy_discards_malformed_restored_last_on_time(
+async def test_occupancy_discards_unparsable_restored_last_on_time(
     hass: HomeAssistant,
 ) -> None:
     """A stored last_on_time that no longer parses is dropped, not a crash."""
@@ -2972,15 +2972,15 @@ async def test_illuminance_non_finite_reading_holds_state(
 
 
 # ---------------------------------------------------------------------------
-# Restore robustness: corrupt attributes must never break setup
+# Restore robustness: unparsable attributes must never break setup
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_occupancy_restore_ignores_corrupt_attributes(
+async def test_occupancy_restore_ignores_unparsable_attributes(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Garbage restored attributes are dropped instead of failing setup."""
+    """Unparsable restored attributes are dropped instead of failing setup."""
     mock_restore_cache(
         hass,
         [
@@ -3029,8 +3029,8 @@ async def test_combined_restores_false_detection_count(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_combined_ignores_corrupt_constituent_lot(hass: HomeAssistant) -> None:
-    """A constituent clearing with a garbage latest_occupied_time is ignored."""
+async def test_combined_ignores_unparsable_constituent_lot(hass: HomeAssistant) -> None:
+    """A constituent clearing with an unparsable latest_occupied_time is ignored."""
     entry = _combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -3053,10 +3053,10 @@ async def test_combined_ignores_corrupt_constituent_lot(hass: HomeAssistant) -> 
 
 
 @pytest.mark.asyncio
-async def test_combined_restore_ignores_corrupt_false_count(
+async def test_combined_restore_ignores_unparsable_false_count(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """A corrupt restored false_detection_count falls back to zero."""
+    """An unparsable restored false_detection_count falls back to zero."""
     mock_restore_cache(
         hass,
         [

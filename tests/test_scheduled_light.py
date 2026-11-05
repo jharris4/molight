@@ -2158,7 +2158,7 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
 async def test_binary_sensor_schedule_drives_scheduled_light_end_to_end(
     hass: HomeAssistant,
 ) -> None:
-    """A real source propagates through its schedule wrapper to the active settings."""
+    """A real source propagates through its schedule sensor to the active settings."""
     source = "binary_sensor.house_mode"
     schedule_entity = "binary_sensor.settings_set_schedule"
     hass.states.async_set(source, "off")
@@ -2186,7 +2186,7 @@ async def test_binary_sensor_schedule_drives_scheduled_light_end_to_end(
         ACTIVE_SETTINGS_INSIDE
     )
 
-    # Losing the real source makes the wrapper unavailable but does not invent
+    # Losing the real source makes the schedule sensor unavailable but does not invent
     # a schedule boundary in the light that references it.
     hass.states.async_set(source, "unavailable")
     await settle(hass)

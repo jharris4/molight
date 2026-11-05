@@ -610,7 +610,7 @@ def expect_step(result: dict[str, Any], step_id: str) -> None:
 
 
 def start_create(client: HomeAssistantClient, entity_type: str) -> dict[str, Any]:
-    """Start the manual-create branch and choose one entity type."""
+    """Start the Create a single entity branch and choose one entity type."""
     result = client.start_flow()
     expect_step(result, "user")
     result = client.continue_flow(result, {"next_step_id": "create"})
@@ -8811,7 +8811,8 @@ def wait_vocab_action(
 
 
 def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
-    """Click resolution per ecosystem, multi-button bindings, no replay on recovery."""
+    """Click resolution per integration, multi-button bindings, no replay on
+    recovery."""
     light_id = create_entry(
         client,
         "light",
@@ -8856,7 +8857,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
     )
     assert_entry_loaded(client, remote_id)
 
-    # Matter: the constituent presses of a click never fire a binding; only the
+    # Matter: the parts of a click never fire a binding; only the
     # multi-press verdict does.
     client.fire_event(EVENT_MATTER, "initial_press")
     client.fire_event(EVENT_MATTER, "short_release")
@@ -8905,7 +8906,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
     wait_entry_removed(client, remote_id, "Temporary vocab remote")
     remove_entry_and_entity(client, light_id, VOCAB_LIGHT)
     print(
-        "PASS: click vocabularies resolved per button; no constituent presses "
+        "PASS: click vocabularies resolved per button; no parts of a click "
         "or replayed clicks"
     )
 

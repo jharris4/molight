@@ -1,4 +1,4 @@
-"""Tests for what a wrapping light's Events entity records of a wrapped light.
+"""Tests for what an outer light's Events entity records of a wrapped light.
 
 The wrapped light's own on and off start and end the outer light's on-period,
 so they fire there with reason wrapped. Its own look changes fire nothing at

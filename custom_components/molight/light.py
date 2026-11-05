@@ -683,7 +683,7 @@ def _look_groups(
 
 
 def _restored_looks(saved: Any) -> dict[str, _Look | None]:
-    """Read per-member looks back from saved data; anything malformed is dropped."""
+    """Read per-member looks back from saved data; anything unparsable is dropped."""
     looks: dict[str, _Look | None] = {}
     if not isinstance(saved, dict):
         return looks

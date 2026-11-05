@@ -12,13 +12,13 @@ cancels an off warning sequence, restarts the timer.
 
 Single vs. double click is resolved per button from the `event_types` its
 event entity has, because the same physical click is spelled differently
-per ecosystem, and a button that supports multi-press fires several events
+per integration, and a button that supports multi-press fires several events
 for one click (initial_press, short_release, multi_press_1), of which only
 one may fire the binding:
 
   - multi-press capable (Matter with MSM, e.g. Bilresa): a completed single
-    click is `multi_press_1`, a double is `multi_press_2`; the constituent
-    initial_press/short_release events are ignored.
+    click is `multi_press_1`, a double is `multi_press_2`; the
+    initial_press/short_release parts of the click are ignored.
   - Zigbee2MQTT-style and Shelly Gen1: literal `single` / `double`.
   - HomeKit controller, native Lutron keypads: `single_press` /
     `double_press`.

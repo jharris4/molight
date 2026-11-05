@@ -2111,7 +2111,7 @@ async def test_reply_inside_a_stage_call_reports_the_stage_brightness_only(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("member", ["instant", "after_the_call"])
-async def test_wrapping_light_sees_no_off_from_the_light_it_wraps(
+async def test_outer_light_sees_no_off_from_the_light_it_wraps(
     hass: HomeAssistant, member: str
 ) -> None:
     """A virtual light replies inside the call itself, whatever it wraps; the

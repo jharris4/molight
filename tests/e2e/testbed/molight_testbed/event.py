@@ -20,7 +20,7 @@ class TestbedButtonEvent(TestbedEntity, EventEntity):
     _attr_device_class = EventDeviceClass.BUTTON
 
     def __init__(self, *args: Any, event_types: list[str]) -> None:
-        """Initialize a button with one ecosystem's click vocabulary."""
+        """Initialize a button with one integration's click vocabulary."""
         super().__init__(*args)
         self._attr_event_types = list(event_types)
 
@@ -47,7 +47,7 @@ async def async_setup_entry(
                 event_types=["short_release", "multi_press_2"],
             ),
             # Matter multi-press: single = multi_press_1, double = multi_press_2;
-            # the constituent initial_press/short_release must not fire bindings.
+            # the initial_press/short_release parts must not fire bindings.
             TestbedButtonEvent(
                 controller,
                 EVENT_MATTER,

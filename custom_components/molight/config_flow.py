@@ -706,16 +706,16 @@ def _molight_occupancy_sensor_ids(hass: HomeAssistant) -> list[str]:
 
 
 # Both are schedules to everything that references one.
-_SCHEDULE_ENTITY_TYPES = (ENTITY_TYPE_SCHEDULE, ENTITY_TYPE_COMBINED_SCHEDULE)
+_SCHEDULE_SENSOR_TYPES = (ENTITY_TYPE_SCHEDULE, ENTITY_TYPE_COMBINED_SCHEDULE)
 
 
-def _molight_schedule_entity_ids(hass: HomeAssistant) -> list[str]:
+def _molight_schedule_sensor_ids(hass: HomeAssistant) -> list[str]:
     """Entity IDs created by MoLight schedule and combined-schedule entries."""
     registry = er.async_get(hass)
     return sorted(
         entity.entity_id
         for entry in hass.config_entries.async_entries(DOMAIN)
-        if _entry_settings(entry).get(CONF_ENTITY_TYPE) in _SCHEDULE_ENTITY_TYPES
+        if _entry_settings(entry).get(CONF_ENTITY_TYPE) in _SCHEDULE_SENSOR_TYPES
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.domain == "binary_sensor"
     )
@@ -747,7 +747,7 @@ def _schedule_entity_selector(
 ) -> selector.EntitySelector:
     """Build a picker containing schedules plus one configured legacy sensor."""
     registry = er.async_get(hass)
-    schedule_ids = set(_molight_schedule_entity_ids(hass))
+    schedule_ids = set(_molight_schedule_sensor_ids(hass))
     excluded_ids = sorted(
         {
             entity.entity_id
@@ -782,7 +782,7 @@ def _schedule_entity_is_allowed(
     if not entity_id:
         return True
     entity_type = _virtual_entity_type(hass, entity_id)
-    return entity_type in _SCHEDULE_ENTITY_TYPES or (
+    return entity_type in _SCHEDULE_SENSOR_TYPES or (
         entity_id == legacy_entity and entity_type is not None
     )
 
@@ -791,7 +791,7 @@ def _schedule_source_is_molight_schedule(
     hass: HomeAssistant, entity_id: str | None
 ) -> bool:
     """Return whether an entity is backed by a MoLight schedule entry."""
-    return _virtual_entity_type(hass, entity_id) in _SCHEDULE_ENTITY_TYPES
+    return _virtual_entity_type(hass, entity_id) in _SCHEDULE_SENSOR_TYPES
 
 
 def _entry_entity_ids(
@@ -902,7 +902,7 @@ def _combined_cycle_candidates(
     # A Virtual Schedule Sensor or Virtual Occupancy Sensor can lead back too, through
     # its source.
     entity_types = (
-        _SCHEDULE_ENTITY_TYPES
+        _SCHEDULE_SENSOR_TYPES
         if entity_type == ENTITY_TYPE_COMBINED_SCHEDULE
         else (ENTITY_TYPE_OCCUPANCY, ENTITY_TYPE_COMBINED_OCCUPANCY)
     )
@@ -1391,7 +1391,7 @@ def _carry_turn_on_selection(
 # Shared setting-field schemas
 #
 # The editable settings of each entity type, with their creation-time defaults
-# (optional fields blank). Used both by the manual create steps and by the
+# (optional fields blank). Used both by the create steps and by the
 # discovery "adjust defaults" steps, so the two stay in sync. Name, entity_id
 # and the wrapped source entity are added by each caller, not here.
 # ---------------------------------------------------------------------------
@@ -2306,7 +2306,7 @@ class MoLightConfigFlow(
     def __init__(self) -> None:
         """Initialize the config flow's cross-step stash."""
         self._entity_type: str | None = None
-        # Set when a manual create step is re-entered from the Entity ID
+        # Set when a create step is re-entered from the Entity ID
         # already exists step's "change" option, so the form comes back
         # prefilled.
         self._prefill: dict[str, Any] | None = None
@@ -2346,7 +2346,7 @@ class MoLightConfigFlow(
         return MoLightOptionsFlow(entry)
 
     def _create_step(self, entity_type: str) -> _StepHandler:
-        """Map an entity type to its manual create step handler."""
+        """Map an entity type to its create step handler."""
         return {
             ENTITY_TYPE_OCCUPANCY: self.async_step_occupancy,
             ENTITY_TYPE_COMBINED_OCCUPANCY: self.async_step_combined_occupancy,
@@ -2359,7 +2359,7 @@ class MoLightConfigFlow(
         }[entity_type]
 
     # ------------------------------------------------------------------
-    # Optional explicit entity_id (manual create steps)
+    # Optional explicit entity_id (create steps)
     # ------------------------------------------------------------------
 
     def _entity_id_taken(self, entity_id: str) -> bool:
@@ -2397,7 +2397,7 @@ class MoLightConfigFlow(
     def _resolve_entity_id(
         self, name: str, user_input: dict[str, Any], entity_id_format: str
     ) -> tuple[str | None, dict[str, str], bool, str]:
-        """Resolve the optional entity_id field of a manual create step.
+        """Resolve the optional entity_id field of a create step.
 
         Returns (object_id, errors, needs_confirm, candidate):
           object_id:      slug to store in CONF_ENTITY_ID, or None to derive it
@@ -2465,7 +2465,7 @@ class MoLightConfigFlow(
         prefill: dict[str, Any],
         entity_id_format: str,
     ) -> tuple[config_entries.FlowResult | None, dict[str, str]]:
-        """Finalize a manual create: create the entry, or divert to confirm.
+        """Finalize a create step: create the entry, or divert to confirm.
 
         `data` is the flat entry settings (sections already flattened);
         `prefill` is the raw, still-nested form input, stashed so the
@@ -2603,7 +2603,7 @@ class MoLightConfigFlow(
     async def async_step_create(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Choose which kind of virtual entity to create manually."""
+        """Choose which kind of virtual entity to create."""
         if user_input is not None:
             self._entity_type = user_input[CONF_ENTITY_TYPE]
             return await self._create_step(self._entity_type)()
@@ -3023,7 +3023,7 @@ class MoLightConfigFlow(
     ) -> config_entries.FlowResult:
         """Adjust the defaults applied to every discovered light.
 
-        The same light_timeout and stage-transition checks the manual light form
+        The same light_timeout and stage-transition checks the light create form
         enforces apply here, since one setting set is shared by every pick.
         """
         errors: dict[str, str] = {}
@@ -3639,7 +3639,7 @@ class MoLightConfigFlow(
         )
 
     # ------------------------------------------------------------------
-    # Combined Occupancy (trigger + maintain VirtualOccupancySensors)
+    # Combined Occupancy (trigger + maintain MoLight occupancy sensors)
     # ------------------------------------------------------------------
 
     async def async_step_combined_occupancy(
@@ -3902,7 +3902,7 @@ class MoLightConfigFlow(
                 vol.Required(CONF_SCHEDULE_SOURCE): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
-                        exclude_entities=_molight_schedule_entity_ids(self.hass),
+                        exclude_entities=_molight_schedule_sensor_ids(self.hass),
                         multiple=False,
                     )
                 ),
@@ -4680,7 +4680,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain="binary_sensor",
-                        exclude_entities=_molight_schedule_entity_ids(self.hass),
+                        exclude_entities=_molight_schedule_sensor_ids(self.hass),
                         multiple=False,
                     )
                 ),

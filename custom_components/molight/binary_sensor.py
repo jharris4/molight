@@ -4,7 +4,7 @@ Provides five sensor types, all created via the config flow:
 
   VirtualOccupancySensor:          wraps one real sensor with an occupancy timeout;
                                    exposes latest_occupied_time = last_off - timeout
-  VirtualCombinedOccupancySensor:  combines VirtualOccupancySensors using
+  VirtualCombinedOccupancySensor:  combines MoLight occupancy sensors using
                                    trigger/maintain logic; latest_occupied_time
                                    is the max across all constituents
   VirtualIlluminanceSensor:        compares a lux sensor to a threshold
@@ -589,7 +589,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
 class VirtualCombinedOccupancySensor(
     BinarySensorEntity, EntityIdFollowingRestoreEntity
 ):
-    """Combines multiple VirtualOccupancySensors using trigger/maintain logic.
+    """Combines multiple MoLight occupancy sensors using trigger/maintain logic.
 
     Trigger sensors start occupancy; maintain sensors extend it once started.
     latest_occupied_time is the max of all constituents' latest_occupied_time

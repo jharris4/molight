@@ -639,7 +639,7 @@ async def test_config_flow_binary_sensor_schedule_excludes_schedule_sources(
     )
 
     # A schedule created after the form opened is absent from its frozen
-    # selector exclusion, so submission must be rejected by backend validation.
+    # selector exclusion, so submission must be rejected by the submit check.
     await setup_entries(hass, schedule_entry)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -4381,12 +4381,12 @@ async def test_discover_preselect_none_and_empty_selection(
 
 
 # ---------------------------------------------------------------------------
-# Manual create: optional explicit entity_id
+# Create a single entity: optional explicit entity_id
 # ---------------------------------------------------------------------------
 
 
 async def _reach_occupancy_form(hass: HomeAssistant) -> dict:
-    """Advance the manual flow to the occupancy create form."""
+    """Advance the Create a single entity flow to the occupancy create form."""
     result = await _start_create(hass)
     return await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
@@ -4394,7 +4394,7 @@ async def _reach_occupancy_form(hass: HomeAssistant) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
+async def test_create_explicit_entity_id(hass: HomeAssistant) -> None:
     """An explicit entity_id is stored and used as the registered entity ID."""
     result = await _reach_occupancy_form(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -4418,7 +4418,7 @@ async def test_manual_explicit_entity_id(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_manual_explicit_entity_id_is_normalized(hass: HomeAssistant) -> None:
+async def test_create_explicit_entity_id_is_normalized(hass: HomeAssistant) -> None:
     """A typed domain prefix is stripped and the rest slugified."""
     result = await _reach_occupancy_form(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -4442,7 +4442,7 @@ async def test_manual_explicit_entity_id_is_normalized(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_manual_whitespace_entity_id_treated_as_blank(
+async def test_create_whitespace_entity_id_treated_as_blank(
     hass: HomeAssistant,
 ) -> None:
     """A whitespace-only entity_id behaves like leaving the field empty."""
@@ -4468,7 +4468,7 @@ async def test_manual_whitespace_entity_id_treated_as_blank(
 
 
 @pytest.mark.asyncio
-async def test_manual_explicit_entity_id_conflict_errors(
+async def test_create_explicit_entity_id_conflict_errors(
     hass: HomeAssistant,
 ) -> None:
     """An explicit entity_id that is already taken is rejected."""
@@ -4490,7 +4490,7 @@ async def test_manual_explicit_entity_id_conflict_errors(
 
 
 @pytest.mark.asyncio
-async def test_manual_explicit_entity_id_no_usable_characters_errors(
+async def test_create_explicit_entity_id_no_usable_characters_errors(
     hass: HomeAssistant,
 ) -> None:
     """Garbage explicit entity IDs error instead of being silently dropped or munged.
@@ -4528,7 +4528,7 @@ async def test_manual_explicit_entity_id_no_usable_characters_errors(
 
 
 @pytest.mark.asyncio
-async def test_manual_blank_entity_id_already_exists_proceed(
+async def test_create_blank_entity_id_already_exists_proceed(
     hass: HomeAssistant,
 ) -> None:
     """Blank entity ID whose name-derived entity ID is taken shows the Entity ID
@@ -4564,7 +4564,7 @@ async def test_manual_blank_entity_id_already_exists_proceed(
 
 
 @pytest.mark.asyncio
-async def test_manual_blank_entity_id_already_exists_change(
+async def test_create_blank_entity_id_already_exists_change(
     hass: HomeAssistant,
 ) -> None:
     """Choosing 'go back' returns to the create form to set an entity_id."""
@@ -4985,7 +4985,7 @@ async def test_assign_aborts_when_only_scheduled_lights_exist(
 
 
 # ---------------------------------------------------------------------------
-# Manual create steps not covered above
+# Create steps not covered above
 # ---------------------------------------------------------------------------
 
 
@@ -7242,7 +7242,8 @@ _DISCOVERY_WRAPPERS = {
 async def test_discovery_flows_submitted_together_wrap_a_pick_once(
     hass: HomeAssistant, kind: str
 ) -> None:
-    """Two flows that pick the same source create one wrapper; the other skips it."""
+    """Two flows that pick the same source create one virtual entity; the other
+    skips it."""
     domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
     pick = f"{domain}.desk"
     hass.states.async_set(pick, "off", attrs)
@@ -7543,7 +7544,7 @@ async def test_config_flow_combined_schedule(
     )
     assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
 
-    # Created after the form was rendered, so only backend validation stops it.
+    # Created after the form was rendered, so only the submit check stops it.
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -7718,20 +7719,20 @@ async def test_light_options_picker_excludes_member_cycles(
     hall = _light_entry("Hall", "hall")
     outer = _light_entry("Outer", "outer")
     outer.data[CONF_LIGHTS][:] = ["light.hall"]
-    outermost = _scheduled_light_entry("Outermost", "outermost")
-    outermost.data[CONF_LIGHTS][:] = ["light.outer"]
+    top = _scheduled_light_entry("Top", "top")
+    top.data[CONF_LIGHTS][:] = ["light.outer"]
     shared = _light_entry("Shared", "shared")
     other = _light_entry("Other", "other")
     other.data[CONF_LIGHTS][:] = ["light.shared"]
-    await setup_entries(hass, hall, outer, outermost, shared, other)
+    await setup_entries(hass, hall, outer, top, shared, other)
 
     result = await hass.config_entries.options.async_init(hall.entry_id)
     # The lights that include it, and the lights other virtual lights control.
     assert _selector_config(result, CONF_LIGHTS)["exclude_entities"] == [
         "light.hall",
         "light.outer",
-        "light.outermost",
         "light.shared",
+        "light.top",
     ]
     # A virtual light outside the cycle that no other light wraps is a valid
     # member; the light it wraps is hidden, since it belongs to it alone.
@@ -7861,14 +7862,14 @@ async def test_scheduled_light_options_reject_member_cycle(
         "light.night",
         "light.outer",
     ]
-    wrapper = _light_entry("Wrapper", "wrapper")
-    wrapper.data[CONF_LIGHTS][:] = ["light.night"]
-    await setup_entries(hass, wrapper)
+    second_outer = _light_entry("Second Outer", "second_outer")
+    second_outer.data[CONF_LIGHTS][:] = ["light.night"]
+    await setup_entries(hass, second_outer)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
             CONF_NAME: "Night",
-            CONF_LIGHTS: ["light.wrapper"],
+            CONF_LIGHTS: ["light.second_outer"],
             CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
             CONF_SCHEDULE_END_ACTION: SCHEDULE_END_ACTION_KEEP,
         },
@@ -8988,7 +8989,7 @@ async def test_light_create_and_discovery_submitted_together_share_no_light(
             create["flow_id"],
             {
                 **EMPTY_LIGHT_CREATE_SECTIONS,
-                CONF_NAME: "Manual",
+                CONF_NAME: "Created",
                 CONF_LIGHTS: ["light.bulb"],
                 CONF_LIGHT_TIMEOUT: 60,
             },
@@ -9372,7 +9373,7 @@ async def test_combined_schedule_options_validate_inputs(
     )
     assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
 
-    # Created after the form was rendered, so only backend validation stops it.
+    # Created after the form was rendered, so only the submit check stops it.
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],

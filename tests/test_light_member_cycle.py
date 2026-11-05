@@ -224,7 +224,7 @@ async def test_a_group_below_a_member_changed_to_include_the_light(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("service", ["turn_on", "turn_off"])
-@pytest.mark.parametrize("entered", ["wrapper", "wrapped"])
+@pytest.mark.parametrize("entered", ["outer", "wrapped"])
 @pytest.mark.allow_warning_log
 async def test_a_group_changed_to_include_the_light_that_wraps_its_owner(
     hass: HomeAssistant, monkeypatch, service: str, entered: str
@@ -246,8 +246,8 @@ async def test_a_group_changed_to_include_the_light_that_wraps_its_owner(
     assert await hass.config_entries.async_reload(below.entry_id)
     await settle(hass)
 
-    target = VIRTUAL if entered == "wrapper" else "light.wrapped"
-    # The wrapper commands the wrapped light once before either notices.
+    target = VIRTUAL if entered == "outer" else "light.wrapped"
+    # The outer light commands the wrapped light once before either notices.
     assert await _count_commands(hass, monkeypatch, service, target) <= 2
 
 

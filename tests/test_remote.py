@@ -82,7 +82,7 @@ if TYPE_CHECKING:
 # The event_types of the remote shapes under test. A Pico-style
 # button has only press/release; a Bilresa (Matter multi-press) button
 # fires a completed single click as multi_press_1 and a double as
-# multi_press_2, with initial_press/short_release as constituent noise that
+# multi_press_2, with initial_press/short_release as parts of a click that
 # must never fire. A Lutron Caséta button re-exposed as an event entity (the
 # lutron-caseta-events integration) has press/multi_tap.
 PICO_TYPES = ["press", "release"]
@@ -190,8 +190,8 @@ async def test_pico_single_click_on_off(
 async def test_bilresa_single_vs_double_click(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """On a multi-press button, only multi_press_1/_2 fire; the constituent
-    initial_press/short_release of the same physical click never do."""
+    """On a multi-press button, only multi_press_1/_2 fire; the
+    initial_press/short_release parts of the same physical click never do."""
     remote = _remote_entry(
         **{
             CONF_ON_BUTTONS_DOUBLE: ["event.bilresa_1"],
@@ -202,7 +202,7 @@ async def test_bilresa_single_vs_double_click(
     _seed(hass, "event.bilresa_1", BILRESA_TYPES)
     await setup_entries(hass, light_entry, remote)
 
-    # The double click's constituent events do nothing on their own...
+    # The double click's earlier events do nothing on their own...
     _fire(hass, "event.bilresa_1", "initial_press", BILRESA_TYPES)
     _fire(hass, "event.bilresa_1", "short_release", BILRESA_TYPES)
     await settle(hass)
@@ -255,7 +255,7 @@ async def test_lutron_event_entity_single_vs_double_click(
 
 
 # Device-resolved vocabularies: (event_types, single, double, events that
-# must never fire: constituents, long, held and triple presses).
+# must never fire: parts of a click, long, held and triple presses).
 DEVICE_RESOLVED_VOCABULARIES = {
     "homekit": (
         ["single_press", "double_press", "long_press"],
@@ -317,8 +317,8 @@ async def test_device_resolved_click_vocabularies(
     hass: HomeAssistant, light_entry: MockConfigEntry, vocabulary: str
 ) -> None:
     """single_press/double_press and their siblings each fire their binding
-    exactly once; constituent, long, held and triple presses fire nothing."""
-    types, single, double, noise = DEVICE_RESOLVED_VOCABULARIES[vocabulary]
+    exactly once; parts of a click and long, held and triple presses fire nothing."""
+    types, single, double, ignored = DEVICE_RESOLVED_VOCABULARIES[vocabulary]
     remote = _remote_entry(
         **{
             CONF_TOGGLE_BUTTONS_SINGLE: ["event.button"],
@@ -337,7 +337,7 @@ async def test_device_resolved_click_vocabularies(
             if c["service_data"].get("entity_id") == ["light.test_light"]
         ]
 
-    for event_type in noise:
+    for event_type in ignored:
         _fire(hass, "event.button", event_type, types)
         await settle(hass)
     assert _actions() == []
@@ -1433,7 +1433,7 @@ async def test_event_sharing_a_timestamp_with_the_previous_one_still_fires(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("event_types", "constituent", "click", "service"),
+    ("event_types", "ignored", "click", "service"),
     [
         (
             ["initial_press", "short_release", "long_press", "long_release"],
@@ -1456,16 +1456,16 @@ async def test_event_sharing_a_timestamp_with_the_previous_one_still_fires(
     ],
     ids=["matter-momentary", "shelly-single", "shelly-double"],
 )
-async def test_click_in_the_same_millisecond_as_a_constituent_fires(
+async def test_click_in_the_same_millisecond_as_an_ignored_event_fires(
     hass: HomeAssistant,
     light_entry: MockConfigEntry,
     freezer,
     event_types: list[str],
-    constituent: str,
+    ignored: str,
     click: str,
     service: str,
 ) -> None:
-    """A real event entity firing a constituent and the click in one
+    """A real event entity firing an ignored event and the click in one
     millisecond, which share a state before HA 2026.8, still runs the click."""
     hass.states.async_set("light.living_room", "on")
     await setup_entries(hass, light_entry)
@@ -1478,7 +1478,7 @@ async def test_click_in_the_same_millisecond_as_a_constituent_fires(
     await settle(hass)
     calls = _record_service_calls(hass)
 
-    button.press(constituent)
+    button.press(ignored)
     button.press(click)
     await settle(hass)
     assert [
@@ -2208,7 +2208,7 @@ async def test_native_integration_vocabulary(
 ) -> None:
     """Each native button shape passes setup for the clicks it has, rejects a
     double click it lacks, and fires each bound click exactly once."""
-    types, single, double, noise = NATIVE_VOCABULARIES[integration]
+    types, single, double, ignored = NATIVE_VOCABULARIES[integration]
     hass.states.async_set("light.living_room", "off")
     await setup_entries(hass, light_entry)
     button = await _add_native_button(hass, types)
@@ -2240,7 +2240,7 @@ async def test_native_integration_vocabulary(
         button.press(event_type)
         await settle(hass)
 
-    for event_type in noise:
+    for event_type in ignored:
         await _press(event_type)
     assert _actions() == []
 

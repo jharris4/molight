@@ -1096,7 +1096,7 @@ async def test_button_and_target_with_changed_entity_ids_keep_the_remote_working
     assert member.is_on
 
 
-async def test_wrapping_light_follows_the_inner_lights_entity_id_change(
+async def test_outer_light_follows_the_inner_lights_entity_id_change(
     hass: HomeAssistant, freezer
 ) -> None:
     """An outer virtual light keeps driving a virtual light whose entity ID changed."""

@@ -1229,8 +1229,8 @@ async def test_inverting_an_empty_combination_is_off(
     freezer.move_to("2026-07-02 12:00:00+00:00")
     nested = [_combined("Nothing", [])]
     if depth == 2:
-        nested.append(_combined("Wrapper", ["binary_sensor.nothing"]))
-    top = "binary_sensor.wrapper" if depth == 2 else "binary_sensor.nothing"
+        nested.append(_combined("Middle", ["binary_sensor.nothing"]))
+    top = "binary_sensor.middle" if depth == 2 else "binary_sensor.nothing"
     await _setup(hass, *nested, _combined("Not Nothing", [top], invert=True))
     state = hass.states.get("binary_sensor.not_nothing")
     assert state.state == "off"

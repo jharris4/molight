@@ -675,7 +675,7 @@ async def test_inner_lit_during_the_outer_blink(
 
 
 async def _held_inner_under(hass: HomeAssistant, *outer: MockConfigEntry) -> RealLight:
-    """An inner light with its auto-off held, under the given wrappers."""
+    """An inner light with its auto-off held, under the given outer lights."""
     hass.states.async_set(INNER_OCC, "off")
     bulb = RealLight("real_1")
     await add_real(hass, bulb)
@@ -697,14 +697,14 @@ async def _held_inner_under(hass: HomeAssistant, *outer: MockConfigEntry) -> Rea
 async def test_turn_on_of_a_lit_inner_light_restarts_the_outer_timer(
     hass: HomeAssistant, freezer, command: str, levels: int
 ) -> None:
-    """Only the inner light's timestamps say so, through one wrapper or two."""
-    wrappers = [make_light_entry(name="Outer", lights=[INNER], timeout=60)]
+    """Only the inner light's timestamps say so, through one outer light or two."""
+    outer_lights = [make_light_entry(name="Outer", lights=[INNER], timeout=60)]
     top = OUTER
     if levels == 2:
         # The middle light is held too, so the top light's timer governs.
-        wrappers.append(make_light_entry(name="Top", lights=[OUTER], timeout=60))
+        outer_lights.append(make_light_entry(name="Top", lights=[OUTER], timeout=60))
         top = "light.top"
-    bulb = await _held_inner_under(hass, *wrappers)
+    bulb = await _held_inner_under(hass, *outer_lights)
     if levels == 2:
         await hass.services.async_call(
             "switch", "turn_off", {"entity_id": "switch.outer_auto_off"}, blocking=True

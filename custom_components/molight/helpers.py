@@ -554,7 +554,7 @@ def shared_lights(
     Maps each such light to its owner (see light_owners), which a caller
     checking many member lists computes once and passes in. Two virtual
     lights commanding one light fight over it, so each light belongs to one;
-    a light under a wrapped virtual light is that light's, not the wrapper's.
+    a light under a wrapped virtual light is that light's, not the wrapping light's.
     """
     lights, owned = owners or light_owners(hass, own_entry_id=own_entry_id)
     mine = lights_commanded(hass, members, lights)

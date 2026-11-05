@@ -488,7 +488,7 @@ RELOAD_GRACE = 10
 # sequence, restarts the timer).
 #
 # Which event_type string means a single vs. a double click differs per
-# ecosystem and is resolved per button from the event_types its event
+# integration and is resolved per button from the event_types its event
 # entity has (see remote.py).
 CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
 # Brightness step, in percent, applied once per brightness up/down click (a step

@@ -662,9 +662,9 @@ Each entry creates one diagnostic **`<name> Last Action` sensor**. Its state is 
 
 Each button may appear in several actions, as long as no *(button, click)* pair is bound twice, e.g. a Bilresa button whose single click toggles and whose double click turns on. The form requires at least one binding overall, and a preset with buttons but no values is rejected (it would just be a turn-on pretending to be a preset).
 
-**How clicks are recognized.** Ecosystems spell "single click" differently, so the discriminating event is read per button from the event entity's `event_types`:
+**How clicks are recognized.** Integrations spell "single click" differently, so the discriminating event is read per button from the event entity's `event_types`:
 
-- Buttons that have `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The constituent `initial_press`/`short_release` of the same physical click never fire a binding twice.
+- Buttons that have `multi_press_1`/`multi_press_2` (Matter multi-press, e.g. the Bilresa): single = `multi_press_1`, double = `multi_press_2`. The `initial_press`/`short_release` parts of the same physical click never fire a binding twice.
 - Zigbee2MQTT-style and Shelly Gen1 buttons with literal `single`/`double` map directly.
 - HomeKit controller buttons have `single_press`/`double_press`, and native Lutron (RadioRA 2) keypad buttons `single_press`: single = `single_press`, double = `double_press`.
 - Shelly Gen2 and later inputs have `single_push`/`double_push`; their `btn_down`/`btn_up` never fire a binding.

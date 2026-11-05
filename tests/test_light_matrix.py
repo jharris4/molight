@@ -2368,8 +2368,10 @@ async def test_self_service_echo_does_not_upgrade_timer(
 
 
 @pytest.mark.asyncio
-async def test_timer_falls_back_when_lot_corrupt(hass: HomeAssistant, freezer) -> None:
-    """A garbage latest_occupied_time falls back to the full light_timeout."""
+async def test_timer_falls_back_when_lot_unparsable(
+    hass: HomeAssistant, freezer
+) -> None:
+    """An unparsable latest_occupied_time falls back to the full light_timeout."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
 
     hass.states.async_set(OCC, "on", {"latest_occupied_time": "garbage"})

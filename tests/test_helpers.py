@@ -73,7 +73,7 @@ def test_entry_settings_options_fully_replace_data() -> None:
 
 
 def test_entry_settings_entity_type_always_comes_from_data() -> None:
-    """entry.data remains authoritative over a corrupt options type value."""
+    """entry.data remains authoritative over a wrong options type value."""
     entry = _entry(
         {CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT, CONF_NAME: "Kitchen"},
         options={CONF_ENTITY_TYPE: "occupancy", CONF_NAME: "Kitchen"},

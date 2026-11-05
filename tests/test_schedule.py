@@ -556,8 +556,10 @@ async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.allow_warning_log
-async def test_invalid_window_edges_never_turn_on(hass: HomeAssistant, freezer) -> None:
-    """Unresolvable edges (bad times, wrong types, missing end) yield no window."""
+async def test_unparsable_window_edges_never_turn_on(
+    hass: HomeAssistant, freezer
+) -> None:
+    """Unparsable edges (bad times, wrong types, missing end) yield no window."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 20:00:00+00:00")
     await _setup(
@@ -1225,7 +1227,7 @@ async def test_window_pushed_past_the_next_midnight_is_found_by_a_fresh_evaluati
 
 
 @pytest.mark.asyncio
-async def test_binary_sensor_schedule_discards_malformed_restored_marker(
+async def test_binary_sensor_schedule_discards_unparsable_restored_marker(
     hass: HomeAssistant,
 ) -> None:
     """A stored window marker that no longer parses is dropped, not a crash.
