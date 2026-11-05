@@ -602,7 +602,9 @@ async def test_light_whose_last_lit_real_lights_entry_is_disabled_is_off(
         hardware.entry_id, ConfigEntryDisabler.USER
     )
     await settle(hass)
-    assert hass.states.get(MEMBER).state == "unavailable"
+    member_state = hass.states.get(MEMBER)
+    # No state from Home Assistant 2026.11, the unavailable placeholder before it.
+    assert member_state is None or member_state.state == "unavailable"
     assert hass.states.get(VIRTUAL).state == ("on" if others == "lit" else "off")
     assert attrs(hass)["last_off_manual"] is None
     assert calls == []
@@ -698,8 +700,9 @@ async def test_sensor_whose_entry_is_disabled_stops_holding(
         sensor.entry_id, ConfigEntryDisabler.USER
     )
     await settle(hass)
-    # The unloaded entry's placeholder stays, and reads like an outage.
-    assert hass.states.get(presence).state == "unavailable"
+    # No state from Home Assistant 2026.11, the unavailable placeholder before it.
+    presence_state = hass.states.get(presence)
+    assert presence_state is None or presence_state.state == "unavailable"
     assert attrs(hass)["auto_off_held"] is False
     assert attrs(hass)["molight_state"] == STATE_ACTIVE
     await expect_fresh_timeout(hass, freezer)
