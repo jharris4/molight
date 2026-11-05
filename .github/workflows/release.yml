@@ -64,6 +64,10 @@ jobs:
           - label: HA floor
             slug: floor
             image: floor
+          # The release that replaced the test package, until the pin moves past it.
+          - label: HA 2026.11.0
+            slug: 2026.11.0
+            image: ghcr.io/home-assistant/home-assistant:2026.11.0
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
