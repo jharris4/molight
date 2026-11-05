@@ -2,7 +2,7 @@
 # release. Home Assistant 2026.11 replaced it with pytest-homeassistant, which
 # scripts/ha-bump moves to at the next release. CI also runs the declared
 # floor and 2026.11.0; see the pytest matrix in .github/workflows/ci.yml.
-pytest-homeassistant-custom-component==0.13.375
+pytest-homeassistant==2026.11.0
 # pytest-homeassistant does not pin these, which `timeout` and `--cov` need;
 # the old package pins the same versions.
 pytest-timeout==2.4.0
