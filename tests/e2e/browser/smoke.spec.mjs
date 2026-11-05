@@ -125,6 +125,13 @@ async function createScheduledLight(page) {
 async function entryCard(page, name) {
   await page.goto("/config/integrations/integration/molight");
   const card = page.locator("ha-config-entry-row").filter({ hasText: name });
+  // The 2026.1 frontend sometimes loads this page with an empty entry list
+  // right after an options flow; reload once if it settles on "No entries".
+  const empty = visibleText(page, "No entries");
+  await expect(card.or(empty).first()).toBeVisible();
+  if (await empty.isVisible()) {
+    await page.reload();
+  }
   await expect(card).toBeVisible();
   return card;
 }
