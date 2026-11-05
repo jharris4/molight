@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import controller_for_entry
-from .const import SOURCE_SELECT, TARGET_SELECT
+from .const import SOURCE_SELECT, TURN_ON_SELECT
 from .entity import TestbedEntity
 
 OPTIONS = ["Cozy", "Focus", "Night"]
@@ -91,9 +91,9 @@ async def async_setup_entry(
         [
             TestbedSelect(
                 controller,
-                TARGET_SELECT,
-                "select.e2e_target_mode",
-                "E2E Target Mode",
+                TURN_ON_SELECT,
+                "select.e2e_turn_on_selection",
+                "E2E Turn-on Selection",
             ),
             TestbedSelect(
                 controller,

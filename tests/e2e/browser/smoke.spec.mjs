@@ -376,7 +376,7 @@ test("a light with a turn-on selection gets the selection step", async ({ page }
   await page.getByRole("textbox", { name: /^Name/ }).fill("Browser Selected");
   await pickEntity(page, page, "Lights to control", "E2E Color Temperature Light");
   const behavior = await sectionPanel(page, "Turn-on & turn-off behavior");
-  await pickEntity(page, behavior, "Turn-on selection entity", "E2E Target Mode");
+  await pickEntity(page, behavior, "Turn-on selection entity", "E2E Turn-on Selection");
   await submit(page);
   await expectFlowTitle(page, "Turn-on selection");
   await selectHaOption(page, "Fixed/fallback option", "Cozy");

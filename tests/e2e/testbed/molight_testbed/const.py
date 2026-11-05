@@ -54,7 +54,7 @@ OCCUPANCY: Final = "occupancy"
 DOOR: Final = "door"
 SCHEDULE: Final = "schedule"
 ILLUMINANCE: Final = "illuminance"
-TARGET_SELECT: Final = "target_select"
+TURN_ON_SELECT: Final = "turn_on_select"
 SOURCE_SELECT: Final = "source_select"
 EVENT_BUTTON: Final = "event_button"
 EVENT_MATTER: Final = "event_matter"
@@ -96,7 +96,7 @@ DEFAULT_STATES: Final = {
     DOOR: {"state": "off", "available": True, "attributes": {}},
     SCHEDULE: {"state": "off", "available": True, "attributes": {}},
     ILLUMINANCE: {"state": 5.0, "available": True, "attributes": {}},
-    TARGET_SELECT: {"state": "Cozy", "available": True, "attributes": {}},
+    TURN_ON_SELECT: {"state": "Cozy", "available": True, "attributes": {}},
     SOURCE_SELECT: {"state": "Focus", "available": True, "attributes": {}},
     EVENT_BUTTON: {"state": None, "available": True, "attributes": {}},
     EVENT_MATTER: {"state": None, "available": True, "attributes": {}},

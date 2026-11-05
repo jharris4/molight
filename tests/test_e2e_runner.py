@@ -282,7 +282,7 @@ class _SelectionHass(runner.HomeAssistantClient):
         self.states: dict[str, dict[str, Any]] = {
             runner.VIRTUAL_OCCUPANCY: {"state": "off", "attributes": {}},
             runner.RAW_LIGHT: {"state": "off", "attributes": {}},
-            runner.TARGET_SELECT: {
+            runner.TURN_ON_SELECT: {
                 "state": "Cozy",
                 "attributes": {"options": ["Cozy", "Focus", "Night"]},
             },
@@ -322,7 +322,7 @@ class _SelectionHass(runner.HomeAssistantClient):
         if self.records:
             light["last_on_occupancy"] = "2026-10-01T00:01:00+00:00"
         if self.applies:
-            self.states[runner.TARGET_SELECT]["state"] = "Cozy"
+            self.states[runner.TURN_ON_SELECT]["state"] = "Cozy"
             light["last_turn_on_selection_option"] = "Cozy"
             light["last_turn_on_selection_source"] = "fixed"
 
@@ -337,7 +337,7 @@ def test_trigger_and_assert_passes_when_the_selection_is_applied(
 
 def test_trigger_and_assert_fails_when_no_selection_is_applied(clock: _Clock) -> None:
     """The select entity and attributes already show Cozy from the previous call."""
-    with pytest.raises(AssertionError, match=runner.TARGET_SELECT):
+    with pytest.raises(AssertionError, match=runner.TURN_ON_SELECT):
         runner.trigger_and_assert(
             _SelectionHass(applies=False), runner.pct(30), "Cozy", source="fixed"
         )

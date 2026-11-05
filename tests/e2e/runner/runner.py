@@ -41,7 +41,7 @@ EVENT_MATTER = "event.e2e_button_matter"
 EVENT_Z2M = "event.e2e_button_z2m"
 EVENT_CASETA = "event.e2e_button_caseta"
 EVENT_HUE = "event.e2e_button_hue"
-TARGET_SELECT = "select.e2e_target_mode"
+TURN_ON_SELECT = "select.e2e_turn_on_selection"
 SOURCE_SELECT = "select.e2e_source_mode"
 VIRTUAL_OCCUPANCY = "binary_sensor.e2e_occupancy"
 RAW_TIMER_MOTION = "binary_sensor.e2e_raw_occupancy"
@@ -803,7 +803,7 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
         "behavior": {
             "auto_on_brightness": brightness,
             "auto_on_transition": 1,
-            "turn_on_select_entity": TARGET_SELECT,
+            "turn_on_select_entity": TURN_ON_SELECT,
         },
     }
 
@@ -1112,12 +1112,12 @@ def trigger_and_assert(
     """Trigger occupancy and assert routed light/select service effects."""
     # Move the select entity off the expected option and note the last occupancy
     # turn-on, so neither wait below can pass on what an earlier turn-on left behind.
-    options = client.state(TARGET_SELECT)["attributes"]["options"]
+    options = client.state(TURN_ON_SELECT)["attributes"]["options"]
     decoy = next(option for option in options if option != selection)
     client.call_service(
-        "select", "select_option", {"entity_id": TARGET_SELECT, "option": decoy}
+        "select", "select_option", {"entity_id": TURN_ON_SELECT, "option": decoy}
     )
-    client.wait_state(TARGET_SELECT, lambda state: state["state"] == decoy, decoy)
+    client.wait_state(TURN_ON_SELECT, lambda state: state["state"] == decoy, decoy)
     occupancy_on_before = client.state(VIRTUAL_LIGHT)["attributes"].get(
         "last_on_occupancy"
     )
@@ -1133,7 +1133,7 @@ def trigger_and_assert(
         f"on at brightness {brightness} with the auto-on transition",
     )
     client.wait_state(
-        TARGET_SELECT,
+        TURN_ON_SELECT,
         lambda state: state["state"] == selection,
         f"selected as {selection}",
     )
@@ -3692,9 +3692,9 @@ def run_primary() -> None:
     reset_trigger(client)
     # With the select entity unavailable no option can be resolved: MoLight
     # warns (allow-listed) and still turns the lights on.
-    client.set_available(TARGET_SELECT, False)
+    client.set_available(TURN_ON_SELECT, False)
     client.wait_state(
-        TARGET_SELECT, lambda state: state["state"] == "unavailable", "unavailable"
+        TURN_ON_SELECT, lambda state: state["state"] == "unavailable", "unavailable"
     )
     client.set_state(RAW_MOTION, "on")
     client.wait_state(VIRTUAL_OCCUPANCY, lambda state: state["state"] == "on", "on")
@@ -3705,13 +3705,13 @@ def run_primary() -> None:
         ),
         "on without a resolvable turn-on selection",
     )
-    client.set_available(TARGET_SELECT, True)
+    client.set_available(TURN_ON_SELECT, True)
     reset_trigger(client)
     # A physical member turn-on applies no selection at all.
     client.call_service(
-        "select", "select_option", {"entity_id": TARGET_SELECT, "option": "Night"}
+        "select", "select_option", {"entity_id": TURN_ON_SELECT, "option": "Night"}
     )
-    client.wait_state(TARGET_SELECT, lambda state: state["state"] == "Night", "Night")
+    client.wait_state(TURN_ON_SELECT, lambda state: state["state"] == "Night", "Night")
     selection_before = client.state(VIRTUAL_LIGHT)["attributes"].get(
         "last_turn_on_selection_option"
     )
@@ -3719,7 +3719,7 @@ def run_primary() -> None:
     wait_machine_state(client, "active")
     assert_state_stays(
         client,
-        TARGET_SELECT,
+        TURN_ON_SELECT,
         lambda state: state["state"] == "Night",
         "untouched: a physical turn-on applies no selection",
     )
@@ -4405,7 +4405,7 @@ ALLOWED_WARNINGS = (
     # Deliberately provoked by the reference-cleanup scenario.
     "has no schedule; using outside-schedule settings",
     # Deliberately provoked by the turn-on selection scenario (select unavailable).
-    "Turn-on selection entity select.e2e_target_mode is unavailable",
+    "Turn-on selection entity select.e2e_turn_on_selection is unavailable",
     # Deliberately provoked by the faulty-member scenario (testbed `reject`).
     "Unable to turn on light.e2e_multi_on_off",
     "Unable to turn off light.e2e_multi_on_off",
@@ -9236,7 +9236,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
 def wait_parked_calls(client: HomeAssistantClient, calls: int) -> None:
     """Wait until the parked select entity holds this many select calls."""
     client.wait_state(
-        TARGET_SELECT,
+        TURN_ON_SELECT,
         lambda state: state["attributes"].get("testbed_parked_calls") == calls,
         f"holding {calls} select call(s)",
     )
@@ -9244,7 +9244,7 @@ def wait_parked_calls(client: HomeAssistantClient, calls: int) -> None:
 
 def release_select(client: HomeAssistantClient, *finish: Callable[[], None]) -> None:
     """Let the held select calls finish, and the service calls behind them."""
-    client.park_select(TARGET_SELECT, False)
+    client.park_select(TURN_ON_SELECT, False)
     wait_parked_calls(client, 0)
     for wait_for_answer in finish:
         wait_for_answer()
@@ -9282,7 +9282,7 @@ def create_park_light(client: HomeAssistantClient) -> str:
             "lights": [RAW_MULTI_DIMMER, RAW_MULTI_RGB],
             "turn_off_timeout": 12,
             **EMPTY_LIGHT_SECTIONS,
-            "behavior": {"turn_on_select_entity": TARGET_SELECT},
+            "behavior": {"turn_on_select_entity": TURN_ON_SELECT},
             "warning": {"warn_duration": 20, "warn_brightness": 20},
             "advanced": {"entity_id": "e2e_park"},
         },
@@ -9313,7 +9313,7 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
         {
             **EMPTY_LIGHT_SECTIONS,
             "turn_off_timeout": 30,
-            "behavior": {"turn_on_select_entity": TARGET_SELECT},
+            "behavior": {"turn_on_select_entity": TURN_ON_SELECT},
         },
     )
     expect_step(result, "scheduled_light_selection")
@@ -9336,14 +9336,14 @@ def park_light_off(client: HomeAssistantClient, light: str, *members: str) -> No
 def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     """What happens around a turn-on while its select call is still running."""
     members = (RAW_MULTI_DIMMER, RAW_MULTI_RGB)
-    option_before = client.state(TARGET_SELECT)["state"]
+    option_before = client.state(TURN_ON_SELECT)["state"]
     entry_id = create_park_light(client)
     assert_entry_loaded(client, entry_id)
     for member in members:
         wait_member(client, member, None)
 
     # An off during the call: the waiting turn-on never lights the room.
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     turn_on = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
     )
@@ -9367,7 +9367,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             "sent the off",
         )
     release_select(client, turn_on)
-    client.wait_state(TARGET_SELECT, lambda state: state["state"] == "Night", "Night")
+    client.wait_state(TURN_ON_SELECT, lambda state: state["state"] == "Night", "Night")
     assert_state_stays(
         client,
         PARK_LIGHT,
@@ -9383,7 +9383,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     checkpoint("an off during the select call kept the waiting turn-on from the lights")
 
     # A newer virtual turn-on during the call: only that one is sent.
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     first = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
     )
@@ -9411,9 +9411,9 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     # The select and one real light share a device, like a WLED strip and its
     # presets. The preset that lights that light is no physical change; the
     # other real light physically turned on still is, and wins.
-    client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], "E2E Preset Strip")
+    client.set_device([TURN_ON_SELECT, RAW_MULTI_DIMMER], "E2E Preset Strip")
     physical_before = client.state(PARK_LIGHT)["attributes"].get("last_on_physical")
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     turn_on = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 200}
     )
@@ -9469,7 +9469,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         wait_member(client, member, 200)
     lit = wait_machine_state(client, "active", PARK_LIGHT)["attributes"]
     time.sleep(max(0.0, started + 7 - time.monotonic()))
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     client.set_available(RAW_MULTI_DIMMER, False)
     client.wait_state(
         RAW_MULTI_DIMMER, lambda state: state["state"] == "unavailable", "unavailable"
@@ -9512,7 +9512,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     for member in members:
         wait_member(client, member, 200)
     wait_machine_state(client, "active", PARK_LIGHT)
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     client.set_available(RAW_MULTI_DIMMER, False)
     client.wait_state(
         RAW_MULTI_DIMMER, lambda state: state["state"] == "unavailable", "unavailable"
@@ -9573,7 +9573,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     scheduled_entry_id = create_park_scheduled_light(client)
     assert_entry_loaded(client, scheduled_entry_id)
     wait_end_light(client, PARK_SCHEDULED_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
-    client.park_select(TARGET_SELECT, True)
+    client.park_select(TURN_ON_SELECT, True)
     turn_on = client.call_service_in_background(
         "light", "turn_on", {"entity_id": PARK_SCHEDULED_LIGHT, "brightness": 200}
     )
@@ -9610,9 +9610,11 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_REMOVAL_MOTION, "off")
     remove_entry_and_entity(client, scheduled_entry_id, PARK_SCHEDULED_LIGHT)
     remove_entry_and_entity(client, schedule_entry_id, PARK_SCHEDULE)
-    client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], None)
+    client.set_device([TURN_ON_SELECT, RAW_MULTI_DIMMER], None)
     client.call_service(
-        "select", "select_option", {"entity_id": TARGET_SELECT, "option": option_before}
+        "select",
+        "select_option",
+        {"entity_id": TURN_ON_SELECT, "option": option_before},
     )
     print(
         "PASS: offs, newer turn-ons, physical changes, a warning, a new brightness and "
