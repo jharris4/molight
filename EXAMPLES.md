@@ -387,7 +387,7 @@ Schedule sensor:   binary_sensor.bedside_schedule
 Schedule mode:     Follow
 ```
 
-Each schedule window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a source-backed schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
+Each schedule window is a separate follow window: turn the lamp off at 07:00 and it stays off until the evening window starts, then comes on as usual. For weekday mornings only, wrap a workday sensor in a binary sensor schedule (as in Example 5), combine it with the morning window using **All**, and use that combined schedule in place of **Bedside Morning** above.
 
 ---
 

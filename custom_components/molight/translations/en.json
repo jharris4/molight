@@ -231,7 +231,7 @@
         },
         "data_description": {
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
+          "illuminance_hysteresis": "Hysteresis band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         }
       },
       "discover_light_defaults": {
@@ -269,7 +269,7 @@
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -398,7 +398,7 @@
         "data_description": {
           "illuminance_sensor": "The real lux sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
+          "illuminance_hysteresis": "Hysteresis band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         },
         "sections": {
           "advanced": {
@@ -565,7 +565,7 @@
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -694,7 +694,7 @@
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -786,7 +786,7 @@
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -1202,7 +1202,7 @@
     },
     "door_mode": {
       "options": {
-        "open": "On open: turn on when the door opens (turn-off timer)",
+        "open": "On open: turn on when the door opens, then the turn-off timer runs",
         "open_close": "Open & close: on while open, turn-off timer starts when closed"
       }
     },
@@ -1260,7 +1260,7 @@
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -1352,7 +1352,7 @@
               "maintain_occupancy_entity": "Optional. While this sensor is occupied, the light stays on regardless of how it was turned on. This sensor never turns the light on.",
               "illuminance_entity": "Optional. A MoLight illuminance sensor; occupancy only turns the lights on while it reports dark.",
               "illuminance_mode": "Control: going bright also forces the lights off. Gate only: bright only stops an off light turning on; use it when the lux sensor can see these lights, which would otherwise oscillate.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -1495,7 +1495,7 @@
         "data_description": {
           "illuminance_sensor": "The real lux sensor to wrap.",
           "illuminance_threshold": "Lux level at or above which it counts as bright (sensor on, no artificial light needed); below it counts as dark (sensor off).",
-          "illuminance_hysteresis": "Dead band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
+          "illuminance_hysteresis": "Hysteresis band that stops flapping around the threshold: becomes bright only at threshold + hysteresis, dark only below threshold - hysteresis. 0 disables."
         }
       },
       "schedule": {
@@ -1616,7 +1616,7 @@
               "schedule_entity": "Optional. A MoLight schedule sensor that drives or limits the lights according to its on/off state and the selected schedule mode.",
               "schedule_mode": "Follow: the schedule window turns the lights on and off. Gate: sensors turn the lights on only inside the window, and the three gate modes differ in what the window's end does to a light that is still on: turn it off, recalculate it from current presence and illuminance, or leave it alone.",
               "match_schedule_after_restart": "Follow mode only. A light found off inside its schedule window after a restart is turned on, and one found on outside the window is turned off, also over a manual change made before the restart; without it the light is left as found. Applies when an options edit reloads the light too. A turn-on or turn-off made while Home Assistant is starting always stands.",
-              "door_entity": "Optional. A door/contact binary sensor or a door, garage or gate cover; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
+              "door_entity": "Optional. A door/contact binary sensor or a cover with device class door, garage or gate; opening it turns the lights on, gated by darkness and a gate-mode schedule window exactly like occupancy.",
               "door_mode": "On open: opening turns the lights on with the turn-off timer; the door is otherwise ignored. Open & close: the lights stay on while the door is open and start the turn-off timer when it closes, unless occupancy still holds them.",
               "hold_entities": "Optional. While any of these is on (guest mode, movie night), every automatic turn-off is suspended. Turn-ons and manual control still work. Only an entity that reads on can hold, so a media player or a person needs a template binary sensor around it."
             }
@@ -1697,7 +1697,7 @@
       },
       "remote": {
         "title": "Virtual Remote",
-        "description": "Bind single or double clicks of remote-control buttons (their event entities) to remote actions. Whether a button supports double clicks is read from the button itself.",
+        "description": "Bind single or double clicks of remote-control buttons (their event entities) to remote actions on lights. Whether a button supports double clicks is read from the button itself.",
         "data": {
           "name": "Name",
           "target_lights": "Lights to control",
