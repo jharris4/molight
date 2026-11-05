@@ -53,8 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Virtual Remote**: buttons using Home Assistant's standard button events
-  (`press_start`), such as Lutron Caséta Picos and keypads on Home Assistant
-  2026.11, fire single clicks.
+  (`press_start`, or `press_end` on a button without it), such as Lutron
+  Caséta Picos and keypads on Home Assistant 2026.11 and ISY keypads, fire
+  single clicks.
 
 ### Fixed
 

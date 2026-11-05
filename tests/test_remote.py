@@ -2055,6 +2055,13 @@ NATIVE_VOCABULARIES = {
         ["press_end"],
     ),
     "lutron_caseta_keypad": (["press_start"], "press_start", None, []),
+    # isy994: ButtonEventType without press_start, so press_end is the single click.
+    "isy994": (
+        ["press_end", "multi_press_end", "long_press_start", "long_press_end"],
+        "press_end",
+        None,
+        ["multi_press_end", "long_press_start", "long_press_end"],
+    ),
     # event: every ButtonEventType member; only press_start fires a binding.
     "button_event_type": (
         [
