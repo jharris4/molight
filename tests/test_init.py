@@ -442,6 +442,8 @@ async def test_changing_the_auto_off_switch_entity_id_keeps_its_hold(
 
 
 @pytest.mark.asyncio
+# Home Assistant 2026.11 logs the failed unload as an error.
+@pytest.mark.allow_error_log
 async def test_failed_platform_unload_keeps_entry_data(hass: HomeAssistant) -> None:
     """A failed platform unload leaves the entry's shared data in place."""
     entry = make_light_entry(name="Hall", lights=["light.real_1"])

@@ -48,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Commands that a real light rejects**: a member whose integration raises no
   longer leaves the virtual light on over a dark room, or off over a lit one.
 
+## [1.9.1] - 2026-11-05
+
+### Added
+
+- **Virtual Remote**: buttons using Home Assistant's standard button events
+  (`press_start`), such as Lutron Caséta Picos and keypads on Home Assistant
+  2026.11, fire single clicks.
+
+### Fixed
+
+- **Home Assistant 2026.11**: changing a MoLight entity's ID made the entity
+  disappear.
+
 ## [1.9.0] - 2026-10-06
 
 This release adds **standby** for Virtual Scheduled Lights and makes sure each
@@ -400,7 +413,8 @@ Initial release.
   with startup-specific handling for lights, occupancy and illuminance.
 - HACS and hassfest validation, CI, and a brand icon.
 
-[Unreleased]: https://github.com/jharris4/molight/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/jharris4/molight/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/jharris4/molight/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/jharris4/molight/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jharris4/molight/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jharris4/molight/compare/v1.6.0...v1.7.0

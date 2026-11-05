@@ -2045,6 +2045,34 @@ NATIVE_VOCABULARIES = {
     ),
     "lutron_keypad": (["single_press"], "single_press", None, []),
     "lutron_raise_lower": (["press", "release"], "press", None, ["release"]),
+    # lutron_caseta from 2026.11: ButtonEventType, Picos report the release.
+    "lutron_caseta_pico": (
+        ["press_start", "press_end"],
+        "press_start",
+        None,
+        ["press_end"],
+    ),
+    "lutron_caseta_keypad": (["press_start"], "press_start", None, []),
+    # event: every ButtonEventType member; only press_start fires a binding.
+    "button_event_type": (
+        [
+            "press_start",
+            "press_end",
+            "long_press_start",
+            "long_press_end",
+            "multi_press_ongoing",
+            "multi_press_end",
+        ],
+        "press_start",
+        None,
+        [
+            "press_end",
+            "long_press_start",
+            "long_press_end",
+            "multi_press_ongoing",
+            "multi_press_end",
+        ],
+    ),
     "bthome": (
         [
             "press",

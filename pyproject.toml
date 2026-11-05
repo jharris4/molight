@@ -1,5 +1,7 @@
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# pytest-homeassistant needs Home Assistant to alias httpx before respx's plugin loads.
+addopts = "-p no:respx"
 testpaths = ["tests"]
 # Fail a hung test instead of hanging CI until the runner's limit.
 timeout = 60

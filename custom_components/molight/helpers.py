@@ -242,9 +242,12 @@ class EntityIdFollowingRestoreEntity(RestoreEntity):
         entry = self.registry_entry
         if entry is None or entry.entity_id == self.entity_id:
             return
-        saved = restore_state.async_get(self.hass).last_states
-        if (stored := saved.pop(self.entity_id, None)) is not None:
-            saved[entry.entity_id] = stored
+        data = restore_state.async_get(self.hass)
+        # Home Assistant 2026.11 saves state by registry ID, so it follows the entity.
+        if not hasattr(data, "last_states"):
+            return
+        if (stored := data.last_states.pop(self.entity_id, None)) is not None:
+            data.last_states[entry.entity_id] = stored
 
 
 def _judge_lights(

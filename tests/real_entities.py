@@ -385,6 +385,8 @@ async def add_real_with_entry(
         MockModule(
             "real", async_setup_entry=setup_entry, async_unload_entry=unload_entry
         ),
+        # Home Assistant 2026.11 only lets a custom integration return a bool.
+        built_in=False,
     )
     mock_platform(hass, "real.config_flow", None)
     for domain in domains:
