@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   system turns on from occupancy, such as a Lutron Caséta occupancy group, keeps that
   faster turn-on while MoLight runs the turn-off and the rest.
 
+### Changed
+
+- **Settings keys renamed** after their field labels, such as `turn_off_timeout`
+  and `keep_on_entities`; every entry is migrated when it loads. A migrated
+  entry does not load on 1.9.x.
+
 ### Deprecated
 
 - **Schedule sensors**: the `next_transition` attribute is now `next_change`.

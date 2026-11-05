@@ -30,18 +30,16 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
-    CONF_LIGHT_TIMEOUT,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_SOURCE,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -49,7 +47,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -1010,11 +1008,11 @@ async def test_occupancy_recovery_applies_a_settings_switch_during_outage(
         hass,
         make_scheduled_light_entry(
             outside={
-                CONF_LIGHT_TIMEOUT: 60,
-                CONF_OCCUPANCY_ENTITY: OCC,
-                CONF_ILLUMINANCE_ENTITY: ILLUM,
+                CONF_TURN_OFF_TIMEOUT: 60,
+                CONF_OCCUPANCY_SENSOR: OCC,
+                CONF_ILLUMINANCE_SENSOR: ILLUM,
             },
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCC},
         ),
     )
     await settle(hass)
@@ -1342,10 +1340,10 @@ async def test_occupancy_outage_across_a_settings_switch(
         hass,
         make_scheduled_light_entry(
             schedule=settings_schedule,
-            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
+            outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCC},
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
-                CONF_OCCUPANCY_ENTITY: OCC if same_sensor else other,
+                CONF_TURN_OFF_TIMEOUT: 60,
+                CONF_OCCUPANCY_SENSOR: OCC if same_sensor else other,
             },
         ),
     )
@@ -2570,7 +2568,7 @@ def _daylight_entry() -> MockConfigEntry:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 @pytest.mark.parametrize("trigger", ["occupancy", "door"])
 async def test_bright_gate_holds_while_the_illuminance_entry_reloads(
     hass: HomeAssistant, mode: str, trigger: str
@@ -3306,7 +3304,7 @@ async def test_illuminance_first_read_dark_after_a_seed_keeps_a_manual_off(
         door=DOOR,
         door_mode=DOOR_MODE_OPEN_CLOSE,
         illuminance=ILLUM,
-        illuminance_mode=ILLUMINANCE_MODE_GATE,
+        illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
     )
     await setup_entries(hass, light)
     hass.states.async_set(OCC if presence == "occupancy" else DOOR, "on")

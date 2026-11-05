@@ -34,10 +34,10 @@ from custom_components.molight.config_flow import (
 )
 from custom_components.molight.const import (
     CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE,
+    CONF_BRIGHTNESS_STEP,
     CONF_BRIGHTNESS_UP_BUTTONS_SINGLE,
-    CONF_DIM_STEP,
+    CONF_EFFECT_DURATION,
     CONF_ENTITY_TYPE,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OFF_BUTTONS_DOUBLE,
@@ -55,7 +55,8 @@ from custom_components.molight.const import (
     CONF_PRESET_2_BUTTONS_SINGLE,
     CONF_TARGET_LIGHTS,
     CONF_TOGGLE_BUTTONS_SINGLE,
-    DEFAULT_DIM_STEP,
+    CONF_TURN_OFF_TIMEOUT,
+    DEFAULT_BRIGHTNESS_STEP,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_REMOTE,
@@ -130,7 +131,7 @@ def _remote_entry(**cfg) -> MockConfigEntry:
         CONF_ENTITY_TYPE: ENTITY_TYPE_REMOTE,
         CONF_NAME: "Test Remote",
         CONF_TARGET_LIGHTS: ["light.test_light"],
-        CONF_DIM_STEP: 10,
+        CONF_BRIGHTNESS_STEP: 10,
         **cfg,
     }
     return MockConfigEntry(domain=DOMAIN, data=data)
@@ -564,7 +565,10 @@ async def test_brightness_step_below_one_percent_uses_the_default(
 ) -> None:
     """A brightness step that truncates to 0% would make the buttons do nothing."""
     remote = _remote_entry(
-        **{CONF_DIM_STEP: 0.5, CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"]}
+        **{
+            CONF_BRIGHTNESS_STEP: 0.5,
+            CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
+        }
     )
     hass.states.async_set("light.living_room", "off")
     _seed(hass, "event.pico_raise", PICO_TYPES)
@@ -574,7 +578,9 @@ async def test_brightness_step_below_one_percent_uses_the_default(
     _fire(hass, "event.pico_raise", "press", PICO_TYPES)
     await settle(hass)
     step_calls = [d for d in calls if "brightness_step_pct" in d["service_data"]]
-    assert step_calls[-1]["service_data"]["brightness_step_pct"] == DEFAULT_DIM_STEP
+    assert (
+        step_calls[-1]["service_data"]["brightness_step_pct"] == DEFAULT_BRIGHTNESS_STEP
+    )
 
 
 @pytest.mark.asyncio
@@ -663,7 +669,7 @@ async def _step_mid_warning(
     remote = _remote_entry(
         **{
             CONF_TARGET_LIGHTS: ["light.matrix_light", *(extra_targets or [])],
-            CONF_DIM_STEP: brightness_step,
+            CONF_BRIGHTNESS_STEP: brightness_step,
             CONF_BRIGHTNESS_UP_BUTTONS_SINGLE: ["event.pico_raise"],
             CONF_BRIGHTNESS_DOWN_BUTTONS_SINGLE: ["event.pico_lower"],
         }
@@ -1090,8 +1096,8 @@ async def test_click_cancels_off_warning(hass: HomeAssistant, freezer) -> None:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Test Light",
             CONF_LIGHTS: ["light.living_room"],
-            CONF_LIGHT_TIMEOUT: 60,
-            "effect_timeout": 10,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_EFFECT_DURATION: 10,
             "effect_brightness": 0,
         },
     )
@@ -1509,7 +1515,7 @@ async def test_options_rebind_takes_effect_live(
         {
             CONF_NAME: "Test Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_b"]},
         },
@@ -1562,7 +1568,7 @@ async def test_create_remote_flow(hass: HomeAssistant) -> None:
         {
             CONF_NAME: "Closet Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 15,
+            CONF_BRIGHTNESS_STEP: 15,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
             REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.pico_off"]},
@@ -1572,7 +1578,7 @@ async def test_create_remote_flow(hass: HomeAssistant) -> None:
     data = result["data"]
     assert data[CONF_ENTITY_TYPE] == ENTITY_TYPE_REMOTE
     assert data[CONF_TARGET_LIGHTS] == ["light.test_light"]
-    assert data[CONF_DIM_STEP] == 15
+    assert data[CONF_BRIGHTNESS_STEP] == 15
     assert data[CONF_ON_BUTTONS_SINGLE] == ["event.pico_on"]
     assert data[CONF_OFF_BUTTONS_SINGLE] == ["event.pico_off"]
     # Unbound keys are absent, not stored as [].
@@ -1588,7 +1594,7 @@ async def test_remote_flow_validation(hass: HomeAssistant) -> None:
     base = {
         CONF_NAME: "Bad Remote",
         CONF_TARGET_LIGHTS: ["light.test_light"],
-        CONF_DIM_STEP: 10,
+        CONF_BRIGHTNESS_STEP: 10,
         **EMPTY_REMOTE_SECTIONS,
     }
     cases = [
@@ -1652,7 +1658,7 @@ async def test_double_click_binding_allowed_when_capable_or_unknown(
     hass.states.async_set("event.no_types", "unknown", {"event_types": []})
     base = {
         CONF_TARGET_LIGHTS: ["light.test_light"],
-        CONF_DIM_STEP: 10,
+        CONF_BRIGHTNESS_STEP: 10,
         **EMPTY_REMOTE_SECTIONS,
     }
 
@@ -1729,7 +1735,7 @@ async def test_click_binding_judged_on_its_event_types(
     user_input = {
         CONF_NAME: "Vocab Remote",
         CONF_TARGET_LIGHTS: ["light.test_light"],
-        CONF_DIM_STEP: 10,
+        CONF_BRIGHTNESS_STEP: 10,
         **EMPTY_REMOTE_SECTIONS,
         REMOTE_ACTION_ON: {key: ["event.button", "event.never_seen"]},
     }
@@ -1762,7 +1768,7 @@ async def test_options_reject_a_single_click_on_a_button_without_one(
         {
             CONF_NAME: "Test Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on", "event.dial"]},
         },
@@ -1786,7 +1792,7 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
         {
             CONF_NAME: "Renamed Remote",
             CONF_TARGET_LIGHTS: ["light.other_light"],
-            CONF_DIM_STEP: 20,
+            CONF_BRIGHTNESS_STEP: 20,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.pico_off"]},
         },
@@ -1797,7 +1803,7 @@ async def test_remote_options_flow(hass: HomeAssistant) -> None:
     cfg = entry_settings(remote)
     assert cfg[CONF_NAME] == "Renamed Remote"
     assert cfg[CONF_TARGET_LIGHTS] == ["light.other_light"]
-    assert cfg[CONF_DIM_STEP] == 20
+    assert cfg[CONF_BRIGHTNESS_STEP] == 20
     assert cfg[CONF_OFF_BUTTONS_SINGLE] == ["event.pico_off"]
     # The original on-binding was cleared by the edit, not merged back in.
     assert CONF_ON_BUTTONS_SINGLE not in cfg
@@ -1817,7 +1823,7 @@ async def test_remote_flow_color_mode_picks_one_of_a_pair(
         {
             CONF_NAME: "Closet Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 15,
+            CONF_BRIGHTNESS_STEP: 15,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_PRESET_1: {
                 CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],
@@ -1860,7 +1866,7 @@ async def test_remote_options_clears_a_set_preset_color(
         {
             CONF_NAME: "Test Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_PRESET_1: {
                 CONF_PRESET_1_BUTTONS_SINGLE: ["event.pico_on"],
@@ -1906,7 +1912,7 @@ async def test_remote_flow_turn_on_values(hass: HomeAssistant) -> None:
         {
             CONF_NAME: "Closet Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 15,
+            CONF_BRIGHTNESS_STEP: 15,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_OFF: {CONF_OFF_BUTTONS_SINGLE: ["event.pico_off"]},
             SECTION_ON_VALUES: {
@@ -1950,7 +1956,7 @@ async def test_remote_options_clears_turn_on_values(hass: HomeAssistant) -> None
         {
             CONF_NAME: "Test Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
             SECTION_ON_VALUES: {
@@ -1996,7 +2002,7 @@ async def test_remote_options_reject_missing_targets(hass: HomeAssistant) -> Non
         {
             CONF_NAME: "Test Remote",
             CONF_TARGET_LIGHTS: [],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             REMOTE_ACTION_ON: {CONF_ON_BUTTONS_SINGLE: ["event.pico_on"]},
         },
@@ -2267,7 +2273,7 @@ async def _create_remote_through_flow(hass: HomeAssistant, sections: dict) -> di
         {
             CONF_NAME: "Native Remote",
             CONF_TARGET_LIGHTS: ["light.test_light"],
-            CONF_DIM_STEP: 10,
+            CONF_BRIGHTNESS_STEP: 10,
             **EMPTY_REMOTE_SECTIONS,
             **sections,
         },

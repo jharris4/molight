@@ -16,28 +16,27 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_EFFECT_BRIGHTNESS,
-    CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_DURATION,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
-    CONF_LIGHT_TIMEOUT,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SENSOR,
     CONF_TIME_WINDOWS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_WARN_BRIGHTNESS,
-    CONF_WARN_TIMEOUT,
+    CONF_WARN_DURATION,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     ENTITY_TYPE_OCCUPANCY,
     ENTITY_TYPE_SCHEDULE,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_ACTIVE,
@@ -67,9 +66,9 @@ def _bright_gated_light_entry() -> MockConfigEntry:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Bright Gated Light",
             CONF_LIGHTS: ["light.living_room"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
         },
     )
 
@@ -101,8 +100,8 @@ def _follow_light_entry() -> MockConfigEntry:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Porch Light",
             CONF_LIGHTS: ["light.porch_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_SCHEDULE_SENSOR: "binary_sensor.night_schedule",
             CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
         },
     )
@@ -297,9 +296,9 @@ async def test_auto_on_brightness_applied_on_occupancy(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Bright Light",
             CONF_LIGHTS: ["light.living_room"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
             CONF_AUTO_ON_BRIGHTNESS: 40,  # 40% → 102 of 255
         },
     )
@@ -327,7 +326,7 @@ async def test_auto_on_brightness_not_applied_on_virtual_on(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Bright Light",
             CONF_LIGHTS: ["light.living_room"],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             CONF_AUTO_ON_BRIGHTNESS: 40,
         },
     )
@@ -360,8 +359,8 @@ async def test_auto_on_brightness_applied_on_schedule_window(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Porch Light",
             CONF_LIGHTS: ["light.porch_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_SCHEDULE_SENSOR: "binary_sensor.night_schedule",
             CONF_SCHEDULE_MODE: SCHEDULE_MODE_FOLLOW,
             CONF_AUTO_ON_BRIGHTNESS: 40,  # 40% → 102 of 255
         },
@@ -393,8 +392,8 @@ async def test_auto_on_brightness_applied_on_illuminance_dark(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Kitchen Light",
             CONF_LIGHTS: ["light.kitchen_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
             CONF_AUTO_ON_BRIGHTNESS: 40,
         },
     )
@@ -490,8 +489,8 @@ async def test_illuminance_dark_resumes_remaining_time(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Kitchen Light",
             CONF_LIGHTS: ["light.kitchen_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
         },
     )
     await _setup_entries(hass, illuminance_entry, light)
@@ -583,8 +582,8 @@ async def test_brightness_change_while_occupied_records_without_timer(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Occ Dim Light",
             CONF_LIGHTS: ["light.real_dim"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.occ_dim",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.occ_dim",
         },
     )
     await _setup_entries(hass, entry)
@@ -800,8 +799,8 @@ def _fd_light_entry() -> MockConfigEntry:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "FD Light",
             CONF_LIGHTS: ["light.fd_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.fd_occupancy",
         },
     )
 
@@ -844,8 +843,8 @@ async def test_false_detection_off_delay_is_configurable(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "FD Light",
             CONF_LIGHTS: ["light.fd_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.fd_occupancy",
             "false_detection_off_delay": delay,
         },
     )
@@ -921,9 +920,9 @@ async def test_stale_occupancy_ownership_never_cuts_user_lights(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "FD Light",
             CONF_LIGHTS: ["light.fd_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.fd_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.fd_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
         },
     )
     await _setup_entries(hass, _fd_occupancy_entry(), illuminance_entry, light)
@@ -981,10 +980,10 @@ async def test_illuminance_gate_only_mode_never_forces_off(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Gate Only Light",
             CONF_LIGHTS: ["light.den_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.test_illuminance",
-            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.test_illuminance",
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
         },
     )
     await _setup_entries(hass, occupancy_entry, illuminance_entry, light)
@@ -1126,7 +1125,7 @@ async def _start_follow_light_with_schedule_unreadable(
     entry = _follow_light_entry()
     if keep_on:
         entry = MockConfigEntry(
-            domain=DOMAIN, data={**entry.data, CONF_HOLD_ENTITIES: [keep_on]}
+            domain=DOMAIN, data={**entry.data, CONF_KEEP_ON_ENTITIES: [keep_on]}
         )
     hass.set_state(CoreState.starting)
     await _setup_entries(hass, entry)
@@ -1301,9 +1300,9 @@ async def test_gate_mode_blocks_occupancy_outside_window(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Schedule-gated Light",
             CONF_LIGHTS: ["light.hall_real"],
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.test_occupancy",
-            CONF_SCHEDULE_ENTITY: "binary_sensor.night_schedule",
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy",
+            CONF_SCHEDULE_SENSOR: "binary_sensor.night_schedule",
             CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
         },
     )
@@ -1447,17 +1446,17 @@ def _warn_light_entry(
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: "Test Light",
         CONF_LIGHTS: ["light.living_room"],
-        CONF_LIGHT_TIMEOUT: timeout,
-        CONF_EFFECT_TIMEOUT: effect_timeout,
+        CONF_TURN_OFF_TIMEOUT: timeout,
+        CONF_EFFECT_DURATION: effect_timeout,
         CONF_EFFECT_BRIGHTNESS: effect_brightness,
-        CONF_WARN_TIMEOUT: warn_timeout,
+        CONF_WARN_DURATION: warn_timeout,
     }
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
     if occupancy:
-        data[CONF_OCCUPANCY_ENTITY] = occupancy
+        data[CONF_OCCUPANCY_SENSOR] = occupancy
     if keep_on_entities:
-        data[CONF_HOLD_ENTITIES] = keep_on_entities
+        data[CONF_KEEP_ON_ENTITIES] = keep_on_entities
     return virtual_light_behavior_entry(MockConfigEntry(domain=DOMAIN, data=data))
 
 

@@ -26,42 +26,40 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
-    CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
+    CONF_DOOR_SENSOR,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_COLOR_TEMP,
+    CONF_EFFECT_DURATION,
     CONF_EFFECT_RGB_COLOR,
-    CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_FALSE_OFF_DELAY,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_END_ACTION,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SENSOR,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
+    CONF_WARN_DURATION,
     CONF_WARN_RGB_COLOR,
-    CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_KEPT,
     DATA_SCHEDULE_WATCH,
@@ -95,7 +93,7 @@ def virtual_light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
         "Tests for a regular Virtual Light schedule mode must use the "
         "regular_virtual_light_only marker"
     )
-    assert CONF_SCHEDULE_ENTITY not in entry.data, marker_error
+    assert CONF_SCHEDULE_SENSOR not in entry.data, marker_error
     assert CONF_SCHEDULE_MODE not in entry.data, marker_error
 
     settings = {
@@ -106,14 +104,14 @@ def virtual_light_behavior_entry(entry: MockConfigEntry) -> MockConfigEntry:
     # Deliberately make the inactive settings set unlike the active one. This ensures
     # the shared behavior tests fail if a Virtual Scheduled Light loads the wrong
     # settings set.
-    inactive_settings = {CONF_LIGHT_TIMEOUT: 9999}
+    inactive_settings = {CONF_TURN_OFF_TIMEOUT: 9999}
     return MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: entry.data[CONF_NAME],
             CONF_LIGHTS: entry.data[CONF_LIGHTS],
-            CONF_SCHEDULE_ENTITY: _BEHAVIOR_SCHEDULE,
+            CONF_SCHEDULE_SENSOR: _BEHAVIOR_SCHEDULE,
             CONF_OUTSIDE_SCHEDULE_SETTINGS: (
                 settings if variant == "scheduled_outside" else inactive_settings
             ),
@@ -190,32 +188,32 @@ def make_light_entry(
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: name,
         CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
-        CONF_LIGHT_TIMEOUT: timeout,
+        CONF_TURN_OFF_TIMEOUT: timeout,
     }
     if false_off_delay is not None:
         data[CONF_FALSE_OFF_DELAY] = false_off_delay
     if occupancy:
-        data[CONF_OCCUPANCY_ENTITY] = occupancy
+        data[CONF_OCCUPANCY_SENSOR] = occupancy
     if occupancy_turn_on:
         data[CONF_OCCUPANCY_TURN_ON] = occupancy_turn_on
     if maintain:
-        data[CONF_MAINTAIN_OCCUPANCY_ENTITY] = maintain
+        data[CONF_MAINTAIN_OCCUPANCY_SENSOR] = maintain
     if illuminance:
-        data[CONF_ILLUMINANCE_ENTITY] = illuminance
+        data[CONF_ILLUMINANCE_SENSOR] = illuminance
     if illuminance_mode:
         data[CONF_ILLUMINANCE_MODE] = illuminance_mode
     if schedule:
-        data[CONF_SCHEDULE_ENTITY] = schedule
+        data[CONF_SCHEDULE_SENSOR] = schedule
     if schedule_mode:
         data[CONF_SCHEDULE_MODE] = schedule_mode
     if match_schedule_after_restart:
         data[CONF_MATCH_SCHEDULE_AFTER_RESTART] = match_schedule_after_restart
     if door:
-        data[CONF_DOOR_ENTITY] = door
+        data[CONF_DOOR_SENSOR] = door
     if door_mode:
         data[CONF_DOOR_MODE] = door_mode
     if keep_on_entities:
-        data[CONF_HOLD_ENTITIES] = keep_on_entities
+        data[CONF_KEEP_ON_ENTITIES] = keep_on_entities
     if auto_on_brightness is not None:
         data[CONF_AUTO_ON_BRIGHTNESS] = auto_on_brightness
     if auto_on_color_temp is not None:
@@ -223,7 +221,7 @@ def make_light_entry(
     if auto_on_rgb_color is not None:
         data[CONF_AUTO_ON_RGB_COLOR] = auto_on_rgb_color
     if effect_timeout is not None:
-        data[CONF_EFFECT_TIMEOUT] = effect_timeout
+        data[CONF_EFFECT_DURATION] = effect_timeout
     if effect_brightness is not None:
         data[CONF_EFFECT_BRIGHTNESS] = effect_brightness
     if effect_color_temp is not None:
@@ -231,7 +229,7 @@ def make_light_entry(
     if effect_rgb_color is not None:
         data[CONF_EFFECT_RGB_COLOR] = effect_rgb_color
     if warn_timeout is not None:
-        data[CONF_WARN_TIMEOUT] = warn_timeout
+        data[CONF_WARN_DURATION] = warn_timeout
     if warn_brightness is not None:
         data[CONF_WARN_BRIGHTNESS] = warn_brightness
     if warn_color_temp is not None:
@@ -265,12 +263,12 @@ def make_scheduled_light_entry(
     inside: dict | None = None,
 ) -> MockConfigEntry:
     """Build a Virtual Scheduled Light entry with two flat settings sets."""
-    default_settings = {CONF_LIGHT_TIMEOUT: 60}
+    default_settings = {CONF_TURN_OFF_TIMEOUT: 60}
     data = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
         CONF_NAME: name,
         CONF_LIGHTS: lights if lights is not None else ["light.real_1"],
-        CONF_SCHEDULE_ENTITY: schedule,
+        CONF_SCHEDULE_SENSOR: schedule,
         CONF_OUTSIDE_SCHEDULE_SETTINGS: outside or default_settings,
         CONF_INSIDE_SCHEDULE_SETTINGS: inside or default_settings,
     }
@@ -565,7 +563,7 @@ def light_entry() -> MockConfigEntry:
                 CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
                 CONF_NAME: "Test Light",
                 CONF_LIGHTS: ["light.living_room"],
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
             },
         )
     )

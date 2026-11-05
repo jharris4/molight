@@ -12,10 +12,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.molight.const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
 )
@@ -55,21 +55,21 @@ def test_entry_settings_options_fully_replace_data() -> None:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Kitchen",
             CONF_LIGHTS: ["light.kitchen_real"],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             # The user cleared this reference in the options flow, so it is
             # present in data but absent from options.
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.kitchen_occupancy",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.kitchen_occupancy",
         },
         options={
             CONF_NAME: "Kitchen Renamed",
             CONF_LIGHTS: ["light.kitchen_real"],
-            CONF_LIGHT_TIMEOUT: 120,
+            CONF_TURN_OFF_TIMEOUT: 120,
         },
     )
     cfg = entry_settings(entry)
     assert cfg[CONF_NAME] == "Kitchen Renamed"
-    assert cfg[CONF_LIGHT_TIMEOUT] == 120
-    assert CONF_OCCUPANCY_ENTITY not in cfg
+    assert cfg[CONF_TURN_OFF_TIMEOUT] == 120
+    assert CONF_OCCUPANCY_SENSOR not in cfg
 
 
 def test_entry_settings_entity_type_always_comes_from_data() -> None:

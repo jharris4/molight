@@ -56,7 +56,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     COMBINE_LATEST,
-    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
@@ -74,7 +74,7 @@ from .const import (
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
     DATA_SCHEDULE_WATCH,
-    DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     DEFAULT_FALSE_DETECTION_GRACE,
     DEFAULT_ILLUMINANCE_HYSTERESIS,
     DEFAULT_ILLUMINANCE_THRESHOLD,
@@ -214,7 +214,7 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
     last_clear_false_detection so lights can turn off after their
     false-detection off delay.
 
-    Clear after unavailable (when clear_on_unavailable_timeout > 0): a source
+    Clear after unavailable (when clear_after_unavailable_timeout > 0): a source
     that stays unavailable/unknown while occupied would otherwise
     hold occupancy (and any lights it lit) on forever. Instead, the person
     is assumed present right up to the dropout: latest_occupied_time advances
@@ -245,8 +245,8 @@ class VirtualOccupancySensor(BinarySensorEntity, EntityIdFollowingRestoreEntity)
         )
         self._unavailable_timeout: int = int(
             cfg.get(
-                CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-                DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+                CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
+                DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
             )
         )
         self._attr_is_on = False

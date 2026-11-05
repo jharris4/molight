@@ -36,34 +36,32 @@ from custom_components.molight.config_flow import (
     SECTION_WARNING,
 )
 from custom_components.molight.const import (
-    CONF_DOOR_ENTITY,
+    CONF_DOOR_SENSOR,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_DEFINITION,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
@@ -160,11 +158,11 @@ OCCUPANCY = "binary_sensor.room_occupancy"
 # ---------------------------------------------------------------------------
 
 _LIGHT_REFERENCES = {
-    CONF_OCCUPANCY_ENTITY: "binary_sensor.occ",
-    CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.maintain",
-    CONF_ILLUMINANCE_ENTITY: "binary_sensor.bright",
-    CONF_DOOR_ENTITY: "binary_sensor.door",
-    CONF_HOLD_ENTITIES: ["switch.keep_on_a", "switch.keep_on_b"],
+    CONF_OCCUPANCY_SENSOR: "binary_sensor.occ",
+    CONF_MAINTAIN_OCCUPANCY_SENSOR: "binary_sensor.maintain",
+    CONF_ILLUMINANCE_SENSOR: "binary_sensor.bright",
+    CONF_DOOR_SENSOR: "binary_sensor.door",
+    CONF_KEEP_ON_ENTITIES: ["switch.keep_on_a", "switch.keep_on_b"],
     CONF_TURN_ON_SELECT_ENTITY: "select.target",
     CONF_TURN_ON_SELECT_OPTION: "Cozy",
     CONF_TURN_ON_SELECT_SOURCE_ENTITY: "select.source",
@@ -174,8 +172,8 @@ _REFERENCING_SETTINGS = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: "Refs Light",
         CONF_LIGHTS: ["light.a", "light.b"],
-        CONF_LIGHT_TIMEOUT: 60,
-        CONF_SCHEDULE_ENTITY: "binary_sensor.sched",
+        CONF_TURN_OFF_TIMEOUT: 60,
+        CONF_SCHEDULE_SENSOR: "binary_sensor.sched",
         CONF_SCHEDULE_MODE: SCHEDULE_MODE_GATE,
         **_LIGHT_REFERENCES,
     },
@@ -183,13 +181,16 @@ _REFERENCING_SETTINGS = {
         CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
         CONF_NAME: "Refs Scheduled",
         CONF_LIGHTS: ["light.a", "light.b"],
-        CONF_SCHEDULE_ENTITY: "binary_sensor.sched",
-        CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60, **_LIGHT_REFERENCES},
-        CONF_INSIDE_SCHEDULE_SETTINGS: {
-            CONF_LIGHT_TIMEOUT: 60,
+        CONF_SCHEDULE_SENSOR: "binary_sensor.sched",
+        CONF_OUTSIDE_SCHEDULE_SETTINGS: {
+            CONF_TURN_OFF_TIMEOUT: 60,
             **_LIGHT_REFERENCES,
-            CONF_DOOR_ENTITY: "binary_sensor.inner_door",
-            CONF_HOLD_ENTITIES: ["switch.keep_on_b", "switch.keep_on_c"],
+        },
+        CONF_INSIDE_SCHEDULE_SETTINGS: {
+            CONF_TURN_OFF_TIMEOUT: 60,
+            **_LIGHT_REFERENCES,
+            CONF_DOOR_SENSOR: "binary_sensor.inner_door",
+            CONF_KEEP_ON_ENTITIES: ["switch.keep_on_b", "switch.keep_on_c"],
         },
     },
     "occupancy": {
@@ -631,7 +632,7 @@ async def test_follow_schedule_with_changed_entity_id_is_not_a_new_window(
 
     calls = record_service_calls(hass)
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
-    assert entry_settings(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
+    assert entry_settings(light)[CONF_SCHEDULE_SENSOR] == "binary_sensor.daytime"
     assert hass.states.get(VIRTUAL).state == "off"
     assert light_targets(calls, "turn_on") == []
     assert attrs(hass)["schedule_window_start"] == marker
@@ -706,7 +707,7 @@ async def test_schedule_sensor_with_changed_entity_id_is_not_a_boundary(
     await add_real(hass, member)
     light = make_scheduled_light_entry(
         schedule="binary_sensor.day",
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 10},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 10},
     )
     await setup_entries(hass, schedule_entry(), light)
     await settle(hass)
@@ -721,7 +722,7 @@ async def test_schedule_sensor_with_changed_entity_id_is_not_a_boundary(
     calls = record_service_calls(hass)
     await change_entity_id(hass, "binary_sensor.day", "binary_sensor.daytime")
 
-    assert entry_settings(light)[CONF_SCHEDULE_ENTITY] == "binary_sensor.daytime"
+    assert entry_settings(light)[CONF_SCHEDULE_SENSOR] == "binary_sensor.daytime"
     state = hass.states.get(virtual)
     assert state.state == "off"
     assert state.attributes["active_settings"] == "inside_schedule"
@@ -1109,7 +1110,7 @@ async def test_outer_light_follows_the_inner_lights_entity_id_change(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Outer",
             CONF_LIGHTS: ["light.inner"],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
         },
     )
     await setup_entries(hass, inner, outer)
@@ -1146,7 +1147,7 @@ async def test_entity_id_change_reaches_an_entry_that_is_disabled(
     await settle(hass)
 
     await change_entity_id(hass, OCCUPANCY, "binary_sensor.presence")
-    assert entry_settings(light)[CONF_OCCUPANCY_ENTITY] == "binary_sensor.presence"
+    assert entry_settings(light)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.presence"
     assert light.disabled_by is ConfigEntryDisabler.USER
     assert light.state is ConfigEntryState.NOT_LOADED
 
@@ -1201,7 +1202,7 @@ async def test_new_entity_under_a_former_entity_id_is_not_the_one_that_had_it(
 @pytest.mark.parametrize("saved_by", ["create", "options"])
 @pytest.mark.parametrize(
     ("domain", "role"),
-    [("light", CONF_LIGHTS), ("binary_sensor", CONF_HOLD_ENTITIES)],
+    [("light", CONF_LIGHTS), ("binary_sensor", CONF_KEEP_ON_ENTITIES)],
     ids=["light_member", "keep_on_entity"],
 )
 async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_with_it(
@@ -1227,8 +1228,8 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
     submitted = {
         CONF_NAME: "Wrapper",
         CONF_LIGHTS: refs[CONF_LIGHTS],
-        CONF_LIGHT_TIMEOUT: 60,
-        SECTION_SENSORS: {CONF_HOLD_ENTITIES: refs.get(CONF_HOLD_ENTITIES, [])},
+        CONF_TURN_OFF_TIMEOUT: 60,
+        SECTION_SENSORS: {CONF_KEEP_ON_ENTITIES: refs.get(CONF_KEEP_ON_ENTITIES, [])},
         SECTION_BEHAVIOR: {},
         SECTION_WARNING: {},
     }
@@ -1255,7 +1256,7 @@ async def test_reference_saved_to_an_entity_that_took_a_former_entity_id_stays_w
         await settle(hass)
     else:
         await tick(hass, freezer, ENTITY_ID_CHANGE_SETTLE_SECONDS)
-    assert entry_settings(keeper)[CONF_HOLD_ENTITIES] == [new]
+    assert entry_settings(keeper)[CONF_KEEP_ON_ENTITIES] == [new]
     assert entry_settings(saved)[role] == [old]
 
 
@@ -1287,7 +1288,7 @@ async def test_timeout_check_and_removal_follow_a_sensor_whose_entity_id_changed
 
     await hass.config_entries.async_remove(sensor.entry_id)
     await settle(hass)
-    assert CONF_OCCUPANCY_ENTITY not in entry_settings(light)
+    assert CONF_OCCUPANCY_SENSOR not in entry_settings(light)
 
 
 # ---------------------------------------------------------------------------
@@ -1434,7 +1435,7 @@ async def test_scheduled_light_with_changed_entity_id_keeps_its_standby(
         schedule_entry(),
         make_scheduled_light_entry(
             schedule="binary_sensor.day",
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 10},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 10},
         ),
     )
     await settle(hass)

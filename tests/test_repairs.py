@@ -9,12 +9,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_SCHEDULED_LIGHT,
 )
@@ -84,7 +84,7 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
     assert list(molight_issues(hass, entry.entry_id)) == [f"hold_never_on_{TV}"]
 
     hass.config_entries.async_update_entry(
-        entry, options={**entry_settings(entry), CONF_HOLD_ENTITIES: []}
+        entry, options={**entry_settings(entry), CONF_KEEP_ON_ENTITIES: []}
     )
     await settle(hass)
     assert molight_issues(hass, entry.entry_id) == {}
@@ -213,8 +213,8 @@ async def test_a_scheduled_light_with_no_schedule_raises_an_issue(
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Porch",
             CONF_LIGHTS: [REAL],
-            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
-            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+            CONF_OUTSIDE_SCHEDULE_SETTINGS: {CONF_TURN_OFF_TIMEOUT: 60},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_TURN_OFF_TIMEOUT: 60},
         },
     )
     await setup_entries(hass, entry)

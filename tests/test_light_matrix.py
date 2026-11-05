@@ -21,7 +21,7 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -271,7 +271,7 @@ async def _assert_resumed_for(hass: HomeAssistant, freezer, seconds: int) -> Non
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 @pytest.mark.parametrize("off_via", ["virtual", "physical"])
 async def test_dark_edge_does_not_turn_on_after_manual_off(
     hass: HomeAssistant, freezer, mode: str, off_via: str
@@ -2055,7 +2055,7 @@ async def _assert_false_blip_keeps_the_visits_timer(
             occupancy=OCC,
             maintain=MAINT if hold == "maintain" else None,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
             schedule=SCHED if lit_by == "window" else None,
             schedule_mode=SCHEDULE_MODE_GATE if lit_by == "window" else None,
         ),

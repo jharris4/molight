@@ -50,13 +50,13 @@ from custom_components.molight.const import (
     ATTR_SCHEDULE_END_OFF_PENDING,
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_ON_BRIGHTNESS,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_KEEP_ON_ENTITIES,
+    CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     DOMAIN,
@@ -299,8 +299,8 @@ def _standby_entry(
         name="Matrix Light",
         schedule=SCHED,
         schedule_end_action=schedule_end_action,
-        outside={CONF_LIGHT_TIMEOUT: 60},
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
     )
 
 
@@ -405,8 +405,8 @@ async def test_missed_end_survives_a_stop_during_startup(
         name="Matrix Light",
         schedule=SCHED,
         schedule_end_action=schedule_end_action,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCC},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call(
@@ -495,9 +495,9 @@ def _end_entry(mode: str, members: list[str], *, hold: bool = False):
             schedule_mode=SCHEDULE_MODE_FOLLOW,
             keep_on_entities=[KEEP_ON] if hold else None,
         )
-    settings = {CONF_LIGHT_TIMEOUT: 60}
+    settings = {CONF_TURN_OFF_TIMEOUT: 60}
     if hold:
-        settings[CONF_HOLD_ENTITIES] = [KEEP_ON]
+        settings[CONF_KEEP_ON_ENTITIES] = [KEEP_ON]
     return make_scheduled_light_entry(
         name="Matrix Light",
         lights=members,
@@ -768,8 +768,8 @@ def _switch_entry() -> MockConfigEntry:
         name="Matrix Light",
         schedule=SCHED,
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCC},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCC},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
 
 
@@ -1314,9 +1314,9 @@ async def _light_at_standby(hass: HomeAssistant, **inside) -> MockConfigEntry:
     entry = make_scheduled_light_entry(
         name="Matrix Light",
         schedule=SCHED,
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             CONF_STANDBY_BRIGHTNESS: 20,
             CONF_AUTO_ON_BRIGHTNESS: 80,
             **inside,
@@ -1613,11 +1613,11 @@ async def test_late_setup_keeps_standby_on_while_bright_under_the_saved_hold(
     entry = make_scheduled_light_entry(
         name="Matrix Light",
         schedule=SCHED,
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             CONF_STANDBY_BRIGHTNESS: 20,
-            CONF_ILLUMINANCE_ENTITY: ILLUM,
+            CONF_ILLUMINANCE_SENSOR: ILLUM,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
     )

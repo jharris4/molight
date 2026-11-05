@@ -13,26 +13,31 @@ from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 
 from .const import (
-    CONF_DOOR_ENTITY,
+    CONF_BRIGHTNESS_STEP,
+    CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
+    CONF_DOOR_SENSOR,
+    CONF_EFFECT_DURATION,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
+    CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MAINTAIN_SENSORS,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_INPUTS,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
+    CONF_WARN_DURATION,
+    CONFIG_ENTRY_VERSION,
     DATA_AUTO_OFF_ENABLED,
     DATA_AUTO_OFF_KEPT,
     DATA_ENTITY_ID_CHANGED,
@@ -41,6 +46,7 @@ from .const import (
     DATA_SCHEDULE_WATCH,
     DOMAIN,
     ENTITY_TYPE_REMOTE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     PLATFORMS,
     PLATFORMS_BY_ENTITY_TYPE,
     REMOTE_ACTION_FIELDS,
@@ -69,18 +75,18 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 # sensor no longer exists would read the gate as permanently closed and
 # silently stop automating).
 _REFERENCE_KEYS = (
-    CONF_DOOR_ENTITY,
-    CONF_OCCUPANCY_ENTITY,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
-    CONF_ILLUMINANCE_ENTITY,
-    CONF_SCHEDULE_ENTITY,
+    CONF_DOOR_SENSOR,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
 )
 _REFERENCE_LIST_KEYS = (
     CONF_TRIGGER_SENSORS,
     CONF_MAINTAIN_SENSORS,
     CONF_SCHEDULE_INPUTS,
-    CONF_HOLD_ENTITIES,
+    CONF_KEEP_ON_ENTITIES,
     CONF_TARGET_LIGHTS,
     # A virtual light may wrap another virtual light (the member picker is any
     # light entity). A removed member must not linger: _all_lights_off treats
@@ -92,8 +98,6 @@ _REFERENCE_LIST_KEYS = (
 # entities MoLight does not create, so a removed entry cannot leave them.
 _ENTITY_ID_KEYS = (
     *_REFERENCE_KEYS,
-    CONF_OCCUPANCY_SENSOR,
-    CONF_ILLUMINANCE_SENSOR,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
 )
@@ -275,15 +279,22 @@ def _remap_references(
     keys: tuple[str, ...],
     list_keys: tuple[str, ...],
 ) -> dict[str, Any]:
-    """Return cfg with each mapped entity ID replaced, or dropped if mapped to None.
+    """Return cfg with each mapped entity ID replaced, or dropped if mapped to None."""
+    return _in_each_settings_set(
+        cfg, lambda settings: _remap_settings(settings, mapping, keys, list_keys)
+    )
 
-    Covers the top level and both settings sets of a Virtual Scheduled Light.
-    """
-    remapped = _remap_settings(cfg, mapping, keys, list_keys)
+
+def _in_each_settings_set(
+    cfg: Mapping[str, Any],
+    rewrite: Callable[[Mapping[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    """Return cfg rewritten at the top level and in both settings sets."""
+    rewritten = rewrite(cfg)
     for settings_set in (CONF_OUTSIDE_SCHEDULE_SETTINGS, CONF_INSIDE_SCHEDULE_SETTINGS):
-        if isinstance(settings := remapped.get(settings_set), dict):
-            remapped[settings_set] = _remap_settings(settings, mapping, keys, list_keys)
-    return remapped
+        if isinstance(settings := rewritten.get(settings_set), dict):
+            rewritten[settings_set] = rewrite(settings)
+    return rewritten
 
 
 def _remap_settings(
@@ -310,6 +321,47 @@ def _remap_settings(
                 )
             )
     return remapped
+
+
+# Entry version 2 renamed these settings keys after their field labels, in every
+# settings set and in data and options alike.
+_RENAMED_KEYS = {
+    "light_timeout": CONF_TURN_OFF_TIMEOUT,
+    "effect_timeout": CONF_EFFECT_DURATION,
+    "warn_timeout": CONF_WARN_DURATION,
+    "hold_entities": CONF_KEEP_ON_ENTITIES,
+    "occupancy_entity": CONF_OCCUPANCY_SENSOR,
+    "maintain_occupancy_entity": CONF_MAINTAIN_OCCUPANCY_SENSOR,
+    "illuminance_entity": CONF_ILLUMINANCE_SENSOR,
+    "schedule_entity": CONF_SCHEDULE_SENSOR,
+    "door_entity": CONF_DOOR_SENSOR,
+    "clear_on_unavailable_timeout": CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
+    "dim_step": CONF_BRIGHTNESS_STEP,
+}
+_RENAMED_ILLUMINANCE_MODES = {"gate": ILLUMINANCE_MODE_GATE_ONLY}
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Bring an entry saved by an earlier release up to the current version."""
+    if entry.version > CONFIG_ENTRY_VERSION:
+        return False  # saved by a later release, under keys unknown here
+    if entry.version < CONFIG_ENTRY_VERSION:
+        hass.config_entries.async_update_entry(
+            entry,
+            data=_in_each_settings_set(entry.data, _rename_settings),
+            options=_in_each_settings_set(entry.options, _rename_settings),
+            version=CONFIG_ENTRY_VERSION,
+        )
+    return True
+
+
+def _rename_settings(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """Return cfg under the version-2 keys, every value copied as it is."""
+    renamed = {_RENAMED_KEYS.get(key, key): value for key, value in cfg.items()}
+    mode = renamed.get(CONF_ILLUMINANCE_MODE)
+    if mode in _RENAMED_ILLUMINANCE_MODES:
+        renamed[CONF_ILLUMINANCE_MODE] = _RENAMED_ILLUMINANCE_MODES[mode]
+    return renamed
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -430,8 +482,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if other.entry_id == entry.entry_id:
             continue
         cfg = entry_settings(other)
+        # The occupancy and illuminance keys also name a sensor entry's own source,
+        # which is never a MoLight entity; clean them up on lights only.
+        keys = _REFERENCE_KEYS if _is_virtual_light(other) else (CONF_SCHEDULE_SOURCE,)
         cleaned = _remap_references(
-            cfg, dict.fromkeys(removed), _REFERENCE_KEYS, _REFERENCE_LIST_KEYS
+            cfg, dict.fromkeys(removed), keys, _REFERENCE_LIST_KEYS
         )
         if cleaned == cfg:
             continue

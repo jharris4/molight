@@ -138,7 +138,7 @@ async def test_a_trigger_while_the_light_is_on_is_not_blocked(hass) -> None:
             name="Hall",
             occupancy=OCC,
             illuminance=ILLUM,
-            illuminance_mode="gate",
+            illuminance_mode="gate_only",
         ),
         binary_sensor__occ="off",
         binary_sensor__illum="off",

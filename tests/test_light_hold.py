@@ -23,11 +23,11 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_SCHEDULE_MODE,
+    CONF_TURN_OFF_TIMEOUT,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_KEEP,
@@ -378,7 +378,9 @@ async def test_release_while_occupied_and_bright_in_gate_only_mode_stays_occupie
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_GATE
+            occupancy=OCC,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
         ),
     )
     hass.states.async_set(OCC, "on")
@@ -1139,7 +1141,7 @@ async def test_load_warns_once_for_a_keep_on_entity_in_both_settings_sets(
 ) -> None:
     """A Virtual Scheduled Light checks both settings sets, naming each entity once."""
     hass.states.async_set(REAL, "off")
-    keep_on = {CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: ["person.alex"]}
+    keep_on = {CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: ["person.alex"]}
     await setup_entries(
         hass, make_scheduled_light_entry(lights=[REAL], outside=keep_on, inside=keep_on)
     )

@@ -60,9 +60,9 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_DIM_STEP,
+    CONF_BRIGHTNESS_STEP,
     CONF_TARGET_LIGHTS,
-    DEFAULT_DIM_STEP,
+    DEFAULT_BRIGHTNESS_STEP,
     DOMAIN,
     REMOTE_ACTION_BRIGHTNESS_DOWN,
     REMOTE_ACTION_BRIGHTNESS_UP,
@@ -262,7 +262,7 @@ def async_setup_remote(hass: HomeAssistant, entry: ConfigEntry) -> CALLBACK_TYPE
     """
     cfg = entry_settings(entry)
     targets: list[str] = cfg.get(CONF_TARGET_LIGHTS, [])
-    brightness_step = int(cfg.get(CONF_DIM_STEP) or 0) or DEFAULT_DIM_STEP
+    brightness_step = int(cfg.get(CONF_BRIGHTNESS_STEP) or 0) or DEFAULT_BRIGHTNESS_STEP
 
     # (button entity_id, click) -> (action, service, service data)
     bindings: dict[tuple[str, str], tuple[str, str, dict[str, Any]]] = {}

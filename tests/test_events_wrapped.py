@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from custom_components.molight.const import (
-    CONF_LIGHT_TIMEOUT,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     EVENT_TURNED_OFF,
     EVENT_TURNED_ON,
     REASON_PHYSICAL,
@@ -77,7 +77,7 @@ async def test_the_inner_lighting_itself_is_wrapped(hass, trigger: str) -> None:
             name="Inner",
             lights=[REAL],
             schedule=WINDOW,
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
         )
     await _nested(hass, "regular", inner=inner)
     records = record_events(hass, OUTER_EVENTS)

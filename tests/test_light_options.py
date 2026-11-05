@@ -20,10 +20,10 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_ENTITY_TYPE,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
-    CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_SENSOR,
+    CONF_TURN_OFF_TIMEOUT,
     ENTITY_TYPE_SCHEDULED_LIGHT,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
@@ -65,7 +65,7 @@ async def _update_options(hass: HomeAssistant, entry, **overrides) -> None:
     if entry.data[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT:
         settings_key = (
             CONF_INSIDE_SCHEDULE_SETTINGS
-            if hass.states.is_state(entry.data[CONF_SCHEDULE_ENTITY], "on")
+            if hass.states.is_state(entry.data[CONF_SCHEDULE_SENSOR], "on")
             else CONF_OUTSIDE_SCHEDULE_SETTINGS
         )
         opts[settings_key] = {**opts[settings_key], **overrides}
@@ -93,7 +93,7 @@ async def test_options_reload_while_active_applies_new_timeout(
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass)
     await settle(hass)
-    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 10})
+    await _update_options(hass, entry, **{CONF_TURN_OFF_TIMEOUT: 10})
 
     state = _state(hass)
     assert state.state == "on"
@@ -165,7 +165,7 @@ async def test_options_reload_removing_occupancy_while_occupied(
     await settle(hass)
     assert _mstate(hass) == STATE_OCCUPIED
 
-    await _update_options(hass, entry, **{CONF_OCCUPANCY_ENTITY: None})
+    await _update_options(hass, entry, **{CONF_OCCUPANCY_SENSOR: None})
 
     state = _state(hass)
     assert state.state == "on"
@@ -200,7 +200,7 @@ async def test_options_reload_during_countdown_restarts_with_new_timeout(
     freezer.tick(timedelta(seconds=30))
     async_fire_time_changed(hass)
     await settle(hass)
-    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 90})
+    await _update_options(hass, entry, **{CONF_TURN_OFF_TIMEOUT: 90})
     calls = record_service_calls(hass)
 
     state = _state(hass)
@@ -236,7 +236,7 @@ async def test_options_reload_while_warn_adopts_active(
     await settle(hass)
     assert _mstate(hass) == STATE_WARN
 
-    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 10})
+    await _update_options(hass, entry, **{CONF_TURN_OFF_TIMEOUT: 10})
 
     state = _state(hass)
     assert state.state == "on"
@@ -290,7 +290,7 @@ async def test_options_reload_while_effect_blink_off_goes_idle(
     assert _state(hass).state == "on"
     assert _mstate(hass) == STATE_EFFECT
 
-    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 60})
+    await _update_options(hass, entry, **{CONF_TURN_OFF_TIMEOUT: 60})
 
     state = _state(hass)
     assert state.state == "off"
@@ -311,7 +311,7 @@ async def test_options_reload_while_scheduled_stays_scheduled(
     await settle(hass)
     assert _mstate(hass) == STATE_SCHEDULED
 
-    await _update_options(hass, entry, **{CONF_LIGHT_TIMEOUT: 10})
+    await _update_options(hass, entry, **{CONF_TURN_OFF_TIMEOUT: 10})
 
     state = _state(hass)
     assert state.state == "on"

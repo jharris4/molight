@@ -35,21 +35,20 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_TRANSITION,
-    CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
+    CONF_DOOR_SENSOR,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_COLOR_TEMP,
-    CONF_EFFECT_TIMEOUT,
+    CONF_EFFECT_DURATION,
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
@@ -58,18 +57,19 @@ from custom_components.molight.const import (
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
     CONF_TIME_WINDOWS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
-    CONF_WARN_TIMEOUT,
+    CONF_WARN_DURATION,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_COMBINED_SCHEDULE,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
@@ -112,10 +112,10 @@ def _porch(
     """The issue's porch: stays at 20 % / 2222 K, motion raises it to 100 %."""
     return make_scheduled_light_entry(
         schedule_end_action=schedule_end_action,
-        outside=outside or {CONF_LIGHT_TIMEOUT: 30},
+        outside=outside or {CONF_TURN_OFF_TIMEOUT: 30},
         inside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_OCCUPANCY_ENTITY: OCCUPANCY,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_OCCUPANCY_SENSOR: OCCUPANCY,
             CONF_AUTO_ON_BRIGHTNESS: 100,
             CONF_STANDBY_BRIGHTNESS: 20,
             CONF_STANDBY_COLOR_TEMP: KELVIN,
@@ -299,9 +299,9 @@ async def test_effect_and_warn_stages_lead_into_standby(
         hass,
         _porch(
             inside={
-                CONF_EFFECT_TIMEOUT: 2,
+                CONF_EFFECT_DURATION: 2,
                 CONF_EFFECT_BRIGHTNESS: 0,
-                CONF_WARN_TIMEOUT: 5,
+                CONF_WARN_DURATION: 5,
                 CONF_WARN_BRIGHTNESS: 50,
             }
         ),
@@ -392,9 +392,9 @@ async def test_turn_on_without_a_brightness_and_no_auto_on_one_keeps_standby_bri
 @pytest.mark.parametrize(
     "stage",
     [
-        {CONF_WARN_TIMEOUT: 2, CONF_WARN_COLOR_TEMP: 6000},
+        {CONF_WARN_DURATION: 2, CONF_WARN_COLOR_TEMP: 6000},
         {
-            CONF_EFFECT_TIMEOUT: 2,
+            CONF_EFFECT_DURATION: 2,
             CONF_EFFECT_BRIGHTNESS: 40,
             CONF_EFFECT_COLOR_TEMP: 6000,
         },
@@ -449,13 +449,13 @@ async def test_standby_after_a_colored_warning_gives_each_light_its_own_color(
         make_scheduled_light_entry(
             lights=[warm.entity_id, cool.entity_id],
             schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-            outside={CONF_LIGHT_TIMEOUT: 30},
+            outside={CONF_TURN_OFF_TIMEOUT: 30},
             inside={
-                CONF_LIGHT_TIMEOUT: 30,
-                CONF_OCCUPANCY_ENTITY: OCCUPANCY,
+                CONF_TURN_OFF_TIMEOUT: 30,
+                CONF_OCCUPANCY_SENSOR: OCCUPANCY,
                 CONF_AUTO_ON_BRIGHTNESS: 100,
                 CONF_STANDBY_BRIGHTNESS: 20,
-                CONF_WARN_TIMEOUT: 2,
+                CONF_WARN_DURATION: 2,
                 CONF_WARN_COLOR_TEMP: 6000,
             },
         ),
@@ -490,7 +490,7 @@ async def test_standby_without_a_color_names_none_after_a_colorless_warning(
             inside={
                 CONF_STANDBY_COLOR_TEMP: None,
                 CONF_AUTO_ON_COLOR_TEMP: 3000,
-                CONF_WARN_TIMEOUT: 2,
+                CONF_WARN_DURATION: 2,
                 CONF_WARN_BRIGHTNESS: 50,
             }
         ),
@@ -525,7 +525,7 @@ async def test_warning_leads_into_an_rgb_standby_on_mixed_members(
             CONF_STANDBY_COLOR_TEMP: None,
             CONF_STANDBY_RGB_COLOR: [0, 0, 255],
             CONF_AUTO_ON_COLOR_TEMP: 3000,
-            CONF_WARN_TIMEOUT: 2,
+            CONF_WARN_DURATION: 2,
             CONF_WARN_COLOR_TEMP: 6000,
         }
     )
@@ -571,8 +571,8 @@ async def test_false_detection_after_a_late_raise_drops_back_after_the_off_delay
     illuminance = "binary_sensor.porch_bright"
     entry = _porch(
         inside={
-            CONF_ILLUMINANCE_ENTITY: illuminance,
-            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
         }
     )
     if route == "gate_lifts":
@@ -746,7 +746,7 @@ async def test_manual_off_while_bright_cancels_the_raise_it_interrupted(
         hass,
         _porch(
             inside={
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             }
         ),
@@ -798,7 +798,7 @@ async def test_turning_the_light_back_on_while_occupied_rejoins_standby(
     door = "binary_sensor.porch_door"
     hass.states.async_set(door, "off")
     entry = _porch(
-        inside={CONF_DOOR_ENTITY: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+        inside={CONF_DOOR_SENSOR: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     )
     await _setup_porch(hass, entry)
     await _echo_standby(hass)
@@ -846,9 +846,9 @@ async def test_bright_sensor_that_is_also_a_keep_on_entity_keeps_standby(
         hass,
         _porch(
             inside={
-                CONF_ILLUMINANCE_ENTITY: bright,
+                CONF_ILLUMINANCE_SENSOR: bright,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
-                CONF_HOLD_ENTITIES: [bright],
+                CONF_KEEP_ON_ENTITIES: [bright],
             }
         ),
     )
@@ -890,17 +890,17 @@ async def test_raising_standby_manually_is_held_by_presence_already_there(
     hass.states.async_set(illuminance, "on")
     hass.states.async_set(sensor, "on")
     gate_only = {
-        CONF_ILLUMINANCE_ENTITY: illuminance,
-        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+        CONF_ILLUMINANCE_SENSOR: illuminance,
+        CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
     }
     inside = {
-        "maintain": {CONF_MAINTAIN_OCCUPANCY_ENTITY: sensor},
+        "maintain": {CONF_MAINTAIN_OCCUPANCY_SENSOR: sensor},
         "door": {
-            CONF_DOOR_ENTITY: sensor,
+            CONF_DOOR_SENSOR: sensor,
             CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             **gate_only,
         },
-        "occupancy": {CONF_OCCUPANCY_ENTITY: sensor, **gate_only},
+        "occupancy": {CONF_OCCUPANCY_SENSOR: sensor, **gate_only},
     }[presence]
     await _setup_porch(hass, _porch(inside=inside))
     await _echo_standby(hass)
@@ -999,7 +999,7 @@ async def test_start_boundary_keeps_an_already_lit_light_until_its_timer_finishe
 ) -> None:
     """A light someone is using is not dimmed at the start; its timer is."""
     calls = await _setup_porch(
-        hass, _porch(outside={CONF_LIGHT_TIMEOUT: 300}), schedule="off"
+        hass, _porch(outside={CONF_TURN_OFF_TIMEOUT: 300}), schedule="off"
     )
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": VIRTUAL, "brightness": 200}
@@ -1029,8 +1029,8 @@ async def test_maintain_leaves_standby_alone_but_the_door_raises_it(
         hass,
         _porch(
             inside={
-                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
-                CONF_DOOR_ENTITY: door,
+                CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
+                CONF_DOOR_SENSOR: door,
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             }
         ),
@@ -1052,7 +1052,7 @@ async def test_door_raises_standby_and_closing_returns_to_it(
     hass.states.async_set(door, "off")
     await _setup_porch(
         hass,
-        _porch(inside={CONF_DOOR_ENTITY: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}),
+        _porch(inside={CONF_DOOR_SENSOR: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}),
     )
     await _set(hass, door, "on")
     assert _attrs(hass)["brightness"] == RAISED
@@ -1074,8 +1074,8 @@ async def test_illuminance_gate_blocks_the_raise_but_not_standby(
         hass,
         _porch(
             inside={
-                CONF_ILLUMINANCE_ENTITY: illuminance,
-                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
             }
         ),
         schedule="off",
@@ -1103,7 +1103,7 @@ async def test_illuminance_control_keeps_standby_off_while_bright(
         hass,
         _porch(
             inside={
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             }
         ),
@@ -1142,8 +1142,8 @@ async def test_raised_on_period_going_bright_cut_short_resumes_when_dark(
         _porch(
             inside={
                 CONF_STANDBY_BRIGHTNESS: 20 if standby else None,
-                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             }
         ),
@@ -1181,11 +1181,11 @@ async def test_timer_while_bright_in_control_mode_ends_in_off(
     illuminance = "binary_sensor.porch_bright"
     hass.states.async_set(illuminance, "on")
     inside = {
-        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_ILLUMINANCE_SENSOR: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     if warn:
-        inside |= {CONF_WARN_TIMEOUT: 5, CONF_WARN_BRIGHTNESS: 40}
+        inside |= {CONF_WARN_DURATION: 5, CONF_WARN_BRIGHTNESS: 40}
     await _setup_porch(hass, _porch(inside=inside))
     assert hass.states.get(VIRTUAL).state == "off"
 
@@ -1212,7 +1212,7 @@ async def test_hold_freezes_the_raised_brightness_and_release_times_back_to_stan
     """An auto-off hold stops the drop; releasing it starts a fresh timer."""
     keep_on = "input_boolean.guests"
     hass.states.async_set(keep_on, "off")
-    calls = await _setup_porch(hass, _porch(inside={CONF_HOLD_ENTITIES: [keep_on]}))
+    calls = await _setup_porch(hass, _porch(inside={CONF_KEEP_ON_ENTITIES: [keep_on]}))
 
     # Holding and releasing at standby leaves it there, with nothing re-sent.
     sent = len(_light_calls(calls, "turn_on"))
@@ -1266,9 +1266,9 @@ async def test_schedule_end_hands_over_a_light_raised_by_presence(
     hass: HomeAssistant, freezer, schedule_end_action: str, watched: bool, state: str
 ) -> None:
     """Presence outlasts the end only where the outside settings still see it."""
-    outside = {CONF_LIGHT_TIMEOUT: 60}
+    outside = {CONF_TURN_OFF_TIMEOUT: 60}
     if watched:
-        outside[CONF_OCCUPANCY_ENTITY] = OCCUPANCY
+        outside[CONF_OCCUPANCY_SENSOR] = OCCUPANCY
     await _setup_porch(
         hass, _porch(schedule_end_action=schedule_end_action, outside=outside)
     )
@@ -1292,7 +1292,7 @@ async def test_schedule_end_keep_gives_standby_the_outside_timer(
         hass,
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_KEEP,
-            outside={CONF_LIGHT_TIMEOUT: 300},
+            outside={CONF_TURN_OFF_TIMEOUT: 300},
         ),
     )
     await _set(hass, SCHEDULE, "off")
@@ -1318,7 +1318,8 @@ async def test_schedule_end_with_a_blank_outside_timeout_leaves_standby_on(
     await _setup_porch(
         hass,
         _porch(
-            schedule_end_action=schedule_end_action, outside={CONF_LIGHT_TIMEOUT: None}
+            schedule_end_action=schedule_end_action,
+            outside={CONF_TURN_OFF_TIMEOUT: None},
         ),
     )
     calls = record_service_calls(hass)
@@ -1339,7 +1340,7 @@ async def test_blank_inside_timeout_keeps_a_raise_until_the_window_ends(
 ) -> None:
     """Each settings set has its own timeout: a blank inside one never drops
     a raised light back to standby; the window end still turns it off."""
-    await _setup_porch(hass, _porch(inside={CONF_LIGHT_TIMEOUT: None}))
+    await _setup_porch(hass, _porch(inside={CONF_TURN_OFF_TIMEOUT: None}))
     _assert_standby(hass)
 
     await _set(hass, OCCUPANCY, "on")
@@ -1374,8 +1375,8 @@ async def test_schedule_end_timer_from_standby_resumes_after_brightness(
     entry = _porch(
         schedule_end_action=schedule_end_action,
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
     )
@@ -1420,9 +1421,9 @@ async def test_schedule_end_timer_from_standby_resumes_despite_an_old_visit(
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_KEEP,
             outside={
-                CONF_LIGHT_TIMEOUT: 60,
-                CONF_OCCUPANCY_ENTITY: yard,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_TURN_OFF_TIMEOUT: 60,
+                CONF_OCCUPANCY_SENSOR: yard,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             },
         ),
@@ -1454,9 +1455,9 @@ async def test_hold_release_after_a_keep_end_starts_a_timer_that_going_dark_resu
     hass.states.async_set(keep_on, "on")
     hass.states.async_set(illuminance, "off")
     settings = {
-        CONF_LIGHT_TIMEOUT: 60,
-        CONF_HOLD_ENTITIES: [keep_on],
-        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_TURN_OFF_TIMEOUT: 60,
+        CONF_KEEP_ON_ENTITIES: [keep_on],
+        CONF_ILLUMINANCE_SENSOR: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     await _setup_porch(
@@ -1500,10 +1501,10 @@ async def test_maintain_timer_going_bright_cut_short_resumes_when_dark(
         hass,
         _porch(
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
-                CONF_OCCUPANCY_ENTITY: None,
-                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_TURN_OFF_TIMEOUT: 60,
+                CONF_OCCUPANCY_SENSOR: None,
+                CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             }
         ),
@@ -1547,7 +1548,7 @@ async def test_schedule_end_timer_from_standby_survives_a_false_detection(
         hass,
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_KEEP,
-            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
+            outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: yard},
         ),
     )
     await _echo_standby(hass)
@@ -1579,7 +1580,7 @@ async def test_schedule_end_switch_from_standby_keeps_a_latest_occupied_time_tim
         hass,
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: yard},
+            outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: yard},
         ),
     )
     await _echo_standby(hass)
@@ -1615,10 +1616,10 @@ async def test_dark_edge_raise_from_standby_is_occupancy_lit_only_by_motion(
         hass,
         _porch(
             inside={
-                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_SENSOR: door,
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
-                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
             }
         ),
     )
@@ -1651,7 +1652,7 @@ async def test_schedule_end_keep_leaves_a_raised_light_to_its_presence(
         hass,
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_KEEP,
-            outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCCUPANCY},
+            outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCCUPANCY},
         ),
     )
     await _set(hass, OCCUPANCY, "on")
@@ -1679,7 +1680,10 @@ async def test_schedule_end_switch_recalculates_standby_from_latest_occupied_tim
         hass,
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-            outside={CONF_LIGHT_TIMEOUT: 300, CONF_OCCUPANCY_ENTITY: outside_occupancy},
+            outside={
+                CONF_TURN_OFF_TIMEOUT: 300,
+                CONF_OCCUPANCY_SENSOR: outside_occupancy,
+            },
         ),
     )
     _assert_standby(hass)
@@ -1705,7 +1709,10 @@ async def test_schedule_end_switch_recalculates_a_standby_still_waiting(
         _porch(
             schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
             inside=_SCENE,
-            outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: outside_occupancy},
+            outside={
+                CONF_TURN_OFF_TIMEOUT: 30,
+                CONF_OCCUPANCY_SENSOR: outside_occupancy,
+            },
         ),
         schedule="off",
     )
@@ -1749,7 +1756,7 @@ async def test_outside_settings_without_standby_still_turn_off(
     """Standby belongs to the inside settings only."""
     await _setup_porch(
         hass,
-        _porch(outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: OCCUPANCY}),
+        _porch(outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: OCCUPANCY}),
         schedule="off",
     )
     assert hass.states.get(VIRTUAL).state == "off"
@@ -2028,7 +2035,9 @@ async def test_restart_outside_the_window_keeps_a_manual_off_over_presence(
 ) -> None:
     """Outside its window a standby light has no standby to suppress, and a
     manual off over presence still holds across a restart like any light's."""
-    entry = _porch(outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: OCCUPANCY})
+    entry = _porch(
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: OCCUPANCY}
+    )
     await _setup_porch(hass, entry, schedule="off")
     await _set(hass, OCCUPANCY, "on")
     assert _attrs(hass)["molight_state"] == STATE_OCCUPIED
@@ -2299,7 +2308,7 @@ async def test_startup_inside_the_window_lights_standby(
     ("illuminance", "state", "brightness"),
     [
         (None, STATE_OCCUPIED, RAISED),
-        (ILLUMINANCE_MODE_GATE, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_GATE_ONLY, STATE_STANDBY, STANDBY),
         (ILLUMINANCE_MODE_CONTROL, STATE_IDLE, None),
     ],
     ids=["dark", "bright_gate", "bright_control"],
@@ -2316,9 +2325,9 @@ async def test_startup_with_the_door_already_open_raises_standby(
     lux = "binary_sensor.bright"
     hass.states.async_set(door, "on")
     hass.states.async_set(lux, "on")
-    inside = {CONF_DOOR_ENTITY: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    inside = {CONF_DOOR_SENSOR: door, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     if illuminance:
-        inside |= {CONF_ILLUMINANCE_ENTITY: lux, CONF_ILLUMINANCE_MODE: illuminance}
+        inside |= {CONF_ILLUMINANCE_SENSOR: lux, CONF_ILLUMINANCE_MODE: illuminance}
     calls = await _setup_porch(hass, _porch(inside=inside))
 
     assert _attrs(hass)["molight_state"] == state
@@ -2370,9 +2379,9 @@ async def test_restart_with_presence_raises_a_standby_light(
 @pytest.mark.parametrize(
     ("illuminance", "bright", "held", "state", "brightness"),
     [
-        (ILLUMINANCE_MODE_GATE, False, False, STATE_OCCUPIED, RAISED),
-        (ILLUMINANCE_MODE_GATE, True, False, STATE_STANDBY, STANDBY),
-        (ILLUMINANCE_MODE_GATE, True, True, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_GATE_ONLY, False, False, STATE_OCCUPIED, RAISED),
+        (ILLUMINANCE_MODE_GATE_ONLY, True, False, STATE_STANDBY, STANDBY),
+        (ILLUMINANCE_MODE_GATE_ONLY, True, True, STATE_STANDBY, STANDBY),
         (ILLUMINANCE_MODE_CONTROL, False, True, STATE_OCCUPIED, RAISED),
         (ILLUMINANCE_MODE_CONTROL, True, True, STATE_STANDBY, STANDBY),
     ],
@@ -2415,11 +2424,11 @@ async def test_restart_with_the_door_open_raises_standby_only_when_dark(
         hass,
         _porch(
             inside={
-                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_SENSOR: door,
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-                CONF_ILLUMINANCE_ENTITY: lux,
+                CONF_ILLUMINANCE_SENSOR: lux,
                 CONF_ILLUMINANCE_MODE: illuminance,
-                CONF_HOLD_ENTITIES: [keep_on],
+                CONF_KEEP_ON_ENTITIES: [keep_on],
             }
         ),
     )
@@ -2457,7 +2466,7 @@ async def test_restart_while_bright_in_control_mode_turns_standby_off(
         hass,
         _porch(
             inside={
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
             }
         ),
@@ -2512,10 +2521,10 @@ async def test_door_closing_at_standby_starts_no_timer(
         hass,
         _porch(
             inside={
-                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_SENSOR: door,
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
-                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
+                CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
             }
         ),
     )
@@ -2896,14 +2905,14 @@ async def test_what_the_inside_settings_come_on_at(
         hass,
         _porch(
             inside={
-                CONF_DOOR_ENTITY: door,
+                CONF_DOOR_SENSOR: door,
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
-                CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
-                CONF_ILLUMINANCE_ENTITY: illuminance,
+                CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
+                CONF_ILLUMINANCE_SENSOR: illuminance,
                 CONF_ILLUMINANCE_MODE: (
-                    ILLUMINANCE_MODE_CONTROL if control else ILLUMINANCE_MODE_GATE
+                    ILLUMINANCE_MODE_CONTROL if control else ILLUMINANCE_MODE_GATE_ONLY
                 ),
-                CONF_HOLD_ENTITIES: [keep_on],
+                CONF_KEEP_ON_ENTITIES: [keep_on],
             }
         ),
     )
@@ -3046,8 +3055,8 @@ async def test_false_detection_keeps_the_timer_a_standby_end_started(
     entry = make_scheduled_light_entry(
         lights=[lamp.entity_id],
         schedule_end_action=SCHEDULE_END_ACTION_KEEP,
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: OCCUPANCY},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: OCCUPANCY},
     )
     hass.states.async_set(SCHEDULE, "on")
     hass.states.async_set(OCCUPANCY, "off", sensor_attrs)

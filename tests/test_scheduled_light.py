@@ -24,36 +24,36 @@ from custom_components.molight.const import (
     ATTR_SCHEDULE_END_OFF_PENDING,
     CONF_AUTO_OFF_TRANSITION,
     CONF_AUTO_ON_BRIGHTNESS,
-    CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
+    CONF_DOOR_SENSOR,
     CONF_EFFECT_BRIGHTNESS,
+    CONF_EFFECT_DURATION,
     CONF_EFFECT_RGB_COLOR,
-    CONF_EFFECT_TIMEOUT,
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_KEEP_ON_ENTITIES,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
-    CONF_SCHEDULE_ENTITY,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_STANDBY_BRIGHTNESS,
     CONF_TIME_WINDOWS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
-    CONF_WARN_TIMEOUT,
+    CONF_WARN_DURATION,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     ENTITY_TYPE_SCHEDULE,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_DEFINITION_BINARY_SENSOR,
     SCHEDULE_END_ACTION_KEEP,
     SCHEDULE_END_ACTION_SWITCH,
@@ -98,13 +98,13 @@ async def test_schedule_selects_settings_for_automatic_turn_on(
     hass.states.async_set(inside_occupancy, "off")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: outside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: outside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 80,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: inside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 20,
         },
     )
@@ -143,10 +143,10 @@ async def test_schedule_change_rechecks_already_active_occupancy(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(occupancy, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
     )
@@ -170,8 +170,8 @@ async def test_schedule_end_can_force_light_off(hass: HomeAssistant) -> None:
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 30},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 30},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -198,11 +198,11 @@ async def test_schedule_end_off_still_checks_outside_sensors_for_off_light(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -227,12 +227,12 @@ async def test_schedule_end_off_still_checks_outside_door_for_off_light(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_DOOR_ENTITY: door,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_DOOR_SENSOR: door,
             CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).state == "off"
@@ -257,8 +257,8 @@ async def test_schedule_end_off_leaves_forced_off_light_off(
     hass.states.async_set(occupancy, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -285,8 +285,8 @@ async def test_schedule_end_off_uses_outgoing_settings_transition(
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 1},
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 4},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 1},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_AUTO_OFF_TRANSITION: 4},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -340,8 +340,8 @@ async def test_schedule_end_switches_state_from_outside_latest_occupied_time(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -365,8 +365,8 @@ async def test_schedule_end_switch_without_lot_uses_full_outside_timeout(
     hass.states.async_set(occupancy, "off")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -402,8 +402,8 @@ async def test_schedule_end_switch_uses_remaining_outside_timer(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -436,8 +436,8 @@ async def test_schedule_end_switch_without_occupancy_or_maintain_uses_full_timeo
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -471,8 +471,8 @@ async def test_schedule_end_switch_adopts_active_outside_occupancy(
     hass.states.async_set(occupancy, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -491,12 +491,12 @@ async def test_schedule_end_switch_adopts_active_outside_occupancy(
     "presence_settings",
     [
         pytest.param(
-            {CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.outside_presence"},
+            {CONF_MAINTAIN_OCCUPANCY_SENSOR: "binary_sensor.outside_presence"},
             id="maintain-occupancy-sensor",
         ),
         pytest.param(
             {
-                CONF_DOOR_ENTITY: "binary_sensor.outside_presence",
+                CONF_DOOR_SENSOR: "binary_sensor.outside_presence",
                 CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             },
             id="open-close-door",
@@ -514,8 +514,8 @@ async def test_schedule_end_switch_adopts_active_outside_presence_source(
     hass.states.async_set(presence, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, **presence_settings},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, **presence_settings},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -557,12 +557,12 @@ async def test_schedule_end_switch_uses_outside_warning_settings(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_OCCUPANCY_ENTITY: occupancy,
-            CONF_WARN_TIMEOUT: 10,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_OCCUPANCY_SENSOR: occupancy,
+            CONF_WARN_DURATION: 10,
             CONF_WARN_BRIGHTNESS: 25,
         },
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -589,7 +589,7 @@ async def test_schedule_end_switch_replaces_inside_warning_with_outside_timer(
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30},
+        outside={CONF_TURN_OFF_TIMEOUT: 30},
         inside=_WARNING_OUTSIDE,
     )
     await setup_entries(hass, entry)
@@ -642,11 +642,11 @@ async def test_schedule_end_switch_obeys_outside_bright_control(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -697,16 +697,16 @@ async def test_schedule_end_into_brightness_resumes_what_the_end_would_have_run(
     hass.states.async_set(inside_occupancy, "off")
     hass.states.async_set(illuminance, "on")
     outside = {
-        CONF_LIGHT_TIMEOUT: 30,
-        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_TURN_OFF_TIMEOUT: 30,
+        CONF_ILLUMINANCE_SENSOR: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     if outside_visit is not None:
-        outside[CONF_OCCUPANCY_ENTITY] = outside_occupancy
+        outside[CONF_OCCUPANCY_SENSOR] = outside_occupancy
     entry = make_scheduled_light_entry(
         schedule_end_action=schedule_end_action,
         outside=outside,
-        inside={CONF_LIGHT_TIMEOUT: 300, CONF_OCCUPANCY_ENTITY: inside_occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300, CONF_OCCUPANCY_SENSOR: inside_occupancy},
     )
     await setup_entries(hass, entry)
     if lit_by == "presence":
@@ -762,8 +762,8 @@ async def test_schedule_end_off_ends_an_on_period_going_bright_had_cut_short(
     Keep state and Switch state carry it past the end."""
     illuminance = "binary_sensor.illuminance"
     settings = {
-        CONF_LIGHT_TIMEOUT: 60,
-        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_TURN_OFF_TIMEOUT: 60,
+        CONF_ILLUMINANCE_SENSOR: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     entry = make_scheduled_light_entry(
@@ -833,12 +833,12 @@ async def test_schedule_end_switch_into_brightness_resumes_for_outside_presence(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -872,12 +872,12 @@ async def test_schedule_end_switch_into_bright_control_respects_a_hold(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
-            CONF_HOLD_ENTITIES: [keep_on],
+            CONF_KEEP_ON_ENTITIES: [keep_on],
         },
-        inside={CONF_LIGHT_TIMEOUT: 300, CONF_HOLD_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 300, CONF_KEEP_ON_ENTITIES: [keep_on]},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -919,11 +919,11 @@ async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_OCCUPANCY_ENTITY: occupancy,
-            CONF_HOLD_ENTITIES: [keep_on],
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_OCCUPANCY_SENSOR: occupancy,
+            CONF_KEEP_ON_ENTITIES: [keep_on],
         },
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -986,8 +986,8 @@ async def test_restart_catches_up_missed_schedule_end_switch(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
 
     await setup_entries(hass, entry)
@@ -1020,7 +1020,7 @@ async def test_restart_missed_schedule_end_switch_replaces_inside_warning(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30},
+        outside={CONF_TURN_OFF_TIMEOUT: 30},
         inside=_WARNING_OUTSIDE,
     )
 
@@ -1054,8 +1054,8 @@ async def test_schedule_end_off_waits_for_hold_release(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -1082,8 +1082,8 @@ async def test_returning_inside_cancels_pending_schedule_end_off(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     await hass.services.async_call("light", "turn_on", {"entity_id": VIRTUAL})
@@ -1274,10 +1274,10 @@ async def test_schedule_change_rechecks_already_open_door(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_DOOR_ENTITY: door,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_DOOR_SENSOR: door,
             CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
             CONF_AUTO_ON_BRIGHTNESS: 25,
         },
@@ -1304,8 +1304,8 @@ async def test_schedule_change_ignores_a_standing_open_momentary_door(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_ENTITY: door},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_DOOR_SENSOR: door},
     )
     await setup_entries(hass, entry)
 
@@ -1333,10 +1333,10 @@ async def test_schedule_change_releases_old_occupancy_hold(
     hass.states.async_set(occupancy, "off")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
         },
-        inside={CONF_LIGHT_TIMEOUT: 10},
+        inside={CONF_TURN_OFF_TIMEOUT: 10},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(occupancy, "on")
@@ -1363,8 +1363,8 @@ async def test_schedule_change_releases_the_hold_of_a_removed_keep_on_entity(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 10},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 10},
     )
     await setup_entries(hass, entry)
 
@@ -1385,8 +1385,8 @@ async def test_schedule_change_does_not_change_the_look_of_an_on_light(
     hass.states.async_set(REAL, "on", {"brightness": 180})
     hass.states.async_set(SCHEDULE, "off")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 80},
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 10},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 80},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 10},
     )
     await setup_entries(hass, entry)
 
@@ -1402,7 +1402,7 @@ async def test_schedule_change_does_not_change_the_look_of_an_on_light(
     ("mode", "expected_state"),
     [
         (ILLUMINANCE_MODE_CONTROL, "off"),
-        (ILLUMINANCE_MODE_GATE, "on"),
+        (ILLUMINANCE_MODE_GATE_ONLY, "on"),
     ],
 )
 async def test_schedule_change_applies_selected_illuminance_mode(
@@ -1414,10 +1414,10 @@ async def test_schedule_change_applies_selected_illuminance_mode(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(illuminance, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: mode,
         },
     )
@@ -1447,12 +1447,12 @@ async def test_schedule_change_bright_gate_only_sensor_lets_occupancy_hold_on_li
     hass.states.async_set(occupancy, "on")
     hass.states.async_set(illuminance, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
-            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
         },
     )
     await setup_entries(hass, entry)
@@ -1477,12 +1477,12 @@ async def test_schedule_change_bright_sensor_leaves_off_light_off(
     hass.states.async_set(occupancy, "on")
     hass.states.async_set(illuminance, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
-            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
+            CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_GATE_ONLY,
         },
     )
     await setup_entries(hass, entry)
@@ -1517,10 +1517,10 @@ async def _run_into_warn_stage(hass: HomeAssistant, freezer) -> None:
 
 
 _WARNING_OUTSIDE = {
-    CONF_LIGHT_TIMEOUT: 60,
-    CONF_EFFECT_TIMEOUT: 10,
+    CONF_TURN_OFF_TIMEOUT: 60,
+    CONF_EFFECT_DURATION: 10,
     CONF_EFFECT_BRIGHTNESS: 0,
-    CONF_WARN_TIMEOUT: 30,
+    CONF_WARN_DURATION: 30,
     CONF_WARN_BRIGHTNESS: 100,
 }
 
@@ -1536,7 +1536,7 @@ async def test_schedule_change_hold_mid_warning_restores_light(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         outside=_WARNING_OUTSIDE,
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
     )
     await setup_entries(hass, entry)
     await _run_into_warn_stage(hass, freezer)
@@ -1570,7 +1570,7 @@ async def test_held_schedule_end_mid_warning_restores_then_turns_off(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
         inside=_WARNING_OUTSIDE,
     )
     await setup_entries(hass, entry)
@@ -1601,8 +1601,8 @@ async def test_schedule_may_also_serve_as_a_keep_on_entity(
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "off")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 10},
-        inside={CONF_LIGHT_TIMEOUT: 10, CONF_HOLD_ENTITIES: [SCHEDULE]},
+        outside={CONF_TURN_OFF_TIMEOUT: 10},
+        inside={CONF_TURN_OFF_TIMEOUT: 10, CONF_KEEP_ON_ENTITIES: [SCHEDULE]},
     )
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).attributes["auto_off_held"] is False
@@ -1645,8 +1645,8 @@ async def test_schedule_change_hold_cancels_running_timer(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 10},
-        inside={CONF_LIGHT_TIMEOUT: 10, CONF_HOLD_ENTITIES: [keep_on]},
+        outside={CONF_TURN_OFF_TIMEOUT: 10},
+        inside={CONF_TURN_OFF_TIMEOUT: 10, CONF_KEEP_ON_ENTITIES: [keep_on]},
     )
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).attributes["molight_state"] == STATE_ACTIVE
@@ -1686,7 +1686,7 @@ async def test_schedule_change_occupancy_mid_warning_adopts_light(
     hass.states.async_set(occupancy, "on")
     entry = make_scheduled_light_entry(
         outside=_WARNING_OUTSIDE,
-        inside={CONF_LIGHT_TIMEOUT: 10, CONF_OCCUPANCY_ENTITY: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 10, CONF_OCCUPANCY_SENSOR: occupancy},
     )
     await setup_entries(hass, entry)
     await _run_into_warn_stage(hass, freezer)
@@ -1729,14 +1729,14 @@ async def test_each_settings_set_applies_its_turn_on_selection(
     hass.states.async_set("select.light_mode", "Day")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: outside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: outside_occupancy,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Day",
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: inside_occupancy,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -1776,10 +1776,10 @@ async def test_schedule_end_takes_over_a_turn_on_waiting_for_its_selection(
     hass.states.async_set(inside_occupancy, "off")
     entry = make_scheduled_light_entry(
         schedule_end_action=schedule_end_action,
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 600,
-            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 600,
+            CONF_OCCUPANCY_SENSOR: inside_occupancy,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -1836,9 +1836,9 @@ async def test_schedule_end_takes_over_a_virtual_turn_on_waiting_for_its_selecti
     hass.states.async_set(outside_occupancy, "off", {"latest_occupied_time": visit})
     entry = make_scheduled_light_entry(
         schedule_end_action=schedule_end_action,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: outside_occupancy},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: outside_occupancy},
         inside={
-            CONF_LIGHT_TIMEOUT: 600,
+            CONF_TURN_OFF_TIMEOUT: 600,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -1889,9 +1889,9 @@ async def test_held_schedule_end_off_waits_for_a_virtual_turn_on_still_waiting(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
         inside={
-            CONF_LIGHT_TIMEOUT: 600,
+            CONF_TURN_OFF_TIMEOUT: 600,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -1939,10 +1939,10 @@ async def test_hold_release_applies_a_held_end_off_to_a_waiting_turn_on(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 5, CONF_HOLD_ENTITIES: [keep_on]},
+        outside={CONF_TURN_OFF_TIMEOUT: 5, CONF_KEEP_ON_ENTITIES: [keep_on]},
         inside={
-            CONF_LIGHT_TIMEOUT: 600,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 600,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -1999,10 +1999,10 @@ async def test_waiting_turn_on_cancelled_by_a_schedule_end_reports_off(
     hass.states.async_set(occupancy, "off")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 600,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 600,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_TURN_ON_SELECT_ENTITY: "select.light_mode",
             CONF_TURN_ON_SELECT_OPTION: "Night",
         },
@@ -2039,16 +2039,16 @@ async def test_options_reload_uses_current_settings_set(
     hass.states.async_set(REAL, "on", {"brightness": 180})
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
-        inside={CONF_LIGHT_TIMEOUT: 30},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 30},
     )
     await setup_entries(hass, entry)
 
     options = {
         key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
     }
-    options[CONF_OUTSIDE_SCHEDULE_SETTINGS] = {CONF_LIGHT_TIMEOUT: 120}
-    options[CONF_INSIDE_SCHEDULE_SETTINGS] = {CONF_LIGHT_TIMEOUT: 10}
+    options[CONF_OUTSIDE_SCHEDULE_SETTINGS] = {CONF_TURN_OFF_TIMEOUT: 120}
+    options[CONF_INSIDE_SCHEDULE_SETTINGS] = {CONF_TURN_OFF_TIMEOUT: 10}
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     await settle(hass)
@@ -2077,13 +2077,13 @@ async def test_rapid_schedule_changes_finish_with_latest_settings(
     hass.states.async_set(illuminance, "on")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_ILLUMINANCE_ENTITY: illuminance,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_ILLUMINANCE_SENSOR: illuminance,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 20,
         },
     )
@@ -2117,12 +2117,12 @@ async def test_schedule_unavailable_keeps_last_selected_settings(
     hass.states.async_set(inside_occupancy, "off")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: outside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: outside_occupancy,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: inside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 20,
         },
     )
@@ -2213,8 +2213,8 @@ async def test_schedule_briefly_unavailable_does_not_restart_running_timer(
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
-        inside={CONF_LIGHT_TIMEOUT: 10},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 10},
     )
     await setup_entries(hass, entry)
 
@@ -2256,13 +2256,13 @@ async def test_restart_valid_schedule_state_overrides_restore(
     mock_restore_cache(hass, [State(VIRTUAL, "off", {ATTR_ACTIVE_SETTINGS: restored})])
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: outside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: outside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 80,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: inside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: inside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 20,
         },
     )
@@ -2330,8 +2330,8 @@ async def test_restart_missed_schedule_end_keep_leaves_light_on(
         ],
     )
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
 
@@ -2376,7 +2376,7 @@ async def test_restart_inside_window_drops_restored_pending_off(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
     )
     await setup_entries(hass, entry)
 
@@ -2411,7 +2411,7 @@ async def test_options_reload_swapping_schedule_does_not_turn_light_off(
     options = {
         key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
     }
-    options[CONF_SCHEDULE_ENTITY] = other
+    options[CONF_SCHEDULE_SENSOR] = other
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     await settle(hass)
@@ -2449,7 +2449,7 @@ async def test_options_reload_to_unavailable_schedule_does_not_invent_boundary(
     options = {
         key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
     }
-    options[CONF_SCHEDULE_ENTITY] = other
+    options[CONF_SCHEDULE_SENSOR] = other
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     await settle(hass)
@@ -2480,8 +2480,8 @@ async def test_schedule_swap_preserves_already_pending_boundary(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
 
@@ -2492,7 +2492,7 @@ async def test_schedule_swap_preserves_already_pending_boundary(
     options = {
         key: value for key, value in entry.data.items() if key != CONF_ENTITY_TYPE
     }
-    options[CONF_SCHEDULE_ENTITY] = other
+    options[CONF_SCHEDULE_SENSOR] = other
     hass.config_entries.async_update_entry(entry, options=options)
     await hass.async_block_till_done()
     await settle(hass)
@@ -2535,11 +2535,11 @@ async def test_restart_with_held_pending_off_reports_maintained_hold(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_HOLD_ENTITIES: [keep_on],
-            CONF_MAINTAIN_OCCUPANCY_ENTITY: maintain,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_KEEP_ON_ENTITIES: [keep_on],
+            CONF_MAINTAIN_OCCUPANCY_SENSOR: maintain,
         },
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
 
@@ -2620,8 +2620,8 @@ async def test_restart_held_pending_off_restores_old_warning_before_release(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
 
@@ -2661,8 +2661,8 @@ async def test_restart_missed_switch_with_light_off_seeds_outside_occupancy(
     )
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-        outside={CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy},
-        inside={CONF_LIGHT_TIMEOUT: 300},
+        outside={CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy},
+        inside={CONF_TURN_OFF_TIMEOUT: 300},
     )
     await setup_entries(hass, entry)
 
@@ -2718,7 +2718,7 @@ async def test_restart_across_a_boundary_ends_a_manual_off_over_presence(
             )
         ],
     )
-    settings = {CONF_LIGHT_TIMEOUT: 30, CONF_OCCUPANCY_ENTITY: occupancy}
+    settings = {CONF_TURN_OFF_TIMEOUT: 30, CONF_OCCUPANCY_SENSOR: occupancy}
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_KEEP, outside=settings, inside=settings
     )
@@ -2801,8 +2801,8 @@ async def test_options_reload_to_keep_drops_pending_schedule_end_off(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(SCHEDULE, "off")
@@ -2840,11 +2840,11 @@ async def test_first_start_without_readable_schedule_defaults_outside(
     hass.states.async_set(occupancy, "on")
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 80,
         },
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 20},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_AUTO_ON_BRIGHTNESS: 20},
     )
     await setup_entries(hass, entry)
 
@@ -2880,9 +2880,9 @@ async def test_restart_uses_restored_settings_while_schedule_unavailable(
         ],
     )
     entry = make_scheduled_light_entry(
-        outside={CONF_LIGHT_TIMEOUT: 60},
+        outside={CONF_TURN_OFF_TIMEOUT: 60},
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
         },
     )
@@ -2915,11 +2915,11 @@ async def test_restart_unavailable_does_not_apply_other_settings_set_sensors(
     )
     entry = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: outside_occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: outside_occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 80,
         },
-        inside={CONF_LIGHT_TIMEOUT: 60},
+        inside={CONF_TURN_OFF_TIMEOUT: 60},
     )
     await setup_entries(hass, entry)
 
@@ -2949,8 +2949,8 @@ async def test_boundary_keeps_door_hold_while_briefly_unavailable(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "off")
     settings_set = {
-        CONF_LIGHT_TIMEOUT: 60,
-        CONF_DOOR_ENTITY: door,
+        CONF_TURN_OFF_TIMEOUT: 60,
+        CONF_DOOR_SENSOR: door,
         CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE,
     }
     entry = make_scheduled_light_entry(
@@ -2984,10 +2984,10 @@ async def test_boundary_does_not_carry_one_door_hold_onto_another_door(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door_a, "off")
     hass.states.async_set(door_b, "unavailable")
-    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    settings_set = {CONF_TURN_OFF_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     entry = make_scheduled_light_entry(
-        outside=settings_set | {CONF_DOOR_ENTITY: door_a},
-        inside=settings_set | {CONF_DOOR_ENTITY: door_b},
+        outside=settings_set | {CONF_DOOR_SENSOR: door_a},
+        inside=settings_set | {CONF_DOOR_SENSOR: door_b},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(door_a, "on")
@@ -3012,11 +3012,11 @@ async def test_boundary_and_a_door_unavailable_for_a_minute(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(door, "off")
     hass.states.async_set(other, "on")
-    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
+    settings_set = {CONF_TURN_OFF_TIMEOUT: 60, CONF_DOOR_MODE: DOOR_MODE_OPEN_CLOSE}
     entry = make_scheduled_light_entry(
-        outside=settings_set | {CONF_DOOR_ENTITY: door},
+        outside=settings_set | {CONF_DOOR_SENSOR: door},
         inside=settings_set
-        | {CONF_DOOR_ENTITY: door if inside_door == "same" else other},
+        | {CONF_DOOR_SENSOR: door if inside_door == "same" else other},
     )
     await setup_entries(hass, entry)
     hass.states.async_set(door, "on")
@@ -3048,8 +3048,8 @@ async def test_schedule_end_off_stays_pending_for_unavailable_keep_on_entity(
     hass.states.async_set(keep_on, "on")
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_TURN_OFF,
-        outside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_HOLD_ENTITIES: [keep_on]},
+        outside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_KEEP_ON_ENTITIES: [keep_on]},
     )
     await setup_entries(hass, entry)
     assert hass.states.get(VIRTUAL).state == "on"
@@ -3078,17 +3078,17 @@ async def test_warn_undoes_effect_recolor_across_keep_boundary(
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_KEEP,
         outside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_EFFECT_TIMEOUT: 10,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_EFFECT_DURATION: 10,
             CONF_EFFECT_BRIGHTNESS: 50,
             CONF_EFFECT_RGB_COLOR: [255, 0, 0],
-            CONF_WARN_TIMEOUT: 30,
+            CONF_WARN_DURATION: 30,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_EFFECT_TIMEOUT: 10,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_EFFECT_DURATION: 10,
             CONF_EFFECT_BRIGHTNESS: 50,
-            CONF_WARN_TIMEOUT: 30,
+            CONF_WARN_DURATION: 30,
         },
     )
     await setup_entries(hass, entry)
@@ -3125,8 +3125,8 @@ async def test_warn_undoes_effect_recolor_across_keep_boundary(
     "new_effect",
     [
         {},
-        {CONF_EFFECT_TIMEOUT: 60, CONF_EFFECT_BRIGHTNESS: 0},
-        {CONF_EFFECT_TIMEOUT: 60, CONF_EFFECT_BRIGHTNESS: 80},
+        {CONF_EFFECT_DURATION: 60, CONF_EFFECT_BRIGHTNESS: 0},
+        {CONF_EFFECT_DURATION: 60, CONF_EFFECT_BRIGHTNESS: 80},
     ],
     ids=["disabled", "blink", "dim"],
 )
@@ -3141,11 +3141,11 @@ async def test_recovery_mid_effect_follows_the_running_stage_after_a_keep_bounda
     await add_real(hass, lamp)
     hass.states.async_set(SCHEDULE, "on" if boundary == "end" else "off")
     old = {
-        CONF_LIGHT_TIMEOUT: 10,
-        CONF_EFFECT_TIMEOUT: 60,
+        CONF_TURN_OFF_TIMEOUT: 10,
+        CONF_EFFECT_DURATION: 60,
         CONF_EFFECT_BRIGHTNESS: running,
     }
-    new = {CONF_LIGHT_TIMEOUT: 10, **new_effect}
+    new = {CONF_TURN_OFF_TIMEOUT: 10, **new_effect}
     entry = make_scheduled_light_entry(
         schedule_end_action=SCHEDULE_END_ACTION_KEEP,
         outside=new if boundary == "end" else old,
@@ -3201,8 +3201,8 @@ async def test_settings_switch_keeps_the_last_known_illuminance_through_outage(
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(illuminance, "on")  # bright
     settings_set = {
-        CONF_LIGHT_TIMEOUT: 60,
-        CONF_ILLUMINANCE_ENTITY: illuminance,
+        CONF_TURN_OFF_TIMEOUT: 60,
+        CONF_ILLUMINANCE_SENSOR: illuminance,
         CONF_ILLUMINANCE_MODE: ILLUMINANCE_MODE_CONTROL,
     }
     entry = make_scheduled_light_entry(
@@ -3234,7 +3234,7 @@ async def test_settings_switch_keeps_the_last_known_illuminance_through_outage(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "role", [CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY]
+    "role", [CONF_OCCUPANCY_SENSOR, CONF_MAINTAIN_OCCUPANCY_SENSOR]
 )
 async def test_settings_switch_keeps_the_hold_of_an_unreadable_sensor(
     hass: HomeAssistant, role: str
@@ -3245,7 +3245,7 @@ async def test_settings_switch_keeps_the_hold_of_an_unreadable_sensor(
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "off")
     hass.states.async_set(presence, "off")
-    settings_set = {CONF_LIGHT_TIMEOUT: 60, role: presence}
+    settings_set = {CONF_TURN_OFF_TIMEOUT: 60, role: presence}
     entry = make_scheduled_light_entry(
         outside=dict(settings_set), inside=dict(settings_set)
     )
@@ -3283,7 +3283,7 @@ async def _manual_off_then_boundary(
         {"current_window_start": "w1"},
     )
     hass.states.async_set(_OCCUPANCY, "unavailable")
-    settings_set = {CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: _OCCUPANCY}
+    settings_set = {CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: _OCCUPANCY}
     inside = {**settings_set, CONF_STANDBY_BRIGHTNESS: 20} if standby else settings_set
     entry = make_scheduled_light_entry(outside=settings_set, inside=inside)
     await setup_entries(hass, entry)
@@ -3439,13 +3439,13 @@ async def test_schedule_sensor_with_a_sunset_past_its_fixed_end_stays_outside(
     )
     light = make_scheduled_light_entry(
         outside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 80,
         },
         inside={
-            CONF_LIGHT_TIMEOUT: 60,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 60,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 20,
         },
     )
@@ -3472,8 +3472,8 @@ async def test_keep_state_boundary_into_a_blank_settings_set_releases_a_held_lig
         hass,
         make_scheduled_light_entry(
             schedule_end_action=SCHEDULE_END_ACTION_KEEP,
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: occupancy},
-            outside={CONF_LIGHT_TIMEOUT: None},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: occupancy},
+            outside={CONF_TURN_OFF_TIMEOUT: None},
         ),
     )
     calls = record_service_calls(hass)
@@ -3508,8 +3508,8 @@ async def test_switch_state_into_a_blank_settings_set_with_presence_runs_no_time
         hass,
         make_scheduled_light_entry(
             schedule_end_action=SCHEDULE_END_ACTION_SWITCH,
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_OCCUPANCY_ENTITY: occupancy},
-            outside={CONF_LIGHT_TIMEOUT: None, CONF_OCCUPANCY_ENTITY: occupancy},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_OCCUPANCY_SENSOR: occupancy},
+            outside={CONF_TURN_OFF_TIMEOUT: None, CONF_OCCUPANCY_SENSOR: occupancy},
         ),
     )
     calls = record_service_calls(hass)

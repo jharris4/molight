@@ -38,7 +38,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     RELOAD_GRACE,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -949,7 +949,7 @@ async def bright_occupied_room(
     return source, sensor, entry
 
 
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 @pytest.mark.parametrize("how", LUX_GONE)
 async def test_illuminance_source_that_goes_missing_lights_an_occupied_room(
     hass: HomeAssistant, virtual_light_behavior_variant, how: str, mode: str

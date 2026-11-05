@@ -22,13 +22,13 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     ATTR_STANDBY_SUPPRESSED,
     CONF_AUTO_ON_BRIGHTNESS,
-    CONF_LIGHT_TIMEOUT,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_WARN_BRIGHTNESS,
-    CONF_WARN_TIMEOUT,
+    CONF_WARN_DURATION,
     DOMAIN,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
@@ -1697,7 +1697,7 @@ async def test_standby_whose_select_call_never_answers_still_comes_on(
             name="Selection Light",
             lights=["light.ambient"],
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
                 CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
                 CONF_TURN_ON_SELECT_OPTION: "Cozy",
@@ -2458,17 +2458,17 @@ async def test_physical_turn_on_on_the_select_device_with_no_call_running_is_cla
 
 _SCHEDULE = "binary_sensor.settings_schedule"
 _PRESET = {
-    CONF_LIGHT_TIMEOUT: 60,
+    CONF_TURN_OFF_TIMEOUT: 60,
     CONF_TURN_ON_SELECT_ENTITY: "select.ambient_theme",
     CONF_TURN_ON_SELECT_OPTION: "Cozy",
 }
 _OTHER_SELECT = {
-    CONF_LIGHT_TIMEOUT: 60,
+    CONF_TURN_OFF_TIMEOUT: 60,
     CONF_TURN_ON_SELECT_ENTITY: "select.other_theme",
     CONF_TURN_ON_SELECT_OPTION: "Cozy",
 }
 _OTHER_SETTINGS = {
-    "no_selection": {CONF_LIGHT_TIMEOUT: 60},
+    "no_selection": {CONF_TURN_OFF_TIMEOUT: 60},
     "another_device": _OTHER_SELECT,
     "no_device": _OTHER_SELECT,
 }
@@ -2956,7 +2956,7 @@ async def test_resend_started_in_a_stage_yields_to_standby(
             inside={
                 **_PRESET,
                 CONF_STANDBY_BRIGHTNESS: 20,
-                CONF_WARN_TIMEOUT: 5,
+                CONF_WARN_DURATION: 5,
                 CONF_WARN_BRIGHTNESS: 40,
             },
         ),
@@ -3090,7 +3090,7 @@ async def test_standby_sent_during_a_replaced_select_call_outlasts_its_preset(
             inside={
                 **_PRESET,
                 CONF_STANDBY_BRIGHTNESS: 20,
-                CONF_WARN_TIMEOUT: 5,
+                CONF_WARN_DURATION: 5,
                 CONF_WARN_BRIGHTNESS: 40,
             },
         ),
@@ -3347,7 +3347,7 @@ async def test_raise_sent_during_a_replaced_standby_select_outlasts_its_preset(
             lights=["light.ambient"],
             inside={
                 **_PRESET,
-                CONF_OCCUPANCY_ENTITY: "binary_sensor.occ",
+                CONF_OCCUPANCY_SENSOR: "binary_sensor.occ",
                 CONF_AUTO_ON_BRIGHTNESS: 80,
                 CONF_STANDBY_BRIGHTNESS: 20,
             },

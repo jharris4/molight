@@ -30,30 +30,28 @@ from custom_components.molight.const import (
     ACTIVE_SETTINGS_INSIDE,
     ACTIVE_SETTINGS_OUTSIDE,
     ATTR_ACTIVE_SETTINGS,
-    CONF_DOOR_ENTITY,
+    CONF_DOOR_SENSOR,
     CONF_ENTITY_TYPE,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MAINTAIN_SENSORS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_ON_BUTTONS_SINGLE,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_DEFINITION,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_INPUTS,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_COMBINED_SCHEDULE,
@@ -371,20 +369,20 @@ async def test_remove_entry_removes_references_from_surviving_entries(
     await _remove_entry(hass, occupancy, entities_first=entities_first)
 
     light_settings = entry_settings(light)
-    assert CONF_OCCUPANCY_ENTITY not in light_settings
-    assert light_settings[CONF_SCHEDULE_ENTITY] == "binary_sensor.rm_schedule"
-    assert light_settings[CONF_HOLD_ENTITIES] == ["input_boolean.guest"]
+    assert CONF_OCCUPANCY_SENSOR not in light_settings
+    assert light_settings[CONF_SCHEDULE_SENSOR] == "binary_sensor.rm_schedule"
+    assert light_settings[CONF_KEEP_ON_ENTITIES] == ["input_boolean.guest"]
     assert entry_settings(combined)[CONF_TRIGGER_SENSORS] == ["binary_sensor.other"]
     # A form opened before the removal rejects the sensor.
     assert current_references(
-        hass, {CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy"}
+        hass, {CONF_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy"}
     ) == (
-        {CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy"},
+        {CONF_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy"},
         "binary_sensor.rm_occupancy",
     )
 
     await _remove_entry(hass, schedule, entities_first=entities_first)
-    assert CONF_SCHEDULE_ENTITY not in entry_settings(light)
+    assert CONF_SCHEDULE_SENSOR not in entry_settings(light)
 
 
 @pytest.mark.asyncio
@@ -422,14 +420,17 @@ async def test_remove_entry_removes_scheduled_light_references(
         lights=["light.rm_inner", "light.real_1"],
         schedule="binary_sensor.rm_schedule",
         outside={
-            CONF_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.rm_illuminance",
-            CONF_HOLD_ENTITIES: ["binary_sensor.rm_occupancy", "input_boolean.guest"],
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.rm_illuminance",
+            CONF_KEEP_ON_ENTITIES: [
+                "binary_sensor.rm_occupancy",
+                "input_boolean.guest",
+            ],
         },
         inside={
-            CONF_DOOR_ENTITY: "binary_sensor.rm_occupancy",
-            CONF_MAINTAIN_OCCUPANCY_ENTITY: "binary_sensor.rm_occupancy",
-            CONF_ILLUMINANCE_ENTITY: "binary_sensor.rm_illuminance",
+            CONF_DOOR_SENSOR: "binary_sensor.rm_occupancy",
+            CONF_MAINTAIN_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy",
+            CONF_ILLUMINANCE_SENSOR: "binary_sensor.rm_illuminance",
         },
     )
     for entry in (occupancy, illuminance, schedule, inner):
@@ -451,18 +452,18 @@ async def test_remove_entry_removes_scheduled_light_references(
     await settle(hass)
 
     cfg = entry_settings(light)
-    assert CONF_OCCUPANCY_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
-    assert CONF_DOOR_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
-    assert CONF_MAINTAIN_OCCUPANCY_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
-    assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_HOLD_ENTITIES] == [
+    assert CONF_OCCUPANCY_SENSOR not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_DOOR_SENSOR not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert CONF_MAINTAIN_OCCUPANCY_SENSOR not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS][CONF_KEEP_ON_ENTITIES] == [
         "input_boolean.guest"
     ]
 
     await hass.config_entries.async_remove(illuminance.entry_id)
     await settle(hass)
     cfg = entry_settings(light)
-    assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
-    assert CONF_ILLUMINANCE_ENTITY not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
+    assert CONF_ILLUMINANCE_SENSOR not in cfg[CONF_OUTSIDE_SCHEDULE_SETTINGS]
+    assert CONF_ILLUMINANCE_SENSOR not in cfg[CONF_INSIDE_SCHEDULE_SETTINGS]
 
     await hass.config_entries.async_remove(inner.entry_id)
     await settle(hass)
@@ -470,7 +471,7 @@ async def test_remove_entry_removes_scheduled_light_references(
 
     await hass.config_entries.async_remove(schedule.entry_id)
     await settle(hass)
-    assert CONF_SCHEDULE_ENTITY not in entry_settings(light)
+    assert CONF_SCHEDULE_SENSOR not in entry_settings(light)
     state = hass.states.get("light.rm_scheduled_light")
     assert state is not None
     assert state.attributes[ATTR_ACTIVE_SETTINGS] == ACTIVE_SETTINGS_OUTSIDE
@@ -576,6 +577,33 @@ async def test_remove_entry_without_references_leaves_others_alone(
 
 
 @pytest.mark.asyncio
+async def test_remove_entry_keeps_a_sensor_entry_source(hass: HomeAssistant) -> None:
+    """A sensor entry's source shares a light's key but is never dropped."""
+    source = _occupancy_entry()
+    wrapper = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY,
+            CONF_NAME: "Wrapper",
+            CONF_OCCUPANCY_SENSOR: "binary_sensor.rm_occupancy",
+            CONF_OCCUPANCY_TIMEOUT: 30,
+        },
+    )
+    for entry in (source, wrapper):
+        entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+    await settle(hass)
+
+    await hass.config_entries.async_remove(source.entry_id)
+    await settle(hass)
+
+    assert not wrapper.options
+    assert (
+        entry_settings(wrapper)[CONF_OCCUPANCY_SENSOR] == "binary_sensor.rm_occupancy"
+    )
+
+
+@pytest.mark.asyncio
 async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
     hass: HomeAssistant,
 ) -> None:
@@ -589,9 +617,9 @@ async def test_remove_entry_leaves_a_partial_scheduled_light_alone(
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: "Partial Scheduled",
             CONF_LIGHTS: ["light.real_1"],
-            CONF_SCHEDULE_ENTITY: "binary_sensor.some_schedule",
+            CONF_SCHEDULE_SENSOR: "binary_sensor.some_schedule",
             # Only one settings set stored; the other is absent entirely.
-            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_LIGHT_TIMEOUT: 60},
+            CONF_INSIDE_SCHEDULE_SETTINGS: {CONF_TURN_OFF_TIMEOUT: 60},
         },
     )
     for entry in (occupancy, partial):

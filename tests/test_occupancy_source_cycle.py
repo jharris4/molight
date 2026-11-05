@@ -21,7 +21,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.molight.config_flow import SECTION_ADVANCED
 from custom_components.molight.const import (
-    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
@@ -66,7 +66,7 @@ def _occupancy(
         CONF_FALSE_DETECTION_GRACE: 0,
     }
     if unavailable_timeout is not None:
-        data[CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT] = unavailable_timeout
+        data[CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT] = unavailable_timeout
     return MockConfigEntry(domain=DOMAIN, data=data)
 
 

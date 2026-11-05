@@ -19,12 +19,11 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
-    CONF_LIGHT_TIMEOUT,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_OCCUPANCY,
     EVENT_TURNED_OFF,
@@ -273,10 +272,10 @@ async def test_timer_finishes_at_standby(hass, freezer) -> None:
         make_scheduled_light_entry(
             name="Hall",
             schedule=SCHED,
-            outside={CONF_LIGHT_TIMEOUT: 30},
+            outside={CONF_TURN_OFF_TIMEOUT: 30},
             inside={
-                CONF_LIGHT_TIMEOUT: 30,
-                CONF_OCCUPANCY_ENTITY: OCC,
+                CONF_TURN_OFF_TIMEOUT: 30,
+                CONF_OCCUPANCY_SENSOR: OCC,
                 CONF_AUTO_ON_BRIGHTNESS: 100,
                 CONF_STANDBY_BRIGHTNESS: 20,
             },
@@ -398,7 +397,7 @@ async def test_a_restart_finding_the_lights_off_at_standby_puts_them_back(
     entry = make_scheduled_light_entry(
         name="Hall",
         schedule=SCHED,
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
     )
     records = await _setup(hass, entry, binary_sensor__sched="on")
     assert hass.states.get(VIRTUAL).attributes["molight_state"] == "standby"

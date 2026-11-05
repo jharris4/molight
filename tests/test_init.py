@@ -18,7 +18,6 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.molight.const import (
     CONF_ENTITY_TYPE,
     CONF_ILLUMINANCE_SENSOR,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
@@ -27,6 +26,7 @@ from custom_components.molight.const import (
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     DATA_AUTO_OFF_ENABLED,
     DATA_AUTO_OFF_KEPT,
     DATA_PLATFORMS,
@@ -88,7 +88,7 @@ TYPE_ENTRIES: dict[str, tuple[dict, dict[str, int]]] = {
         {
             CONF_NAME: "Init Light",
             CONF_LIGHTS: ["light.real_init"],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
         },
         {"light": 1, "switch": 1, "event": 1},
     ),
@@ -255,8 +255,8 @@ async def test_disabling_the_auto_off_switch_while_off_releases_the_hold(
     entry = (
         make_scheduled_light_entry(
             name="Kept Light",
-            inside={CONF_LIGHT_TIMEOUT: 10},
-            outside={CONF_LIGHT_TIMEOUT: 10},
+            inside={CONF_TURN_OFF_TIMEOUT: 10},
+            outside={CONF_TURN_OFF_TIMEOUT: 10},
         )
         if scheduled
         else make_light_entry(name="Kept Light", timeout=10)
@@ -299,8 +299,8 @@ async def test_reenabling_the_auto_off_switch_brings_back_its_state(
     entry = (
         make_scheduled_light_entry(
             name="Kept Light",
-            inside={CONF_LIGHT_TIMEOUT: 10},
-            outside={CONF_LIGHT_TIMEOUT: 10},
+            inside={CONF_TURN_OFF_TIMEOUT: 10},
+            outside={CONF_TURN_OFF_TIMEOUT: 10},
         )
         if scheduled
         else make_light_entry(name="Kept Light", timeout=10)
@@ -355,8 +355,8 @@ async def test_deleting_the_auto_off_switch_while_off_releases_the_hold(
     entry = (
         make_scheduled_light_entry(
             name="Kept Light",
-            inside={CONF_LIGHT_TIMEOUT: 10},
-            outside={CONF_LIGHT_TIMEOUT: 10},
+            inside={CONF_TURN_OFF_TIMEOUT: 10},
+            outside={CONF_TURN_OFF_TIMEOUT: 10},
         )
         if scheduled
         else make_light_entry(name="Kept Light", timeout=10)

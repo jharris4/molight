@@ -24,7 +24,7 @@ from custom_components.molight.const import (
     DOOR_MODE_OPEN,
     DOOR_MODE_OPEN_CLOSE,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_GATE,
     SCHEDULE_MODE_GATE_SWITCH,
     STATE_ACTIVE,
@@ -110,7 +110,7 @@ async def test_physical_on_adopts_active_occupancy(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("source", ["virtual", "physical"])
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 async def test_turn_on_while_bright_adopts_occupancy_only_in_gate_only_mode(
     hass: HomeAssistant, freezer, mode: str, source: str
 ) -> None:
@@ -284,7 +284,7 @@ async def _setup_gate_only_mode(hass: HomeAssistant, **kwargs) -> None:
         make_light_entry(
             occupancy=OCC,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
             **kwargs,
         ),
     )
@@ -326,7 +326,7 @@ async def test_gate_only_mode_occupancy_cancels_a_warning_while_bright(
         make_light_entry(
             occupancy=OCC,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
             warn_timeout=60,
             warn_brightness=50,
         ),
@@ -356,7 +356,7 @@ async def test_gate_only_mode_door_opening_retriggers_an_on_light_while_bright(
             door=DOOR,
             door_mode=door_mode,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
         ),
     )
     hass.states.async_set(ILLUM, "on")
@@ -385,7 +385,7 @@ async def test_gate_only_mode_door_opening_retriggers_an_on_light_while_bright(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_only_mode(
     hass: HomeAssistant, mode: str
 ) -> None:
@@ -399,7 +399,7 @@ async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_only_mode
     )
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == (
-        STATE_OCCUPIED if mode == ILLUMINANCE_MODE_GATE else STATE_ACTIVE
+        STATE_OCCUPIED if mode == ILLUMINANCE_MODE_GATE_ONLY else STATE_ACTIVE
     )
 
 
@@ -411,7 +411,9 @@ async def test_gate_only_mode_occupancy_recovering_holds_a_bright_light_lit_mean
     await setup_entries(
         hass,
         make_light_entry(
-            occupancy=OCC, illuminance=ILLUM, illuminance_mode=ILLUMINANCE_MODE_GATE
+            occupancy=OCC,
+            illuminance=ILLUM,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
         ),
     )
     hass.states.async_set(ILLUM, "on")

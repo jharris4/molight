@@ -2,6 +2,9 @@
 
 DOMAIN = "molight"
 
+# Config entry version; 2 renamed the settings keys after their field labels.
+CONFIG_ENTRY_VERSION = 2
+
 # Union of every platform below; the fallback for an unrecognized entity type.
 PLATFORMS = ["binary_sensor", "event", "light", "sensor", "switch"]
 
@@ -87,7 +90,8 @@ ASSIGN_ROLE_MAINTAIN = "maintain"
 ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
 
 # --- Virtual Occupancy Sensor (one real sensor) ---
-CONF_OCCUPANCY_SENSOR = "occupancy_sensor"  # entity_id of the real binary_sensor
+# The real binary_sensor; on a Virtual Light, its occupancy sensor.
+CONF_OCCUPANCY_SENSOR = "occupancy_sensor"
 # latest_occupied_time is computed as last_off minus this timeout
 CONF_OCCUPANCY_TIMEOUT = "occupancy_timeout"
 DEFAULT_OCCUPANCY_TIMEOUT = 120
@@ -104,8 +108,8 @@ DEFAULT_FALSE_DETECTION_GRACE = 3
 # never classified as a false detection). latest_occupied_time is advanced
 # to the dropout moment immediately. 0 disables; occupancy then keeps its
 # last known value for as long as the source is unavailable.
-CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT = "clear_on_unavailable_timeout"
-DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT = 60
+CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT = "clear_after_unavailable_timeout"
+DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT = 60
 
 # --- Virtual Combined Occupancy Sensor ---
 # trigger_sensors: any one going ON starts occupancy
@@ -114,7 +118,8 @@ CONF_TRIGGER_SENSORS = "trigger_sensors"
 CONF_MAINTAIN_SENSORS = "maintain_sensors"
 
 # --- Virtual Illuminance Sensor ---
-CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"  # entity_id of a real sensor
+# The real sensor; on a Virtual Light, its illuminance sensor.
+CONF_ILLUMINANCE_SENSOR = "illuminance_sensor"
 CONF_ILLUMINANCE_THRESHOLD = "illuminance_threshold"  # on = value >= threshold (bright)
 DEFAULT_ILLUMINANCE_THRESHOLD = 10.0
 # Hysteresis band (lx) around the threshold: becomes bright at
@@ -173,8 +178,9 @@ CONF_INSIDE_SCHEDULE_SETTINGS = "inside_schedule_settings"
 ATTR_ACTIVE_SETTINGS = "active_settings"
 ACTIVE_SETTINGS_OUTSIDE = "outside_schedule"
 ACTIVE_SETTINGS_INSIDE = "inside_schedule"
-CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds, None for no timer; >= occupancy_timeout
-DEFAULT_LIGHT_TIMEOUT = 300
+# Seconds, None for no timer; >= occupancy_timeout.
+CONF_TURN_OFF_TIMEOUT = "turn_off_timeout"
+DEFAULT_TURN_OFF_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* (by occupancy, a door opening, illuminance going dark, or
 # a schedule window). Manual turn-ons are never affected (they
@@ -230,21 +236,21 @@ DEFAULT_FALSE_OFF_DELAY = 5
 # Off warning sequence before an automatic turn-off. When the turn-off
 # timer finishes the light can flag the impending off before turning off:
 #   EFFECT: the effect stage (a blink/dip to effect_brightness), shown
-#           for effect_timeout seconds. effect_brightness is a percent 0-100
+#           for effect_duration seconds. effect_brightness is a percent 0-100
 #           where 0 blinks the real lights fully off.
-#   WARN:   the warn stage, at warn_brightness for warn_timeout seconds, then
+#   WARN:   the warn stage, at warn_brightness for warn_duration seconds, then
 #           the lights turn off. warn_brightness is an optional percent 1-100;
 #           blank = keep whatever brightness was in effect before the warning.
 # Each stage is skipped when its duration is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
 # either stage (occupancy, a manual on, a dim, ...) cancels it and
 # behaves as if the turn-off timer were still running, restoring the brightness.
-CONF_EFFECT_TIMEOUT = "effect_timeout"
-DEFAULT_EFFECT_TIMEOUT = 0
+CONF_EFFECT_DURATION = "effect_duration"
+DEFAULT_EFFECT_DURATION = 0
 CONF_EFFECT_BRIGHTNESS = "effect_brightness"
 DEFAULT_EFFECT_BRIGHTNESS = 0
-CONF_WARN_TIMEOUT = "warn_timeout"
-DEFAULT_WARN_TIMEOUT = 0
+CONF_WARN_DURATION = "warn_duration"
+DEFAULT_WARN_DURATION = 0
 CONF_WARN_BRIGHTNESS = "warn_brightness"
 # Optional colors for the effect and warn stages, e.g. a red warn stage is
 # much harder to miss than a dim. Like the auto-on color, each stage takes a
@@ -269,15 +275,15 @@ CONF_WARN_RGB_COLOR = "warn_rgb_color"
 #                         off is untouched.
 #   effect_transition:    fade into the effect stage's brightness.
 #   warn_transition:      fade into the warn stage's brightness.
-# A stage transition must fit inside its stage: effect_transition <= effect_timeout
-# and warn_transition <= warn_timeout (enforced by the config/options flows,
+# A stage transition must fit inside its stage: effect_transition <= effect_duration
+# and warn_transition <= warn_duration (enforced by the config/options flows,
 # which also rejects a transition on a disabled stage since its duration is 0).
 CONF_AUTO_ON_TRANSITION = "auto_on_transition"
 CONF_AUTO_OFF_TRANSITION = "auto_off_transition"
 CONF_EFFECT_TRANSITION = "effect_transition"
 CONF_WARN_TRANSITION = "warn_transition"
-# Optional references to virtual entities (entity_ids)
-CONF_OCCUPANCY_ENTITY = "occupancy_entity"
+# Optional references to virtual entities (entity_ids). The occupancy and
+# illuminance sensor keys are CONF_OCCUPANCY_SENSOR and CONF_ILLUMINANCE_SENSOR above.
 # What turns the light on for occupancy:
 #   molight:                  MoLight does.
 #   own_system:               the light's own system (a Lutron occupancy
@@ -301,14 +307,13 @@ OCCUPANCY_TURN_ON_WAIT = 1.0
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
 # light regardless of how it was lit: manually or by occupancy.
-CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
-CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
-CONF_SCHEDULE_ENTITY = "schedule_entity"
+CONF_MAINTAIN_OCCUPANCY_SENSOR = "maintain_occupancy_sensor"
+CONF_SCHEDULE_SENSOR = "schedule_sensor"
 # Keep-on entities: while ANY of these entities is "on", every automatic
 # turn-off (the timer finishing, false-detection off delay, bright-forces-off,
 # schedule window end) is suspended. Turn-ons and manual control are never
 # affected. When the last hold releases the light re-evaluates its rules.
-CONF_HOLD_ENTITIES = "hold_entities"
+CONF_KEEP_ON_ENTITIES = "keep_on_entities"
 
 # Each virtual light entry also creates a companion "<name> Auto-off" switch;
 # turning it OFF holds the light the same way a keep-on entity does. The
@@ -386,8 +391,8 @@ STAGE_CANCELLED = "cancelled"
 #               forced off → dark → on ...).
 CONF_ILLUMINANCE_MODE = "illuminance_mode"
 ILLUMINANCE_MODE_CONTROL = "control"
-ILLUMINANCE_MODE_GATE = "gate"
-ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE]
+ILLUMINANCE_MODE_GATE_ONLY = "gate_only"
+ILLUMINANCE_MODES = [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY]
 DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 
 # How the schedule sensor affects the light:
@@ -464,7 +469,7 @@ DEFAULT_SCHEDULE_END_ACTION = SCHEDULE_END_ACTION_KEEP
 #                  open, and closing starts the turn-off timer, deferring to
 #                  occupancy/auto-off holds (a closed door never cuts the lights
 #                  over someone the occupancy sensor still sees).
-CONF_DOOR_ENTITY = "door_entity"
+CONF_DOOR_SENSOR = "door_sensor"
 CONF_DOOR_MODE = "door_mode"
 DOOR_MODE_OPEN = "open"
 DOOR_MODE_OPEN_CLOSE = "open_close"
@@ -494,8 +499,8 @@ CONF_TARGET_LIGHTS = "target_lights"  # light entity_ids the buttons control
 # Brightness step, in percent, applied once per brightness up/down click (a step
 # below the minimum turns the light off, per the light domain's own brightness_step
 # handling, and a step on an off light turns it on dim).
-CONF_DIM_STEP = "dim_step"
-DEFAULT_DIM_STEP = 10
+CONF_BRIGHTNESS_STEP = "brightness_step"
+DEFAULT_BRIGHTNESS_STEP = 10
 
 CONF_ON_BUTTONS_SINGLE = "on_buttons_single"
 CONF_ON_BUTTONS_DOUBLE = "on_buttons_double"

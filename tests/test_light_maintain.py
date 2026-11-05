@@ -16,7 +16,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     SCHEDULE_MODE_FOLLOW,
     SCHEDULE_MODE_GATE,
     STATE_COUNTDOWN,
@@ -598,7 +598,7 @@ async def test_maintain_clear_defers_to_occupancy_while_bright_in_gate_only_mode
             occupancy=OCC,
             maintain=MAINT,
             illuminance=ILLUM,
-            illuminance_mode=ILLUMINANCE_MODE_GATE,
+            illuminance_mode=ILLUMINANCE_MODE_GATE_ONLY,
             timeout=10,
         ),
     )

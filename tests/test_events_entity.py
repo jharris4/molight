@@ -15,12 +15,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.molight.const import (
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
     ENTITY_TYPE_ILLUMINANCE,
@@ -124,7 +124,7 @@ async def test_events_entity_follows_a_typed_entity_id(hass) -> None:
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Hall",
             CONF_LIGHTS: [REAL],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
             CONF_ENTITY_ID: "kitchen",
         },
     )

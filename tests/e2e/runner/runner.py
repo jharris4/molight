@@ -187,17 +187,17 @@ def pct(percent: int) -> int:
 LIGHT_ENTRY_KEYS = (
     "name",
     "lights",
-    "schedule_entity",
+    "schedule_sensor",
     "schedule_mode",
     "schedule_end_action",
     "entity_id",
 )
 # Inputs that conversion to scheduled strips from the outside settings.
 CONVERSION_INPUT_KEYS = (
-    "occupancy_entity",
-    "maintain_occupancy_entity",
-    "illuminance_entity",
-    "door_entity",
+    "occupancy_sensor",
+    "maintain_occupancy_sensor",
+    "illuminance_sensor",
+    "door_sensor",
 )
 EMPTY_REMOTE_SECTIONS = {
     "turn_on": {},
@@ -706,7 +706,7 @@ def create_virtual_occupancy(
             "occupancy_timeout": timeout,
             "advanced": {
                 "false_detection_grace": 0,
-                "clear_on_unavailable_timeout": 1,
+                "clear_after_unavailable_timeout": 1,
                 "entity_id": entity_id,
             },
         },
@@ -792,12 +792,12 @@ def light_settings(brightness: int, *, inside: bool) -> dict[str, Any]:
     """Build one settings set with deliberately distinct illuminance/door modes."""
     return {
         **(EMPTY_INSIDE_LIGHT_SECTIONS if inside else EMPTY_LIGHT_SECTIONS),
-        "light_timeout": 30,
+        "turn_off_timeout": 30,
         "sensors": {
-            "occupancy_entity": VIRTUAL_OCCUPANCY,
-            "illuminance_entity": VIRTUAL_ILLUMINANCE,
-            "illuminance_mode": "control" if inside else "gate",
-            "door_entity": RAW_DOOR,
+            "occupancy_sensor": VIRTUAL_OCCUPANCY,
+            "illuminance_sensor": VIRTUAL_ILLUMINANCE,
+            "illuminance_mode": "control" if inside else "gate_only",
+            "door_sensor": RAW_DOOR,
             "door_mode": "open_close" if inside else "open",
         },
         "behavior": {
@@ -849,7 +849,7 @@ def create_scheduled_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Scheduled",
             "lights": [RAW_LIGHT],
-            "schedule_entity": VIRTUAL_SCHEDULE,
+            "schedule_sensor": VIRTUAL_SCHEDULE,
             "schedule_end_action": "keep",
             "advanced": {"entity_id": "e2e_scheduled"},
         },
@@ -875,16 +875,16 @@ def create_timeout_light(
         {
             "name": "E2E Timer",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": turn_off_timeout,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": turn_off_timeout,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "false_detection_off_delay": 0,
                 "auto_on_brightness": 60,
             },
             "warning": {
-                "effect_timeout": stage,
+                "effect_duration": stage,
                 "effect_brightness": 10,
-                "warn_timeout": stage,
+                "warn_duration": stage,
                 "warn_brightness": 20,
             },
             "advanced": {"entity_id": "e2e_timer"},
@@ -901,8 +901,8 @@ def create_auto_off_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Auto-off",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 3,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 3,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {},
             "advanced": {"entity_id": "e2e_auto_off"},
@@ -919,12 +919,12 @@ def create_restart_warning_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Restart Warning",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 10,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 10,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {
-                "effect_timeout": 0,
-                "warn_timeout": 10,
+                "effect_duration": 0,
+                "warn_duration": 10,
                 "warn_brightness": 20,
             },
             "advanced": {"entity_id": "e2e_restart_warning"},
@@ -941,7 +941,7 @@ def create_multi_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Multi",
             "lights": [RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_multi"},
         },
@@ -957,7 +957,7 @@ def create_remote(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Remote",
             "target_lights": [VIRTUAL_MULTI_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_on": {"on_buttons_single": [EVENT_BUTTON]},
             "turn_off": {"off_buttons_double": [EVENT_BUTTON]},
@@ -975,7 +975,7 @@ def edit_remote(client: HomeAssistantClient, entry_id: str) -> None:
         {
             "name": "E2E Remote Edited",
             "target_lights": [VIRTUAL_MULTI_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "toggle": {"toggle_buttons_double": [EVENT_BUTTON]},
             "brightness_up": {"brightness_up_buttons_single": [EVENT_BUTTON]},
@@ -994,8 +994,8 @@ def create_removal_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Removal Light",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": REMOVAL_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": REMOVAL_OCCUPANCY},
             "behavior": {"auto_on_brightness": 50},
             "warning": {},
             "advanced": {"entity_id": "e2e_removal_light"},
@@ -1013,7 +1013,7 @@ def edit_scheduled_light(client: HomeAssistantClient, entry_id: str) -> None:
         {
             "name": "E2E Scheduled Edited",
             "lights": [RAW_LIGHT],
-            "schedule_entity": VIRTUAL_SCHEDULE,
+            "schedule_sensor": VIRTUAL_SCHEDULE,
             "schedule_end_action": "keep",
         },
         options=True,
@@ -1192,7 +1192,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
     on_off_light = {
         "name": "E2E Rejected",
         "lights": [RAW_MULTI_ON_OFF],
-        "light_timeout": 30,
+        "turn_off_timeout": 30,
         **EMPTY_LIGHT_SECTIONS,
         "advanced": {},
     }
@@ -1227,9 +1227,9 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Rejected",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": "binary_sensor.e2e_slow_occupancy"},
+            "sensors": {"occupancy_sensor": "binary_sensor.e2e_slow_occupancy"},
             "advanced": {},
         },
     )
@@ -1243,7 +1243,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Rejected",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_scheduled"},
         },
@@ -1256,9 +1256,9 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Rejected",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"schedule_entity": RAW_DOOR, "schedule_mode": "gate"},
+            "sensors": {"schedule_sensor": RAW_DOOR, "schedule_mode": "gate"},
             "advanced": {},
         },
     )
@@ -1267,7 +1267,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
     remote = {
         "name": "E2E Rejected Remote",
         "target_lights": [VIRTUAL_LIGHT],
-        "dim_step": 20,
+        "brightness_step": 20,
         **EMPTY_REMOTE_SECTIONS,
     }
     for bindings, code in (
@@ -1365,7 +1365,10 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
         result,
         {
             "occupancy_timeout": 2,
-            "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+            "advanced": {
+                "false_detection_grace": 0,
+                "clear_after_unavailable_timeout": 1,
+            },
         },
     )
     placeholders = expect_abort(result, "discovery_done")
@@ -1420,7 +1423,9 @@ def run_discovery_scenarios(client: HomeAssistantClient) -> None:
         },
     )
     expect_step(result, "discover_light_defaults")
-    result = client.continue_flow(result, {"light_timeout": 30, **EMPTY_LIGHT_SECTIONS})
+    result = client.continue_flow(
+        result, {"turn_off_timeout": 30, **EMPTY_LIGHT_SECTIONS}
+    )
     placeholders = expect_abort(result, "discovery_done")
     if placeholders.get("count") != "1":
         raise AssertionError(f"Light discovery did not report one entry: {result}")
@@ -1448,7 +1453,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Assign A",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_assign_a"},
         },
@@ -1460,7 +1465,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Assign B",
             "lights": [RAW_MULTI_ON_OFF],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_assign_b"},
         },
@@ -1496,12 +1501,12 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         raise AssertionError(f"Occupancy assignment summary unexpected: {summary}")
     wait_stored_entry(
         light_a,
-        lambda cfg: cfg.get("occupancy_entity") == "binary_sensor.e2e_slow_occupancy",
+        lambda cfg: cfg.get("occupancy_sensor") == "binary_sensor.e2e_slow_occupancy",
         "assigned the slow occupancy sensor",
     )
     wait_stored_entry(
         light_b,
-        lambda cfg: not cfg.get("occupancy_entity"),
+        lambda cfg: not cfg.get("occupancy_sensor"),
         "skipped (timeout check)",
     )
     summary = assign(
@@ -1511,7 +1516,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     )
     if summary.get("removed") != "1" or summary.get("assigned") != "0":
         raise AssertionError(f"Occupancy removal summary unexpected: {summary}")
-    wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_entity"), "removed")
+    wait_stored_entry(light_a, lambda cfg: not cfg.get("occupancy_sensor"), "removed")
 
     # The maintain role fills its own key, under the same timeout check.
     summary = assign(
@@ -1529,14 +1534,14 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_a,
         lambda cfg: (
-            cfg.get("maintain_occupancy_entity") == "binary_sensor.e2e_slow_occupancy"
-            and not cfg.get("occupancy_entity")
+            cfg.get("maintain_occupancy_sensor") == "binary_sensor.e2e_slow_occupancy"
+            and not cfg.get("occupancy_sensor")
         ),
         "assigned the slow occupancy sensor as its maintain occupancy sensor only",
     )
     wait_stored_entry(
         light_b,
-        lambda cfg: not cfg.get("maintain_occupancy_entity"),
+        lambda cfg: not cfg.get("maintain_occupancy_sensor"),
         "left without a maintain occupancy sensor (timeout check)",
     )
     summary = assign(
@@ -1551,13 +1556,13 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
         raise AssertionError(f"Maintain removal summary unexpected: {summary}")
     wait_stored_entry(
         light_a,
-        lambda cfg: not cfg.get("maintain_occupancy_entity"),
+        lambda cfg: not cfg.get("maintain_occupancy_sensor"),
         "without its maintain occupancy sensor",
     )
 
     summary = assign(
         "assign_illuminance",
-        {"assign_sensor": VIRTUAL_ILLUMINANCE, "illuminance_mode": "gate"},
+        {"assign_sensor": VIRTUAL_ILLUMINANCE, "illuminance_mode": "gate_only"},
         ["light.e2e_assign_a"],
     )
     if summary.get("assigned") != "1":
@@ -1565,8 +1570,8 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_a,
         lambda cfg: (
-            cfg.get("illuminance_entity") == VIRTUAL_ILLUMINANCE
-            and cfg.get("illuminance_mode") == "gate"
+            cfg.get("illuminance_sensor") == VIRTUAL_ILLUMINANCE
+            and cfg.get("illuminance_mode") == "gate_only"
         ),
         "assigned the illuminance sensor in Gate only mode",
     )
@@ -1580,7 +1585,7 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     wait_stored_entry(
         light_a,
         lambda cfg: (
-            cfg.get("schedule_entity") == VIRTUAL_SCHEDULE
+            cfg.get("schedule_sensor") == VIRTUAL_SCHEDULE
             and cfg.get("schedule_mode") == "gate_keep"
         ),
         "assigned the schedule in gate_keep mode",
@@ -1616,11 +1621,11 @@ def run_keep_on_entity_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Hold",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "hold_entities": [RAW_REMOVAL_MOTION],
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "keep_on_entities": [RAW_REMOVAL_MOTION],
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_hold"},
@@ -2067,12 +2072,12 @@ def create_physical_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Physical",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             "sensors": {},
             "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
             "warning": {
-                "effect_timeout": 0,
-                "warn_timeout": 8,
+                "effect_duration": 0,
+                "warn_duration": 8,
                 "warn_brightness": 20,
                 "warn_rgb_color": [255, 0, 0],
             },
@@ -2307,7 +2312,7 @@ def create_schedule_end_action_light(
         {
             "name": "E2E End Action",
             "lights": [RAW_MULTI_RGB],
-            "schedule_entity": END_SCHEDULE,
+            "schedule_sensor": END_SCHEDULE,
             "schedule_end_action": schedule_end_action,
             "advanced": {"entity_id": "e2e_end_action"},
         },
@@ -2317,7 +2322,7 @@ def create_schedule_end_action_light(
         result,
         {
             **EMPTY_LIGHT_SECTIONS,
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             "behavior": {"auto_on_brightness": 50},
         },
     )
@@ -2326,8 +2331,8 @@ def create_schedule_end_action_light(
         result,
         {
             **EMPTY_INSIDE_LIGHT_SECTIONS,
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "auto_off_transition": 1},
         },
     )
@@ -2440,11 +2445,11 @@ def create_gate_mode_light(client: HomeAssistantClient, schedule_mode: str) -> s
         {
             "name": "E2E Gate Mode",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 12,
+            "turn_off_timeout": 12,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "schedule_entity": END_SCHEDULE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_sensor": END_SCHEDULE,
                 "schedule_mode": schedule_mode,
             },
             "behavior": {"auto_on_brightness": 60},
@@ -2632,11 +2637,11 @@ def run_combined_and_maintain_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Maintain",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": TRIGGER_OCCUPANCY,
-                "maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "occupancy_sensor": TRIGGER_OCCUPANCY,
+                "maintain_occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_maintain"},
@@ -3005,7 +3010,7 @@ def create_preset_remote(
         {
             "name": "E2E Preset Remote",
             "target_lights": [VIRTUAL_MULTI_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             **bindings,
         },
@@ -3513,7 +3518,7 @@ def assert_subset(actual: dict[str, Any], expected: dict[str, Any], what: str) -
 
 
 def assert_converted_to_regular(
-    entry_id: str, schedule_entity: str, schedule_mode: str, settings: dict[str, Any]
+    entry_id: str, schedule_sensor: str, schedule_mode: str, settings: dict[str, Any]
 ) -> None:
     """Assert a converted entry stores the inside settings as a schedule-gated light."""
     cfg = wait_stored_entry(
@@ -3525,7 +3530,7 @@ def assert_converted_to_regular(
         cfg,
         {
             **settings,
-            "schedule_entity": schedule_entity,
+            "schedule_sensor": schedule_sensor,
             "schedule_mode": schedule_mode,
         },
         "Converted light settings",
@@ -3541,7 +3546,7 @@ def assert_converted_to_regular(
 
 def assert_converted_to_scheduled(
     entry_id: str,
-    schedule_entity: str,
+    schedule_sensor: str,
     schedule_end_action: str,
     settings: dict[str, Any],
 ) -> None:
@@ -3554,7 +3559,7 @@ def assert_converted_to_scheduled(
     assert_subset(
         cfg,
         {
-            "schedule_entity": schedule_entity,
+            "schedule_sensor": schedule_sensor,
             "schedule_end_action": schedule_end_action,
         },
         "Converted light schedule settings",
@@ -4468,7 +4473,7 @@ def run_false_detection_prepare() -> None:
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
-                "clear_on_unavailable_timeout": 1,
+                "clear_after_unavailable_timeout": 1,
                 "entity_id": "e2e_grace_occupancy",
             },
         },
@@ -4480,9 +4485,9 @@ def run_false_detection_prepare() -> None:
         {
             "name": "E2E Grace",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": GRACE_OCCUPANCY},
+            "sensors": {"occupancy_sensor": GRACE_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
             "advanced": {"entity_id": "e2e_grace"},
         },
@@ -4635,7 +4640,7 @@ def run_late_source_prepare() -> None:
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
-                "clear_on_unavailable_timeout": 1,
+                "clear_after_unavailable_timeout": 1,
                 "entity_id": "e2e_late_occupancy",
             },
         },
@@ -4647,9 +4652,9 @@ def run_late_source_prepare() -> None:
         {
             "name": "E2E Late",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": LATE_OCCUPANCY},
+            "sensors": {"occupancy_sensor": LATE_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
             "advanced": {"entity_id": "e2e_late"},
         },
@@ -4751,9 +4756,9 @@ def create_effect_light(client: HomeAssistantClient, warning: dict[str, Any]) ->
         {
             "name": "E2E Effect",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 6,
+            "turn_off_timeout": 6,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": warning,
             "advanced": {"entity_id": "e2e_effect"},
@@ -4796,11 +4801,11 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
     entry_id = create_effect_light(
         client,
         {
-            "effect_timeout": 3,
+            "effect_duration": 3,
             "effect_brightness": 40,
             "effect_rgb_color": [0, 255, 0],
             "effect_transition": 1,
-            "warn_timeout": 3,
+            "warn_duration": 3,
             "warn_transition": 1,
         },
     )
@@ -4848,9 +4853,9 @@ def run_effect_color_scenarios(client: HomeAssistantClient) -> None:
     entry_id = create_effect_light(
         client,
         {
-            "effect_timeout": 2,
+            "effect_duration": 2,
             "effect_brightness": 0,
-            "warn_timeout": 3,
+            "warn_duration": 3,
             "warn_brightness": 20,
             "warn_rgb_color": [255, 0, 0],
         },
@@ -4886,9 +4891,9 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Auto Color",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "auto_on_rgb_color": [255, 0, 255]},
             "advanced": {"entity_id": "e2e_auto_color"},
         },
@@ -4945,9 +4950,9 @@ def run_auto_on_color_scenario(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Auto Color",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "auto_on_brightness": 60,
                 "auto_on_color_mode": "none",
@@ -4989,18 +4994,18 @@ def set_dusk_lux(client: HomeAssistantClient, bright: bool) -> None:
 def create_dusk_light(client: HomeAssistantClient, *, occupancy: bool) -> str:
     """Create the dusk light, with or without an occupancy input."""
     sensors: dict[str, Any] = {
-        "illuminance_entity": DUSK_ILLUMINANCE,
+        "illuminance_sensor": DUSK_ILLUMINANCE,
         "illuminance_mode": "control",
     }
     if occupancy:
-        sensors["occupancy_entity"] = VIRTUAL_TIMER_OCCUPANCY
+        sensors["occupancy_sensor"] = VIRTUAL_TIMER_OCCUPANCY
     return create_entry(
         client,
         "light",
         {
             "name": "E2E Dusk",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": sensors,
             "behavior": {"auto_on_brightness": 60},
@@ -5245,11 +5250,11 @@ def run_follow_restart_prepare() -> None:
         {
             "name": "E2E Follow",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "schedule_entity": FOLLOW_SCHEDULE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_sensor": FOLLOW_SCHEDULE,
                 "schedule_mode": "follow",
             },
             "behavior": {"auto_on_brightness": 60},
@@ -5285,11 +5290,11 @@ def run_follow_restart_prepare() -> None:
         {
             "name": "E2E Cycle",
             "lights": [RAW_COLOR_TEMP],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "schedule_entity": CYCLE_SCHEDULE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_sensor": CYCLE_SCHEDULE,
                 "schedule_mode": "follow",
             },
             "advanced": {"entity_id": "e2e_cycle"},
@@ -5447,7 +5452,7 @@ def create_two_settings_set_light(
     name: str,
     entity_id: str,
     member: str,
-    schedule_entity: str,
+    schedule_sensor: str,
     schedule_end_action: str,
     outside: dict[str, Any],
     inside: dict[str, Any],
@@ -5460,7 +5465,7 @@ def create_two_settings_set_light(
         {
             "name": name,
             "lights": [member],
-            "schedule_entity": schedule_entity,
+            "schedule_sensor": schedule_sensor,
             "schedule_end_action": schedule_end_action,
             "advanced": {"entity_id": entity_id},
         },
@@ -5500,10 +5505,10 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         RAW_MULTI_RGB,
         END_SCHEDULE,
         "turn_off",
-        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {"turn_off_timeout": 30, "behavior": {"auto_on_brightness": 50}},
         {
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
         },
     )
@@ -5576,10 +5581,10 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         RAW_MULTI_RGB,
         END_SCHEDULE,
         "turn_off",
-        {"light_timeout": 30},
+        {"turn_off_timeout": 30},
         {
-            "light_timeout": 3,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 3,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 100},
             "standby": {"standby_brightness": 20},
         },
@@ -5658,17 +5663,17 @@ def run_scheduled_light_depth_scenarios(client: HomeAssistantClient) -> None:
         END_SCHEDULE,
         "switch",
         {
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "illuminance_entity": END_ILLUMINANCE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_sensor": END_ILLUMINANCE,
                 "illuminance_mode": "control",
             },
             "behavior": {"auto_on_brightness": 50},
         },
         {
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
         },
     )
@@ -5756,10 +5761,10 @@ def run_end_restart_prepare() -> None:
         RAW_TIMER_LIGHT,
         END_RESTART_SCHEDULE,
         "turn_off",
-        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {"turn_off_timeout": 30, "behavior": {"auto_on_brightness": 50}},
         {
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
         },
     )
@@ -5796,8 +5801,8 @@ def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
         RAW_MULTI_DIMMER,
         END_RESTART_SCHEDULE,
         "turn_off",
-        {"light_timeout": 120},
-        {"light_timeout": 120},
+        {"turn_off_timeout": 120},
+        {"turn_off_timeout": 120},
     )
     follow_entry_id = create_entry(
         client,
@@ -5805,10 +5810,10 @@ def prepare_late_end_lights(client: HomeAssistantClient) -> dict[str, Any]:
         {
             "name": "E2E End Follow Late",
             "lights": [RAW_MULTI_ON_OFF],
-            "light_timeout": 120,
+            "turn_off_timeout": 120,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "schedule_entity": END_RESTART_SCHEDULE,
+                "schedule_sensor": END_RESTART_SCHEDULE,
                 "schedule_mode": "follow",
             },
             "advanced": {"entity_id": "e2e_end_follow_late"},
@@ -6078,7 +6083,7 @@ def run_entity_id_taken_scenario(client: HomeAssistantClient) -> None:
         "name": "E2E Rename",
         "occupancy_sensor": RAW_MOTION,
         "occupancy_timeout": 1,
-        "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+        "advanced": {"false_detection_grace": 0, "clear_after_unavailable_timeout": 1},
     }
     first = finish_creation(
         submit_create(client, "occupancy", payload), "First E2E Rename"
@@ -6119,8 +6124,8 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Rn",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 3,
-            "sensors": {"occupancy_entity": ENTITY_ID_CHANGE_OCCUPANCY},
+            "turn_off_timeout": 3,
+            "sensors": {"occupancy_sensor": ENTITY_ID_CHANGE_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {},
             "advanced": {"entity_id": "e2e_rn"},
@@ -6150,7 +6155,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_stored_entry(
         light_id,
-        lambda cfg: cfg.get("occupancy_entity") == ENTITY_ID_CHANGE_PRESENCE,
+        lambda cfg: cfg.get("occupancy_sensor") == ENTITY_ID_CHANGE_PRESENCE,
         "rewritten to the occupancy sensor's new entity ID",
     )
     wait_machine_state(client, "occupied", ENTITY_ID_CHANGE_LIGHT)
@@ -6193,7 +6198,7 @@ def run_entity_id_change_scenarios(client: HomeAssistantClient) -> None:
         light_id,
         lambda cfg: (
             cfg.get("lights") == [ENTITY_ID_CHANGE_BULB]
-            and cfg.get("occupancy_entity") == ENTITY_ID_CHANGE_OCCUPANCY
+            and cfg.get("occupancy_sensor") == ENTITY_ID_CHANGE_OCCUPANCY
         ),
         "rewritten to the real light's and sensor's new entity IDs",
     )
@@ -6508,7 +6513,7 @@ def run_physical_brightness_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Physical Brightness",
             "lights": [RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_physical_brightness"},
         },
@@ -6594,12 +6599,12 @@ def run_restart_effect_prepare() -> None:
         {
             "name": "E2E Restart Effect",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {
-                "effect_timeout": 10,
+                "effect_duration": 10,
                 "effect_brightness": 20,
                 "effect_rgb_color": [255, 0, 0],
             },
@@ -6618,12 +6623,12 @@ def run_restart_effect_prepare() -> None:
         {
             "name": "E2E Restart Effect Late",
             "lights": [RAW_COLOR_TEMP],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "warning": {
-                "effect_timeout": 10,
+                "effect_duration": 10,
                 "effect_brightness": 20,
                 "effect_color_temp": 5000,
             },
@@ -6846,15 +6851,15 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Hold Rules",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "illuminance_entity": HOLD_ILLUMINANCE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_sensor": HOLD_ILLUMINANCE,
                 "illuminance_mode": "control",
-                "schedule_entity": END_SCHEDULE,
+                "schedule_sensor": END_SCHEDULE,
                 "schedule_mode": "gate",
-                "hold_entities": [RAW_DOOR],
+                "keep_on_entities": [RAW_DOOR],
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_hold_rules"},
@@ -6923,14 +6928,14 @@ def run_hold_release_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Hold Warn",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 6,
+            "turn_off_timeout": 6,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "hold_entities": [RAW_DOOR],
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "keep_on_entities": [RAW_DOOR],
             },
             "behavior": {"auto_on_brightness": 60},
-            "warning": {"warn_timeout": 3, "warn_brightness": 20},
+            "warning": {"warn_duration": 3, "warn_brightness": 20},
             "advanced": {"entity_id": "e2e_hold_warn"},
         },
         "Hold-warn light",
@@ -6992,11 +6997,11 @@ def run_hold_restart_prepare() -> None:
         {
             "name": "E2E Hold Boot",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "hold_entities": [RAW_REMOVAL_MOTION],
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "keep_on_entities": [RAW_REMOVAL_MOTION],
             },
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_hold_boot"},
@@ -7074,7 +7079,7 @@ def create_grace_occupancy(
             "occupancy_timeout": 2,
             "advanced": {
                 "false_detection_grace": 1,
-                "clear_on_unavailable_timeout": 1,
+                "clear_after_unavailable_timeout": 1,
                 "entity_id": entity_id,
             },
         },
@@ -7098,9 +7103,9 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Maintain Manual",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"maintain_occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_maintain_manual"},
         },
@@ -7138,11 +7143,11 @@ def run_maintain_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Grace Both",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": GRACE_TRIGGER,
-                "maintain_occupancy_entity": GRACE_MAINTAIN,
+                "occupancy_sensor": GRACE_TRIGGER,
+                "maintain_occupancy_sensor": GRACE_MAINTAIN,
             },
             "behavior": {"auto_on_brightness": 60, "false_detection_off_delay": 1},
             "advanced": {"entity_id": "e2e_grace_both"},
@@ -7232,9 +7237,9 @@ def run_maintain_restart_prepare() -> None:
         {
             "name": "E2E Maintain Boot",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"maintain_occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"maintain_occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_maintain_boot"},
         },
@@ -7291,12 +7296,12 @@ def create_door_gate_light(client: HomeAssistantClient, door_mode: str) -> str:
         {
             "name": "E2E Door Gate",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "door_entity": RAW_DOOR,
+                "door_sensor": RAW_DOOR,
                 "door_mode": door_mode,
-                "schedule_entity": END_SCHEDULE,
+                "schedule_sensor": END_SCHEDULE,
                 "schedule_mode": "gate",
             },
             "behavior": {"auto_on_brightness": 60},
@@ -7382,9 +7387,9 @@ def run_door_restart_prepare() -> None:
         {
             "name": "E2E Door Boot",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"door_entity": RAW_DOOR, "door_mode": "open_close"},
+            "sensors": {"door_sensor": RAW_DOOR, "door_mode": "open_close"},
             "behavior": {"auto_on_brightness": 60},
             "advanced": {"entity_id": "e2e_door_boot"},
         },
@@ -7444,10 +7449,10 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
         RAW_TIMER_LIGHT,
         REF_SCHEDULE,
         "keep",
-        {"light_timeout": 30, "behavior": {"auto_on_brightness": 50}},
+        {"turn_off_timeout": 30, "behavior": {"auto_on_brightness": 50}},
         {
-            "light_timeout": 30,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 30,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60},
         },
     )
@@ -7465,7 +7470,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     wait_end_light(client, REF_SCHEDULED_LIGHT, ACTIVE_SETTINGS_OUTSIDE)
     wait_stored_entry(
         scheduled_entry_id,
-        lambda cfg: not cfg.get("schedule_entity"),
+        lambda cfg: not cfg.get("schedule_sensor"),
         "stored without the deleted schedule",
     )
     client.call_service("light", "turn_on", {"entity_id": REF_SCHEDULED_LIGHT})
@@ -7501,12 +7506,12 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Ref Light",
             "lights": [RAW_MULTI_DIMMER],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "illuminance_entity": REF_ILLUMINANCE,
+                "illuminance_sensor": REF_ILLUMINANCE,
                 "illuminance_mode": "control",
-                "schedule_entity": REF_SCHEDULE,
+                "schedule_sensor": REF_SCHEDULE,
                 "schedule_mode": "gate",
             },
             "advanced": {"entity_id": "e2e_ref_light"},
@@ -7534,7 +7539,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     wait_entry_loaded(client, light_entry_id)
     wait_stored_entry(
         light_entry_id,
-        lambda cfg: not cfg.get("illuminance_entity"),
+        lambda cfg: not cfg.get("illuminance_sensor"),
         "stored without the deleted illuminance sensor",
     )
     client.set_state(RAW_ILLUMINANCE, 5)
@@ -7554,7 +7559,7 @@ def run_reference_cleanup_scenarios(client: HomeAssistantClient) -> None:
     wait_entry_loaded(client, light_entry_id)
     wait_stored_entry(
         light_entry_id,
-        lambda cfg: not cfg.get("schedule_entity"),
+        lambda cfg: not cfg.get("schedule_sensor"),
         "stored without the deleted schedule",
     )
     client.call_service("light", "turn_off", {"entity_id": REF_LIGHT})
@@ -7589,13 +7594,13 @@ def run_manual_control_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Manual",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "illuminance_entity": MANUAL_ILLUMINANCE,
-                "illuminance_mode": "gate",
-                "schedule_entity": END_SCHEDULE,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "illuminance_sensor": MANUAL_ILLUMINANCE,
+                "illuminance_mode": "gate_only",
+                "schedule_sensor": END_SCHEDULE,
                 "schedule_mode": "gate",
             },
             "behavior": {"auto_on_brightness": 60},
@@ -7727,7 +7732,10 @@ def run_sensor_options_scenarios(client: HomeAssistantClient) -> None:
             "name": "E2E Opt Occupancy Edited",
             "occupancy_sensor": RAW_REMOVAL_MOTION,
             "occupancy_timeout": 3,
-            "advanced": {"false_detection_grace": 0, "clear_on_unavailable_timeout": 1},
+            "advanced": {
+                "false_detection_grace": 0,
+                "clear_after_unavailable_timeout": 1,
+            },
         },
         options=True,
     )
@@ -7818,7 +7826,7 @@ def run_faulty_member_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Faulty",
             "lights": [RAW_MULTI_ON_OFF, RAW_MULTI_DIMMER, RAW_MULTI_RGB],
-            "light_timeout": 8,
+            "turn_off_timeout": 8,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_faulty"},
         },
@@ -8275,11 +8283,11 @@ def run_combined_schedule_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Combo Gate",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
-                "schedule_entity": COMBO_ANY,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
+                "schedule_sensor": COMBO_ANY,
                 "schedule_mode": "gate",
             },
             "advanced": {"entity_id": "e2e_combo_gate"},
@@ -8479,9 +8487,9 @@ def run_combined_schedule_restart_prepare() -> None:
         {
             "name": "E2E Combo Boot Light",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"schedule_entity": COMBO_BOOT, "schedule_mode": "follow"},
+            "sensors": {"schedule_sensor": COMBO_BOOT, "schedule_mode": "follow"},
             "advanced": {"entity_id": "e2e_combo_boot_light"},
         },
         "Combo boot light",
@@ -8621,9 +8629,9 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Color Temperature Virtual",
             "lights": [RAW_COLOR_TEMP],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {"auto_on_brightness": 60, "auto_on_color_temp": 3000},
             "advanced": {"entity_id": "e2e_color_temp_virtual"},
         },
@@ -8688,7 +8696,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Color Temperature Remote",
             "target_lights": [COLOR_TEMP_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "preset_1": {
                 "preset_1_buttons_single": [EVENT_BUTTON],
@@ -8728,7 +8736,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Color Temperature Mix",
             "lights": [RAW_COLOR_TEMP, RAW_MULTI_RGB],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_color_temp_mix"},
         },
@@ -8821,7 +8829,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Vocab",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
             "advanced": {"entity_id": "e2e_vocab"},
         },
@@ -8835,7 +8843,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Rejected Remote",
             "target_lights": [VOCAB_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_off": {"off_buttons_double": [EVENT_HUE]},
         },
@@ -8848,7 +8856,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Vocab Remote",
             "target_lights": [VOCAB_LIGHT],
-            "dim_step": 20,
+            "brightness_step": 20,
             **EMPTY_REMOTE_SECTIONS,
             "turn_on": {
                 "on_buttons_single": [EVENT_MATTER, EVENT_Z2M, EVENT_CASETA, EVENT_HUE]
@@ -8936,13 +8944,13 @@ def create_own_system_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Own System",
             "lights": [RAW_TIMER_LIGHT],
-            "light_timeout": 4,
+            "turn_off_timeout": 4,
             "sensors": {
-                "occupancy_entity": VIRTUAL_TIMER_OCCUPANCY,
+                "occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY,
                 "occupancy_turn_on": "own_system_then_molight",
             },
             "behavior": {"auto_on_brightness": 60},
-            "warning": {"effect_timeout": 0, "warn_timeout": 0},
+            "warning": {"effect_duration": 0, "warn_duration": 0},
             "advanced": {"entity_id": "e2e_own_system"},
         },
         "Own-system light",
@@ -9079,9 +9087,9 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         {
             "name": "E2E Fade",
             "lights": [RAW_MULTI_RGB],
-            "light_timeout": 10,
+            "turn_off_timeout": 10,
             **EMPTY_LIGHT_SECTIONS,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "auto_on_brightness": 80,
                 "auto_on_rgb_color": blue,
@@ -9089,11 +9097,11 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
                 "auto_off_transition": LONG_FADE,
             },
             "warning": {
-                "effect_timeout": 9,
+                "effect_duration": 9,
                 "effect_brightness": 40,
                 "effect_rgb_color": green,
                 "effect_transition": LONG_FADE,
-                "warn_timeout": 11,
+                "warn_duration": 11,
                 "warn_brightness": 20,
                 "warn_rgb_color": magenta,
                 "warn_transition": LONG_FADE,
@@ -9190,10 +9198,10 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         RAW_MULTI_RGB,
         FADE_SCHEDULE,
         "turn_off",
-        {"light_timeout": 30},
+        {"turn_off_timeout": 30},
         {
-            "light_timeout": 4,
-            "sensors": {"occupancy_entity": VIRTUAL_TIMER_OCCUPANCY},
+            "turn_off_timeout": 4,
+            "sensors": {"occupancy_sensor": VIRTUAL_TIMER_OCCUPANCY},
             "behavior": {
                 "auto_on_brightness": 80,
                 "auto_on_transition": LONG_FADE,
@@ -9272,10 +9280,10 @@ def create_park_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Park",
             "lights": [RAW_MULTI_DIMMER, RAW_MULTI_RGB],
-            "light_timeout": 12,
+            "turn_off_timeout": 12,
             **EMPTY_LIGHT_SECTIONS,
             "behavior": {"turn_on_select_entity": TARGET_SELECT},
-            "warning": {"warn_timeout": 20, "warn_brightness": 20},
+            "warning": {"warn_duration": 20, "warn_brightness": 20},
             "advanced": {"entity_id": "e2e_park"},
         },
     )
@@ -9294,7 +9302,7 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
         {
             "name": "E2E Park Scheduled",
             "lights": [RAW_MULTI_DIMMER],
-            "schedule_entity": PARK_SCHEDULE,
+            "schedule_sensor": PARK_SCHEDULE,
             "schedule_end_action": "keep",
             "advanced": {"entity_id": "e2e_park_scheduled"},
         },
@@ -9304,7 +9312,7 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
         result,
         {
             **EMPTY_LIGHT_SECTIONS,
-            "light_timeout": 30,
+            "turn_off_timeout": 30,
             "behavior": {"turn_on_select_entity": TARGET_SELECT},
         },
     )
@@ -9312,7 +9320,7 @@ def create_park_scheduled_light(client: HomeAssistantClient) -> str:
     result = client.continue_flow(result, {"turn_on_select_option": "Night"})
     expect_step(result, "scheduled_light_inside")
     result = client.continue_flow(
-        result, {**EMPTY_INSIDE_LIGHT_SECTIONS, "light_timeout": 30}
+        result, {**EMPTY_INSIDE_LIGHT_SECTIONS, "turn_off_timeout": 30}
     )
     return finish_creation(result, "Park Virtual Scheduled Light")
 

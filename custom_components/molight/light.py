@@ -34,10 +34,10 @@ Off warning sequence
   going dark, controlled by these settings (all default to the feature being
   off, so the light turns straight off exactly as before):
     EFFECT: the effect stage (blink/dip to effect_brightness, 0 = fully off) shown
-            for effect_timeout seconds. Skipped when effect_timeout is 0.
+            for effect_duration seconds. Skipped when effect_duration is 0.
     WARN:   the warn stage, at warn_brightness (blank = the brightness the
-            light had before the warning) for warn_timeout seconds, then off.
-            Skipped when warn_timeout is 0.
+            light had before the warning) for warn_duration seconds, then off.
+            Skipped when warn_duration is 0.
   Each stage can optionally fade into its brightness over effect_transition /
   warn_transition seconds (each validated <= its stage's duration). Separately,
   auto_on_transition / auto_off_transition fade automatic turn-ons and
@@ -191,7 +191,7 @@ illuminance_mode:
 
 Holding auto-off
   Auto-off is *held* while the companion "<name> Auto-off" switch is off OR
-  any configured keep-on entity (hold_entities) is on. While held, every
+  any configured keep-on entity (keep_on_entities) is on. While held, every
   automatic turn-off is suspended (the timer finishing, the false-detection off
   delay, bright-forces-off, and schedule window ends), but turn-ons and manual
   control work exactly as usual (a manual off still turns the lights off).
@@ -328,29 +328,29 @@ from .const import (
     CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
-    CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
+    CONF_DOOR_SENSOR,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_COLOR_TEMP,
+    CONF_EFFECT_DURATION,
     CONF_EFFECT_RGB_COLOR,
-    CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_TYPE,
     CONF_FALSE_OFF_DELAY,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_MODE,
+    CONF_ILLUMINANCE_SENSOR,
     CONF_INSIDE_SCHEDULE_SETTINGS,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TURN_ON,
     CONF_OUTSIDE_SCHEDULE_SETTINGS,
     CONF_SCHEDULE_END_ACTION,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
     CONF_STANDBY_RGB_COLOR,
@@ -359,20 +359,20 @@ from .const import (
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
+    CONF_WARN_DURATION,
     CONF_WARN_RGB_COLOR,
-    CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
     DATA_AUTO_OFF_ENABLED,
     DEFAULT_DOOR_MODE,
     DEFAULT_EFFECT_BRIGHTNESS,
-    DEFAULT_EFFECT_TIMEOUT,
+    DEFAULT_EFFECT_DURATION,
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_MODE,
     DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
     DEFAULT_OCCUPANCY_TURN_ON,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
-    DEFAULT_WARN_TIMEOUT,
+    DEFAULT_WARN_DURATION,
     DOMAIN,
     DOOR_MODE_OPEN_CLOSE,
     DOOR_UNAVAILABLE_TIMEOUT,
@@ -384,7 +384,7 @@ from .const import (
     EVENT_TURNED_OFF,
     EVENT_TURNED_ON,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE,
     MATCH_SCHEDULE_AFTER_RESTART_INSIDE_AND_OUTSIDE,
     MATCH_SCHEDULE_AFTER_RESTART_OUTSIDE,
@@ -562,11 +562,11 @@ def _opt_color(cfg: dict[str, Any], color_temp_key: str, rgb_key: str) -> dict |
 # watches both settings sets' references; events from the inactive one simply
 # match no role in _handle_state_change.
 _WATCHED_REFERENCE_KEYS = (
-    CONF_OCCUPANCY_ENTITY,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
-    CONF_ILLUMINANCE_ENTITY,
-    CONF_SCHEDULE_ENTITY,
-    CONF_DOOR_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
+    CONF_ILLUMINANCE_SENSOR,
+    CONF_SCHEDULE_SENSOR,
+    CONF_DOOR_SENSOR,
 )
 
 
@@ -1022,7 +1022,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         self._lights: list[str] = cfg.get(CONF_LIGHTS, [])
         self._is_scheduled_light = cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
-        self._schedule_sensor: str | None = cfg.get(CONF_SCHEDULE_ENTITY)
+        self._schedule_sensor: str | None = cfg.get(CONF_SCHEDULE_SENSOR)
         self._schedule_end_action = cfg.get(
             CONF_SCHEDULE_END_ACTION, DEFAULT_SCHEDULE_END_ACTION
         )
@@ -1254,7 +1254,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # value (0 = blink fully off); warn_brightness is None to keep whatever
         # brightness the light had before the warning began.
         self._effect_duration = int(
-            cfg.get(CONF_EFFECT_TIMEOUT, DEFAULT_EFFECT_TIMEOUT)
+            cfg.get(CONF_EFFECT_DURATION, DEFAULT_EFFECT_DURATION)
         )
         self._effect_brightness = round(
             percentage_to_ranged_value(
@@ -1262,7 +1262,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 int(cfg.get(CONF_EFFECT_BRIGHTNESS, DEFAULT_EFFECT_BRIGHTNESS)),
             )
         )
-        self._warn_duration = int(cfg.get(CONF_WARN_TIMEOUT, DEFAULT_WARN_TIMEOUT))
+        self._warn_duration = int(cfg.get(CONF_WARN_DURATION, DEFAULT_WARN_DURATION))
         warn_pct = int(cfg.get(CONF_WARN_BRIGHTNESS) or 0)
         self._warn_brightness = (
             round(percentage_to_ranged_value((1, 255), warn_pct)) if warn_pct else None
@@ -1286,12 +1286,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         # Sensor references. A Virtual Scheduled Light has no schedule mode: its
         # schedule sensor selects settings rather than being followed or gating.
-        self._occupancy_sensor = cfg.get(CONF_OCCUPANCY_ENTITY)
+        self._occupancy_sensor = cfg.get(CONF_OCCUPANCY_SENSOR)
         self._occupancy_turn_on = cfg.get(
             CONF_OCCUPANCY_TURN_ON, DEFAULT_OCCUPANCY_TURN_ON
         )
-        self._maintain_occupancy_sensor = cfg.get(CONF_MAINTAIN_OCCUPANCY_ENTITY)
-        self._illuminance_sensor = cfg.get(CONF_ILLUMINANCE_ENTITY)
+        self._maintain_occupancy_sensor = cfg.get(CONF_MAINTAIN_OCCUPANCY_SENSOR)
+        self._illuminance_sensor = cfg.get(CONF_ILLUMINANCE_SENSOR)
         self._illuminance_mode = cfg.get(
             CONF_ILLUMINANCE_MODE, DEFAULT_ILLUMINANCE_MODE
         )
@@ -1303,9 +1303,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         self._match_schedule_after_restart = cfg.get(
             CONF_MATCH_SCHEDULE_AFTER_RESTART, DEFAULT_MATCH_SCHEDULE_AFTER_RESTART
         )
-        self._door_sensor = cfg.get(CONF_DOOR_ENTITY)
+        self._door_sensor = cfg.get(CONF_DOOR_SENSOR)
         self._door_mode = cfg.get(CONF_DOOR_MODE, DEFAULT_DOOR_MODE)
-        self._keep_on_entities = cfg.get(CONF_HOLD_ENTITIES, [])
+        self._keep_on_entities = cfg.get(CONF_KEEP_ON_ENTITIES, [])
 
     # ------------------------------------------------------------------
     # HA lifecycle
@@ -1470,7 +1470,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 for key in _WATCHED_REFERENCE_KEYS
                 if (entity_id := settings.get(key))
             )
-            watch.extend(settings.get(CONF_HOLD_ENTITIES, []))
+            watch.extend(settings.get(CONF_KEEP_ON_ENTITIES, []))
         # One entity may serve several roles; watch it only once.
         watch = list(dict.fromkeys(watch))
 
@@ -1653,7 +1653,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             dict.fromkeys(
                 entity_id
                 for settings in self._settings_sets
-                for entity_id in settings.get(CONF_HOLD_ENTITIES, [])
+                for entity_id in settings.get(CONF_KEEP_ON_ENTITIES, [])
             )
         )
         always = lights_lit_with(
@@ -3690,7 +3690,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         raised from standby: an on light is held and re-triggered as usual.
         """
         return self._is_illuminance_bright() and (
-            self._illuminance_mode != ILLUMINANCE_MODE_GATE
+            self._illuminance_mode != ILLUMINANCE_MODE_GATE_ONLY
             or not self._attr_is_on
             or self._machine_state == STATE_STANDBY
         )
@@ -4657,7 +4657,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         if self._machine_state == STATE_SCHEDULED:
             return  # follow-mode window owns the lights
         if is_bright:
-            if self._illuminance_mode == ILLUMINANCE_MODE_GATE:
+            if self._illuminance_mode == ILLUMINANCE_MODE_GATE_ONLY:
                 # Gate only: bright never forces the lights off (breaks the
                 # feedback loop when the lux sensor sees the controlled
                 # lights). Occupancy/timer handle turning off.

@@ -43,16 +43,16 @@ from .const import (
     CONF_AUTO_ON_COLOR_TEMP,
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
-    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_BRIGHTNESS_STEP,
+    CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     CONF_CONFIRM_CONVERSION,
     CONF_CONVERT_LIGHTS,
-    CONF_DIM_STEP,
-    CONF_DOOR_ENTITY,
     CONF_DOOR_MODE,
+    CONF_DOOR_SENSOR,
     CONF_EFFECT_BRIGHTNESS,
     CONF_EFFECT_COLOR_TEMP,
+    CONF_EFFECT_DURATION,
     CONF_EFFECT_RGB_COLOR,
-    CONF_EFFECT_TIMEOUT,
     CONF_EFFECT_TRANSITION,
     CONF_ENTITY_ID,
     CONF_ENTITY_TYPE,
@@ -60,20 +60,17 @@ from .const import (
     CONF_FALSE_OFF_DELAY,
     CONF_FILTER_AREAS,
     CONF_FILTER_LABELS,
-    CONF_HOLD_ENTITIES,
-    CONF_ILLUMINANCE_ENTITY,
     CONF_ILLUMINANCE_HYSTERESIS,
     CONF_ILLUMINANCE_MODE,
     CONF_ILLUMINANCE_SENSOR,
     CONF_ILLUMINANCE_THRESHOLD,
     CONF_INSIDE_SCHEDULE_SETTINGS,
-    CONF_LIGHT_TIMEOUT,
+    CONF_KEEP_ON_ENTITIES,
     CONF_LIGHTS,
-    CONF_MAINTAIN_OCCUPANCY_ENTITY,
+    CONF_MAINTAIN_OCCUPANCY_SENSOR,
     CONF_MAINTAIN_SENSORS,
     CONF_MATCH_SCHEDULE_AFTER_RESTART,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
     CONF_OCCUPANCY_TURN_ON,
@@ -81,11 +78,11 @@ from .const import (
     CONF_PRESELECT_ALL,
     CONF_SCHEDULE_DEFINITION,
     CONF_SCHEDULE_END_ACTION,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_INPUTS,
     CONF_SCHEDULE_INVERT,
     CONF_SCHEDULE_MODE,
     CONF_SCHEDULE_OPERATOR,
+    CONF_SCHEDULE_SENSOR,
     CONF_SCHEDULE_SOURCE,
     CONF_SELECTED_ENTITIES,
     CONF_STANDBY_BRIGHTNESS,
@@ -94,33 +91,35 @@ from .const import (
     CONF_TARGET_LIGHTS,
     CONF_TIME_WINDOWS,
     CONF_TRIGGER_SENSORS,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_TURN_ON_SELECT_ENTITY,
     CONF_TURN_ON_SELECT_OPTION,
     CONF_TURN_ON_SELECT_SOURCE_ENTITY,
     CONF_WARN_BRIGHTNESS,
     CONF_WARN_COLOR_TEMP,
+    CONF_WARN_DURATION,
     CONF_WARN_RGB_COLOR,
-    CONF_WARN_TIMEOUT,
     CONF_WARN_TRANSITION,
+    CONFIG_ENTRY_VERSION,
     DATA_DISCOVERY_RESERVED,
-    DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-    DEFAULT_DIM_STEP,
+    DEFAULT_BRIGHTNESS_STEP,
+    DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     DEFAULT_DOOR_MODE,
     DEFAULT_EFFECT_BRIGHTNESS,
-    DEFAULT_EFFECT_TIMEOUT,
+    DEFAULT_EFFECT_DURATION,
     DEFAULT_FALSE_DETECTION_GRACE,
     DEFAULT_FALSE_OFF_DELAY,
     DEFAULT_ILLUMINANCE_HYSTERESIS,
     DEFAULT_ILLUMINANCE_MODE,
     DEFAULT_ILLUMINANCE_THRESHOLD,
-    DEFAULT_LIGHT_TIMEOUT,
     DEFAULT_MATCH_SCHEDULE_AFTER_RESTART,
     DEFAULT_OCCUPANCY_TIMEOUT,
     DEFAULT_OCCUPANCY_TURN_ON,
     DEFAULT_SCHEDULE_END_ACTION,
     DEFAULT_SCHEDULE_MODE,
     DEFAULT_SCHEDULE_OPERATOR,
-    DEFAULT_WARN_TIMEOUT,
+    DEFAULT_TURN_OFF_TIMEOUT,
+    DEFAULT_WARN_DURATION,
     DOMAIN,
     DOOR_MODES,
     EDGE_COMBINE,
@@ -325,13 +324,13 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_AUTO_OFF_TRANSITION,
     ),
     SECTION_WARNING: (
-        CONF_EFFECT_TIMEOUT,
+        CONF_EFFECT_DURATION,
         CONF_EFFECT_BRIGHTNESS,
         CONF_EFFECT_COLOR_MODE,
         CONF_EFFECT_COLOR_TEMP,
         CONF_EFFECT_RGB_COLOR,
         CONF_EFFECT_TRANSITION,
-        CONF_WARN_TIMEOUT,
+        CONF_WARN_DURATION,
         CONF_WARN_BRIGHTNESS,
         CONF_WARN_COLOR_MODE,
         CONF_WARN_COLOR_TEMP,
@@ -346,17 +345,17 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
         CONF_STANDBY_RGB_COLOR,
     ),
     SECTION_SENSORS: (
-        CONF_OCCUPANCY_ENTITY,
+        CONF_OCCUPANCY_SENSOR,
         CONF_OCCUPANCY_TURN_ON,
-        CONF_MAINTAIN_OCCUPANCY_ENTITY,
-        CONF_ILLUMINANCE_ENTITY,
+        CONF_MAINTAIN_OCCUPANCY_SENSOR,
+        CONF_ILLUMINANCE_SENSOR,
         CONF_ILLUMINANCE_MODE,
-        CONF_SCHEDULE_ENTITY,
+        CONF_SCHEDULE_SENSOR,
         CONF_SCHEDULE_MODE,
         CONF_MATCH_SCHEDULE_AFTER_RESTART,
-        CONF_DOOR_ENTITY,
+        CONF_DOOR_SENSOR,
         CONF_DOOR_MODE,
-        CONF_HOLD_ENTITIES,
+        CONF_KEEP_ON_ENTITIES,
     ),
     SECTION_ADVANCED: (CONF_ENTITY_ID,),
 }
@@ -364,7 +363,7 @@ _LIGHT_SECTIONS: dict[str, tuple[str, ...]] = {
 _OCCUPANCY_SECTIONS: dict[str, tuple[str, ...]] = {
     SECTION_ADVANCED: (
         CONF_FALSE_DETECTION_GRACE,
-        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+        CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
         CONF_ENTITY_ID,
     ),
 }
@@ -463,7 +462,7 @@ def _flatten_light(user_input: dict[str, Any]) -> dict[str, Any]:
     as None, since a missing key reads as the 300 s default.
     """
     flat = _flatten_sections(user_input, _LIGHT_SECTIONS)
-    flat.setdefault(CONF_LIGHT_TIMEOUT, None)
+    flat.setdefault(CONF_TURN_OFF_TIMEOUT, None)
     return _apply_color_modes(flat, _LIGHT_COLOR_GROUPS)
 
 
@@ -603,25 +602,25 @@ def _schedule_edge_fields() -> dict:
 # Keep-on entities can be anything with an on/off state, so that picker is
 # narrowed only to the domains in KEEP_ON_ENTITY_DOMAINS.
 _LIGHT_REF_SELECTORS = {
-    CONF_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
+    CONF_OCCUPANCY_SENSOR: selector.EntitySelectorConfig(
         integration=DOMAIN,
         domain="binary_sensor",
         device_class="occupancy",
         multiple=False,
     ),
-    CONF_MAINTAIN_OCCUPANCY_ENTITY: selector.EntitySelectorConfig(
+    CONF_MAINTAIN_OCCUPANCY_SENSOR: selector.EntitySelectorConfig(
         integration=DOMAIN,
         domain="binary_sensor",
         device_class="occupancy",
         multiple=False,
     ),
-    CONF_ILLUMINANCE_ENTITY: selector.EntitySelectorConfig(
+    CONF_ILLUMINANCE_SENSOR: selector.EntitySelectorConfig(
         integration=DOMAIN,
         domain="binary_sensor",
         device_class="light",
         multiple=False,
     ),
-    CONF_DOOR_ENTITY: selector.EntitySelectorConfig(
+    CONF_DOOR_SENSOR: selector.EntitySelectorConfig(
         filter=[
             {
                 "domain": "binary_sensor",
@@ -631,7 +630,7 @@ _LIGHT_REF_SELECTORS = {
         ],
         multiple=False,
     ),
-    CONF_HOLD_ENTITIES: selector.EntitySelectorConfig(
+    CONF_KEEP_ON_ENTITIES: selector.EntitySelectorConfig(
         filter={"domain": _KEEP_ON_ENTITY_DOMAINS}, multiple=True
     ),
 }
@@ -973,8 +972,8 @@ def _min_referencing_turn_off_timeout(
             timeout
             for settings in settings_sets
             if (
-                settings.get(CONF_OCCUPANCY_ENTITY) in sensor_ids
-                or settings.get(CONF_MAINTAIN_OCCUPANCY_ENTITY) in sensor_ids
+                settings.get(CONF_OCCUPANCY_SENSOR) in sensor_ids
+                or settings.get(CONF_MAINTAIN_OCCUPANCY_SENSOR) in sensor_ids
             )
             and (timeout := _turn_off_timeout(settings)) is not None
         )
@@ -993,18 +992,18 @@ def _validate_turn_off_timeout(
     """
     timeout = _turn_off_timeout(user_input)
     if timeout is None:
-        if int(user_input.get(CONF_EFFECT_TIMEOUT) or 0) or int(
-            user_input.get(CONF_WARN_TIMEOUT) or 0
+        if int(user_input.get(CONF_EFFECT_DURATION) or 0) or int(
+            user_input.get(CONF_WARN_DURATION) or 0
         ):
-            return {CONF_LIGHT_TIMEOUT: "light_timeout_blank_warning"}
+            return {CONF_TURN_OFF_TIMEOUT: "light_timeout_blank_warning"}
         return {}
-    for key in (CONF_OCCUPANCY_ENTITY, CONF_MAINTAIN_OCCUPANCY_ENTITY):
+    for key in (CONF_OCCUPANCY_SENSOR, CONF_MAINTAIN_OCCUPANCY_SENSOR):
         entity_id = user_input.get(key)
         if not entity_id:
             continue
         occ_timeout = _effective_occupancy_timeout(hass, entity_id)
         if occ_timeout is not None and timeout < occ_timeout:
-            return {CONF_LIGHT_TIMEOUT: "light_timeout_too_short"}
+            return {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
     return {}
 
 
@@ -1014,7 +1013,7 @@ def _validate_match_schedule_after_restart(
     """Only a Follow light can match its schedule after a restart."""
     choice = user_input.get(CONF_MATCH_SCHEDULE_AFTER_RESTART)
     mode = user_input.get(CONF_SCHEDULE_MODE, DEFAULT_SCHEDULE_MODE)
-    follow = user_input.get(CONF_SCHEDULE_ENTITY) and mode == SCHEDULE_MODE_FOLLOW
+    follow = user_input.get(CONF_SCHEDULE_SENSOR) and mode == SCHEDULE_MODE_FOLLOW
     if choice not in (None, MATCH_SCHEDULE_AFTER_RESTART_AS_FOUND) and not follow:
         return {"base": "match_schedule_after_restart_needs_follow"}
     return {}
@@ -1162,8 +1161,8 @@ def _validate_stage_transitions(user_input: dict[str, Any]) -> dict[str, str]:
     violation is reported as a base error.
     """
     for transition_key, duration_key, error in (
-        (CONF_EFFECT_TRANSITION, CONF_EFFECT_TIMEOUT, "effect_transition_too_long"),
-        (CONF_WARN_TRANSITION, CONF_WARN_TIMEOUT, "warn_transition_too_long"),
+        (CONF_EFFECT_TRANSITION, CONF_EFFECT_DURATION, "effect_transition_too_long"),
+        (CONF_WARN_TRANSITION, CONF_WARN_DURATION, "warn_transition_too_long"),
     ):
         transition = user_input.get(transition_key)
         if transition is not None and float(transition) > int(
@@ -1252,19 +1251,19 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
     if effect_color and not int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0):
         return {"base": "effect_color_requires_brightness"}
     # Stage durations are whole seconds, as the light runs them.
-    if effect_color and not int(user_input.get(CONF_EFFECT_TIMEOUT) or 0):
+    if effect_color and not int(user_input.get(CONF_EFFECT_DURATION) or 0):
         return {"base": "effect_color_requires_timeout"}
     # 0 is the default and blinks the lights fully off, so only a positive value
     # on a disabled stage is a mistake.
     if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not int(
-        user_input.get(CONF_EFFECT_TIMEOUT) or 0
+        user_input.get(CONF_EFFECT_DURATION) or 0
     ):
         return {"base": "effect_brightness_requires_timeout"}
     if (
         int(user_input.get(CONF_WARN_BRIGHTNESS) or 0)
         or user_input.get(CONF_WARN_COLOR_TEMP)
         or user_input.get(CONF_WARN_RGB_COLOR)
-    ) and not int(user_input.get(CONF_WARN_TIMEOUT) or 0):
+    ) and not int(user_input.get(CONF_WARN_DURATION) or 0):
         return {"base": "warn_values_require_timeout"}
     return {}
 
@@ -1370,7 +1369,7 @@ def _clean_optional_values(values: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in values.items()
-        if value is not None or key == CONF_LIGHT_TIMEOUT
+        if value is not None or key == CONF_TURN_OFF_TIMEOUT
     }
 
 
@@ -1408,8 +1407,8 @@ def _occupancy_setting_fields(*, with_entity_id: bool = False) -> dict:
             )
         ),
         vol.Required(
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
-            default=DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+            CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
+            default=DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0, max=3600, unit_of_measurement="s", mode="box"
@@ -1488,8 +1487,8 @@ def _light_setting_fields(
     standby section is for a Virtual Scheduled Light's inside-schedule settings.
     """
     sensor_fields: dict = {
-        vol.Optional(CONF_OCCUPANCY_ENTITY): selector.EntitySelector(
-            _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
+        vol.Optional(CONF_OCCUPANCY_SENSOR): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_SENSOR]
         ),
         vol.Required(
             CONF_OCCUPANCY_TURN_ON, default=DEFAULT_OCCUPANCY_TURN_ON
@@ -1499,11 +1498,11 @@ def _light_setting_fields(
                 translation_key=CONF_OCCUPANCY_TURN_ON,
             )
         ),
-        vol.Optional(CONF_MAINTAIN_OCCUPANCY_ENTITY): selector.EntitySelector(
-            _LIGHT_REF_SELECTORS[CONF_MAINTAIN_OCCUPANCY_ENTITY]
+        vol.Optional(CONF_MAINTAIN_OCCUPANCY_SENSOR): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_MAINTAIN_OCCUPANCY_SENSOR]
         ),
-        vol.Optional(CONF_ILLUMINANCE_ENTITY): selector.EntitySelector(
-            _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
+        vol.Optional(CONF_ILLUMINANCE_SENSOR): selector.EntitySelector(
+            _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_SENSOR]
         ),
         vol.Required(
             CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
@@ -1517,7 +1516,7 @@ def _light_setting_fields(
     if with_schedule:
         sensor_fields.update(
             {
-                vol.Optional(CONF_SCHEDULE_ENTITY): _schedule_sensor_selector(
+                vol.Optional(CONF_SCHEDULE_SENSOR): _schedule_sensor_selector(
                     hass, legacy_entity=legacy_schedule
                 ),
                 vol.Required(
@@ -1541,8 +1540,8 @@ def _light_setting_fields(
         )
     sensor_fields.update(
         {
-            vol.Optional(CONF_DOOR_ENTITY): selector.EntitySelector(
-                _LIGHT_REF_SELECTORS[CONF_DOOR_ENTITY]
+            vol.Optional(CONF_DOOR_SENSOR): selector.EntitySelector(
+                _LIGHT_REF_SELECTORS[CONF_DOOR_SENSOR]
             ),
             vol.Required(CONF_DOOR_MODE, default=DEFAULT_DOOR_MODE): (
                 selector.SelectSelector(
@@ -1551,9 +1550,9 @@ def _light_setting_fields(
                     )
                 )
             ),
-            vol.Optional(CONF_HOLD_ENTITIES): selector.EntitySelector(
+            vol.Optional(CONF_KEEP_ON_ENTITIES): selector.EntitySelector(
                 {
-                    **_LIGHT_REF_SELECTORS[CONF_HOLD_ENTITIES],
+                    **_LIGHT_REF_SELECTORS[CONF_KEEP_ON_ENTITIES],
                     "exclude_entities": list(keep_on_exclusions),
                 }
             ),
@@ -1563,7 +1562,7 @@ def _light_setting_fields(
     fields: dict = {
         # No default: a new form suggests 300, and a cleared field is a blank
         # timeout, which runs no timer.
-        vol.Optional(CONF_LIGHT_TIMEOUT): selector.NumberSelector(
+        vol.Optional(CONF_TURN_OFF_TIMEOUT): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=1, max=14400, unit_of_measurement="s", mode="box"
             )
@@ -1601,7 +1600,7 @@ def _light_setting_fields(
             vol.Schema(
                 {
                     vol.Required(
-                        CONF_EFFECT_TIMEOUT, default=DEFAULT_EFFECT_TIMEOUT
+                        CONF_EFFECT_DURATION, default=DEFAULT_EFFECT_DURATION
                     ): _STAGE_DURATION_SELECTOR,
                     vol.Required(
                         CONF_EFFECT_BRIGHTNESS, default=DEFAULT_EFFECT_BRIGHTNESS
@@ -1611,7 +1610,7 @@ def _light_setting_fields(
                     vol.Optional(CONF_EFFECT_RGB_COLOR): _RGB_COLOR_SELECTOR,
                     vol.Optional(CONF_EFFECT_TRANSITION): _TRANSITION_SELECTOR,
                     vol.Required(
-                        CONF_WARN_TIMEOUT, default=DEFAULT_WARN_TIMEOUT
+                        CONF_WARN_DURATION, default=DEFAULT_WARN_DURATION
                     ): _STAGE_DURATION_SELECTOR,
                     vol.Optional(CONF_WARN_BRIGHTNESS): _AUTO_ON_BRIGHTNESS_SELECTOR,
                     vol.Optional(CONF_WARN_COLOR_MODE): _COLOR_MODE_SELECTOR,
@@ -1666,7 +1665,7 @@ def _remote_top_fields() -> dict:
         vol.Required(CONF_TARGET_LIGHTS): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="light", multiple=True)
         ),
-        vol.Required(CONF_DIM_STEP, default=DEFAULT_DIM_STEP): (
+        vol.Required(CONF_BRIGHTNESS_STEP, default=DEFAULT_BRIGHTNESS_STEP): (
             selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=1, max=50, step=1, unit_of_measurement="%", mode="box"
@@ -1837,7 +1836,7 @@ def _occupancy_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
         CONF_OCCUPANCY_SENSOR: entity_id,
         CONF_OCCUPANCY_TIMEOUT: DEFAULT_OCCUPANCY_TIMEOUT,
         CONF_FALSE_DETECTION_GRACE: DEFAULT_FALSE_DETECTION_GRACE,
-        CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: DEFAULT_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+        CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: DEFAULT_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     }
 
 
@@ -1853,7 +1852,7 @@ def _illuminance_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
 
 # What a new light's form starts from: the timeout is only suggested, so
 # clearing it saves a blank one.
-_NEW_LIGHT_PREFILL = {CONF_LIGHT_TIMEOUT: DEFAULT_LIGHT_TIMEOUT}
+_NEW_LIGHT_PREFILL = {CONF_TURN_OFF_TIMEOUT: DEFAULT_TURN_OFF_TIMEOUT}
 
 
 def _light_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
@@ -1863,7 +1862,7 @@ def _light_entry_settings(entity_id: str, name: str) -> dict[str, Any]:
         CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
         CONF_NAME: name,
         CONF_LIGHTS: [entity_id],
-        CONF_LIGHT_TIMEOUT: DEFAULT_LIGHT_TIMEOUT,
+        CONF_TURN_OFF_TIMEOUT: DEFAULT_TURN_OFF_TIMEOUT,
         CONF_FALSE_OFF_DELAY: DEFAULT_FALSE_OFF_DELAY,
         CONF_OCCUPANCY_TURN_ON: DEFAULT_OCCUPANCY_TURN_ON,
         CONF_ILLUMINANCE_MODE: DEFAULT_ILLUMINANCE_MODE,
@@ -2060,7 +2059,7 @@ def _validate_keep_on_entities(
     members: Sequence[str],
 ) -> dict[str, str]:
     """Reject keep-on entities that are on whenever the light is, or never on."""
-    keep_on_entities = settings.get(CONF_HOLD_ENTITIES) or []
+    keep_on_entities = settings.get(CONF_KEEP_ON_ENTITIES) or []
     if set(keep_on_entities) & _lights_lit_with(
         hass, own_entities, members, keep_on_entities
     ).union(own_entities):
@@ -2078,7 +2077,7 @@ def _conversion_eligible(cfg: dict[str, Any], *, to_scheduled: bool) -> bool:
     Schedule-gated → scheduled needs a regular Virtual Light with a schedule in any gate
     mode; scheduled → schedule-gated needs a Virtual Scheduled Light with a schedule.
     """
-    if not cfg.get(CONF_SCHEDULE_ENTITY):
+    if not cfg.get(CONF_SCHEDULE_SENSOR):
         return False
     if to_scheduled:
         return cfg.get(CONF_ENTITY_TYPE) == ENTITY_TYPE_LIGHT and cfg.get(
@@ -2105,7 +2104,7 @@ _LIGHT_ENTRY_KEYS = frozenset(
         CONF_ENTITY_ID,
         CONF_NAME,
         CONF_LIGHTS,
-        CONF_SCHEDULE_ENTITY,
+        CONF_SCHEDULE_SENSOR,
         CONF_SCHEDULE_MODE,
         CONF_MATCH_SCHEDULE_AFTER_RESTART,
         CONF_SCHEDULE_END_ACTION,
@@ -2231,7 +2230,7 @@ class _ScheduledLightSettingsSteps:
                                     CONF_LIGHTS, []
                                 ),
                             ),
-                            (previous or {}).get(CONF_HOLD_ENTITIES),
+                            (previous or {}).get(CONF_KEEP_ON_ENTITIES),
                         ),
                     )
                 ),
@@ -2301,7 +2300,7 @@ class MoLightConfigFlow(
 ):
     """Handle a config flow for MoLight."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
 
     def __init__(self) -> None:
         """Initialize the config flow's cross-step stash."""
@@ -3060,7 +3059,7 @@ class MoLightConfigFlow(
                     placeholders["entity_id"] = entity_id
                     break
             if not _schedule_sensor_is_allowed(
-                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+                self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
                 errors["base"] = "schedule_entity_not_schedule"
             if not errors:
@@ -3124,7 +3123,7 @@ class MoLightConfigFlow(
         self, entity_id: str, label: str, entry: config_entries.ConfigEntry
     ) -> selector.SelectOptionDict:
         """Build a labeled conversion choice including its retained schedule."""
-        schedule_name = self._entity_label(_entry_settings(entry)[CONF_SCHEDULE_ENTITY])
+        schedule_name = self._entity_label(_entry_settings(entry)[CONF_SCHEDULE_SENSOR])
         return selector.SelectOptionDict(
             value=entity_id, label=f"{label} ({schedule_name})"
         )
@@ -3210,17 +3209,17 @@ class MoLightConfigFlow(
             for key, value in inside.items()
             if key
             not in (
-                CONF_OCCUPANCY_ENTITY,
-                CONF_MAINTAIN_OCCUPANCY_ENTITY,
-                CONF_ILLUMINANCE_ENTITY,
-                CONF_DOOR_ENTITY,
+                CONF_OCCUPANCY_SENSOR,
+                CONF_MAINTAIN_OCCUPANCY_SENSOR,
+                CONF_ILLUMINANCE_SENSOR,
+                CONF_DOOR_SENSOR,
             )
         }
         return {
             CONF_ENTITY_TYPE: ENTITY_TYPE_SCHEDULED_LIGHT,
             CONF_NAME: cfg[CONF_NAME],
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
-            CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
+            CONF_SCHEDULE_SENSOR: cfg[CONF_SCHEDULE_SENSOR],
             CONF_SCHEDULE_END_ACTION: {
                 SCHEDULE_MODE_GATE: SCHEDULE_END_ACTION_TURN_OFF,
                 SCHEDULE_MODE_GATE_SWITCH: SCHEDULE_END_ACTION_SWITCH,
@@ -3246,7 +3245,7 @@ class MoLightConfigFlow(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: cfg[CONF_NAME],
             CONF_LIGHTS: cfg.get(CONF_LIGHTS, []),
-            CONF_SCHEDULE_ENTITY: cfg[CONF_SCHEDULE_ENTITY],
+            CONF_SCHEDULE_SENSOR: cfg[CONF_SCHEDULE_SENSOR],
             CONF_SCHEDULE_MODE: {
                 SCHEDULE_END_ACTION_TURN_OFF: SCHEDULE_MODE_GATE,
                 SCHEDULE_END_ACTION_SWITCH: SCHEDULE_MODE_GATE_SWITCH,
@@ -3349,9 +3348,9 @@ class MoLightConfigFlow(
             self._assign = {
                 "sensor": user_input[CONF_ASSIGN_SENSOR],
                 "key": (
-                    CONF_MAINTAIN_OCCUPANCY_ENTITY
+                    CONF_MAINTAIN_OCCUPANCY_SENSOR
                     if role == ASSIGN_ROLE_MAINTAIN
-                    else CONF_OCCUPANCY_ENTITY
+                    else CONF_OCCUPANCY_SENSOR
                 ),
                 "mode_key": None,
                 "mode": None,
@@ -3364,7 +3363,7 @@ class MoLightConfigFlow(
         schema = vol.Schema(
             {
                 vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
-                    _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_ENTITY]
+                    _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_SENSOR]
                 ),
                 vol.Required(
                     CONF_ASSIGN_ROLE, default=ASSIGN_ROLE_REGULAR
@@ -3384,7 +3383,7 @@ class MoLightConfigFlow(
         if user_input is not None:
             self._assign = {
                 "sensor": user_input[CONF_ASSIGN_SENSOR],
-                "key": CONF_ILLUMINANCE_ENTITY,
+                "key": CONF_ILLUMINANCE_SENSOR,
                 "mode_key": CONF_ILLUMINANCE_MODE,
                 "mode": user_input[CONF_ILLUMINANCE_MODE],
                 "check_timeout": False,
@@ -3394,7 +3393,7 @@ class MoLightConfigFlow(
         schema = vol.Schema(
             {
                 vol.Required(CONF_ASSIGN_SENSOR): selector.EntitySelector(
-                    _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_ENTITY]
+                    _LIGHT_REF_SELECTORS[CONF_ILLUMINANCE_SENSOR]
                 ),
                 vol.Required(
                     CONF_ILLUMINANCE_MODE, default=DEFAULT_ILLUMINANCE_MODE
@@ -3421,7 +3420,7 @@ class MoLightConfigFlow(
             else:
                 self._assign = {
                     "sensor": user_input[CONF_ASSIGN_SENSOR],
-                    "key": CONF_SCHEDULE_ENTITY,
+                    "key": CONF_SCHEDULE_SENSOR,
                     "mode_key": CONF_SCHEDULE_MODE,
                     "mode": user_input[CONF_SCHEDULE_MODE],
                     "check_timeout": False,
@@ -4010,7 +4009,7 @@ class MoLightConfigFlow(
                 _validate_brightness_support(self.hass, flat, flat.get(CONF_LIGHTS, []))
             )
             if not _schedule_sensor_is_allowed(
-                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+                self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
                 errors["base"] = "schedule_entity_not_schedule"
             if not errors:
@@ -4141,9 +4140,9 @@ class MoLightConfigFlow(
             if not flat.get(CONF_LIGHTS):
                 errors[CONF_LIGHTS] = "lights_required"
             if not _schedule_sensor_is_allowed(
-                self.hass, flat.get(CONF_SCHEDULE_ENTITY)
+                self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
-                errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
+                errors[CONF_SCHEDULE_SENSOR] = "schedule_entity_not_schedule"
             if not errors:
                 errors.update(self._new_light_errors(flat))
             if not errors:
@@ -4167,7 +4166,7 @@ class MoLightConfigFlow(
                         multiple=True,
                     )
                 ),
-                vol.Required(CONF_SCHEDULE_ENTITY): _schedule_sensor_selector(
+                vol.Required(CONF_SCHEDULE_SENSOR): _schedule_sensor_selector(
                     self.hass
                 ),
                 vol.Required(
@@ -4781,8 +4780,8 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
             )
             if not _schedule_sensor_is_allowed(
                 self.hass,
-                flat.get(CONF_SCHEDULE_ENTITY),
-                legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
+                flat.get(CONF_SCHEDULE_SENSOR),
+                legacy_entity=self._cfg.get(CONF_SCHEDULE_SENSOR),
             ):
                 errors["base"] = "schedule_entity_not_schedule"
             if not errors:
@@ -4825,14 +4824,14 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 ),
                 **_light_setting_fields(
                     self.hass,
-                    legacy_schedule=cfg.get(CONF_SCHEDULE_ENTITY),
+                    legacy_schedule=cfg.get(CONF_SCHEDULE_SENSOR),
                     keep_on_exclusions=_picker_exclusions(
                         _keep_on_picker_exclusions(
                             self.hass,
                             self._keep_on_exclusions(),
                             cfg.get(CONF_LIGHTS, []),
                         ),
-                        cfg.get(CONF_HOLD_ENTITIES),
+                        cfg.get(CONF_KEEP_ON_ENTITIES),
                     ),
                 ),
             }
@@ -4907,10 +4906,10 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 errors[CONF_LIGHTS] = "light_group_virtual"
             if not _schedule_sensor_is_allowed(
                 self.hass,
-                user_input.get(CONF_SCHEDULE_ENTITY),
-                legacy_entity=self._cfg.get(CONF_SCHEDULE_ENTITY),
+                user_input.get(CONF_SCHEDULE_SENSOR),
+                legacy_entity=self._cfg.get(CONF_SCHEDULE_SENSOR),
             ):
-                errors[CONF_SCHEDULE_ENTITY] = "schedule_entity_not_schedule"
+                errors[CONF_SCHEDULE_SENSOR] = "schedule_entity_not_schedule"
             if not errors:
                 self._scheduled_light_shared = dict(user_input)
                 return await self.async_step_scheduled_light_outside()
@@ -4939,9 +4938,9 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                     )
                 ),
                 vol.Required(
-                    CONF_SCHEDULE_ENTITY, default=cfg.get(CONF_SCHEDULE_ENTITY)
+                    CONF_SCHEDULE_SENSOR, default=cfg.get(CONF_SCHEDULE_SENSOR)
                 ): _schedule_sensor_selector(
-                    self.hass, legacy_entity=cfg.get(CONF_SCHEDULE_ENTITY)
+                    self.hass, legacy_entity=cfg.get(CONF_SCHEDULE_SENSOR)
                 ),
                 vol.Required(
                     CONF_SCHEDULE_END_ACTION,

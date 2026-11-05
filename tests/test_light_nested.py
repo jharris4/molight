@@ -18,9 +18,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
-    CONF_LIGHT_TIMEOUT,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     SCHEDULE_MODE_FOLLOW,
     STATE_ACTIVE,
     STATE_EFFECT,
@@ -62,9 +62,9 @@ HUMAN_TIMESTAMPS = (
 def _outer(kind: str, occupancy: str | None):
     """An outer light of the given kind wrapping the inner light."""
     if kind == "scheduled":
-        inside = {CONF_LIGHT_TIMEOUT: 300}
+        inside = {CONF_TURN_OFF_TIMEOUT: 300}
         if occupancy:
-            inside[CONF_OCCUPANCY_ENTITY] = occupancy
+            inside[CONF_OCCUPANCY_SENSOR] = occupancy
         return make_scheduled_light_entry(name="Outer", lights=[INNER], inside=inside)
     if kind == "follow":
         return make_light_entry(
@@ -183,7 +183,7 @@ async def test_inner_turn_on_by_itself_is_not_a_physical_turn_on(
             name="Inner",
             lights=[REAL],
             schedule=WINDOW,
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
         )
     await _nested(hass, "regular", inner=inner)
 
@@ -529,8 +529,8 @@ def _inner_b(trigger: str) -> MockConfigEntry:
             name="Inner B",
             lights=["light.real_2"],
             schedule=WINDOW,
-            inside={CONF_LIGHT_TIMEOUT: 10, CONF_STANDBY_BRIGHTNESS: 20},
-            outside={CONF_LIGHT_TIMEOUT: 10},
+            inside={CONF_TURN_OFF_TIMEOUT: 10, CONF_STANDBY_BRIGHTNESS: 20},
+            outside={CONF_TURN_OFF_TIMEOUT: 10},
         )
     return make_light_entry(
         name="Inner B", lights=["light.real_2"], timeout=10, occupancy=INNER_OCC
@@ -869,7 +869,7 @@ async def test_inner_light_lit_by_its_sensor_keeps_the_outer_standby_suppressed(
     outer = make_scheduled_light_entry(
         name="Outer",
         lights=[INNER],
-        inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+        inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
     )
     await setup_entries(hass, inner, outer)
     await settle(hass)

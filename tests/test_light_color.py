@@ -21,9 +21,9 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
-    CONF_LIGHT_TIMEOUT,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_COLOR_TEMP,
+    CONF_TURN_OFF_TIMEOUT,
     STATE_ACTIVE,
     STATE_EFFECT,
     STATE_OCCUPIED,
@@ -896,7 +896,7 @@ async def test_reported_standby_color_temp_stays_in_the_offered_range(
         make_scheduled_light_entry(
             name="Matrix Light",
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
                 CONF_STANDBY_COLOR_TEMP: kelvin,
             },

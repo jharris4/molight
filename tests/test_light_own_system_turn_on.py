@@ -16,10 +16,10 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.molight.const import (
     CONF_AUTO_ON_BRIGHTNESS,
-    CONF_LIGHT_TIMEOUT,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TURN_ON,
     CONF_STANDBY_BRIGHTNESS,
+    CONF_TURN_OFF_TIMEOUT,
     EVENT_TURN_ON_BLOCKED,
     EVENT_TURNED_ON,
     ILLUMINANCE_MODE_CONTROL,
@@ -669,10 +669,10 @@ async def test_standby_is_raised_at_the_edge_as_before(hass, freezer, choice) ->
     entry = make_scheduled_light_entry(
         name="Hall",
         schedule=SCHED,
-        outside={CONF_LIGHT_TIMEOUT: 30},
+        outside={CONF_TURN_OFF_TIMEOUT: 30},
         inside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_OCCUPANCY_ENTITY: OCC,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_OCCUPANCY_SENSOR: OCC,
             CONF_OCCUPANCY_TURN_ON: choice,
             CONF_AUTO_ON_BRIGHTNESS: 100,
             CONF_STANDBY_BRIGHTNESS: 20,

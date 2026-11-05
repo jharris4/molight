@@ -27,8 +27,8 @@ from custom_components.molight.const import (
     CONF_NAME,
     CONF_OCCUPANCY_SENSOR,
     CONF_OCCUPANCY_TIMEOUT,
-    CONF_SCHEDULE_ENTITY,
     CONF_SCHEDULE_MODE,
+    CONF_SCHEDULE_SENSOR,
     CONF_TRIGGER_SENSORS,
     DOMAIN,
     ENTITY_TYPE_COMBINED_OCCUPANCY,
@@ -741,7 +741,7 @@ async def test_swapping_the_follow_schedule_leaves_the_old_marker_behind(
     hass.states.async_set(SCHED_B, other, attrs)
 
     calls = record_service_calls(hass)
-    await _edit_options(hass, entry, **{CONF_SCHEDULE_ENTITY: SCHED_B})
+    await _edit_options(hass, entry, **{CONF_SCHEDULE_SENSOR: SCHED_B})
     assert light_targets(calls, "turn_off") == []
     state = _state(hass)
     assert state.state == "on"

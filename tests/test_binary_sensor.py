@@ -17,7 +17,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.molight.const import (
-    CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT,
+    CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT,
     CONF_ENTITY_TYPE,
     CONF_FALSE_DETECTION_GRACE,
     CONF_ILLUMINANCE_HYSTERESIS,
@@ -33,7 +33,7 @@ from custom_components.molight.const import (
     ENTITY_TYPE_ILLUMINANCE,
     ENTITY_TYPE_OCCUPANCY,
     ILLUMINANCE_MODE_CONTROL,
-    ILLUMINANCE_MODE_GATE,
+    ILLUMINANCE_MODE_GATE_ONLY,
     RELOAD_GRACE,
 )
 from custom_components.molight.helpers import entry_settings
@@ -151,7 +151,7 @@ async def test_occupancy_holds_forever_when_unavailable_clear_disabled(
             CONF_NAME: "Test Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 0,
+            CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: 0,
         },
     )
     entry.add_to_hass(hass)
@@ -607,7 +607,7 @@ def _dropout_entry() -> MockConfigEntry:
             CONF_NAME: "Dropout Occupancy",
             CONF_OCCUPANCY_SENSOR: "binary_sensor.motion_1",
             CONF_OCCUPANCY_TIMEOUT: 30,
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: 60,
+            CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: 60,
         },
     )
 
@@ -632,7 +632,9 @@ async def test_occupancy_edit_during_dropout_keeps_the_finish_time(
     entry = _dropout_entry()
     dropout = await _occupied_then_dropped(hass, entry)
     freezer.tick(timedelta(seconds=10))
-    await _edit_options(hass, entry, **{CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: new_timeout})
+    await _edit_options(
+        hass, entry, **{CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: new_timeout}
+    )
     await settle(hass)
 
     state = hass.states.get("binary_sensor.dropout_occupancy")
@@ -689,7 +691,7 @@ async def test_occupancy_edit_after_a_second_invalid_report_keeps_the_first_fini
     freezer.tick(timedelta(seconds=10))
     if via == "edit":
         await _edit_options(
-            hass, entry, **{CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: new_timeout}
+            hass, entry, **{CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: new_timeout}
         )
     else:
         assert await hass.config_entries.async_reload(entry.entry_id)
@@ -1287,7 +1289,7 @@ async def test_illuminance_source_with_changed_entity_id_keeps_its_reading(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("how", LUX_GONE)
-@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE])
+@pytest.mark.parametrize("mode", [ILLUMINANCE_MODE_CONTROL, ILLUMINANCE_MODE_GATE_ONLY])
 async def test_light_gated_by_a_sensor_whose_source_went_missing_comes_on(
     hass: HomeAssistant, how: str, mode: str
 ) -> None:
@@ -3160,7 +3162,7 @@ async def test_occupancy_source_swap_does_not_carry_over_an_occupied_old_source(
         entry,
         **{
             CONF_OCCUPANCY_SENSOR: "binary_sensor.presence",
-            CONF_CLEAR_ON_UNAVAILABLE_TIMEOUT: unavailable_timeout,
+            CONF_CLEAR_AFTER_UNAVAILABLE_TIMEOUT: unavailable_timeout,
         },
     )
     await settle(hass)

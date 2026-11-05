@@ -27,15 +27,15 @@ from custom_components.molight.const import (
     CONF_AUTO_ON_RGB_COLOR,
     CONF_AUTO_ON_TRANSITION,
     CONF_ENTITY_TYPE,
-    CONF_LIGHT_TIMEOUT,
     CONF_LIGHTS,
     CONF_NAME,
-    CONF_OCCUPANCY_ENTITY,
+    CONF_OCCUPANCY_SENSOR,
     CONF_STANDBY_BRIGHTNESS,
     CONF_STANDBY_RGB_COLOR,
+    CONF_TURN_OFF_TIMEOUT,
     CONF_WARN_BRIGHTNESS,
+    CONF_WARN_DURATION,
     CONF_WARN_RGB_COLOR,
-    CONF_WARN_TIMEOUT,
     DOMAIN,
     ENTITY_TYPE_LIGHT,
     SCHEDULE_MODE_FOLLOW,
@@ -1914,13 +1914,13 @@ async def test_standby_and_auto_on_color_fades_are_not_recolors(
         name="Test Light",
         lights=[MEMBER],
         inside={
-            CONF_LIGHT_TIMEOUT: 30,
-            CONF_OCCUPANCY_ENTITY: occupancy,
+            CONF_TURN_OFF_TIMEOUT: 30,
+            CONF_OCCUPANCY_SENSOR: occupancy,
             CONF_AUTO_ON_BRIGHTNESS: 100,
             CONF_AUTO_ON_RGB_COLOR: [51, 51, 255],
             CONF_STANDBY_BRIGHTNESS: 20,
             CONF_STANDBY_RGB_COLOR: [255, 51, 51],
-            CONF_WARN_TIMEOUT: 10,
+            CONF_WARN_DURATION: 10,
             CONF_WARN_BRIGHTNESS: 50,
             CONF_WARN_RGB_COLOR: [51, 255, 51],
         },
@@ -2061,7 +2061,7 @@ async def test_reply_inside_the_standby_call_never_reports_off(
         hass,
         make_scheduled_light_entry(
             name="Matrix Light",
-            inside={CONF_LIGHT_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
+            inside={CONF_TURN_OFF_TIMEOUT: 60, CONF_STANDBY_BRIGHTNESS: 20},
         ),
     )
     seen = _reports_of(hass, INSTANT)
@@ -2124,7 +2124,7 @@ async def test_outer_light_sees_no_off_from_the_light_it_wraps(
             CONF_ENTITY_TYPE: ENTITY_TYPE_LIGHT,
             CONF_NAME: "Outer",
             CONF_LIGHTS: [INSTANT],
-            CONF_LIGHT_TIMEOUT: 60,
+            CONF_TURN_OFF_TIMEOUT: 60,
         },
     )
     await setup_entries(hass, make_light_entry(timeout=600), outer)
@@ -2295,7 +2295,7 @@ async def test_standby_fade_is_not_a_physical_change(
         make_scheduled_light_entry(
             name="Matrix Light",
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
                 CONF_AUTO_ON_TRANSITION: fade,
                 CONF_AUTO_OFF_TRANSITION: fade,
@@ -2609,7 +2609,7 @@ async def test_standby_power_first_at_remembered_brightness_is_not_a_dim(
         make_scheduled_light_entry(
             name="Matrix Light",
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
                 CONF_AUTO_ON_TRANSITION: fade,
             },
@@ -2894,7 +2894,7 @@ async def _mixed_light(
             name="Matrix Light",
             lights=lights,
             inside={
-                CONF_LIGHT_TIMEOUT: 60,
+                CONF_TURN_OFF_TIMEOUT: 60,
                 CONF_STANDBY_BRIGHTNESS: 20,
                 CONF_STANDBY_RGB_COLOR: rgb,
             },
