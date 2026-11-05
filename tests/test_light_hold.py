@@ -302,7 +302,7 @@ async def test_manual_off_works_while_held(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_physical_off_works_while_held(hass: HomeAssistant, freezer) -> None:
-    """A wall-switch off is respected while held; releasing while off is a no-op."""
+    """A physical off is respected while held; releasing while off is a no-op."""
     await setup_entries(hass, make_light_entry())
     await _switch(hass, on=False)
 
@@ -313,7 +313,7 @@ async def test_physical_off_works_while_held(hass: HomeAssistant, freezer) -> No
     await _tick(hass, freezer, 3600)
     assert _state(hass).state == "on"
 
-    # Wall switch off: never suppressed by the hold.
+    # Physical off: never suppressed by the hold.
     hass.states.async_set("light.real_1", "off")
     await settle(hass)
     assert _state(hass).state == "off"

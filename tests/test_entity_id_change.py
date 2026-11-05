@@ -387,7 +387,7 @@ async def test_entity_id_change_is_not_a_new_visit_for_a_light_turned_off_manual
     assert attrs(hass)["last_on_occupancy"] < turned_off
 
 
-async def test_real_light_with_changed_entity_id_is_not_a_change_at_the_wall(
+async def test_real_light_with_changed_entity_id_is_not_a_physical_change(
     hass: HomeAssistant, freezer, virtual_light_behavior_variant
 ) -> None:
     """A real light that changes entity ID stays on, unclaimed, and is still driven."""
@@ -428,7 +428,7 @@ async def test_entity_id_change_waits_for_a_real_light_that_is_slow_to_come_back
     """The light reloads only once its real light reports again under its new entity ID.
 
     Reloading earlier would seed it as off, and the real light reporting in
-    lit would then read as a turn-on at the wall.
+    lit would then read as a physical turn-on.
     """
     member = RealLight("real_1", on=True, brightness=90)
     await add_real(hass, member)

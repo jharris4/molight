@@ -3,7 +3,7 @@
 test_light.py covers the core effect→warn→off lifecycle and the common
 re-triggers; this file sweeps the remaining interactions of the EFFECT and
 WARN states: attribute invariance while the warning drives the real lights,
-forced offs (manual, physical, bright, gate window end), the maintain
+forced offs (manual, bright, gate window end), the maintain
 occupancy sensor, follow-mode schedule windows adopting the light mid-warning,
 and the pre-warn brightness restore on every kind of re-trigger.
 """
@@ -202,7 +202,7 @@ async def test_effect_dim_stage_commands_stage_brightness(
 async def test_warn_brightness_below_one_percent_keeps_the_brightness(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A warn brightness that truncates to 0% is unset, not a blink off."""
+    """A warn brightness that truncates to 0% counts as blank, not a blink off."""
     entry = make_light_entry(warn_timeout=20, warn_brightness=0.5)
     await setup_entries(hass, entry)
     await _turn_on_virtual(hass, brightness=200)
@@ -245,7 +245,7 @@ async def test_warn_defaults_to_full_brightness_without_history(
 
 
 # ---------------------------------------------------------------------------
-# Offs during the warning: manual, physical, bright, gate window end
+# Offs during the warning: manual, bright, gate window end
 # ---------------------------------------------------------------------------
 
 
@@ -932,11 +932,11 @@ async def test_retrigger_after_plain_auto_on_restores_real_brightness(
 
 
 # ---------------------------------------------------------------------------
-# Several real lights: a change at the wall on one cancels the warning for all
+# Several real lights: a physical change on one cancels the warning for all
 # ---------------------------------------------------------------------------
 
 GREEN, BLUE, STAGE_RED = (120.0, 100.0), (240.0, 100.0), [255, 0, 0]
-WALL_KEYS = (
+PHYSICAL_KEYS = (
     "last_on_physical",
     "last_brightness_change_physical",
     "last_color_change_physical",
@@ -949,7 +949,7 @@ async def _pair_in_stage(
 ) -> tuple[FadingLight, FadingLight, list[dict]]:
     """Two real lights, green at 200, taken into a stage.
 
-    Returns the one about to be changed at the wall, the other, and the
+    Returns the one about to be physically changed, the other, and the
     light commands sent from here on.
     """
     pair = [
@@ -969,9 +969,9 @@ async def _pair_in_stage(
     return pair[touched], pair[1 - touched], calls
 
 
-def _wall_timestamps(hass: HomeAssistant) -> list[str]:
+def _physical_timestamps(hass: HomeAssistant) -> list[str]:
     attrs = _state(hass).attributes
-    return [key for key in WALL_KEYS if attrs[key] is not None]
+    return [key for key in PHYSICAL_KEYS if attrs[key] is not None]
 
 
 def _commands_to(calls: list[dict], light: FadingLight) -> list[dict]:
@@ -985,7 +985,7 @@ def _commands_to(calls: list[dict], light: FadingLight) -> list[dict]:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("touched", [0, 1])
-async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
+async def test_physical_turn_on_during_blink_off_turns_on_the_other_light(
     hass: HomeAssistant, freezer, touched: int
 ) -> None:
     """One switch flipped back on during the blink: the other light comes
@@ -996,11 +996,11 @@ async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
     assert not one.is_on
     assert not other.is_on
 
-    one.wall(brightness=180)
+    one.physical_change(brightness=180)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_timestamps(hass) == ["last_on_physical"]
+    assert _physical_timestamps(hass) == ["last_on_physical"]
     assert _state(hass).attributes["brightness"] == 180
     assert (other.is_on, other.brightness, other.hs_color) == (True, 200, GREEN)
     assert one.brightness == 180
@@ -1020,10 +1020,10 @@ async def test_wall_turn_on_during_blink_off_turns_on_the_other_light(
     ],
     ids=["dim", "recolor", "both"],
 )
-async def test_wall_change_during_a_stage_restores_the_other_light(
+async def test_physical_change_during_a_stage_restores_the_other_light(
     hass: HomeAssistant, freezer, touched: int, stage: str, change: dict, keeps: tuple
 ) -> None:
-    """The light changed at the wall keeps what was changed on it and gets
+    """The light physically changed keeps what was changed on it and gets
     the rest of its pre-warning look back; the other gets all of it."""
     stages = {
         f"{stage}_timeout": 30,
@@ -1033,11 +1033,11 @@ async def test_wall_change_during_a_stage_restores_the_other_light(
     one, other, _ = await _pair_in_stage(hass, freezer, touched, **stages)
     assert (other.brightness, other.hs_color) == (26, (0.0, 100.0))
 
-    one.wall(**change)
+    one.physical_change(**change)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_timestamps(hass) == [
+    assert _physical_timestamps(hass) == [
         f"last_{name}_change_physical"
         for name, key in (("brightness", "brightness"), ("color", "hs_color"))
         if key in change
@@ -1051,21 +1051,21 @@ async def test_wall_change_during_a_stage_restores_the_other_light(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("touched", [0, 1])
-async def test_wall_off_and_on_during_a_stage_restores_the_other_light(
+async def test_physical_off_and_on_during_a_stage_restores_the_other_light(
     hass: HomeAssistant, freezer, touched: int
 ) -> None:
-    """One light switched off at the wall leaves the warning running on the
+    """One light physically switched off leaves the warning running on the
     other; switched back on, it cancels it for both."""
     one, other, _ = await _pair_in_stage(
         hass, freezer, touched, warn_timeout=30, warn_brightness=10
     )
 
-    one.wall(on=False)
+    one.physical_change(on=False)
     await settle(hass)
     assert _mstate(hass) == STATE_WARN
     assert other.brightness == 26
 
-    one.wall(brightness=180)
+    one.physical_change(brightness=180)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
@@ -1075,7 +1075,7 @@ async def test_wall_off_and_on_during_a_stage_restores_the_other_light(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("touched", [0, 1])
-async def test_wall_change_outside_a_warning_leaves_the_other_light_alone(
+async def test_physical_change_outside_a_warning_leaves_the_other_light_alone(
     hass: HomeAssistant, freezer, touched: int
 ) -> None:
     """Real lights are not kept in step: only a warning's cancelling sends
@@ -1090,11 +1090,11 @@ async def test_wall_change_outside_a_warning_leaves_the_other_light_alone(
     )
     calls = _record_service_calls(hass)
 
-    pair[touched].wall(brightness=150)
+    pair[touched].physical_change(brightness=150)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
-    assert _wall_timestamps(hass) == ["last_brightness_change_physical"]
+    assert _physical_timestamps(hass) == ["last_brightness_change_physical"]
     assert pair[1 - touched].brightness == 200
     assert [d for d in calls if d["domain"] == "light"] == []
 
@@ -1240,14 +1240,14 @@ async def test_turn_on_during_a_stage_restores_each_real_lights_own_look(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", ["dim", "colored", "warn"])
-async def test_wall_dim_during_a_stage_restores_the_others_own_looks(
+async def test_physical_dim_during_a_stage_restores_the_others_own_looks(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
-    """The real light dimmed at the wall keeps it; the others each get
+    """The real light physically dimmed keeps it; the others each get
     their own look back, and the one that was off stays off."""
     lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
 
-    lights["b"].wall(brightness=150)
+    lights["b"].physical_change(brightness=150)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
@@ -1257,14 +1257,14 @@ async def test_wall_dim_during_a_stage_restores_the_others_own_looks(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", ["dim", "blink", "warn"])
-async def test_wall_turn_on_of_the_off_light_restores_the_others(
+async def test_physical_turn_on_of_the_off_light_restores_the_others(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
     """Switching on, mid-warning, the real light that was off cancels the
     warning: it keeps what it came on at, the others get their own looks."""
     lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
 
-    lights["c"].wall(brightness=180)
+    lights["c"].physical_change(brightness=180)
     await settle(hass)
 
     assert _mstate(hass) == STATE_ACTIVE
@@ -1277,11 +1277,11 @@ async def test_wall_turn_on_of_the_off_light_restores_the_others(
 async def test_real_light_switched_off_mid_warning_stays_off_on_retrigger(
     hass: HomeAssistant, freezer, stage: str, off: dict
 ) -> None:
-    """A real light switched off at the wall during the warning was not
+    """A real light physically switched off during the warning was not
     turned off by it: the re-trigger leaves it off."""
     lights, _, _ = await _mixed_in_stage(hass, freezer, stage)
 
-    lights["b"].wall(**off)
+    lights["b"].physical_change(**off)
     await settle(hass)
     assert _state(hass).attributes["warning_active"] is True
 
@@ -1301,7 +1301,7 @@ async def test_real_light_recovering_mid_warning_gets_the_stage_then_its_look(
     lights, calls, _ = await _mixed_in_stage(hass, freezer, stage)
     hass.states.async_set("light.b", "unavailable")
     await settle(hass)
-    lights["b"].wall(on=False)
+    lights["b"].physical_change(on=False)
     await settle(hass)
 
     assert _shown(lights)["b"] == ((26, BLUE) if stage == "dim" else None)
@@ -1335,11 +1335,11 @@ async def test_reload_mid_blink_turns_on_only_the_real_lights_found_lit(
     """A reload finding one real light lit mid blink-off restores that one
     to its own look; the ones the blink left off stay off."""
     lights, _, entry = await _mixed_in_stage(hass, freezer, "blink")
-    lights["b"].wall(on=False)  # still off, as the blink left it
+    lights["b"].physical_change(on=False)  # still off, as the blink left it
     await settle(hass)
     await hass.config_entries.async_unload(entry.entry_id)
     await settle(hass)
-    lights["k"].wall(brightness=26)
+    lights["k"].physical_change(brightness=26)
     await settle(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)

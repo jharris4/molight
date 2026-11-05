@@ -956,10 +956,11 @@ async def test_door_open_applies_auto_on_brightness_and_transition(
 
 
 @pytest.mark.asyncio
-async def test_auto_on_brightness_below_one_percent_is_unset(
+async def test_auto_on_brightness_below_one_percent_counts_as_blank(
     hass: HomeAssistant,
 ) -> None:
-    """A percentage that truncates to 0 turns on unqualified, not at brightness 0."""
+    """A percentage that truncates to 0 turns on without a brightness, not at
+    brightness 0."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN, auto_on_brightness=0.5
     )

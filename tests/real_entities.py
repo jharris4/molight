@@ -241,8 +241,8 @@ class FadingLight(RealLight):
         self._reports.clear()
 
     @callback
-    def wall(self, *, on: bool = True, **attributes: Any) -> None:
-        """Change the light at the wall, which ends any fade."""
+    def physical_change(self, *, on: bool = True, **attributes: Any) -> None:
+        """Change the light physically, which ends any fade."""
         self._cancel_reports()
         self._attr_is_on = on
         for name, value in attributes.items():

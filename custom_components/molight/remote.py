@@ -180,7 +180,7 @@ def _action_call(
         return ("turn_on", {"brightness_step_pct": -brightness_step})
     brightness_key, color_temp_key, rgb_key = REMOTE_ACTION_VALUE_KEYS[action]
     data: dict[str, Any] = {}
-    # Below 1% is unset, not a turn-off.
+    # Below 1% counts as blank, not a turn-off.
     if brightness_pct := int(cfg.get(brightness_key) or 0):
         data["brightness_pct"] = brightness_pct
     if cfg.get(color_temp_key):

@@ -2697,7 +2697,7 @@ async def test_light_options_prefills_the_set_color_modes(
 
 
 @pytest.mark.asyncio
-async def test_light_options_leaves_unset_color_modes_blank(
+async def test_light_options_leaves_color_modes_without_a_stored_color_blank(
     hass: HomeAssistant,
 ) -> None:
     """A pair with no stored color suggests no mode: a prefilled "none" would
@@ -11145,7 +11145,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
 
 
 # ---------------------------------------------------------------------------
-# A brightness percentage below 1 is unset
+# A brightness percentage below 1 counts as blank
 # ---------------------------------------------------------------------------
 
 
@@ -11161,7 +11161,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
     ],
     ids=["standby_color", "warn", "effect"],
 )
-def test_color_rules_treat_a_brightness_below_one_percent_as_unset(
+def test_color_rules_treat_a_brightness_below_one_percent_as_blank(
     settings: dict, expected: dict
 ) -> None:
     """The light truncates the percentage, so the rules judge it truncated."""

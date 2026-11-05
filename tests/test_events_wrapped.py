@@ -119,7 +119,7 @@ async def test_the_inner_warn_dim_fires_nothing_at_the_outer(hass, freezer) -> N
 
 
 @pytest.mark.asyncio
-async def test_an_off_at_the_wall_on_the_inner_bulb_is_physical(hass) -> None:
+async def test_a_physical_off_on_the_inner_bulb_is_physical_for_the_outer(hass) -> None:
     """A person switching the bulb off is physical for the outer light too."""
     await _nested(hass, "regular", occupancy="binary_sensor.occ")
     records = record_events(hass, OUTER_EVENTS)

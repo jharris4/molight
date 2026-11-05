@@ -75,7 +75,7 @@ Virtual Remote buttons.
 
 - **Standby for Virtual Scheduled Lights**: the inside-schedule settings can
   stay at a low brightness and color instead of turning off. A dusk-to-dawn
-  porch can glow at 1%, come up to 100% when someone walks up, drop back to 1%
+  porch can glow at 1%, be raised to 100% when someone walks up, drop back to 1%
   once they leave, and turn off when the schedule ends.
 
 ### Changed
@@ -93,7 +93,7 @@ Virtual Remote buttons.
 ### Fixed
 
 - **Wrapped virtual lights**: what the wrapped light does by itself, such as
-  its timer turning it off, is no longer taken for a change at the wall. It
+  its timer turning it off, is no longer taken for a physical change. It
   recorded a manual off that kept an occupied room dark on the next visit.
   The light form now explains this when another virtual light is added.
 - **Restarts**: a virtual light reports the state it had until Home Assistant
@@ -103,7 +103,7 @@ Virtual Remote buttons.
   in Home Assistant is now followed; every entry that referenced it kept the former
   one and quietly stopped working. A deleted or disabled sensor, door or keep-on
   entity no longer keeps a light on.
-- **Long and colored fades** are no longer taken for a change at the wall.
+- **Long and colored fades** are no longer taken for a physical change.
   These cancelled warnings, restarted the timer, or kept a light on
   indefinitely.
 - **Slow turn-on selects** (such as WLED presets): a turn-on waits at most 10
@@ -203,7 +203,7 @@ replying late.
 
 ### Fixed
 
-- A configured color can now be un-set: each RGB color / color temperature
+- A configured color can now be cleared: each RGB color / color temperature
   pair (auto-on, effect, warn, and the remote presets) gained a **Color
   mode** field whose **None** choice clears it. Previously a color that
   the chosen lights couldn't show could leave the form impossible to save.

@@ -724,10 +724,10 @@ async def test_dark_edge_resumes_the_timer_a_raw_sensors_clear_started(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["dim", "recolor"])
-async def test_dark_edge_resumes_a_timer_restarted_at_the_wall(
+async def test_dark_edge_resumes_a_timer_restarted_by_a_physical_change(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """A dim or recolor at the wall restarts the timer going dark resumes."""
+    """A physical dim or recolor restarts the timer going dark resumes."""
     hass.states.async_set(ILLUM, "off")  # dark
     hass.states.async_set(REAL, "off")
     _real_light_reports(hass)
@@ -1542,7 +1542,7 @@ async def test_state_preserving_gate_adopts_open_door_after_virtual_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-@pytest.mark.parametrize("how", ["virtual", "wall", "startup", "maintain_clear"])
+@pytest.mark.parametrize("how", ["virtual", "physical", "startup", "maintain_clear"])
 async def test_gate_and_turn_off_light_on_outside_its_window_ignores_an_open_door(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
@@ -1562,7 +1562,7 @@ async def test_gate_and_turn_off_light_on_outside_its_window_ignores_an_open_doo
             schedule_mode=SCHEDULE_MODE_GATE,
         ),
     )
-    if how == "wall":
+    if how == "physical":
         hass.states.async_set(REAL, "on")
     elif how != "startup":
         await _turn_on_by(hass, "virtual")
@@ -1903,10 +1903,10 @@ async def test_false_detection_clear_keeps_the_timer_of_the_users_turn_on(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("change", ["brightness", "color"])
-async def test_false_detection_clear_keeps_the_timer_of_a_change_at_the_wall(
+async def test_false_detection_clear_keeps_the_timer_of_a_physical_change(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
-    """A dim or recolor at the wall restarts the timer; a false detection keeps it."""
+    """A physical dim or recolor restarts the timer; a false detection keeps it."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     attrs = {"brightness": 100, "hs_color": (10.0, 50.0)}
     hass.states.async_set(REAL, "off")
@@ -1943,10 +1943,10 @@ async def test_false_detection_clear_keeps_the_timer_of_a_change_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hold", ["occupancy", "maintain"])
 @pytest.mark.parametrize("change", ["brightness", "color", "second_light"])
-async def test_false_detection_clear_leaves_a_light_changed_at_the_wall_its_timer(
+async def test_false_detection_clear_leaves_a_physically_changed_light_its_timer(
     hass: HomeAssistant, freezer, change: str, hold: str
 ) -> None:
-    """A dim, recolor or turn-on at the wall while motion has the light on
+    """A physical dim, recolor or turn-on while motion has the light on
     makes the on-period the user's, as the same change through this entity."""
     old = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
     attrs = {"brightness": 100, "hs_color": (10.0, 50.0)}

@@ -198,9 +198,7 @@ async def test_effect_blink_off_uses_effect_transition(
 
 
 @pytest.mark.asyncio
-async def test_no_transition_attribute_when_unconfigured(
-    hass: HomeAssistant, freezer
-) -> None:
+async def test_no_transition_attribute_when_blank(hass: HomeAssistant, freezer) -> None:
     """Without any transition settings the service calls carry no transition,
     exactly as before the feature existed."""
     entry = make_light_entry(occupancy=OCC)

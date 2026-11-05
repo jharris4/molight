@@ -550,7 +550,7 @@ async def test_slow_member_answering_after_another_raised_keeps_the_light_on(
     hass: HomeAssistant, freezer, caplog
 ) -> None:
     """A member that took the turn-on another member's integration rejected
-    reports on a moment later: that is its reply, not a turn-on at the wall,
+    reports on a moment later: that is its reply, not a physical turn-on,
     and the judgment of the failure waits for it."""
     hass.states.async_set(OCC, "off")
     hass.states.async_set(REAL, "off")

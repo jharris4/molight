@@ -1,8 +1,8 @@
-"""Member writes under MoLight's own context are judged, not blindly ignored.
+"""Member reports under MoLight's own context are judged, not blindly ignored.
 
 Home Assistant keeps a service call's context on the targeted entity for five
 seconds, so a human change right after a MoLight command arrives under
-MoLight's context. Only writes consistent with the command count as echoes.
+MoLight's context. Only reports consistent with the command count as echoes.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ async def test_on_at_brightness_zero_echo_is_not_physical(
 
 
 @pytest.mark.asyncio
-async def test_two_part_and_stepwise_echo_is_not_physical(
+async def test_power_first_and_stepwise_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """Power first with stale brightness, then fade steps toward the target."""
@@ -182,7 +182,7 @@ async def test_quantized_echo_is_not_physical(
 
 
 @pytest.mark.asyncio
-async def test_wall_switch_on_after_our_off_is_physical(
+async def test_on_after_our_off_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """An `on` under our turn-off context contradicts the command: a human did it."""
@@ -201,7 +201,7 @@ async def test_wall_switch_on_after_our_off_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_wall_switch_off_while_our_on_settles_is_physical(
+async def test_off_while_our_on_settles_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """An `off` while our turn-on still settles contradicts it: a human did it."""
@@ -719,7 +719,7 @@ async def test_late_color_contradiction_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_color_after_brightness_two_part_echo_is_not_physical(
+async def test_color_after_brightness_power_first_echo_is_not_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A bulb replying power and brightness first, then its color, stays our echo."""
@@ -774,8 +774,8 @@ async def test_late_matching_reply_under_its_own_context_is_not_physical(
 async def test_late_on_after_our_off_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, reply_context: str
 ) -> None:
-    """A silent member reporting on after our off is a human turn-on, not the
-    late reply to the turn-on before it, even under the off's context."""
+    """A silent member reporting on after our off is a physical turn-on, not
+    the late reply to the turn-on before it, even under the off's context."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on")
@@ -795,7 +795,7 @@ async def test_late_on_after_our_off_is_physical(
 async def test_late_off_after_our_on_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, reply_context: str
 ) -> None:
-    """A silent member reporting off after our turn-on is a human turn-off, not
+    """A silent member reporting off after our turn-on is a physical off, not
     the late reply to the turn-off before it, even under the turn-on's context."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
@@ -1017,10 +1017,10 @@ async def test_user_turn_on_of_a_member_that_missed_ours_restarts_the_timer(
 
 
 @pytest.mark.asyncio
-async def test_foreign_write_while_settling_is_physical(
+async def test_foreign_report_while_settling_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """While the command settles, a write under another context is a real change
+    """While the command settles, a report under another context is a real change
     even if it would pass as an echo; HA reuses our context for the reply."""
     await _setup(hass, light_entry)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1035,7 +1035,7 @@ async def test_foreign_write_while_settling_is_physical(
 async def test_stale_expectation_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """A write under our context long after the command is a real change."""
+    """A report under our context long after the command is a real change."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=153)
@@ -1269,8 +1269,8 @@ async def test_late_effect_dim_reply_does_not_cancel_warn(
 async def test_late_effect_blink_off_reply_does_not_cancel_warn(
     hass: HomeAssistant, freezer, reply_context: str
 ) -> None:
-    """A blink-off reported after the warn command is not a human turn-off,
-    and the warn reply that follows is not a human turn-on."""
+    """A blink-off reported after the warn command is not a physical off,
+    and the warn reply that follows is not a physical turn-on."""
     effect_context, warn_context = await _into_warn(
         hass, freezer, effect_timeout=2, warn_timeout=30, warn_brightness=50
     )
@@ -1408,7 +1408,7 @@ async def test_dim_after_unanswered_plain_turn_on_is_physical(
     hass: HomeAssistant, light_entry: MockConfigEntry, context: str
 ) -> None:
     """A plain turn-on changes nothing on a lit member, so no reply is awaited
-    and a dim that follows is a human one."""
+    and a dim that follows is a physical one."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _write(hass, "on", Context(), brightness=200)
@@ -2115,7 +2115,7 @@ async def test_wrapping_light_sees_no_off_from_the_light_it_wraps(
     hass: HomeAssistant, member: str
 ) -> None:
     """A virtual light replies inside the call itself, whatever it wraps; the
-    light wrapping it must not take a blink for an off at the wall."""
+    light wrapping it must not take a blink for a physical off."""
     cls = InstantLight if member == "instant" else RealLight
     await add_real(hass, cls("real_1"))
     outer = MockConfigEntry(
@@ -2161,7 +2161,7 @@ PHYSICAL = (
 
 
 def _timestamps(hass: HomeAssistant) -> dict:
-    """The marks a change at the wall leaves on the virtual light."""
+    """The marks a physical change leaves on the virtual light."""
     attrs = _attrs_of(hass, INSTANT)
     return {name: attrs[name] for name in PHYSICAL if attrs[name] is not None}
 
@@ -2184,7 +2184,7 @@ async def _fading_light(hass: HomeAssistant, entry: MockConfigEntry, **member):
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("stage", ["effect", "warn"])
-async def test_stage_fade_is_not_a_dim_at_the_wall(
+async def test_stage_fade_is_not_a_physical_dim(
     hass: HomeAssistant, freezer, fade: int, stage: str
 ) -> None:
     """A stage's fade, reported in steps, runs to its end and the light goes off."""
@@ -2209,7 +2209,7 @@ async def test_stage_fade_is_not_a_dim_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_blink_off_fade_is_not_an_off_at_the_wall(
+async def test_blink_off_fade_is_not_a_physical_off(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
     """A blink that fades out reports dimmer, then off: the stage stands."""
@@ -2232,7 +2232,7 @@ async def test_blink_off_fade_is_not_an_off_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
+async def test_auto_on_fade_is_not_a_physical_turn_on(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
     """An automatic turn-on fading in stays the sensor's on-period."""
@@ -2261,11 +2261,11 @@ async def test_auto_on_fade_is_not_a_turn_on_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_auto_off_fade_is_not_a_change_at_the_wall(
+async def test_auto_off_fade_is_not_a_physical_change(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
     """An automatic turn-off fading out neither turns the light on again nor counts as
-    an off at the wall."""
+    a physical off."""
     member = await _fading_light(hass, make_light_entry(auto_off_transition=fade))
     seen = _reports_of(hass, INSTANT)
     await _run(hass, freezer, 61)
@@ -2282,7 +2282,7 @@ async def test_auto_off_fade_is_not_a_change_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("start", ["off", "active"])
-async def test_standby_fade_is_not_a_change_at_the_wall(
+async def test_standby_fade_is_not_a_physical_change(
     hass: HomeAssistant, freezer, fade: int, start: str
 ) -> None:
     """Coming on at standby, or dropping back to it, over a fade."""
@@ -2323,7 +2323,7 @@ async def test_standby_fade_is_not_a_change_at_the_wall(
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
 @pytest.mark.parametrize("service", ["turn_on", "turn_off"])
-async def test_caller_fade_is_not_a_change_at_the_wall(
+async def test_caller_fade_is_not_a_physical_change(
     hass: HomeAssistant, freezer, fade: int, service: str
 ) -> None:
     """A transition the caller asked for is the caller's command all the way."""
@@ -2352,7 +2352,7 @@ async def test_caller_fade_is_not_a_change_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
+async def test_warning_restore_fade_is_not_a_physical_dim(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
     """A turn-on during the warning restores the old brightness over its own
@@ -2378,7 +2378,7 @@ async def test_warning_restore_fade_is_not_a_dim_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("fade", FADES)
-async def test_stage_color_fade_is_not_a_recolor_at_the_wall(
+async def test_stage_color_fade_is_not_a_physical_recolor(
     hass: HomeAssistant, freezer, fade: int
 ) -> None:
     """A stage fading from red to cyan and dimmer, reported in steps."""
@@ -2406,7 +2406,7 @@ async def test_stage_color_fade_is_not_a_recolor_at_the_wall(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("change", ["brighter", "off", "recolor", "command"])
-async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
+async def test_physical_change_late_in_a_stage_fade_still_cancels_it(
     hass: HomeAssistant, freezer, change: str
 ) -> None:
     """Seven seconds into a 10 s fade to the warn brightness, the member's
@@ -2422,11 +2422,11 @@ async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
     assert _timestamps(hass) == {}
 
     if change == "brighter":
-        member.wall(brightness=230)
+        member.physical_change(brightness=230)
     elif change == "off":
-        member.wall(on=False)
+        member.physical_change(on=False)
     elif change == "recolor":
-        member.wall(hs_color=GREEN)
+        member.physical_change(hs_color=GREEN)
     else:
         # Dimmer, as the fade is, but by an automation's command to the member.
         await hass.services.async_call(
@@ -2461,7 +2461,7 @@ async def test_change_at_the_wall_late_in_a_stage_fade_still_cancels_it(
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("virtual_light_behavior_variant")
 @pytest.mark.parametrize("when", ["during", "after"])
-async def test_turn_on_at_the_wall_late_in_an_off_fade_is_a_turn_on(
+async def test_physical_turn_on_late_in_an_off_fade_is_a_turn_on(
     hass: HomeAssistant, freezer, when: str
 ) -> None:
     """Brighter during a 10 s fade to off, or back on just after it."""
@@ -2471,7 +2471,7 @@ async def test_turn_on_at_the_wall_late_in_an_off_fade_is_a_turn_on(
     assert member.is_on is (when == "during")
     assert _timestamps(hass) == {}
 
-    member.wall(brightness=180)
+    member.physical_change(brightness=180)
     await settle(hass)
 
     assert hass.states.get(INSTANT).state == "on"
@@ -2501,7 +2501,7 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_WARN
     assert _timestamps(hass) == {}
 
-    member.wall(hs_color=PURPLE)
+    member.physical_change(hs_color=PURPLE)
     await settle(hass)
 
     assert _attrs_of(hass, INSTANT)["molight_state"] == STATE_ACTIVE
@@ -2516,7 +2516,7 @@ async def test_recolor_off_the_way_late_in_a_color_fade_is_a_recolor(
 # from off in steps. When the turn-on carried a transition, that first report is
 # neither the command's answer nor the echo anchor for the step after it, for the
 # fade's length from that report; after that, or when the turn-on carried no
-# transition, a lower brightness is a dim at the wall as before.
+# transition, a lower brightness is a physical dim as before.
 # ---------------------------------------------------------------------------
 
 REMEMBERED = [204, 100]  # at the 80% target the tests send, and off it
@@ -2780,7 +2780,7 @@ async def test_fade_runs_from_the_power_first_report(
 
 
 @pytest.mark.asyncio
-async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
+async def test_dim_after_the_fade_has_ended_is_physical(
     hass: HomeAssistant, freezer
 ) -> None:
     """A bulb answering power first at the target and nothing more: a lower
@@ -2796,7 +2796,7 @@ async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
     assert member.brightness == 204
     assert _timestamps(hass) == {}
 
-    member.wall(brightness=100)
+    member.physical_change(brightness=100)
     await settle(hass)
 
     assert list(_timestamps(hass)) == ["last_brightness_change_physical"]
@@ -2804,7 +2804,7 @@ async def test_dim_at_the_wall_after_the_fade_has_ended_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
+async def test_dim_during_the_fade_after_a_step_is_physical(
     hass: HomeAssistant, freezer
 ) -> None:
     """Only the report after the power-first one goes unjudged: a brightness that
@@ -2819,7 +2819,7 @@ async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
     assert member.brightness == 51  # the first step
     assert _timestamps(hass) == {}
 
-    member.wall(brightness=30)
+    member.physical_change(brightness=30)
     await settle(hass)
 
     assert list(_timestamps(hass)) == ["last_brightness_change_physical"]
@@ -2827,7 +2827,7 @@ async def test_dim_at_the_wall_during_the_fade_after_a_step_is_physical(
 
 
 @pytest.mark.asyncio
-async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
+async def test_off_right_after_the_power_first_report_is_physical(
     hass: HomeAssistant, freezer
 ) -> None:
     """An off during the fade contradicts the turn-on whatever came first."""
@@ -2839,7 +2839,7 @@ async def test_off_at_the_wall_right_after_the_power_first_report_is_physical(
     await _occupied(hass)
     assert member.brightness == 204
 
-    member.wall(on=False)
+    member.physical_change(on=False)
     await settle(hass)
 
     assert hass.states.get(INSTANT).state == "off"
@@ -2851,7 +2851,7 @@ async def test_power_first_then_a_step_without_a_transition_is_a_dim(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A turn-on that carried no transition has no steps to expect: a lower brightness
-    after the first report is a dim at the wall, as before."""
+    after the first report is a physical dim, as before."""
     await _setup(hass, light_entry)
     contexts = _member_contexts(hass)
     await _virtual(hass, "turn_on", brightness=204)
@@ -2958,18 +2958,18 @@ async def test_late_other_color_temperature_after_a_color_is_physical(
     hass: HomeAssistant, freezer, source: str
 ) -> None:
     """Asked for red, nearest 6279 K, the member shows 4000 K four seconds
-    later: that is someone at the wall, not its reply."""
+    later: that is a physical change, not its reply."""
     white, machine_state = await _mixed_light(hass, source, RED_RGB)
     await _run(hass, freezer, (61 if source in ("effect", "warn") else 0) + 4)
     assert _attrs_of(hass, INSTANT)["molight_state"] == machine_state
     assert _timestamps(hass) == {}
 
-    white.wall(color_temp_kelvin=4000)
+    white.physical_change(color_temp_kelvin=4000)
     await settle(hass)
 
     attrs = _attrs_of(hass, INSTANT)
     if source in ("auto_on", "standby"):
-        # The member was off until then: a turn-on at the wall.
+        # The member was off until then: a physical turn-on.
         assert list(_timestamps(hass)) == ["last_on_physical"]
         assert attrs["color_temp_kelvin"] == 4000
     else:

@@ -1,7 +1,7 @@
 """Tests for the adjusted event on a light's Events entity.
 
 A person's dim or recolor of a light that is on names what changed, and
-whether it was through the entity or at the wall. MoLight's own changes
+whether it was through the entity or physically. MoLight's own changes
 fire nothing here: they are turned_on and off_warning events.
 """
 
@@ -86,7 +86,7 @@ async def test_a_recolor_through_the_entity(hass) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_dim_at_the_wall(hass) -> None:
+async def test_a_physical_dim(hass) -> None:
     records = await _setup_lit(hass)
 
     hass.states.async_set(
@@ -98,7 +98,7 @@ async def test_a_dim_at_the_wall(hass) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_recolor_at_the_wall(hass) -> None:
+async def test_a_physical_recolor(hass) -> None:
     records = await _setup_lit(hass)
 
     hass.states.async_set(

@@ -399,7 +399,7 @@ async def test_entity_slow_to_return_after_an_entity_id_change_has_not_gone_miss
 
 
 @pytest.mark.parametrize("how", ["deleted", "disabled"])
-async def test_missing_real_light_does_not_block_an_off_at_the_wall(
+async def test_missing_real_light_does_not_block_a_physical_off(
     hass: HomeAssistant, virtual_light_behavior_variant, how: str
 ) -> None:
     """Turning the last real light off turns the light off: the other is gone."""

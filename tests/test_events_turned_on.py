@@ -96,7 +96,7 @@ async def test_virtual_turn_on(hass) -> None:
 
 @pytest.mark.asyncio
 async def test_physical_turn_on(hass) -> None:
-    """A member lit at the wall names what the member reported."""
+    """A member physically lit names what the member reported."""
     records = await _setup(hass, make_light_entry(name="Hall"))
 
     hass.states.async_set(REAL, "on", {"brightness": 120})

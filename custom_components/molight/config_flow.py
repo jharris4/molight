@@ -200,7 +200,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 # "none" lets a previously chosen sun event be cleared in the options flow:
-# a bare SelectSelector can't be un-set once it has a value.
+# a bare SelectSelector can't be cleared once it has a value.
 _SUN_OPTIONS = ["none", *SUN_EVENTS]
 _COMBINE_OPTIONS = [COMBINE_LATEST, COMBINE_EARLIEST]
 
@@ -244,7 +244,7 @@ _RGB_COLOR_SELECTOR = selector.ColorRGBSelector()
 # The frontend offers no way to clear a bare color selector once it has a
 # value, so each pair gets a "Color mode" field: it is form-only (never
 # stored), prefilled from whichever key is set, and on submit keeps only the
-# key it selects; "none" keeps neither, which is the only way to un-set a
+# key it selects; "none" keeps neither, which is the only way to clear a
 # color. Left blank (new forms, programmatic submissions) it keeps the color
 # fields exactly as submitted.
 COLOR_MODE_NONE = "none"
@@ -1306,7 +1306,7 @@ def _validate_brightness_support(
         CONF_WARN_BRIGHTNESS,
         CONF_STANDBY_BRIGHTNESS,
     )
-    # Whole percent, as the light runs them: below 1 is unset.
+    # Whole percent, as the light runs them: below 1 counts as blank.
     if not any(int(user_input.get(key) or 0) for key in keys):
         return {}
     if lights_support_brightness(hass, lights) is False:
@@ -1922,7 +1922,7 @@ def _groups_with_virtual_lights(
     """Light groups among the members that contain a virtual light.
 
     Through a group, the virtual light's own timer and sensors would pass for
-    a person at the wall, so its lights are listed directly instead.
+    a physical change, so its lights are listed directly instead.
     """
     lights = _virtual_light_entries(hass, _VIRTUAL_LIGHT_TYPES)
     return [
@@ -4800,7 +4800,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         cfg = self._cfg
         # Entry settings are applied as suggested values (not defaults) so the
         # optional fields (sensor references, brightness/transition overrides) can
-        # be cleared back to "not set" once given a value.
+        # be cleared back to blank once given a value.
         schema = vol.Schema(
             {
                 vol.Required(CONF_NAME, default=cfg[CONF_NAME]): str,

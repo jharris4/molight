@@ -966,7 +966,7 @@ async def test_preset_turns_on_with_values(
 
 
 @pytest.mark.asyncio
-async def test_preset_brightness_below_one_percent_is_unset(
+async def test_preset_brightness_below_one_percent_counts_as_blank(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
     """A preset brightness that truncates to 0% sends its color alone, never 0%."""
@@ -1003,7 +1003,7 @@ def test_turn_on_call_carries_its_values() -> None:
         "turn_on",
         {"rgb_color": [255, 0, 0]},
     )
-    # Below 1% is unset, and unlike a preset the binding stays live.
+    # Below 1% counts as blank, and unlike a preset the binding stays live.
     assert _action_call(REMOTE_ACTION_ON, {CONF_ON_BRIGHTNESS: 0.5}, 10) == (
         "turn_on",
         {},

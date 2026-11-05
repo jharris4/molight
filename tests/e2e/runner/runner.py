@@ -79,7 +79,7 @@ END_RESTART_LIGHT = "light.e2e_end_restart"
 END_LATE_LIGHT = "light.e2e_end_late"
 END_FOLLOW_LATE_LIGHT = "light.e2e_end_follow_late"
 TIME_WINDOW_SCHEDULE = "binary_sensor.e2e_time_window"
-WALL_LIGHT = "light.e2e_wall"
+PHYSICAL_BRIGHTNESS_LIGHT = "light.e2e_physical_brightness"
 OWN_SYSTEM_LIGHT = "light.e2e_own_system"
 RESTART_EFFECT_LIGHT = "light.e2e_restart_effect"
 RESTART_EFFECT_LATE_LIGHT = "light.e2e_restart_effect_late"
@@ -1963,7 +1963,7 @@ def run_sensor_briefly_unavailable_scenarios(client: HomeAssistantClient) -> Non
 def wait_timer_stage(
     client: HomeAssistantClient, stage: str, target_brightness: int
 ) -> None:
-    """Observe one effect or warn stage on both the virtual and physical lights."""
+    """Observe one effect or warn stage on both the virtual and real lights."""
     client.wait_state(
         VIRTUAL_TIMER_LIGHT,
         lambda state: (
@@ -2083,7 +2083,7 @@ def create_physical_light(client: HomeAssistantClient) -> str:
 
 
 def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
-    """Prove wall-switch changes to the real light drive the state machine."""
+    """Prove physical changes to the real light drive the state machine."""
     entry_id = create_physical_light(client)
     assert_entry_loaded(client, entry_id)
     client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
@@ -2097,7 +2097,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
         or started["attributes"].get("last_on_virtual") is not None
     ):
         raise AssertionError(
-            f"Physical turn-on was not attributed to the wall: {started}"
+            f"Physical turn-on was not recorded as physical: {started}"
         )
 
     # A physical dim two seconds in restarts the ten-second timer.
@@ -2180,7 +2180,7 @@ def run_physical_change_scenarios(client: HomeAssistantClient) -> None:
     )
     wait_machine_state(client, "idle", PHYSICAL_LIGHT)
     # Again outlast HA's context window after MoLight's own turn-off, or the
-    # wall-switch turn-on below would read as MoLight's echo.
+    # physical turn-on below would read as MoLight's echo.
     assert_state_stays(
         client,
         RAW_MULTI_RGB,
@@ -2231,15 +2231,15 @@ def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
     """Physical changes inside HA's 5 s command-context window must still count.
 
     Home Assistant stamps MoLight's service-call context on a member for 5 s,
-    so a wall-switch change in that window arrives under MoLight's own context.
-    MoLight judges such writes against what it asked for, so a contradicting
+    so a physical change in that window arrives under MoLight's own context.
+    MoLight judges such reports against what it asked for, so a contradicting
     one still counts as a real change.
     """
     entry_id = create_physical_light(client)
     assert_entry_loaded(client, entry_id)
     client.wait_state(PHYSICAL_LIGHT, lambda state: state["state"] == "off", "off")
 
-    # Wall-switch on one second after MoLight turned the light off.
+    # Physical on one second after MoLight turned the light off.
     client.set_state(RAW_MULTI_RGB, "on", {"brightness": pct(60)})
     wait_machine_state(client, "active", PHYSICAL_LIGHT)
     client.call_service("light", "turn_off", {"entity_id": PHYSICAL_LIGHT})
@@ -2255,7 +2255,7 @@ def run_fast_physical_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "active"
         ),
-        "on and active after a wall-switch on 1 s after MoLight's own turn-off",
+        "on and active after a physical on 1 s after MoLight's own turn-off",
         timeout=10,
     )
 
@@ -3716,7 +3716,7 @@ def run_primary() -> None:
         client,
         TARGET_SELECT,
         lambda state: state["state"] == "Night",
-        "untouched: a wall turn-on applies no selection",
+        "untouched: a physical turn-on applies no selection",
     )
     if (
         client.state(VIRTUAL_LIGHT)["attributes"].get("last_turn_on_selection_option")
@@ -3727,7 +3727,7 @@ def run_primary() -> None:
     checkpoint(
         "turn-on selection follows its option source entity, falls back when that "
         "is unavailable or unmatched, warns without its select entity, ignores "
-        "wall turn-ons"
+        "physical turn-ons"
     )
     client.call_service(
         "select",
@@ -6499,80 +6499,86 @@ def run_time_window_scenario(client: HomeAssistantClient) -> None:
     )
 
 
-def run_wall_brightness_scenarios(client: HomeAssistantClient) -> None:
-    """Brightness 0 at the wall counts as off; 0 -> non-zero is a turn-on."""
+def run_physical_brightness_scenarios(client: HomeAssistantClient) -> None:
+    """Physical brightness 0 counts as off; 0 -> non-zero is a turn-on."""
     entry_id = create_entry(
         client,
         "light",
         {
-            "name": "E2E Wall",
+            "name": "E2E Physical Brightness",
             "lights": [RAW_MULTI_DIMMER, RAW_MULTI_ON_OFF],
             "light_timeout": 30,
             **EMPTY_LIGHT_SECTIONS,
-            "advanced": {"entity_id": "e2e_wall"},
+            "advanced": {"entity_id": "e2e_physical_brightness"},
         },
-        "Wall light",
+        "Physical brightness light",
     )
     assert_entry_loaded(client, entry_id)
-    client.wait_state(WALL_LIGHT, lambda state: state["state"] == "off", "off")
+    client.wait_state(
+        PHYSICAL_BRIGHTNESS_LIGHT, lambda state: state["state"] == "off", "off"
+    )
 
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 100})
     first_on = client.wait_state(
-        WALL_LIGHT,
+        PHYSICAL_BRIGHTNESS_LIGHT,
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("last_on_physical") is not None
         ),
-        "active after a wall turn-on of one member",
+        "active after a physical turn-on of one member",
     )["attributes"]["last_on_physical"]
 
     # A member reporting on at brightness 0 counts as off; with the other
     # member off, every real light is off and the virtual light goes idle.
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 0})
     client.wait_state(
-        WALL_LIGHT,
+        PHYSICAL_BRIGHTNESS_LIGHT,
         lambda state: (
             state["state"] == "off"
             and state["attributes"].get("molight_state") == "idle"
             and state["attributes"].get("last_brightness_change_physical") is not None
         ),
-        "idle: a member dimmed to 0 at the wall counts as off",
+        "idle: a member physically dimmed to 0 counts as off",
     )
 
     # 0 -> non-zero on an idle light is a physical turn-on.
     client.set_state(RAW_MULTI_DIMMER, "on", {"brightness": 120})
     client.wait_state(
-        WALL_LIGHT,
+        PHYSICAL_BRIGHTNESS_LIGHT,
         lambda state: (
             state["state"] == "on"
             and state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("last_on_physical") not in (None, first_on)
             and state["attributes"].get("brightness") == 120
         ),
-        "active again with a fresh wall turn-on timestamp and the dimmed brightness",
+        "active again with a fresh physical turn-on timestamp and the dimmed "
+        "brightness",
     )
 
-    # Every member switched off at the wall -> idle; one still on keeps it on.
+    # Every member physically switched off -> idle; one still on keeps it on.
     client.set_state(RAW_MULTI_ON_OFF, "on", {})
     client.set_state(RAW_MULTI_DIMMER, "off", {})
     assert_state_stays(
         client,
-        WALL_LIGHT,
+        PHYSICAL_BRIGHTNESS_LIGHT,
         lambda state: state["state"] == "on",
-        "on while one member is still on at the wall",
+        "on while one member is still physically on",
     )
     client.set_state(RAW_MULTI_ON_OFF, "off", {})
     client.wait_state(
-        WALL_LIGHT,
+        PHYSICAL_BRIGHTNESS_LIGHT,
         lambda state: (
             state["state"] == "off"
             and state["attributes"].get("molight_state") == "idle"
         ),
-        "idle once every member is off at the wall",
+        "idle once every member is physically off",
     )
-    remove_entry_and_entity(client, entry_id, WALL_LIGHT)
-    print("PASS: wall brightness 0 reads as off, 0 -> on as a turn-on, all off as idle")
+    remove_entry_and_entity(client, entry_id, PHYSICAL_BRIGHTNESS_LIGHT)
+    print(
+        "PASS: physical brightness 0 reads as off, 0 -> on as a turn-on, all off as "
+        "idle"
+    )
 
 
 def run_restart_effect_prepare() -> None:
@@ -8606,7 +8612,7 @@ def run_combined_schedule_restart_verify() -> None:
 
 
 def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
-    """Color temperature: auto-on, mirrored wall changes, presets, mixed routing."""
+    """Color temperature: auto-on, mirrored physical changes, presets, mixed routing."""
     entry_id = create_entry(
         client,
         "light",
@@ -8656,7 +8662,7 @@ def run_color_temp_scenarios(client: HomeAssistantClient) -> None:
             and state["attributes"].get("color_temp_kelvin") == 5000
             and state["attributes"].get("brightness") == 100
         ),
-        "mirroring the wall-set color temperature and brightness",
+        "mirroring the physically set color temperature and brightness",
     )
     client.call_service("light", "turn_off", {"entity_id": COLOR_TEMP_LIGHT})
     client.wait_state(RAW_COLOR_TEMP, lambda state: state["state"] == "off", "off")
@@ -8905,7 +8911,7 @@ def run_remote_vocabulary_scenarios(client: HomeAssistantClient) -> None:
 
 
 def run_timer_scenarios(client: HomeAssistantClient) -> None:
-    """The timer and off warning sequence on an instant and a slow two-part bulb."""
+    """The timer and off warning sequence on an instant and a slow power-first bulb."""
     timer_entry_id = create_timeout_light(client)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(client, timer_entry_id)
@@ -8914,7 +8920,7 @@ def run_timer_scenarios(client: HomeAssistantClient) -> None:
     timer_entry_id = create_timeout_light(client, light_timeout=10, stage=3)
     assert_entry_loaded(client, timer_entry_id)
     run_timeout_warning_scenario(
-        client, timer_entry_id, "slow two-part bulb", light_timeout=10
+        client, timer_entry_id, "slow power-first bulb", light_timeout=10
     )
     client.set_behavior(RAW_TIMER_LIGHT, latency=0, report_steps=False)
 
@@ -9009,8 +9015,8 @@ def run_own_system_turn_on_scenarios(client: HomeAssistantClient) -> None:
 
 # Longer than the 5 s Home Assistant keeps a command's context on a light.
 LONG_FADE = 7
-# What a change at the wall leaves on a virtual light.
-WALL_TIMESTAMPS = (
+# What a physical change leaves on a virtual light.
+PHYSICAL_TIMESTAMPS = (
     "last_on_physical",
     "last_brightness_change_physical",
     "last_color_change_physical",
@@ -9018,9 +9024,9 @@ WALL_TIMESTAMPS = (
 )
 
 
-def wall_timestamps(state: dict[str, Any]) -> dict[str, Any]:
-    """Return a virtual light's records of changes at the wall."""
-    return {name: state["attributes"].get(name) for name in WALL_TIMESTAMPS}
+def physical_timestamps(state: dict[str, Any]) -> dict[str, Any]:
+    """Return a virtual light's records of physical changes."""
+    return {name: state["attributes"].get(name) for name in PHYSICAL_TIMESTAMPS}
 
 
 def watch_long_fade(
@@ -9033,7 +9039,7 @@ def watch_long_fade(
 ) -> dict[str, Any]:
     """Watch a long fade to its end on the RGB member, reported in steps.
 
-    The virtual light keeps its state and records no change at the wall, and
+    The virtual light keeps its state and records no physical change, and
     the member ends at the brightness and color asked for, or off for None.
     Returns the virtual light's records for the next fade.
     """
@@ -9043,7 +9049,7 @@ def watch_long_fade(
         state = client.state(light)
         if (
             state["attributes"].get("molight_state") != machine_state
-            or wall_timestamps(state) != timestamps
+            or physical_timestamps(state) != timestamps
         ):
             raise AssertionError(
                 f"Expected {light} to stay {machine_state} with {timestamps} "
@@ -9057,7 +9063,7 @@ def watch_long_fade(
     member = wait_member(client, RAW_MULTI_RGB, brightness)
     if rgb is not None and list(member["attributes"].get("rgb_color") or []) != rgb:
         raise AssertionError(f"The fade ended at another color than {rgb}: {member}")
-    return wall_timestamps(wait_machine_state(client, machine_state, light))
+    return physical_timestamps(wait_machine_state(client, machine_state, light))
 
 
 def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
@@ -9094,7 +9100,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         "Fade light",
     )
     assert_entry_loaded(client, entry_id)
-    timestamps = wall_timestamps(client.state(FADE_LIGHT))
+    timestamps = physical_timestamps(client.state(FADE_LIGHT))
 
     set_timer_motion(client, True)
     wait_machine_state(client, "occupied", FADE_LIGHT)
@@ -9123,9 +9129,9 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
     timestamps = watch_long_fade(
         client, FADE_LIGHT, timestamps, "active", pct(80), blue
     )
-    checkpoint("a 7 s fade back to the pre-warning look was not a change at the wall")
+    checkpoint("a 7 s fade back to the pre-warning look was not a physical change")
 
-    # Late in the next stage's fade, brighter at the wall is still a person.
+    # Late in the next stage's fade, physically brighter is still a person.
     wait_machine_state(client, "effect", FADE_LIGHT)
     time.sleep(5.6)
     shown = client.state(RAW_MULTI_RGB)["attributes"]["rgb_color"]
@@ -9138,15 +9144,15 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
             and state["attributes"].get("last_brightness_change_physical")
             != timestamps["last_brightness_change_physical"]
         ),
-        "active at the wall's 250, the warning cancelled",
+        "active at the physically set 250, the warning cancelled",
     )
     client.wait_state(
         RAW_MULTI_RGB,
         lambda state: list(state["attributes"].get("rgb_color") or []) == blue,
         "back at the pre-warning blue",
     )
-    timestamps = wall_timestamps(client.state(FADE_LIGHT))
-    checkpoint("brighter at the wall 5.6 s into a stage's fade cancelled the warning")
+    timestamps = physical_timestamps(client.state(FADE_LIGHT))
+    checkpoint("physically brighter 5.6 s into a stage's fade cancelled the warning")
 
     # The whole sequence again, to the fade to off: dimmer steps, then off.
     wait_machine_state(client, "effect", FADE_LIGHT)
@@ -9156,8 +9162,10 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
     assert_state_stays(
         client,
         FADE_LIGHT,
-        lambda state: state["state"] == "off" and wall_timestamps(state) == timestamps,
-        "off, with no off at the wall recorded for its own fade",
+        lambda state: (
+            state["state"] == "off" and physical_timestamps(state) == timestamps
+        ),
+        "off, with no physical off recorded for its own fade",
         duration=1,
     )
     remove_entry_and_entity(client, entry_id, FADE_LIGHT)
@@ -9192,7 +9200,7 @@ def run_long_fade_scenarios(client: HomeAssistantClient) -> None:
         },
     )
     assert_entry_loaded(client, scheduled_entry_id)
-    timestamps = wall_timestamps(client.state(FADE_SCHEDULED_LIGHT))
+    timestamps = physical_timestamps(client.state(FADE_SCHEDULED_LIGHT))
     client.set_state(RAW_REMOVAL_MOTION, "on")
     wait_machine_state(client, "standby", FADE_SCHEDULED_LIGHT)
     timestamps = watch_long_fade(
@@ -9390,8 +9398,8 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     checkpoint("a newer virtual turn-on during the select call was the only one sent")
 
     # The select and one real light share a device, like a WLED strip and its
-    # presets. The preset lighting that light is no change at the wall; the
-    # other real light turned on at the wall still is, and wins.
+    # presets. The preset lighting that light is no physical change; the
+    # other real light physically turned on still is, and wins.
     client.set_device([TARGET_SELECT, RAW_MULTI_DIMMER], "E2E Preset Strip")
     physical_before = client.state(PARK_LIGHT)["attributes"].get("last_on_physical")
     client.park_select(TARGET_SELECT, True)
@@ -9407,7 +9415,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("last_on_physical") == physical_before
         ),
-        "on with no turn-on at the wall recorded for the preset's own light",
+        "on with no physical turn-on recorded for the preset's own light",
         duration=1,
     )
     client.set_state(RAW_MULTI_RGB, "on", {"brightness": 150})
@@ -9417,7 +9425,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             state["attributes"].get("last_on_physical") not in (None, physical_before)
             and state["attributes"].get("brightness") == 150
         ),
-        "at the wall's 150 with the turn-on at the wall recorded",
+        "at the physically set 150 with the physical turn-on recorded",
     )
     commands = member_commands(client, *members)
     release_select(client, turn_on)
@@ -9430,12 +9438,13 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     )
     if member_commands(client, *members) != commands:
         raise AssertionError(
-            "A turn-on overtaken at the wall was sent after its select"
+            "A turn-on a physical change overtook was sent after its select"
         )
     wait_member(client, RAW_MULTI_RGB, 150)
     park_light_off(client, PARK_LIGHT, *members)
     checkpoint(
-        "the preset's own light was no wall change; another device's light was, and won"
+        "the preset's own light was no physical change; another device's light was, "
+        "and won"
     )
 
     # A real light goes unavailable and comes back off shortly before the warning.
@@ -9500,7 +9509,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
     client.set_state(RAW_MULTI_DIMMER, "off")
     client.set_available(RAW_MULTI_DIMMER, True)
     wait_parked_calls(client, 1)
-    timestamps = wall_timestamps(client.state(PARK_LIGHT))
+    timestamps = physical_timestamps(client.state(PARK_LIGHT))
     client.call_service(
         "light", "turn_on", {"entity_id": PARK_LIGHT, "brightness": 100}
     )
@@ -9514,14 +9523,14 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         return (
             state["attributes"].get("molight_state") == "active"
             and state["attributes"].get("brightness") == 100
-            and wall_timestamps(state) == timestamps
+            and physical_timestamps(state) == timestamps
         )
 
     assert_state_stays(
         client,
         PARK_LIGHT,
         at_the_new_brightness,
-        "active at 100: the preset's brightness is no dim at the wall",
+        "active at 100: the preset's brightness is no physical dim",
         duration=1,
     )
     release_select(client)
@@ -9543,7 +9552,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
 
     # A Virtual Scheduled Light switches settings while the preset of the settings it
     # left is still being applied: that select call keeps speaking for its
-    # device, so the preset lighting the light is still no change at the wall.
+    # device, so the preset lighting the light is still no physical change.
     schedule_entry_id = create_virtual_schedule(
         client, "E2E Park Schedule", "e2e_park_schedule", source=RAW_REMOVAL_MOTION
     )
@@ -9569,7 +9578,7 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
             state["state"] == "on"
             and state["attributes"].get("last_on_physical") is None
         ),
-        "on with no turn-on at the wall recorded after the settings switch",
+        "on with no physical turn-on recorded after the settings switch",
         duration=1,
     )
     release_select(client, turn_on)
@@ -9595,8 +9604,8 @@ def run_select_in_flight_scenarios(client: HomeAssistantClient) -> None:
         "select", "select_option", {"entity_id": TARGET_SELECT, "option": option_before}
     )
     print(
-        "PASS: offs, newer turn-ons, wall changes, a warning, a new brightness and a "
-        "settings switch during a select call"
+        "PASS: offs, newer turn-ons, physical changes, a warning, a new brightness and "
+        "a settings switch during a select call"
     )
 
 
@@ -9611,7 +9620,7 @@ SCENARIO_SHARDS: dict[str, list[Callable[[HomeAssistantClient], None]]] = {
         run_fast_physical_scenarios,
         run_effect_color_scenarios,
         run_auto_on_color_scenario,
-        run_wall_brightness_scenarios,
+        run_physical_brightness_scenarios,
         run_reference_cleanup_scenarios,
         run_manual_control_scenarios,
         run_color_temp_scenarios,

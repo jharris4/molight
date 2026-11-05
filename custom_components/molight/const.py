@@ -177,13 +177,13 @@ CONF_LIGHT_TIMEOUT = "light_timeout"  # seconds, None for no timer; >= occupancy
 DEFAULT_LIGHT_TIMEOUT = 300
 # Brightness (percent, 1-100) applied when the light is turned on
 # *automatically* (by occupancy, a door opening, illuminance going dark, or
-# a schedule window). Virtual and physical turn-ons are never affected (they
-# keep whatever brightness the user/last state set). Absent = don't set a
+# a schedule window). Manual turn-ons are never affected (they
+# keep whatever brightness the user/last state set). Blank = don't set a
 # brightness on automatic turn-ons either (the real lights use their own
 # last/default).
 CONF_AUTO_ON_BRIGHTNESS = "auto_on_brightness"
 # Optional color applied when the light is turned on *automatically*, exactly
-# like auto_on_brightness (virtual and physical turn-ons are never affected).
+# like auto_on_brightness (manual turn-ons are never affected).
 # At most one may be set (the config/options flows enforce it):
 #   auto_on_color_temp: white color temperature in Kelvin
 #   auto_on_rgb_color:  an [r, g, b] color
@@ -234,10 +234,10 @@ DEFAULT_FALSE_OFF_DELAY = 5
 #           where 0 blinks the real lights fully off.
 #   WARN:   the warn stage, at warn_brightness for warn_timeout seconds, then
 #           the lights turn off. warn_brightness is an optional percent 1-100;
-#           absent = keep whatever brightness was in effect before the warning.
+#           blank = keep whatever brightness was in effect before the warning.
 # Each stage is skipped when its duration is 0 (both default 0 = feature off,
 # so the light turns straight off exactly as before). Any re-trigger during
-# either stage (occupancy, virtual/physical on, a dim, ...) cancels it and
+# either stage (occupancy, a manual on, a dim, ...) cancels it and
 # behaves as if the turn-off timer were still running, restoring the brightness.
 CONF_EFFECT_TIMEOUT = "effect_timeout"
 DEFAULT_EFFECT_TIMEOUT = 0
@@ -259,11 +259,11 @@ CONF_EFFECT_RGB_COLOR = "effect_rgb_color"
 CONF_WARN_COLOR_TEMP = "warn_color_temp"
 CONF_WARN_RGB_COLOR = "warn_rgb_color"
 # Optional transition settings (seconds), sent with the service calls the
-# virtual light makes itself. Absent/0 = no transition attribute is sent
+# virtual light makes itself. Blank/0 = no transition attribute is sent
 # (the real lights use their own default).
 #   auto_on_transition:   automatic turn-ons only (occupancy, a door opening,
-#                         illuminance going dark, a schedule window start); virtual and
-#                         physical turn-ons are untouched.
+#                         illuminance going dark, a schedule window start); manual
+#                         turn-ons are untouched.
 #   auto_off_transition:  automatic turn-offs (the timer finishing, false-detection
 #                         off delay, bright-forces-off, schedule window end); a manual
 #                         off is untouched.
@@ -300,7 +300,7 @@ OCCUPANCY_TURN_ON_WAIT = 1.0
 # Maintain occupancy sensor: keeps an already-on light on while it is on, but
 # never turns the light on. Unlike the combined sensor's maintain_sensors
 # (which only extend occupancy started by a trigger sensor), this holds the
-# light regardless of how it was lit: virtual, physical, or occupancy.
+# light regardless of how it was lit: manually or by occupancy.
 CONF_MAINTAIN_OCCUPANCY_ENTITY = "maintain_occupancy_entity"
 CONF_ILLUMINANCE_ENTITY = "illuminance_entity"
 CONF_SCHEDULE_ENTITY = "schedule_entity"

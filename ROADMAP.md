@@ -8,8 +8,8 @@ records what should be built next, and what was asked for and answered another w
 
 - **Risk is the gate.** The state machine in light.py is where every breakage risk in this codebase
   lives. An item that adds an input to the light's precedence rules (manual, then holds, then a
-  follow window, then forced offs, then occupancy and the door) or changes what counts as a change at
-  the wall ships alone, with matrix tests, an e2e run and a REFERENCE.md section, as standby did.
+  follow window, then forced offs, then occupancy and the door) or changes what counts as a physical
+  change ships alone, with matrix tests, an e2e run and a REFERENCE.md section, as standby did.
   Anything else can share a release.
 - **Every new setting starts off**, so an existing entry behaves exactly as before.
 - **A request that existing virtual entities plus a Home Assistant helper answer is not built.** It goes under
@@ -32,7 +32,7 @@ Ships alone.
   This is the most common complaint about motion lighting anywhere.
 - **Design.** One option on the light, off by default. When on, after a manual off, occupancy and
   the door do not turn the light on until the room has been empty for the turn-off timeout, by the
-  same rule the timer uses, so there is no new number to set. A virtual or physical turn-on
+  same rule the timer uses, so there is no new number to set. A manual turn-on
   ends it, as does a schedule boundary, as they end a manual off today. A blocked turn-on fires a
   `turn_on_blocked` event on the Events entity.
 - **Why now.** It is the one gap a remote or a voice assistant cannot paper over: a Turn off then
@@ -66,7 +66,7 @@ Ships alone.
   timer, so a light both control never turns off. Adaptive Lighting is among the most installed
   HACS integrations, and it is the answer this file gives to time-of-day brightness.
 - **Design.** A per-light option, off by default: an adjustment to a light that is on does not
-  restart the timer; a turn-on or off at the wall still counts. The docs say to leave the auto-on
+  restart the timer; a physical turn-on or off still counts. The docs say to leave the auto-on
   brightness and color blank, since Adaptive Lighting takes MoLight's values for manual control and
   stops adapting. Verify the failure with a test before designing.
 - **Cost.** It changes what a physical change does, so it ships alone with its own tests.

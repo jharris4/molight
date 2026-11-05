@@ -2553,7 +2553,7 @@ async def test_restart_with_held_pending_off_reports_maintained_hold(
 
 
 @pytest.mark.asyncio
-async def test_restart_clears_pending_off_when_physical_light_is_already_off(
+async def test_restart_clears_pending_off_when_real_light_is_already_off(
     hass: HomeAssistant,
 ) -> None:
     """A completed pending off cannot cut a later virtual on after a hold cycle."""

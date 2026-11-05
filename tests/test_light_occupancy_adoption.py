@@ -1,7 +1,7 @@
 """Tests for adopting an already occupied sensor into an on light.
 
 Occupancy normally adopts the light on its own rising edge. When it is
-already on while the light turns on (virtual/physical after a manual off, or
+already on while the light turns on (manually after a manual off, or
 suppressed earlier by bright/window), or when the gate suppressing it lifts
 (illuminance going dark, a gate-mode window start) while the light is
 already on, the light must adopt it as OCCUPIED; otherwise a timer finishes
@@ -93,7 +93,7 @@ async def test_virtual_on_adopts_active_occupancy(hass: HomeAssistant, freezer) 
 async def test_physical_on_adopts_active_occupancy(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A wall-switch turn-on while already occupied → OCCUPIED."""
+    """A physical turn-on while already occupied → OCCUPIED."""
     await setup_entries(hass, make_light_entry(occupancy=OCC))
     hass.states.async_set(OCC, "on")
     await settle(hass)

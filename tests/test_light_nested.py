@@ -2,8 +2,8 @@
 
 The inner light keeps its own timer, stages, sensors and schedule. What it
 does by itself reaches the outer light as a member change, which must not
-pass for a person at the wall; what a person does to the inner light, at the
-wall or through it, still must.
+pass for a physical change; what a person does to the inner light, physically
+or through it, still must.
 """
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ async def test_inner_timer_off_is_not_a_manual_off(
 async def test_inner_warn_dim_does_not_restart_the_outer_timer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The inner's warn stage is mirrored, not taken for a dim at the wall."""
+    """The inner's warn stage is mirrored, not taken for a physical dim."""
     inner = make_light_entry(
         name="Inner", lights=[REAL], timeout=100, warn_timeout=50, warn_brightness=20
     )
@@ -168,7 +168,7 @@ async def test_inner_warn_dim_does_not_restart_the_outer_timer(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["occupancy", "standby"])
-async def test_inner_turn_on_by_itself_is_not_a_turn_on_at_the_wall(
+async def test_inner_turn_on_by_itself_is_not_a_physical_turn_on(
     hass: HomeAssistant, freezer, trigger: str
 ) -> None:
     """The inner's own sensor or standby lights it: the outer adopts the
@@ -224,7 +224,7 @@ async def test_inner_schedule_end_is_not_a_manual_off(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", OUTER_KINDS)
-async def test_off_at_the_wall_on_the_inner_bulb_is_a_manual_off(
+async def test_a_physical_off_on_the_inner_bulb_is_a_manual_off(
     hass: HomeAssistant, kind: str
 ) -> None:
     """A person switching the bulb off is one for the inner and the outer."""
@@ -240,10 +240,10 @@ async def test_off_at_the_wall_on_the_inner_bulb_is_a_manual_off(
 
 
 @pytest.mark.asyncio
-async def test_dim_at_the_wall_on_the_inner_bulb_is_physical(
+async def test_a_physical_dim_on_the_inner_bulb_is_physical_for_the_outer(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A person dimming the bulb restarts the outer's timer as a wall dim."""
+    """A person dimming the bulb restarts the outer's timer as a physical dim."""
     inner = make_light_entry(name="Inner", lights=[REAL], timeout=1000)
     await _nested(hass, "regular", inner=inner)
     await hass.services.async_call(
@@ -333,7 +333,9 @@ BULB = "light.bulb"
 GROUP_TOPOLOGIES = ["sole", "mixed", "nested"]
 
 
-def _at_the_wall(bulb: RealLight, *, on: bool = True, brightness: int = 255) -> None:
+def _physical_change(
+    bulb: RealLight, *, on: bool = True, brightness: int = 255
+) -> None:
     """Change a bulb with no command behind it."""
     bulb._attr_is_on = on
     bulb._attr_brightness = brightness
@@ -431,7 +433,7 @@ async def test_timer_off_through_an_edited_group_is_not_a_manual_off(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("topology", GROUP_TOPOLOGIES)
-@pytest.mark.parametrize("target", ["inner", "wall"])
+@pytest.mark.parametrize("target", ["inner", "physical"])
 async def test_a_persons_dim_through_an_edited_group_restarts_the_outer_timer(
     hass: HomeAssistant, freezer, topology: str, target: str
 ) -> None:
@@ -444,7 +446,7 @@ async def test_a_persons_dim_through_an_edited_group_restarts_the_outer_timer(
             "light", "turn_on", {"entity_id": INNER, "brightness": 150}, blocking=True
         )
     else:
-        _at_the_wall(bulbs["real_1"], brightness=150)
+        _physical_change(bulbs["real_1"], brightness=150)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
 
@@ -455,7 +457,7 @@ async def test_a_persons_dim_through_an_edited_group_restarts_the_outer_timer(
 
 
 @pytest.mark.asyncio
-async def test_a_dim_at_a_bulb_beside_the_inner_light_is_a_persons(
+async def test_a_physical_dim_of_a_bulb_beside_the_inner_light_is_a_persons(
     hass: HomeAssistant, freezer
 ) -> None:
     """A bulb in the group changing with the inner light: not acting by itself."""
@@ -465,7 +467,7 @@ async def test_a_dim_at_a_bulb_beside_the_inner_light_is_a_persons(
     bulbs = await _outer_over_edited_group(hass, "mixed", inner)
     await _tick(hass, freezer, 51)
     assert _attrs(hass, OUTER)["last_brightness_change_physical"] is None
-    _at_the_wall(bulbs["bulb"], brightness=90)
+    _physical_change(bulbs["bulb"], brightness=90)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
 
@@ -474,10 +476,10 @@ async def test_a_dim_at_a_bulb_beside_the_inner_light_is_a_persons(
 
 
 @pytest.mark.asyncio
-async def test_a_group_of_bulbs_is_a_person_at_the_wall(
+async def test_a_group_of_bulbs_is_a_physical_change(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A group without a virtual light reports changes at the wall as before."""
+    """A group without a virtual light reports physical changes as before."""
     bulb = RealLight("bulb")
     await add_real(hass, bulb)
     await setup_entries(hass, _light_group("Room", [BULB]))
@@ -487,13 +489,13 @@ async def test_a_group_of_bulbs_is_a_person_at_the_wall(
     )
     await settle(hass)
     await _tick(hass, freezer, 51)
-    _at_the_wall(bulb, brightness=90)
+    _physical_change(bulb, brightness=90)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_brightness_change_physical"] is not None
 
     await _tick(hass, freezer, 10)
     assert hass.states.get(OUTER).state == "on"
-    _at_the_wall(bulb, on=False)
+    _physical_change(bulb, on=False)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_off_manual"] is not None
 
@@ -567,11 +569,12 @@ async def test_inner_lit_by_itself_does_not_restart_a_running_outer_timer(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("how", ["service", "wall"])
+@pytest.mark.parametrize("how", ["service", "physical"])
 async def test_inner_lit_by_a_person_restarts_a_running_outer_timer(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
-    """A command through the inner light, or its bulb at the wall, still does."""
+    """A command through the inner light, or a physical change on its bulb, still
+    does."""
     await _outer_over_two(hass, _inner_b("occupancy"))
     await hass.services.async_call(
         "light", "turn_on", {"entity_id": OUTER, "brightness": 180}, blocking=True
@@ -590,7 +593,7 @@ async def test_inner_lit_by_a_person_restarts_a_running_outer_timer(
         )
     else:
         bulb = hass.data["entity_components"]["light"].get_entity("light.real_2")
-        _at_the_wall(bulb, brightness=180)
+        _physical_change(bulb, brightness=180)
     await settle(hass)
     assert _attrs(hass, OUTER)["last_on_physical"] is not None
 

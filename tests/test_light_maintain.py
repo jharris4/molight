@@ -3,7 +3,7 @@
 The maintain occupancy sensor holds an already-on light on while it is on; it never
 turns the light on. Unlike the combined sensor's maintain_sensors (which only
 extend occupancy started by a trigger sensor), it holds the light regardless
-of how it was lit: virtual, physical, or occupancy. The watched sensors are
+of how it was lit: manually or by occupancy. The watched sensors are
 plain states set via hass.states.async_set, as in test_light_matrix.py.
 """
 

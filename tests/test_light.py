@@ -431,7 +431,7 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
     occupancy_entry: MockConfigEntry,
     illuminance_entry: MockConfigEntry,
 ) -> None:
-    """With no auto-on brightness set, an automatic turn-on doesn't touch brightness."""
+    """With blank auto-on brightness, an automatic turn-on doesn't touch brightness."""
     # The bright-gated light entry configures no auto-on brightness.
     mock_restore_cache(
         hass,
@@ -454,7 +454,7 @@ async def test_auto_on_brightness_blank_leaves_brightness_unchanged(
 
 
 @pytest.mark.asyncio
-async def test_physical_light_adoption(
+async def test_physically_switched_light_adoption(
     hass: HomeAssistant, light_entry: MockConfigEntry, freezer
 ) -> None:
     """A physically switched real light is adopted and released."""
@@ -595,7 +595,7 @@ async def test_brightness_change_while_occupied_records_without_timer(
     assert state.state == "on"
     assert state.attributes["molight_state"] == STATE_OCCUPIED
 
-    # The real light reports on, then someone dims it at the wall.
+    # The real light reports on, then someone dims it physically.
     hass.states.async_set("light.real_dim", "on", {"brightness": 200})
     await _settle(hass)
     hass.states.async_set("light.real_dim", "on", {"brightness": 120})
@@ -635,7 +635,7 @@ async def test_brightness_zero_treated_as_off(
     assert state.state == "off"
     assert state.attributes["molight_state"] == STATE_IDLE
     assert state.attributes["last_brightness_change_physical"] == dimmed
-    # A dim to 0 at the wall is a manual off.
+    # A physical dim to 0 is a manual off.
     assert state.attributes["last_off_manual"] == dimmed
 
     # 0 → non-zero is a physical turn-on: back to ACTIVE with physical

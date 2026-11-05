@@ -393,7 +393,7 @@ Each schedule window is a separate follow window: turn the lamp off at 07:00 and
 
 ### Example 12: Back porch light with standby (Virtual Scheduled Light)
 
-Through Example 4's schedule window the back porch glows at 1% and warm, comes up to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. It reuses Example 4's schedule sensor, since one sensor can feed many lights. It also needs a Virtual Occupancy Sensor wrapping the back porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
+Through Example 4's schedule window the back porch glows at 1% and warm, is raised to full brightness when someone walks up, and drops back to 1% 30 s after they leave. At 07:00 it turns off. It reuses Example 4's schedule sensor, since one sensor can feed many lights. It also needs a Virtual Occupancy Sensor wrapping the back porch motion sensor, set up like Example 2's with an occupancy timeout of 30 or less.
 
 **1. Virtual Scheduled Light** (shared form)
 
