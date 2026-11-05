@@ -129,7 +129,10 @@ def main() -> None:
     write = "--write" in sys.argv[1:]
     hotfix = "--hotfix" in sys.argv[1:]
     if len(args) != 1:
-        fail("usage: scripts/release <version> [--write]   e.g. scripts/release 1.6.0")
+        fail(
+            "usage: scripts/release <version> [--write] [--hotfix]"
+            "   e.g. scripts/release 1.6.0"
+        )
     version = args[0].lstrip("v")
     requested_version = _version_tuple(version)
 
