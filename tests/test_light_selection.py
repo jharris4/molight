@@ -60,7 +60,7 @@ def _ambient_theme(hass: HomeAssistant) -> None:
 
 def _selection_entry(
     *,
-    fixed_option: str | None = "Cozy",
+    option: str | None = "Cozy",
     source_entity: str | None = None,
     **kwargs: Any,
 ):
@@ -69,7 +69,7 @@ def _selection_entry(
         name="Selection Light",
         lights=["light.ambient"],
         turn_on_select_entity="select.ambient_theme",
-        turn_on_select_option=fixed_option,
+        turn_on_select_option=option,
         turn_on_select_source_entity=source_entity,
         **kwargs,
     )
@@ -212,7 +212,7 @@ async def test_source_entity_is_resolved_at_each_turn_on(hass: HomeAssistant) ->
     "source_state",
     ["unavailable", "Not Offered"],
 )
-async def test_unusable_source_falls_back_to_fixed_option(
+async def test_unusable_source_uses_the_fixed_fallback_option(
     hass: HomeAssistant, source_state: str
 ) -> None:
     """Option source entity values that are unavailable or not offered by the select
@@ -260,7 +260,7 @@ async def test_source_without_fallback_can_skip_selection(
     await setup_entries(
         hass,
         _selection_entry(
-            fixed_option=None,
+            option=None,
             source_entity="input_select.desired_theme",
         ),
     )
@@ -552,7 +552,7 @@ async def test_selection_prefers_the_exact_option(
     await setup_entries(
         hass,
         _selection_entry(
-            fixed_option=fixed,
+            option=fixed,
             source_entity="input_select.desired_theme" if source else None,
         ),
     )

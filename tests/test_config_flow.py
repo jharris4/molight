@@ -5670,7 +5670,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
             if key not in (CONF_ENTITY_TYPE, CONF_ENTITY_ID)
         },
     )
-    soft_gate = _light_entry(
+    gate_keep = _light_entry(
         "Pantry",
         "pantry",
         schedule_sensor="binary_sensor.dusk",
@@ -5678,7 +5678,7 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
     )
     hass.states.async_set("binary_sensor.night", "off", {"friendly_name": "Night"})
     hass.states.async_set("binary_sensor.dusk", "off", {"friendly_name": "Dusk"})
-    await setup_entries(hass, light, soft_gate)
+    await setup_entries(hass, light, gate_keep)
     original_entry_id = light.entry_id
     original_entities = {
         entity.entity_id
@@ -5734,10 +5734,10 @@ async def test_convert_schedule_gated_light_to_scheduled_in_place(
             er.async_get(hass), light.entry_id
         )
     } == original_entities
-    soft_cfg = entry_settings(soft_gate)
-    assert soft_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
-    assert soft_cfg[CONF_SCHEDULE_SENSOR] == "binary_sensor.dusk"
-    assert soft_cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
+    gate_keep_cfg = entry_settings(gate_keep)
+    assert gate_keep_cfg[CONF_ENTITY_TYPE] == ENTITY_TYPE_SCHEDULED_LIGHT
+    assert gate_keep_cfg[CONF_SCHEDULE_SENSOR] == "binary_sensor.dusk"
+    assert gate_keep_cfg[CONF_SCHEDULE_END_ACTION] == SCHEDULE_END_ACTION_KEEP
 
 
 @pytest.mark.asyncio
@@ -8113,10 +8113,10 @@ async def test_light_options_final_page_rejects_a_light_taken_meanwhile(
     "last_step",
     [
         "selection",
-        "collision",
+        "entity_id",
         "wrapped_lights",
         "scheduled_inside",
-        "scheduled_collision",
+        "scheduled_entity_id",
     ],
 )
 async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
@@ -8127,7 +8127,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
     await _setup_night_schedule(hass)
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.group", "off", {"entity_id": ["light.spare"]})
-    if last_step.endswith("collision"):
+    if last_step.endswith("entity_id"):
         hass.states.async_set("light.new", "off")
     outer = _light_entry("Outer", "outer")
     await setup_entries(hass, outer, _light_entry("Inner", "inner"))
@@ -8152,7 +8152,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
             result["flow_id"], settings_set
         )
         assert result["step_id"] == "scheduled_light_inside"
-        if last_step == "scheduled_collision":
+        if last_step == "scheduled_entity_id":
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"], {**settings_set, SECTION_STANDBY: {}}
             )
@@ -8190,7 +8190,7 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
         assert other["type"] == FlowResultType.CREATE_ENTRY
         await hass.async_block_till_done()
     elif taken == "own_id":
-        own_id = "light.new_2" if last_step.endswith("collision") else "light.new"
+        own_id = "light.new_2" if last_step.endswith("entity_id") else "light.new"
         hass.states.async_set(
             "light.group", "off", {"entity_id": ["light.spare", own_id]}
         )
@@ -8223,9 +8223,9 @@ async def test_light_create_final_page_rejects_a_light_taken_meanwhile(
 _KEEP_ON_FINAL_PAGES = [
     "create_selection",
     "create_wrapped_lights",
-    "create_collision",
+    "create_entity_id",
     "scheduled_create_inside",
-    "scheduled_create_collision",
+    "scheduled_create_entity_id",
     "options_selection",
     "options_wrapped_lights",
     "scheduled_options_inside",
@@ -8250,7 +8250,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
     hass.states.async_set(member, "off")
     hass.states.async_set("select.scene", "Cozy", {"options": ["Cozy"]})
     hass.states.async_set("light.keep", "off", {"entity_id": ["light.spare"]})
-    if last_step.endswith("collision"):
+    if last_step.endswith("entity_id"):
         hass.states.async_set("light.subject", "off")
     await setup_entries(hass, _light_entry("Inner", "inner"))
     flow = hass.config_entries.flow
@@ -8328,14 +8328,14 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
                 "scheduled_light_selection" if scheduled else "light_selection"
             ),
             "lights": "confirm_wrapped_lights",
-            "collision": "confirm_entity_id",
+            "id": "confirm_entity_id",
             "inside": "scheduled_light_inside",
         }[last_step.rsplit("_", 1)[-1]]
     )
 
     if edited:
         # A new light whose entity ID is taken gets the next free one.
-        if last_step.endswith("collision"):
+        if last_step.endswith("entity_id"):
             own_id = "light.subject_2"
         elif last_step.startswith("discovery"):
             own_id = f"{member}_2"
@@ -8349,7 +8349,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         user_input = {CONF_TURN_ON_SELECT_OPTION: "Cozy"}
     elif last_step.endswith("inside"):
         user_input = {**settings_set, SECTION_STANDBY: {}}
-    elif last_step.endswith("collision"):
+    elif last_step.endswith("entity_id"):
         user_input = {"next_step_id": "entity_id_proceed"}
     else:
         user_input = {}
@@ -9204,7 +9204,7 @@ async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_e
 
 
 # ---------------------------------------------------------------------------
-# Validators shared by every form that edits a Virtual Light's settings
+# Submit checks shared by every form that edits a Virtual Light's settings
 # ---------------------------------------------------------------------------
 
 SUBJECT_MEMBER = "light.subject_real"
@@ -9327,7 +9327,7 @@ async def _reach_light_settings_form(hass: HomeAssistant, form: str) -> dict:
 @pytest.mark.parametrize(
     "form", ["create", "options", "scheduled_create", "scheduled_options", "discovery"]
 )
-async def test_light_settings_forms_share_validators(
+async def test_light_settings_forms_share_submit_checks(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, form: str, case: str
 ) -> None:
     """Every form that edits a light's settings rejects the same mistakes."""

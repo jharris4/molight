@@ -95,7 +95,9 @@ def _occupancy(source: str) -> MockConfigEntry:
     )
 
 
-def _group(name: str, members: list[str], *, every: bool = False) -> MockConfigEntry:
+def _group(
+    name: str, members: list[str], *, all_entities: bool = False
+) -> MockConfigEntry:
     return MockConfigEntry(
         domain="group",
         title=name,
@@ -104,7 +106,7 @@ def _group(name: str, members: list[str], *, every: bool = False) -> MockConfigE
             "name": name,
             "entities": members,
             "hide_members": False,
-            "all": every,
+            "all": all_entities,
         },
     )
 
@@ -121,18 +123,18 @@ async def _set_members(
 
 
 async def _groups(
-    hass: HomeAssistant, *, every: bool = False
+    hass: HomeAssistant, *, all_entities: bool = False
 ) -> tuple[dict[str, MockConfigEntry], RealBinary]:
     """A real sensor in a group inside the source group, which also has it.
 
     The real sensor keeps both groups available whatever else they contain.
-    With every, the groups are on only when all their members are.
+    With all_entities, the groups are on only when all their members are.
     """
     real = RealBinary("real")
     await add_real(hass, real)
     groups = {
-        "below": _group("Below", [REAL], every=every),
-        "source": _group("Source Group", [REAL, BELOW], every=every),
+        "below": _group("Below", [REAL], all_entities=all_entities),
+        "source": _group("Source Group", [REAL, BELOW], all_entities=all_entities),
     }
     await setup_entries(hass, *groups.values())
     return groups, real
@@ -301,7 +303,7 @@ async def test_an_all_group_under_the_source_changed_to_include_the_schedule_sto
     hass: HomeAssistant, monkeypatch
 ) -> None:
     """Groups that need every member on hide the change from the source too."""
-    groups, real = await _groups(hass, every=True)
+    groups, real = await _groups(hass, all_entities=True)
     await setup_entries(hass, _schedule(GROUP, invert=False))
     real.set(True)
     await settle(hass)

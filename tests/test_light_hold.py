@@ -397,7 +397,7 @@ async def test_release_while_occupied_and_bright_in_gate_only_mode_stays_occupie
 
 
 @pytest.mark.asyncio
-async def test_hold_blocks_bright_force_off_release_applies_it(
+async def test_hold_blocks_bright_off_release_applies_it(
     hass: HomeAssistant,
 ) -> None:
     """Bright in control mode can't turn held lights off; release does."""
