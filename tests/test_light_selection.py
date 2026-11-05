@@ -3548,6 +3548,9 @@ async def test_torn_down_light_sends_nothing_once_its_select_call_ends(
         assert state.state == "on"  # the strip the preset lit
     elif teardown == "remove":
         assert state is None
+    elif teardown == "disable":
+        # No state from Home Assistant 2026.11, the unavailable placeholder before it.
+        assert state is None or state.state == "unavailable"
     else:
         assert state.state == "unavailable"
 

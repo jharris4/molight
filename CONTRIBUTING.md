@@ -20,7 +20,7 @@ npm run dev:up      # start the devcontainer (fast after first build)
 npm test
 ```
 
-`npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13), so a test that passes locally can still fail there, and, as an advisory leg, on the newest version `pytest-homeassistant-custom-component` targets, which is often a beta.
+`npm test` runs the suite on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the suite on the minimum Home Assistant version in `hacs.json` (with Python 3.13), on Home Assistant 2026.11.0, and, as an advisory leg, on the newest `pytest-homeassistant` release, which is often a beta, so a test that passes locally can still fail there. Home Assistant 2026.11 replaced `pytest-homeassistant-custom-component` with `pytest-homeassistant`, and the two cannot be installed together, so the tests keep the old import name and `tests/__init__.py` aliases it to the new package when only that one is installed.
 
 A daily workflow opens a PR when a newer stable Home Assistant is out, moving that pin and the e2e image in `tests/e2e/env.sh` together, and runs pytest and every e2e suite on the new version only. `scripts/ha-bump` previews the same bump locally.
 
@@ -80,6 +80,11 @@ git push
 
 Do not start new work on `develop` between the first merge and this final sync;
 keeping the release window short ensures both updates remain fast-forwards.
+
+A patch release that cannot wait for `develop` is prepared on a branch from
+`main` and merged into `main`. `npm run release -- <version> --hotfix` then
+skips the check that `main` contains `develop`, and the final sync is a plain
+`git merge main` on `develop` instead of a fast-forward.
 
 ## Working in the dev container
 
@@ -166,7 +171,8 @@ the HA configuration, and Compose logs) in `tests/e2e/artifacts/browser` in
 the repository, and clears that directory at the start of each run.
 
 CI runs the live suite against the pinned current Home Assistant image on
-pushes and pull requests. Nightly and manually dispatched E2E workflows run
+pushes and pull requests, and against Home Assistant 2026.11.0 until the pin
+moves past it. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
 minimum-supported/current matrix plus advisory floating `stable` and `beta`
 canaries; the nightly run covers both `main` and `develop`. Release tags run

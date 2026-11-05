@@ -66,9 +66,11 @@ jobs:
             --title "Bump Home Assistant to $VERSION" \
             --body "Moves the pinned Home Assistant from $PREVIOUS to $VERSION: the test package in \`requirements_test.txt\` and the e2e image in \`tests/e2e/env.sh\`.
 
-          The bump workflow started pytest and every e2e suite on $VERSION for this branch.
+          The bump workflow started pytest and every e2e suite on $VERSION for this branch: [runs]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions?query=branch%3A$branch+event%3Aworkflow_dispatch).
+
+          This PR's own runs wait for approval and can be skipped: they repeat those.
 
           Before merging, re-check the native button vocabularies in \`tests/test_remote.py\` against this release."
-          # A PR opened with this token triggers no workflows, but a dispatch does.
+          # This token's PRs run workflows only once approved, but a dispatch runs at once.
           gh workflow run ci.yml --ref "$branch" -f pinned_only=true
           gh workflow run e2e.yml --ref "$branch" -f pinned_only=true

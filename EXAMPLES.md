@@ -305,7 +305,7 @@ At 23:00 the schedule turns on and the light silently switches to the inside set
 
 ### Example 9: Pico remote for the closet light (Virtual Remote)
 
-A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. Home Assistant's own Caséta integration doesn't expose Pico buttons as `event` entities, so install [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) first, and each button appears as one on the Pico's device page:
+A 5-button Pico (on / favorite / raise / lower / off) driving one light, all on single clicks. From Home Assistant 2026.11 the Caséta integration exposes each Pico button as an `event` entity on the Pico's device page; on older versions, or for double clicks, [lutron-caseta-events](https://github.com/jharris4/lutron-caseta-events) does the same:
 
 **Virtual Remote**
 

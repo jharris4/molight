@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Virtual Remote**: buttons using Home Assistant's standard button events
+  (`press_start`), such as Lutron Caséta Picos and keypads on Home Assistant
+  2026.11, fire single clicks.
+
+### Fixed
+
+- **Home Assistant 2026.11**: changing a MoLight entity's ID made the entity
+  disappear.
+
 ## [1.9.0] - 2026-10-06
 
 This release adds **standby** for Virtual Scheduled Lights and makes sure each

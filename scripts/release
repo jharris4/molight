@@ -3,6 +3,7 @@
 
 Usage: scripts/release 1.6.0            # preview only
        scripts/release 1.6.0 --write    # apply
+       scripts/release 1.6.1 --hotfix   # a patch from main that develop lacks
 
 Previewing is the default so a stray invocation can never rewrite files. The
 preview prints the exact command to apply it, so there is nothing to remember.
@@ -60,7 +61,7 @@ def _version_tuple(version: str) -> tuple[int, int, int]:
     return parts[0], parts[1], parts[2]
 
 
-def _preflight(version: str) -> None:
+def _preflight(version: str, hotfix: bool) -> None:
     """Refuse to prepare a release from an unsafe repository state."""
     branch = _git("branch", "--show-current").stdout.strip()
     if branch != RELEASE_BRANCH:
@@ -76,14 +77,20 @@ def _preflight(version: str) -> None:
     develop_ref = f"refs/heads/{DEVELOP_BRANCH}"
     if _git("show-ref", "--verify", "--quiet", develop_ref, check=False).returncode:
         fail(f"local branch '{DEVELOP_BRANCH}' does not exist")
-    if _git(
-        "merge-base",
-        "--is-ancestor",
-        DEVELOP_BRANCH,
-        RELEASE_BRANCH,
-        check=False,
-    ).returncode:
-        fail(f"'{RELEASE_BRANCH}' does not contain the tip of '{DEVELOP_BRANCH}'")
+    if (
+        not hotfix
+        and _git(
+            "merge-base",
+            "--is-ancestor",
+            DEVELOP_BRANCH,
+            RELEASE_BRANCH,
+            check=False,
+        ).returncode
+    ):
+        fail(
+            f"'{RELEASE_BRANCH}' does not contain the tip of '{DEVELOP_BRANCH}'"
+            " (pass --hotfix for a patch release from main)"
+        )
 
     requested_refs = [
         f"refs/heads/{RELEASE_BRANCH}",
@@ -117,10 +124,15 @@ def _preflight(version: str) -> None:
 
 def main() -> None:
     """Stamp the changelog and manifest for a release."""
-    args = [a for a in sys.argv[1:] if a != "--write"]
+    flags = {"--write", "--hotfix"}
+    args = [a for a in sys.argv[1:] if a not in flags]
     write = "--write" in sys.argv[1:]
+    hotfix = "--hotfix" in sys.argv[1:]
     if len(args) != 1:
-        fail("usage: scripts/release <version> [--write]   e.g. scripts/release 1.6.0")
+        fail(
+            "usage: scripts/release <version> [--write] [--hotfix]"
+            "   e.g. scripts/release 1.6.0"
+        )
     version = args[0].lstrip("v")
     requested_version = _version_tuple(version)
 
@@ -151,7 +163,7 @@ def main() -> None:
     if not body.strip():
         fail("the [Unreleased] section is empty, so there is nothing to release")
 
-    _preflight(version)
+    _preflight(version, hotfix)
 
     # Stamp Unreleased as this version and open a fresh empty one above it.
     text = text.replace(
@@ -181,6 +193,7 @@ def main() -> None:
         print(
             f"\nPreview only, nothing written. To apply, run:\n"
             f"  python3 scripts/release {version} --write"
+            f"{' --hotfix' if hotfix else ''}"
         )
         return
 
