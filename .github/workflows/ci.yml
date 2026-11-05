@@ -77,15 +77,6 @@ jobs:
             python: "3.13"
             spec: pytest-homeassistant-custom-component==0.13.305
             experimental: false
-          # The release that replaced the test package, until the pin moves past
-          # it. Its package is not on PyPI (home-assistant/core#190470), so it
-          # comes from the tag and pins nothing; these match requirements_test.txt.
-          - label: HA 2026.11.0
-            python: "3.14"
-            spec: >-
-              git+https://github.com/home-assistant/core@2026.11.0#subdirectory=packages/pytest-homeassistant
-              homeassistant==2026.11.0 pytest-timeout==2.4.0 pytest-cov==7.1.0
-            experimental: false
           # Whatever the newest test package targets, often a beta.
           - label: HA newest
             python: "3.14"

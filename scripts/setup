@@ -16,7 +16,8 @@ fi
 VENV=/opt/molight-venv
 
 echo "▶ Creating virtual environment at $VENV..."
-python3 -m venv "$VENV"
+# --clear: the two Home Assistant test packages cannot be installed together.
+python3 -m venv --clear "$VENV"
 
 echo "▶ Installing dependencies..."
 "$VENV/bin/pip" install -r requirements_test.txt

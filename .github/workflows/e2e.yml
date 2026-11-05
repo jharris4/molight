@@ -128,46 +128,6 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-  # The release that replaced the test package, until the pin moves past it.
-  newest:
-    name: Live E2E (HA 2026.11.0, ${{ matrix.suite }})
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [core, restarts, scenarios-a, scenarios-b, scenarios-c, browser]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        if: matrix.suite == 'browser'
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install the pinned Playwright test package
-        if: matrix.suite == 'browser'
-        run: npm ci
-      - name: Run the ${{ matrix.suite }} suite
-        run: npm run test:e2e:${{ matrix.suite }}
-        env:
-          MOLIGHT_E2E_HA_IMAGE: ghcr.io/home-assistant/home-assistant:2026.11.0
-      - name: Make the retained artifacts readable
-        if: failure() || cancelled()
-        run: |
-          sudo chmod -R a+rX "$MOLIGHT_E2E_RUN_ROOT" tests/e2e/artifacts/browser 2>/dev/null || true
-      - name: Upload failure artifacts
-        if: failure() || cancelled()
-        uses: actions/upload-artifact@v7
-        with:
-          name: molight-e2e-failure-2026.11.0-${{ matrix.suite }}
-          path: |
-            ${{ env.MOLIGHT_E2E_RUN_ROOT }}
-            tests/e2e/artifacts/browser
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 7
-
   compatibility:
     name: Live E2E (${{ matrix.ref && format('{0}, ', matrix.ref) }}${{ matrix.ha.label }}, ${{ matrix.suite }})
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && !inputs.pinned_only

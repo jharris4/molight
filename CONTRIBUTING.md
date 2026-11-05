@@ -20,7 +20,7 @@ npm run dev:up      # start the dev container (fast after first build)
 npm test
 ```
 
-`npm test` runs the unit tests on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the unit tests on the minimum Home Assistant version in `hacs.json` (with Python 3.13), on Home Assistant 2026.11.0, and, as an advisory leg, on the newest `pytest-homeassistant` release, which is often a beta, so a test that passes locally can still fail there. Home Assistant 2026.11 replaced `pytest-homeassistant-custom-component` with `pytest-homeassistant`, and the two cannot be installed together, so the tests keep the old import name and `tests/__init__.py` aliases it to the new package when only that one is installed.
+`npm test` runs the unit tests on the Home Assistant version pinned in `requirements_test.txt`. CI also fails when coverage of lines and branches together drops below 98 %; `npm test -- --cov` checks that locally. Besides the pinned version, CI runs the unit tests on the minimum Home Assistant version in `hacs.json` (with Python 3.13) and, as an advisory leg, on the newest `pytest-homeassistant` release, which is often a beta, so a test that passes locally can still fail on either. Home Assistant 2026.11 replaced `pytest-homeassistant-custom-component` with `pytest-homeassistant`, and the two cannot be installed together. The minimum version still needs the old package, so the tests keep the old import name and `tests/__init__.py` aliases it to the new package when only that one is installed.
 
 A daily workflow opens a PR when a newer stable Home Assistant is out, moving that pin and the e2e image in `tests/e2e/env.sh` together, and runs pytest and every e2e suite on the new version only. `scripts/ha-bump` previews the same bump locally.
 
@@ -177,8 +177,7 @@ the HA configuration, and Compose logs) in `tests/e2e/artifacts/browser` in
 the repository, and clears that directory at the start of each run.
 
 CI runs the end-to-end suite against the pinned current Home Assistant image on
-pushes and pull requests, and against Home Assistant 2026.11.0 until the pin
-moves past it. Nightly and manually dispatched E2E workflows run
+pushes and pull requests. Nightly and manually dispatched E2E workflows run
 every suite (API lanes and the browser smoke tests) on a
 minimum-supported/current matrix plus advisory legs on floating `stable` and
 `beta`; the nightly run covers both `main` and `develop`. Release tags run

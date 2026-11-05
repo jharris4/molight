@@ -24,11 +24,7 @@ REQUIREMENTS = ROOT / "requirements_test.txt"
 E2E_ENV = ROOT / "tests/e2e/env.sh"
 PYPI = "https://pypi.org/pypi"
 TEST_PACKAGE = "pytest-homeassistant"
-# The package Home Assistant 2026.11 replaced; the pin leaves it at the next bump.
-OLD_TEST_PACKAGE = "pytest-homeassistant-custom-component"
-TEST_PACKAGE_PIN = re.compile(
-    rf"^((?:{TEST_PACKAGE}|{OLD_TEST_PACKAGE})==\S+)$", re.MULTILINE
-)
+TEST_PACKAGE_PIN = re.compile(rf"^({TEST_PACKAGE}==\S+)$", re.MULTILINE)
 E2E_PIN = re.compile(r"^MOLIGHT_E2E_HA_VERSION=(\S+)$", re.MULTILINE)
 
 

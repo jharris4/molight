@@ -16,6 +16,8 @@ venv*/
 .pytest_cache/
 .coverage
 htmlcov/
+# pytest-homeassistant's config dir, where HA copies its stock blueprints
+tests/testing_config/
 
 # Home Assistant runtime data (dev container config/ dir)
 config/.storage/
