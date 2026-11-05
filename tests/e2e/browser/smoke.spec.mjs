@@ -68,12 +68,16 @@ async function selectHaOption(page, label, option) {
   }
 }
 
-async function selectHaEntity(page, fieldIndex, entityName) {
-  await page
-    .locator("ha-selector-entity")
-    .nth(fieldIndex)
+// The entity picker's rows are list items before Home Assistant 2026.11 and
+// buttons from it.
+function pickerRows(picker) {
+  return picker
     .getByRole("listitem")
-    .click();
+    .or(picker.getByRole("button", { name: /Select an entity/ }));
+}
+
+async function selectHaEntity(page, fieldIndex, entityName) {
+  await pickerRows(page.locator("ha-selector-entity").nth(fieldIndex)).first().click();
   await visibleText(page, entityName).click();
 }
 
@@ -253,7 +257,7 @@ async function pickEntity(page, scope, label, entityName) {
   await expect(picker).toBeVisible();
   await picker.scrollIntoViewIfNeeded();
   // Multi-entity pickers list chosen entities first and an empty row last.
-  await picker.getByRole("listitem").last().click();
+  await pickerRows(picker).last().click();
   await visibleText(page, entityName).click();
 }
 
