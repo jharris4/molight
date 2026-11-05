@@ -974,7 +974,7 @@ async def test_light_flows_reject_non_schedule_virtual_sensor(
         },
     )
     assert result["step_id"] == "light"
-    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+    assert result["errors"] == {"base": "schedule_sensor_not_schedule"}
 
     result = await hass.config_entries.flow.async_configure(
         scheduled["flow_id"],
@@ -986,7 +986,7 @@ async def test_light_flows_reject_non_schedule_virtual_sensor(
         },
     )
     assert result["step_id"] == "scheduled_light"
-    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_sensor_not_schedule"}
 
 
 @pytest.mark.asyncio
@@ -1103,7 +1103,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
         },
     )
     assert result["step_id"] == "light"
-    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+    assert result["errors"] == {"base": "schedule_sensor_not_schedule"}
 
     result = await hass.config_entries.options.async_configure(
         scheduled_result["flow_id"],
@@ -1114,7 +1114,7 @@ async def test_light_options_reject_different_non_schedule_sensor(
         },
     )
     assert result["step_id"] == "scheduled_light"
-    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_sensor_not_schedule"}
 
 
 @pytest.mark.asyncio
@@ -1340,7 +1340,7 @@ async def test_scheduled_light_options_requires_replacing_deleted_schedule(
         },
     )
     assert result["step_id"] == "scheduled_light"
-    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_SCHEDULE_SENSOR: "schedule_sensor_not_schedule"}
 
 
 @pytest.mark.asyncio
@@ -1373,7 +1373,7 @@ async def test_scheduled_light_validates_each_settings_set_timeout(
         result["flow_id"], too_short
     )
     assert result["step_id"] == "scheduled_light_outside"
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
     valid = {**too_short, CONF_TURN_OFF_TIMEOUT: 60}
     result = await hass.config_entries.flow.async_configure(result["flow_id"], valid)
@@ -1383,7 +1383,7 @@ async def test_scheduled_light_validates_each_settings_set_timeout(
         result["flow_id"], {**too_short, SECTION_STANDBY: {}}
     )
     assert result["step_id"] == "scheduled_light_inside"
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {**valid, SECTION_STANDBY: {}}
@@ -2857,10 +2857,10 @@ async def test_light_flow_rejects_effect_color_without_brightness(
                 CONF_EFFECT_BRIGHTNESS: 30,
                 CONF_EFFECT_RGB_COLOR: [255, 0, 0],
             },
-            "effect_color_requires_timeout",
+            "effect_color_requires_duration",
         ),
-        ({CONF_WARN_BRIGHTNESS: 50}, "warn_values_require_timeout"),
-        ({CONF_WARN_RGB_COLOR: [255, 0, 0]}, "warn_values_require_timeout"),
+        ({CONF_WARN_BRIGHTNESS: 50}, "warn_values_require_duration"),
+        ({CONF_WARN_RGB_COLOR: [255, 0, 0]}, "warn_values_require_duration"),
     ],
     ids=["effect_color", "warn_brightness", "warn_color"],
 )
@@ -3149,7 +3149,7 @@ async def test_light_flow_rejects_timeout_below_occupancy_timeout(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
     # A timeout >= 30s is accepted.
     result = await hass.config_entries.flow.async_configure(
@@ -3221,7 +3221,7 @@ async def test_light_flow_rejects_a_blank_timeout_with_an_effect_or_warn_stage(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_blank_warning"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_blank_warning"}
     # The re-shown form keeps the timeout blank rather than suggesting 300.
     assert _suggested_values(result["data_schema"]).get(CONF_TURN_OFF_TIMEOUT) is None
 
@@ -3574,7 +3574,7 @@ async def test_light_flow_validates_combined_timeout(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -3643,7 +3643,7 @@ async def test_light_flow_survives_cyclic_combined_sensors(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+    assert result["errors"] == {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -4084,7 +4084,7 @@ async def test_discover_light_defaults_rejects_non_schedule_sensor_from_stale_fo
         },
     )
     assert result["step_id"] == "discover_light_defaults"
-    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+    assert result["errors"] == {"base": "schedule_sensor_not_schedule"}
     schedule_selector = _section_selector_config(
         result, SECTION_SENSORS, CONF_SCHEDULE_SENSOR
     )
@@ -5584,7 +5584,7 @@ async def test_assign_schedule_rejects_non_schedule_sensor_from_stale_form(
         },
     )
     assert result["step_id"] == "assign_schedule"
-    assert result["errors"] == {CONF_ASSIGN_SENSOR: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_ASSIGN_SENSOR: "schedule_sensor_not_schedule"}
     assert (
         "binary_sensor.test_occupancy"
         in _selector_config(result, CONF_ASSIGN_SENSOR)["exclude_entities"]
@@ -7131,7 +7131,7 @@ async def test_light_flow_rejects_effect_brightness_on_disabled_stage(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "effect_brightness_requires_timeout"}
+    assert result["errors"] == {"base": "effect_brightness_requires_duration"}
 
 
 @pytest.mark.asyncio
@@ -7456,7 +7456,7 @@ async def test_options_light_rejects_non_molight_schedule_sensor(
         },
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "schedule_entity_not_schedule"}
+    assert result["errors"] == {"base": "schedule_sensor_not_schedule"}
 
 
 @pytest.mark.asyncio
@@ -7551,7 +7551,7 @@ async def test_config_flow_combined_schedule(
         result["flow_id"],
         {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_occupancy"]},
     )
-    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_sensor_not_schedule"}
     picker = _selector_config(result, CONF_SCHEDULE_INPUTS)
     assert "binary_sensor.test_occupancy" in picker["exclude_entities"]
     assert "binary_sensor.test_schedule" not in picker["exclude_entities"]
@@ -8360,7 +8360,7 @@ async def test_light_final_page_rechecks_a_keep_on_group_edited_behind_it(
         assert result.get("reason") in (None, "discovery_done")
         return
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "hold_entity_own"}
+    assert result["errors"] == {"base": "keep_on_entity_own"}
     if last_step == "discovery_selection":
         assert result["step_id"] == "discover_light_defaults"
     else:
@@ -9044,7 +9044,7 @@ async def test_light_options_reject_own_keep_on_entities(
         {CONF_KEEP_ON_ENTITIES: ["input_boolean.guest_mode", "switch.hall_hold"]},
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "hold_entity_own"}
+    assert result["errors"] == {"base": "keep_on_entity_own"}
 
 
 @pytest.mark.asyncio
@@ -9084,7 +9084,7 @@ async def test_scheduled_light_options_reject_own_keep_on_entities(
         },
     )
     assert result["step_id"] == "scheduled_light_outside"
-    assert result["errors"] == {"base": "hold_entity_own"}
+    assert result["errors"] == {"base": "keep_on_entity_own"}
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {**EMPTY_LIGHT_SECTIONS, CONF_TURN_OFF_TIMEOUT: 60}
@@ -9117,7 +9117,7 @@ async def test_light_options_stored_own_keep_on_entity_gets_friendly_error(
         {CONF_KEEP_ON_ENTITIES: ["switch.hall_auto_off"]},
     )
     assert result["type"] == FlowResultType.FORM
-    assert result["errors"] == {"base": "hold_entity_own"}
+    assert result["errors"] == {"base": "keep_on_entity_own"}
 
 
 @pytest.mark.asyncio
@@ -9191,7 +9191,7 @@ async def test_scheduled_light_options_stored_own_keep_on_entity_gets_friendly_e
         },
     )
     assert result["step_id"] == "scheduled_light_outside"
-    assert result["errors"] == {"base": "hold_entity_own"}
+    assert result["errors"] == {"base": "keep_on_entity_own"}
 
     # The inside settings store none, so the switch is excluded there.
     result = await hass.config_entries.options.async_configure(
@@ -9219,7 +9219,7 @@ _SHARED_LIGHT_CASES = {
             CONF_TURN_OFF_TIMEOUT: 20,
             SECTION_SENSORS: {CONF_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy"},
         },
-        {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"},
+        {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"},
     ),
     # A maintain occupancy sensor's visits feed the turn-off timer the same way.
     "maintain_timeout": (
@@ -9231,7 +9231,7 @@ _SHARED_LIGHT_CASES = {
                 CONF_MAINTAIN_OCCUPANCY_SENSOR: "binary_sensor.test_occupancy"
             },
         },
-        {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"},
+        {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"},
     ),
     "stage_transition": (
         _ALL_MODES,
@@ -9389,7 +9389,7 @@ async def test_combined_schedule_options_validate_inputs(
         result["flow_id"],
         {**base, CONF_SCHEDULE_INPUTS: ["binary_sensor.test_occupancy"]},
     )
-    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+    assert result["errors"] == {CONF_SCHEDULE_INPUTS: "schedule_sensor_not_schedule"}
 
 
 async def _raise_occupancy_timeout(
@@ -9410,7 +9410,7 @@ async def _raise_occupancy_timeout(
     await hass.async_block_till_done()
 
 
-_TOO_SHORT = {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+_TOO_SHORT = {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
 
 
 @pytest.mark.asyncio
@@ -10102,7 +10102,7 @@ async def test_every_form_strips_the_name(
         ),
         (
             {CONF_EFFECT_DURATION: 0.5, CONF_EFFECT_BRIGHTNESS: 50},
-            "effect_brightness_requires_timeout",
+            "effect_brightness_requires_duration",
         ),
         (
             {
@@ -10110,11 +10110,11 @@ async def test_every_form_strips_the_name(
                 CONF_EFFECT_BRIGHTNESS: 30,
                 CONF_EFFECT_RGB_COLOR: [255, 0, 0],
             },
-            "effect_color_requires_timeout",
+            "effect_color_requires_duration",
         ),
         (
             {CONF_WARN_DURATION: 0.5, CONF_WARN_BRIGHTNESS: 50},
-            "warn_values_require_timeout",
+            "warn_values_require_duration",
         ),
         ({CONF_EFFECT_DURATION: 2.5, CONF_EFFECT_TRANSITION: 2}, None),
     ],
@@ -10923,10 +10923,10 @@ async def test_new_light_rejects_a_member_group_that_already_names_it(
 @pytest.mark.parametrize(
     ("keep_on", "error"),
     [
-        (SUBJECT_MEMBER, "hold_entity_own"),
-        ("group.room", "hold_entity_own"),
-        ("media_player.tv", "hold_entity_never_on"),
-        ("person.alex", "hold_entity_never_on"),
+        (SUBJECT_MEMBER, "keep_on_entity_own"),
+        ("group.room", "keep_on_entity_own"),
+        ("media_player.tv", "keep_on_entity_never_on"),
+        ("person.alex", "keep_on_entity_never_on"),
     ],
     ids=["member", "generic_group_with_member", "media_player", "person"],
 )
@@ -11029,7 +11029,7 @@ async def test_new_light_rejects_a_keep_on_group_naming_its_future_id(
                 SECTION_SENSORS: {CONF_KEEP_ON_ENTITIES: ["group.around"]},
             },
         )
-        assert result["errors"] == {"base": "hold_entity_own"}
+        assert result["errors"] == {"base": "keep_on_entity_own"}
 
     result = await _submit_subject_settings(
         hass, form, result, {CONF_TURN_OFF_TIMEOUT: 300}
@@ -11156,7 +11156,7 @@ async def test_keep_on_lights_that_are_on_whenever_the_light_is(
                 ["light.hall_real", "light.inner"],
                 {CONF_KEEP_ON_ENTITIES: [keep_on]},
             )
-        assert submitted["errors"] == {"base": "hold_entity_own"}, keep_on
+        assert submitted["errors"] == {"base": "keep_on_entity_own"}, keep_on
 
 
 # ---------------------------------------------------------------------------

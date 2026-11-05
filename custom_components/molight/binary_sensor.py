@@ -683,11 +683,6 @@ class VirtualCombinedOccupancySensor(
                 or entity_id: _parse_datetime(raw)
                 for entity_id, raw in (lots if isinstance(lots, dict) else {}).items()
             }
-        elif restored_on and extra is not None:
-            # A save from before each constituent's history was recorded.
-            self._visit_genuine = self._latest_occupied_time != _parse_datetime(
-                saved.get("cycle_start_latest_occupied_time")
-            )
         all_sensors = list(
             dict.fromkeys(self._trigger_sensors + self._maintain_sensors)
         )
@@ -2194,7 +2189,7 @@ class VirtualCombinedScheduleSensor(BinarySensorEntity, EntityIdFollowingRestore
                 self.hass,
                 self._entry_id,
                 ISSUE_COMBINED_SCHEDULE_CYCLE,
-                {"entity": self.entity_id, "loop": entity_id},
+                {"entity": self.entity_id, "cycle": entity_id},
                 about=entity_id,
             )
 

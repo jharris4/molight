@@ -1233,7 +1233,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
             "advanced": {},
         },
     )
-    expect_rejection(client, result, "light_timeout_too_short")
+    expect_rejection(client, result, "turn_off_timeout_too_short")
     client.remove_entry(slow_entry_id)
     wait_entry_removed(client, slow_entry_id, "Temporary slow occupancy")
 
@@ -1262,7 +1262,7 @@ def run_config_flow_rejections(client: HomeAssistantClient) -> None:
             "advanced": {},
         },
     )
-    expect_rejection(client, result, "schedule_entity_not_schedule")
+    expect_rejection(client, result, "schedule_sensor_not_schedule")
 
     remote = {
         "name": "E2E Rejected Remote",

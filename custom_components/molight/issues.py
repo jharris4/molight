@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 ISSUE_COMBINED_SCHEDULE_CYCLE = "combined_schedule_cycle"
-ISSUE_HOLD_ALWAYS_ON = "hold_always_on"
-ISSUE_HOLD_NEVER_ON = "hold_never_on"
+ISSUE_KEEP_ON_ALWAYS_ON = "keep_on_always_on"
+ISSUE_KEEP_ON_NEVER_ON = "keep_on_never_on"
 ISSUE_LIGHT_MEMBER_CYCLE = "light_member_cycle"
 ISSUE_LIGHT_SHARED_MEMBER = "light_shared_member"
 ISSUE_OCCUPANCY_SOURCE_CYCLE = "occupancy_source_cycle"

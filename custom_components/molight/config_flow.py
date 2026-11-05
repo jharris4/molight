@@ -829,7 +829,7 @@ def _validate_combined_schedule_inputs(
     if not inputs:
         return {CONF_SCHEDULE_INPUTS: "schedule_inputs_required"}
     if not all(_schedule_sensor_is_allowed(hass, e) for e in inputs):
-        return {CONF_SCHEDULE_INPUTS: "schedule_entity_not_schedule"}
+        return {CONF_SCHEDULE_INPUTS: "schedule_sensor_not_schedule"}
     return {}
 
 
@@ -995,7 +995,7 @@ def _validate_turn_off_timeout(
         if int(user_input.get(CONF_EFFECT_DURATION) or 0) or int(
             user_input.get(CONF_WARN_DURATION) or 0
         ):
-            return {CONF_TURN_OFF_TIMEOUT: "light_timeout_blank_warning"}
+            return {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_blank_warning"}
         return {}
     for key in (CONF_OCCUPANCY_SENSOR, CONF_MAINTAIN_OCCUPANCY_SENSOR):
         entity_id = user_input.get(key)
@@ -1003,7 +1003,7 @@ def _validate_turn_off_timeout(
             continue
         occ_timeout = _effective_occupancy_timeout(hass, entity_id)
         if occ_timeout is not None and timeout < occ_timeout:
-            return {CONF_TURN_OFF_TIMEOUT: "light_timeout_too_short"}
+            return {CONF_TURN_OFF_TIMEOUT: "turn_off_timeout_too_short"}
     return {}
 
 
@@ -1252,19 +1252,19 @@ def _validate_colors(user_input: dict[str, Any]) -> dict[str, str]:
         return {"base": "effect_color_requires_brightness"}
     # Stage durations are whole seconds, as the light runs them.
     if effect_color and not int(user_input.get(CONF_EFFECT_DURATION) or 0):
-        return {"base": "effect_color_requires_timeout"}
+        return {"base": "effect_color_requires_duration"}
     # 0 is the default and blinks the lights fully off, so only a positive value
     # on a disabled stage is a mistake.
     if int(user_input.get(CONF_EFFECT_BRIGHTNESS) or 0) and not int(
         user_input.get(CONF_EFFECT_DURATION) or 0
     ):
-        return {"base": "effect_brightness_requires_timeout"}
+        return {"base": "effect_brightness_requires_duration"}
     if (
         int(user_input.get(CONF_WARN_BRIGHTNESS) or 0)
         or user_input.get(CONF_WARN_COLOR_TEMP)
         or user_input.get(CONF_WARN_RGB_COLOR)
     ) and not int(user_input.get(CONF_WARN_DURATION) or 0):
-        return {"base": "warn_values_require_timeout"}
+        return {"base": "warn_values_require_duration"}
     return {}
 
 
@@ -2063,11 +2063,11 @@ def _validate_keep_on_entities(
     if set(keep_on_entities) & _lights_lit_with(
         hass, own_entities, members, keep_on_entities
     ).union(own_entities):
-        return {"base": "hold_entity_own"}
+        return {"base": "keep_on_entity_own"}
     if any(
         split_entity_id(e)[0] not in _KEEP_ON_ENTITY_DOMAINS for e in keep_on_entities
     ):
-        return {"base": "hold_entity_never_on"}
+        return {"base": "keep_on_entity_never_on"}
     return {}
 
 
@@ -3061,7 +3061,7 @@ class MoLightConfigFlow(
             if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
-                errors["base"] = "schedule_entity_not_schedule"
+                errors["base"] = "schedule_sensor_not_schedule"
             if not errors:
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
                     self._light_pending = {"kind": "discovery", "flat": flat}
@@ -3416,7 +3416,7 @@ class MoLightConfigFlow(
             if not _schedule_sensor_is_allowed(
                 self.hass, user_input.get(CONF_ASSIGN_SENSOR)
             ):
-                errors[CONF_ASSIGN_SENSOR] = "schedule_entity_not_schedule"
+                errors[CONF_ASSIGN_SENSOR] = "schedule_sensor_not_schedule"
             else:
                 self._assign = {
                     "sensor": user_input[CONF_ASSIGN_SENSOR],
@@ -4011,7 +4011,7 @@ class MoLightConfigFlow(
             if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
-                errors["base"] = "schedule_entity_not_schedule"
+                errors["base"] = "schedule_sensor_not_schedule"
             if not errors:
                 errors.update(self._new_light_errors(flat))
             if not errors:
@@ -4142,7 +4142,7 @@ class MoLightConfigFlow(
             if not _schedule_sensor_is_allowed(
                 self.hass, flat.get(CONF_SCHEDULE_SENSOR)
             ):
-                errors[CONF_SCHEDULE_SENSOR] = "schedule_entity_not_schedule"
+                errors[CONF_SCHEDULE_SENSOR] = "schedule_sensor_not_schedule"
             if not errors:
                 errors.update(self._new_light_errors(flat))
             if not errors:
@@ -4783,7 +4783,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 flat.get(CONF_SCHEDULE_SENSOR),
                 legacy_entity=self._cfg.get(CONF_SCHEDULE_SENSOR),
             ):
-                errors["base"] = "schedule_entity_not_schedule"
+                errors["base"] = "schedule_sensor_not_schedule"
             if not errors:
                 if flat.get(CONF_TURN_ON_SELECT_ENTITY):
                     self._light_pending = {"flat": flat}
@@ -4909,7 +4909,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
                 user_input.get(CONF_SCHEDULE_SENSOR),
                 legacy_entity=self._cfg.get(CONF_SCHEDULE_SENSOR),
             ):
-                errors[CONF_SCHEDULE_SENSOR] = "schedule_entity_not_schedule"
+                errors[CONF_SCHEDULE_SENSOR] = "schedule_sensor_not_schedule"
             if not errors:
                 self._scheduled_light_shared = dict(user_input)
                 return await self.async_step_scheduled_light_outside()

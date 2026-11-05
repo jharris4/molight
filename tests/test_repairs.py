@@ -58,8 +58,8 @@ async def test_rejected_keep_on_entities_raise_one_issue_each(
     await settle(hass)
 
     assert molight_issues(hass, entry.entry_id) == {
-        f"hold_always_on_{REAL}": {"entity": "light.room", "hold": REAL},
-        f"hold_never_on_{TV}": {"entity": "light.room", "hold": TV},
+        f"keep_on_always_on_{REAL}": {"entity": "light.room", "keep_on_entity": REAL},
+        f"keep_on_never_on_{TV}": {"entity": "light.room", "keep_on_entity": TV},
     }
 
 
@@ -73,7 +73,7 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
     entry = make_light_entry(name="Room", lights=[REAL], keep_on_entities=[TV])
     await setup_entries(hass, entry)
     await settle(hass)
-    assert list(molight_issues(hass, entry.entry_id)) == [f"hold_never_on_{TV}"]
+    assert list(molight_issues(hass, entry.entry_id)) == [f"keep_on_never_on_{TV}"]
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await settle(hass)
@@ -81,7 +81,7 @@ async def test_issues_clear_on_unload_and_return_until_corrected(
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     await settle(hass)
-    assert list(molight_issues(hass, entry.entry_id)) == [f"hold_never_on_{TV}"]
+    assert list(molight_issues(hass, entry.entry_id)) == [f"keep_on_never_on_{TV}"]
 
     hass.config_entries.async_update_entry(
         entry, options={**entry_settings(entry), CONF_KEEP_ON_ENTITIES: []}

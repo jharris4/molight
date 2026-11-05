@@ -444,8 +444,8 @@ from .helpers import (
     virtual_light_entries,
 )
 from .issues import (
-    ISSUE_HOLD_ALWAYS_ON,
-    ISSUE_HOLD_NEVER_ON,
+    ISSUE_KEEP_ON_ALWAYS_ON,
+    ISSUE_KEEP_ON_NEVER_ON,
     ISSUE_LIGHT_MEMBER_CYCLE,
     ISSUE_SCHEDULED_LIGHT_NO_SCHEDULE,
     async_check_shared_members,
@@ -1661,9 +1661,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         )
         for entity_id in keep_on_entities:
             if entity_id in always:
-                reason, key = "is on whenever this light is", ISSUE_HOLD_ALWAYS_ON
+                reason, key = "is on whenever this light is", ISSUE_KEEP_ON_ALWAYS_ON
             elif split_entity_id(entity_id)[0] not in KEEP_ON_ENTITY_DOMAINS:
-                reason, key = "never reads on", ISSUE_HOLD_NEVER_ON
+                reason, key = "never reads on", ISSUE_KEEP_ON_NEVER_ON
             else:
                 continue
             _LOGGER.warning(
@@ -1676,7 +1676,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 self.hass,
                 self._entry_id,
                 key,
-                {"entity": self.entity_id, "hold": entity_id},
+                {"entity": self.entity_id, "keep_on_entity": entity_id},
                 about=entity_id,
             )
 

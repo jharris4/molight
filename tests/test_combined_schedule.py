@@ -1151,7 +1151,7 @@ async def test_reference_cycle_is_unknown_instead_of_hanging(
         assert molight_issues(hass, entry.entry_id) == {
             f"combined_schedule_cycle_{entity_id}": {
                 "entity": entity_id,
-                "loop": entity_id,
+                "cycle": entity_id,
             }
         }
     assert hass.states.get("binary_sensor.cycle_a").state == "unavailable"
