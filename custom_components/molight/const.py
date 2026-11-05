@@ -81,13 +81,13 @@ AFFIX_TARGETS = [AFFIX_TARGET_ENTITY_ID, AFFIX_TARGET_NAME]
 # those that already reference the sensor. The submitted set is the source of truth:
 # deselecting a pre-selected light removes the reference.
 CONF_ASSIGN_SENSOR = "assign_sensor"  # the virtual sensor entity_id to assign
-CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: regular vs maintain
+CONF_ASSIGN_ROLE = "assign_role"  # occupancy only: occupancy vs maintain
 CONF_ASSIGN_LIGHTS = "assign_lights"  # regular Virtual Light entity_ids to assign
 CONF_CONVERT_LIGHTS = "convert_lights"  # virtual light entity_ids to convert
 CONF_CONFIRM_CONVERSION = "confirm_conversion"
-ASSIGN_ROLE_REGULAR = "regular"
+ASSIGN_ROLE_OCCUPANCY = "occupancy"
 ASSIGN_ROLE_MAINTAIN = "maintain"
-ASSIGN_ROLES = [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN]
+ASSIGN_ROLES = [ASSIGN_ROLE_OCCUPANCY, ASSIGN_ROLE_MAINTAIN]
 
 # --- Virtual Occupancy Sensor (one real sensor) ---
 # The real binary_sensor; on a Virtual Light, its occupancy sensor.
@@ -312,7 +312,7 @@ CONF_SCHEDULE_SENSOR = "schedule_sensor"
 # Keep-on entities: while ANY of these entities is "on", every automatic
 # turn-off (the timer finishing, false-detection off delay, bright-forces-off,
 # schedule window end) is suspended. Turn-ons and manual control are never
-# affected. When the last hold releases the light re-evaluates its rules.
+# affected. When the last hold releases the light re-checks its rules.
 CONF_KEEP_ON_ENTITIES = "keep_on_entities"
 
 # Each virtual light entry also creates a companion "<name> Auto-off" switch;
@@ -399,7 +399,7 @@ DEFAULT_ILLUMINANCE_MODE = ILLUMINANCE_MODE_CONTROL
 #   follow:       lights turn on at window start and off at window end (porch lights)
 #   gate:         occupancy may only turn lights on inside the window; the
 #                 window end forces the lights off (the original behavior)
-#   gate_switch:  the same turn-on gate, but the window end reconciles an
+#   gate_switch:  the same turn-on gate, but the window end recalculates an
 #                 already-on light from current sensor state and
 #                 latest_occupied_time
 #   gate_keep:    the same turn-on gate, but the window end leaves an

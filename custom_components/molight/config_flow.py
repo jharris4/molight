@@ -28,7 +28,7 @@ from .const import (
     AFFIX_TARGET_NAME,
     AFFIX_TARGETS,
     ASSIGN_ROLE_MAINTAIN,
-    ASSIGN_ROLE_REGULAR,
+    ASSIGN_ROLE_OCCUPANCY,
     ASSIGN_ROLES,
     COMBINE_EARLIEST,
     COMBINE_LATEST,
@@ -1025,7 +1025,7 @@ def _stale_light_settings(
     own_entities: Sequence[str] = (),
     members: Sequence[str] | None = None,
 ) -> tuple[str | None, dict[str, str]]:
-    """Recheck a light's entry settings (timeouts, keep-on entities) as things are now.
+    """Re-check a light's entry settings (timeouts, keep-on entities) as things are now.
 
     An occupancy timeout can be raised, or a keep-on group edited, while a later
     step of the light's form is open, since the unsaved light does not reference
@@ -2602,7 +2602,7 @@ class MoLightConfigFlow(
     async def async_step_create(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Choose which kind of virtual entity to create."""
+        """Choose which type of virtual entity to create."""
         if user_input is not None:
             self._entity_type = user_input[CONF_ENTITY_TYPE]
             return await self._create_step(self._entity_type)()
@@ -3366,7 +3366,7 @@ class MoLightConfigFlow(
                     _LIGHT_REF_SELECTORS[CONF_OCCUPANCY_SENSOR]
                 ),
                 vol.Required(
-                    CONF_ASSIGN_ROLE, default=ASSIGN_ROLE_REGULAR
+                    CONF_ASSIGN_ROLE, default=ASSIGN_ROLE_OCCUPANCY
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=ASSIGN_ROLES, translation_key=CONF_ASSIGN_ROLE
@@ -4325,7 +4325,7 @@ class MoLightOptionsFlow(_ScheduledLightSettingsSteps, config_entries.OptionsFlo
         rename fires the reload listener once instead of twice.
 
         Another light's options may have been saved while a multi-step form
-        was open, so the member graph is checked again at the final save; a
+        was open, so the member graph is re-checked at the final save; a
         form opened before the light was converted no longer fits its entry,
         and one that offers an entity removed since would bring it back.
         """

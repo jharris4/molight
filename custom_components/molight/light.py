@@ -96,9 +96,9 @@ Occupancy turn-on by the light's own system (occupancy_turn_on)
     lit by occupancy, last_on_occupancy, turned_on with reason occupancy),
     and skips the gates. The auto-on brightness, color and selection follow
     at the wait's end. MoLight never turns the light on for occupancy, also
-    not when it re-reads presence (startup, a settings or gate window start, dark).
+    not when it re-checks presence (startup, a settings or gate window start, dark).
   - own_system_then_molight: as own_system, and at the wait's end an idle
-    light is turned on the normal, gated way; re-reads turn it on as usual.
+    light is turned on the normal, gated way; re-checks turn it on as usual.
   - Standby and follow windows behave as with molight. The wait is not saved.
 
 Turn-on attribution
@@ -197,7 +197,7 @@ Holding auto-off
   control work exactly as usual (a manual off still turns the lights off).
   State changes keep happening; they just never arm a timer.
 
-  When the last hold releases, the light re-evaluates its rules from current
+  When the last hold releases, the light re-checks its rules from current
   conditions: a follow-mode or Gate and turn off window that ended while held turns it
   off now (the follow window marker, or schedule_end_off_pending, is kept
   while held for exactly this; any off drops it), as does being bright in
@@ -220,7 +220,7 @@ Schedule handling (when a schedule sensor is configured), per schedule_mode:
     while SCHEDULED.
   - gate: occupancy may only turn lights on inside the window; window end
     forces lights off (like illuminance going bright), window start
-    re-evaluates occupancy. Outside the window a light that is on ignores
+    re-checks occupancy. Outside the window a light that is on ignores
     occupancy and the door: neither holds it.
   - gate_switch: the same turn-on gate for an OFF light. Window end
     recalculates an ON light's state and timer from the current latest_occupied_time;
@@ -229,7 +229,7 @@ Schedule handling (when a schedule sensor is configured), per schedule_mode:
     it off.
   - gate_keep: the same gate for turning an OFF light on; once the lights
     are on, occupancy and the door behave as inside the window (adopt, hold,
-    re-hold), and window end preserves the current on-period, including its
+    re-trigger), and window end preserves the current on-period, including its
     presence hold, timer or warning.
 
 Door handling (when a door sensor is configured), per door_mode:
@@ -247,7 +247,7 @@ Door handling (when a door sensor is configured), per door_mode:
     maintained light does: an already-on light with the door open is adopted
     as OCCUPIED. Forced offs (bright in control mode, a Gate and turn off window end)
     still win over a held-open door, as they do over occupancy.
-    A standing-open door is re-evaluated when a gate lifts, exactly like
+    A standing-open door is re-checked when a gate lifts, exactly like
     an already occupied sensor: illuminance going dark or a gate-mode window
     starting turns the lights on and holds them while the door is open. The
     door sensor keeps its last known value, so a sensor that is briefly unavailable
@@ -1142,7 +1142,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         # How long that on-period would have lasted at least; None when
         # only latest_occupied_time can tell.
         self._bright_resume_until: datetime | None = None
-        # Auto-off hold: companion switch off OR any keep-on entity on.
+        # Auto-off hold: Auto-off switch off OR any keep-on entity on.
         self._held: bool = False
         # Start marker (ISO string) of the follow-mode window we last turned
         # lights on for and whose end we have not yet applied. Survives
@@ -1805,7 +1805,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         return self._settings_window_start
 
     def _switch_scheduled_settings(self, inside: bool) -> None:
-        """Select and reconcile a Virtual Scheduled Light settings set."""
+        """Select a Virtual Scheduled Light settings set and re-check the light."""
         if not self._is_scheduled_light or inside == self._inside_schedule:
             return
         leaving_inside = self._inside_schedule and not inside
@@ -2555,9 +2555,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 STATE_UNKNOWN,
             )
             # A first sighting, or the placeholder HA writes for a registered
-            # entity at startup, is startup adoption, not a member reboot. The
-            # same placeholder written after the member was seen is its
-            # integration reloading, which is one.
+            # entity at startup, is startup adoption, not a member back from
+            # unavailable. The same placeholder written after the member was
+            # seen is its integration reloading, which is one.
             member_rebooted = (
                 member_recovered
                 and old_state is not None
@@ -2592,7 +2592,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 # A member back at the brightness that an unanswered command asked for
                 # may still have lost its selection: re-send like any other.
                 if resend and self._machine_state in (STATE_STANDBY, STATE_SCHEDULED):
-                    self._reconcile_recovered_member()
+                    self._match_recovered_member()
                 elif (
                     member_recovered
                     and not lit
@@ -2636,7 +2636,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     # Turned off physically while a stage had it blinked off.
                     self._go_idle(manual=True, reason=REASON_PHYSICAL)
                 return
-            if resend and self._reconcile_recovered_member():
+            if resend and self._match_recovered_member():
                 return
             if member_recovered and not lit and self._turn_on_waiting():
                 # A member that comes back not lit while a turn-on waits for its
@@ -2651,12 +2651,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 and lit
                 and (self._machine_state != STATE_IDLE or self._turn_on_waiting())
             ):
-                # A member recovering (first sighting, or recovery from
-                # unavailable) while the virtual light is already on, or is
-                # about to be, is not a person's change: mirror its
-                # brightness/color but leave the running timer or
-                # off warning sequence untouched; a bulb that briefly drops off the mesh
-                # with a timer running must not win itself a fresh timer.
+                # A member back from unavailable (or first seen) while the
+                # virtual light is already on, or is about to be, is not a
+                # person's change: mirror its brightness/color but leave the
+                # running timer or off warning sequence untouched; a bulb that
+                # briefly drops off the mesh with a timer running must not win
+                # itself a fresh timer.
                 self._mirror_member(new_state)
                 return
             if (
@@ -3333,9 +3333,9 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         changed = supported != self._attr_supported_color_modes
         # Most permissive color temperature range; each member clamps to its own
-        # range. Track and reset it (to HA's defaults) so a member recovering with a
-        # different range doesn't leave the virtual light offering kelvins
-        # no member can hit.
+        # range. Track and reset it (to HA's defaults) so a member back from
+        # unavailable with a different range doesn't leave the virtual light
+        # offering kelvins no member can hit.
         color_temp_range = (
             min(min_kelvins) if min_kelvins else DEFAULT_MIN_KELVIN,
             max(max_kelvins) if max_kelvins else DEFAULT_MAX_KELVIN,
@@ -3700,7 +3700,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
 
         gate_switch and gate_keep gate turn-ons only: once the lights are
         on, occupancy and the door behave as inside the window (adopt, hold,
-        re-hold). Their difference is whether the window end
+        re-trigger). Their difference is whether the window end
         recalculates or preserves the running state/timer. An unreadable
         schedule blocks turn-ons, but ends no hold that its window allowed.
         """
@@ -3851,7 +3851,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
     # ------------------------------------------------------------------
 
     def _switch_running_state(self) -> None:
-        """Reconcile an already-on light and replace its running timer's finish time.
+        """Recalculate an already-on light and replace its running timer's finish time.
 
         Used by Gate and switch state and the Switch state choice of At schedule end.
         The applicable settings have already been selected. A presence hold adopts the
@@ -3976,7 +3976,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
             return
 
         # All gate modes block automatic turn-ons outside the window and
-        # re-evaluate occupancy/a held-open door when it starts. At the end,
+        # re-check occupancy/a held-open door when it starts. At the end,
         # Gate and turn off forces off, gate_switch recalculates an on
         # light from the current latest_occupied_time, and gate_keep leaves its current
         # state/timer alone.
@@ -4058,12 +4058,13 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                 )
                 self.async_write_ha_state()
 
-    def _reconcile_recovered_member(self) -> bool:
+    def _match_recovered_member(self) -> bool:
         """Make a member back from unavailable match a follow schedule.
 
-        A rebooted (or reloaded) member reports whatever it booted into, which
-        is not a person's change: the schedule decides on/off and its settings
-        are re-sent. Returns False when there is no valid follow schedule to
+        A member back from unavailable (a reboot or a reload) reports whatever
+        it booted into, which is not a person's change: the schedule decides
+        on/off and its settings are re-sent. Returns False when there is no
+        valid follow schedule to
         follow, or a hold would suppress the off. A light at standby
         is re-sent its standby settings the same way.
         """
@@ -4161,7 +4162,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Handle the virtual occupancy sensor changing.
 
         edge is a change the sensor reported, which the light's own system
-        may turn the light on for; the others re-evaluate presence.
+        may turn the light on for; the others re-check presence.
         """
         if not occupied and not self._occupancy_clear_was_false():
             # A genuine visit ended: a later false detection did not light the light.
@@ -4187,12 +4188,12 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
                     return
             if self._bright_gates_presence():
                 # Bright enough: suppress lights; when illuminance turns off we
-                # re-evaluate occupancy from the sensor's current state.
+                # re-check occupancy from the sensor's current state.
                 self._send_blocked(REASON_OCCUPANCY, REASON_BRIGHT)
                 return
             if self._gate_schedule_inactive():
                 # Outside the schedule window: occupancy may not turn lights
-                # on; window start re-evaluates occupancy.
+                # on; window start re-checks occupancy.
                 self._send_blocked(REASON_OCCUPANCY, REASON_SCHEDULE)
                 return
             was_warning = self._in_warning()
@@ -4431,7 +4432,7 @@ class VirtualLight(LightEntity, EntityIdFollowingRestoreEntity):
         """Return True when a turn-on gate lifted at or after `since`.
 
         Illuminance going dark or losing its reading, a gate-mode window
-        starting, or a Virtual Scheduled Light switching settings each re-read
+        starting, or a Virtual Scheduled Light switching settings each re-check
         occupancy live, and an unreadable sensor counted as clear then.
         """
         checks = [(self._illuminance_sensor, ("off", STATE_UNAVAILABLE))]

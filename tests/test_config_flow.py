@@ -44,7 +44,7 @@ from custom_components.molight.const import (
     AFFIX_TARGET_ENTITY_ID,
     AFFIX_TARGET_NAME,
     ASSIGN_ROLE_MAINTAIN,
-    ASSIGN_ROLE_REGULAR,
+    ASSIGN_ROLE_OCCUPANCY,
     CONF_AFFIX_PREFIX,
     CONF_AFFIX_SUFFIX,
     CONF_AFFIX_TARGET,
@@ -316,7 +316,7 @@ async def test_config_flow_occupancy(hass: HomeAssistant) -> None:
 async def test_occupancy_source_picker_excludes_molight_occupancy_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Neither kind of MoLight occupancy sensor can be wrapped again."""
+    """Neither type of MoLight occupancy sensor can be wrapped again."""
     combined = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -342,7 +342,7 @@ async def test_occupancy_source_picker_excludes_molight_occupancy_sensors(
 async def test_occupancy_create_rejects_molight_source_from_stale_form(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Submission rechecks a MoLight source created after the form was opened."""
+    """Submission re-checks a MoLight source created after the form was opened."""
     result = await _start_create(hass)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_ENTITY_TYPE: ENTITY_TYPE_OCCUPANCY}
@@ -3367,7 +3367,7 @@ async def test_assign_occupancy_keeps_a_blank_timeout_light(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -3473,7 +3473,7 @@ async def test_occupancy_options_reject_timeout_above_turn_off_timeout(
 async def test_occupancy_options_reject_molight_source_from_stale_form(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry
 ) -> None:
-    """Options recheck a MoLight source created after the form was opened."""
+    """Options re-check a MoLight source created after the form was opened."""
     await setup_entries(hass, occupancy_entry)
     result = await hass.config_entries.options.async_init(occupancy_entry.entry_id)
     assert _selector_config(result, CONF_OCCUPANCY_SENSOR)["exclude_entities"] == [
@@ -4612,7 +4612,7 @@ async def test_create_blank_entity_id_already_exists_change(
 
 @pytest.mark.asyncio
 async def test_light_entity_id_parallels_switch(hass: HomeAssistant) -> None:
-    """A light's explicit entity ID gives the companion switch a matching
+    """A light's explicit entity ID gives the Auto-off switch a matching
     _auto_off entity ID."""
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -4698,7 +4698,7 @@ async def test_assign_occupancy_adds_and_removes(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     assert result["type"] == FlowResultType.FORM
@@ -4740,7 +4740,7 @@ async def test_assign_occupancy_deselect_all_removes(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -4811,7 +4811,7 @@ async def test_assign_occupancy_skips_short_timeout(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -4862,7 +4862,7 @@ _ASSIGN_ROLES = {
         "assign_occupancy",
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
         CONF_OCCUPANCY_SENSOR,
     ),
@@ -4956,7 +4956,7 @@ async def test_assign_aborts_when_no_lights(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     assert result["type"] == FlowResultType.ABORT
@@ -4977,7 +4977,7 @@ async def test_assign_aborts_when_only_scheduled_lights_exist(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     assert result["type"] == FlowResultType.ABORT
@@ -5873,7 +5873,7 @@ async def test_conversion_round_trip_restores_settings_mapping(
 async def test_options_form_opened_before_a_conversion_is_rejected(
     hass: HomeAssistant, direction: str
 ) -> None:
-    """A form of the old kind cannot be saved over the converted light."""
+    """A form of the old type cannot be saved over the converted light."""
     await _setup_night_schedule(hass)
     if direction == "convert_to_scheduled":
         light = _light_entry(
@@ -6340,7 +6340,7 @@ async def test_assign_ignores_stale_light_pick(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -6473,7 +6473,7 @@ async def test_assign_noop_leaves_entry_untouched(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     result = await hass.config_entries.flow.async_configure(
@@ -7048,7 +7048,7 @@ async def test_assign_lights_picker_excludes_scheduled_lights(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     assert result["step_id"] == "assign_lights"
@@ -7073,7 +7073,7 @@ async def test_assign_lights_rejects_scheduled_light_from_stale_form(
         result["flow_id"],
         {
             CONF_ASSIGN_SENSOR: "binary_sensor.test_occupancy",
-            CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR,
+            CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY,
         },
     )
     assert result["step_id"] == "assign_lights"
@@ -7205,7 +7205,7 @@ async def test_discovery_count_reflects_entries_that_actually_got_created(
     assert "binary_sensor.porch_pir" not in wrapped
 
 
-_DISCOVERY_KINDS = {
+_DISCOVERY_TYPES = {
     "occupancy": (
         "binary_sensor",
         {"device_class": "motion"},
@@ -7238,22 +7238,22 @@ _DISCOVERY_WRAPPERS = {
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", list(_DISCOVERY_KINDS))
+@pytest.mark.parametrize("entity_type", list(_DISCOVERY_TYPES))
 async def test_discovery_flows_submitted_together_wrap_a_pick_once(
-    hass: HomeAssistant, kind: str
+    hass: HomeAssistant, entity_type: str
 ) -> None:
     """Two flows that pick the same source create one virtual entity; the other
     skips it."""
-    domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
+    domain, attrs, key, defaults = _DISCOVERY_TYPES[entity_type]
     pick = f"{domain}.desk"
     hass.states.async_set(pick, "off", attrs)
     flows = []
     for _ in range(2):
-        result = await _reach_discovery_select(hass, f"discover_{kind}")
+        result = await _reach_discovery_select(hass, f"discover_{entity_type}")
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_SELECTED_ENTITIES: [pick]}
         )
-        assert result["step_id"] == f"discover_{kind}_defaults"
+        assert result["step_id"] == f"discover_{entity_type}_defaults"
         flows.append(result["flow_id"])
 
     results = await asyncio.gather(
@@ -7277,23 +7277,23 @@ async def test_discovery_flows_submitted_together_wrap_a_pick_once(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", list(_DISCOVERY_KINDS))
+@pytest.mark.parametrize("entity_type", list(_DISCOVERY_TYPES))
 async def test_discovery_skips_a_pick_wrapped_while_the_form_was_open(
-    hass: HomeAssistant, kind: str
+    hass: HomeAssistant, entity_type: str
 ) -> None:
     """A pick that another flow wrapped meanwhile is skipped, and the summary says
     so."""
-    domain, attrs, key, defaults = _DISCOVERY_KINDS[kind]
+    domain, attrs, key, defaults = _DISCOVERY_TYPES[entity_type]
     picks = [f"{domain}.desk", f"{domain}.hall"]
     for entity_id in picks:
         hass.states.async_set(entity_id, "off", attrs)
-    result = await _reach_discovery_select(hass, f"discover_{kind}")
+    result = await _reach_discovery_select(hass, f"discover_{entity_type}")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_SELECTED_ENTITIES: picks}
     )
-    assert result["step_id"] == f"discover_{kind}_defaults"
+    assert result["step_id"] == f"discover_{entity_type}_defaults"
 
-    wrapper = dict(_DISCOVERY_WRAPPERS[kind])
+    wrapper = dict(_DISCOVERY_WRAPPERS[entity_type])
     wrapper[key] = [picks[0]] if key == CONF_LIGHTS else picks[0]
     MockConfigEntry(domain=DOMAIN, data=wrapper).add_to_hass(hass)
     result = await hass.config_entries.flow.async_configure(
@@ -10463,7 +10463,7 @@ async def test_combined_schedule_accepts_an_input_whose_entity_id_changed_while_
 async def test_scheduled_light_schedule_changed_before_the_last_form(
     hass: HomeAssistant, flow: str, change: str
 ) -> None:
-    """The schedule picked on the first form is checked again when the last is saved."""
+    """The schedule picked on the first form is re-checked when the last is saved."""
     await _setup_night_schedule(hass)
     (schedule,) = hass.config_entries.async_entries(DOMAIN)
     shared = {
@@ -10519,7 +10519,7 @@ _ASSIGN_KINDS = {
     # kind step: (sensor fixture, the form's other fields, the key it writes)
     "assign_occupancy": (
         "occupancy_entry",
-        {CONF_ASSIGN_ROLE: ASSIGN_ROLE_REGULAR},
+        {CONF_ASSIGN_ROLE: ASSIGN_ROLE_OCCUPANCY},
         CONF_OCCUPANCY_SENSOR,
     ),
     "assign_maintain": (
@@ -11319,7 +11319,7 @@ async def test_occupancy_options_check_lights_through_nested_combined_sensors(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [ASSIGN_ROLE_REGULAR, ASSIGN_ROLE_MAINTAIN])
+@pytest.mark.parametrize("role", [ASSIGN_ROLE_OCCUPANCY, ASSIGN_ROLE_MAINTAIN])
 async def test_assign_occupancy_accepts_a_timeout_equal_to_the_sensors(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, role: str
 ) -> None:

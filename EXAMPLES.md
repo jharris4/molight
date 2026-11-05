@@ -226,7 +226,7 @@ Schedule mode:     Gate and keep state
 Between 22:00 and 06:00 motion turns the light on and it goes off 5 minutes after the stairs empty; during the day motion does nothing (manual control always works). The mode only matters to a light that is still on when the schedule window ends. Someone walking in at 05:58 keeps the light until their timer finishes at about 06:03, exactly as it would mid-window, because the window ending changes nothing for a light already on. Compare the other two:
 
 - **Gate and turn off** (Example 5) would switch the light off at 06:00, mid-stairs.
-- **Gate and switch state** would recompute the timer at 06:00 from the occupancy sensor's current state and `latest_occupied_time`, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
+- **Gate and switch state** would recalculate the timer at 06:00 from the occupancy sensor's current state and `latest_occupied_time`, with much the same result here, but it also re-checks illuminance, so a room that is already bright at 06:00 (with an illuminance sensor in **Control** mode) goes off.
 
 Two things every Gate mode does at 22:00 that are easy to miss: if someone is already on the stairs when the schedule window starts (the occupancy sensor is on and it's dark), the light turns on right then; and if the light is already on, that person holds it. The window start never turns a light off.
 

@@ -41,7 +41,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the companion switch for a virtual light entry."""
+    """Set up the Auto-off switch for a virtual light entry."""
     if entry.data[CONF_ENTITY_TYPE] in (
         ENTITY_TYPE_LIGHT,
         ENTITY_TYPE_SCHEDULED_LIGHT,

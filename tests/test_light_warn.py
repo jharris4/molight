@@ -523,8 +523,9 @@ async def test_follow_window_start_during_effect_restores_lights(
 async def test_schedule_recovery_same_marker_during_warn_restores_lights(
     hass: HomeAssistant, freezer
 ) -> None:
-    """The schedule sensor recovering mid-window while the light reached the
-    warn stage re-adopts the light as SCHEDULED and undoes the warn dim."""
+    """The schedule sensor coming back from unavailable mid-window while the
+    light reached the warn stage re-adopts the light as SCHEDULED and undoes
+    the warn dim."""
     entry = make_light_entry(
         schedule=SCHED,
         schedule_mode=SCHEDULE_MODE_FOLLOW,
@@ -1293,7 +1294,7 @@ async def test_real_light_switched_off_mid_warning_stays_off_on_retrigger(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stage", ["dim", "blink"])
-async def test_real_light_recovering_mid_warning_gets_the_stage_then_its_look(
+async def test_real_light_back_from_unavailable_mid_warning_gets_the_stage_then_look(
     hass: HomeAssistant, freezer, stage: str
 ) -> None:
     """A real light back from unavailable mid-warning is sent the stage

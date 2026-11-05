@@ -564,7 +564,7 @@ async def test_molight_turns_on_at_the_edge_as_before(hass, freezer) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("choice", OWN)
 async def test_a_reload_inside_the_wait_forgets_it(hass, choice) -> None:
-    """Presence re-read at the reload lights the room only with then MoLight."""
+    """Presence re-checked at the reload lights the room only with then MoLight."""
     records, calls, lamp = await _setup(hass, _hall(choice), binary_sensor__occ="off")
     entry = hass.config_entries.async_entries("molight")[-1]
 

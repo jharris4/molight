@@ -1767,8 +1767,11 @@ async def test_outside_settings_without_standby_still_turn_off(
 
 
 @pytest.mark.asyncio
-async def test_rebooted_member_is_sent_standby_again(hass: HomeAssistant) -> None:
-    """A member that comes back off is a member reboot, not a manual off."""
+async def test_member_back_from_unavailable_is_sent_standby_again(
+    hass: HomeAssistant,
+) -> None:
+    """A member that comes back off came back from unavailable, not from a
+    manual off."""
     calls = await _setup_porch(hass, _porch(inside={CONF_AUTO_ON_TRANSITION: 2}))
     await _echo_standby(hass)
     sent = len(_light_calls(calls, "turn_on"))
@@ -1813,7 +1816,7 @@ async def test_member_reporting_in_off_while_raised_is_sent_the_raise(
 @pytest.mark.parametrize(
     "acknowledged", [True, False], ids=["acknowledged", "unanswered_command"]
 )
-async def test_rebooted_member_at_the_standby_brightness_is_selected_again(
+async def test_member_back_from_unavailable_at_the_standby_brightness_is_selected_again(
     hass: HomeAssistant, freezer, acknowledged: bool
 ) -> None:
     """A member back at the right brightness may still have lost its selection."""

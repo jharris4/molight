@@ -547,7 +547,7 @@ async def test_no_windows_stays_off(hass: HomeAssistant, freezer) -> None:
     assert state.state == "off"
     assert state.attributes["next_change"] is None
 
-    # No boundaries in sight: the sensor re-evaluates tomorrow without error.
+    # No boundaries in sight: the sensor re-checks tomorrow without error.
     freezer.tick(timedelta(days=1, minutes=1))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
@@ -2073,7 +2073,7 @@ async def test_time_zone_change_inside_the_window_keeps_its_marker(
 
 
 @pytest.mark.asyncio
-async def test_location_change_reevaluates_a_sun_window(
+async def test_location_change_rechecks_a_sun_window(
     hass: HomeAssistant, freezer
 ) -> None:
     """Ten minutes after sunset in London; 60 degrees west the sun is still
@@ -2128,7 +2128,7 @@ async def test_location_change_inside_a_sun_window_keeps_its_marker(
 async def test_unrelated_core_config_change_leaves_the_schedule_alone(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Changing the currency re-evaluates to the same state and boundaries."""
+    """Changing the currency re-checks the schedule to the same state and boundaries."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 12:00:00+00:00")
     await _setup(hass, _schedule_entry([_window("00:00", "00:00")]))

@@ -297,10 +297,10 @@ async def _setup_gate_only_mode(hass: HomeAssistant, **kwargs) -> None:
 
 
 @pytest.mark.asyncio
-async def test_gate_only_mode_occupancy_rehold_while_bright(
+async def test_gate_only_mode_occupancy_retrigger_while_bright(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Moving again while the timer runs holds the light that the lamp makes bright."""
+    """A re-trigger while the timer runs holds the light that the lamp makes bright."""
     await _setup_gate_only_mode(hass, timeout=300)
     hass.states.async_set(
         OCC, "off", {"latest_occupied_time": dt_util.utcnow().isoformat()}
@@ -404,7 +404,7 @@ async def test_startup_adopts_occupancy_over_a_bright_on_light_in_gate_only_mode
 
 
 @pytest.mark.asyncio
-async def test_gate_only_mode_occupancy_recovering_holds_a_bright_light_lit_meanwhile(
+async def test_gate_only_mode_occupancy_back_from_unavailable_holds_a_lit_light(
     hass: HomeAssistant, freezer
 ) -> None:
     """Occupancy back from an outage holds a light turned on during it."""

@@ -1143,7 +1143,7 @@ _UNREADABLE = ["unavailable", "unknown", "absent"]
 async def test_follow_mode_unreadable_schedule_at_startup_keeps_manual_off(
     hass: HomeAssistant, unreadable: str
 ) -> None:
-    """An unreadable schedule at startup is not a window end, so recovering
+    """An unreadable schedule at startup is not a window end, so coming back
     inside the same window doesn't undo a manual off."""
     marker = "2026-07-02T21:00:00+00:00"
     await _start_follow_light_with_schedule_unreadable(hass, "off", marker, unreadable)

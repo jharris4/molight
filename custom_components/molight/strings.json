@@ -106,7 +106,7 @@
       },
       "create": {
         "title": "Create a MoLight virtual entity",
-        "description": "Pick the kind of virtual entity to create. Sensors must exist before the virtual light that references them.",
+        "description": "Pick the type of virtual entity to create. Sensors must exist before the virtual light that references them.",
         "data": {
           "entity_type": "Entity type"
         }
@@ -857,7 +857,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the raise to the auto-on brightness.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in Control mode keeps standby off while it is bright; in Gate only mode it just blocks the raise to the auto-on brightness.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
@@ -1117,7 +1117,7 @@
   "selector": {
     "assign_role": {
       "options": {
-        "regular": "Regular: turns lights on and off with occupancy",
+        "occupancy": "Occupancy: turns lights on and off",
         "maintain": "Maintain: only holds an already-on light on while occupied"
       }
     },
@@ -1423,7 +1423,7 @@
               "standby_rgb_color": "Standby color"
             },
             "data_description": {
-              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in control mode keeps standby off while it is bright; gate mode only blocks the raise to the auto-on brightness.",
+              "standby_brightness": "Optional. Setting it turns standby on. Set the auto-on brightness above it: with that left blank, occupancy and the door hold the light without raising it. Illuminance in Control mode keeps standby off while it is bright; in Gate only mode it just blocks the raise to the auto-on brightness.",
               "standby_color_mode": "Optional. Whether standby applies a white color temperature or a color; only the selected field is used. Choose None to clear a color that is already set.",
               "standby_color_temp": "Optional. White color temperature (Kelvin) at standby, applied to lights that support it. Needs a standby brightness.",
               "standby_rgb_color": "Optional. Color at standby, applied to lights that can show it. Needs a standby brightness."
@@ -1887,7 +1887,7 @@
       "light_member_cycle": "Another virtual light was changed to include this one while this form was open, so the chosen members would include the light itself. Open Configure again.",
       "light_shared": "Another virtual light was changed to control one of these lights while this form was open. Open Configure again.",
       "light_group_virtual": "A light group among these lights came to contain a virtual light while this form was open. Open Configure again.",
-      "entry_converted": "This light was converted to another kind while this form was open, so the form no longer fits it. Open Configure again.",
+      "entry_converted": "This light was converted to another type while this form was open, so the form no longer fits it. Open Configure again.",
       "reference_removed": "{entity_id} was deleted while this form was open, so nothing was saved. Open Configure again."
     }
   },

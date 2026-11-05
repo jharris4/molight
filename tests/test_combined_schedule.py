@@ -956,7 +956,7 @@ async def test_restart_catches_up_a_missed_time_window(
 async def test_handed_over_marker_survives_outage_and_restart(
     hass: HomeAssistant, freezer, how: str
 ) -> None:
-    """A marker the inputs can't re-derive is restored, not recomputed."""
+    """A marker the inputs can't re-derive is restored, not recalculated."""
     await hass.config.async_set_time_zone("UTC")
     freezer.move_to("2026-07-02 07:00:00+00:00")
     hass.states.async_set("binary_sensor.src_a", "on")
@@ -1862,7 +1862,7 @@ async def test_time_zone_change_while_an_input_is_out_keeps_the_marker(
 
 
 @pytest.mark.asyncio
-async def test_location_change_reevaluates_a_sun_input(
+async def test_location_change_rechecks_a_sun_input(
     hass: HomeAssistant, freezer
 ) -> None:
     """Ten minutes after sunset in London; 15 degrees west the sun sets an

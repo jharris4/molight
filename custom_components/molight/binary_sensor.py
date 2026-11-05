@@ -718,7 +718,7 @@ class VirtualCombinedOccupancySensor(
             # reads occupied before startup finishes, or on its first sighting
             # after it, carry the restored visit instead (see
             # _handle_occupancy_change). Seeding off meanwhile is harmless:
-            # lights that reference it adopt with a fresh timer and re-evaluate.
+            # lights that reference it adopt with a fresh timer and re-check.
             self._restored_carry = True
             self._startup_done = self.hass.state is CoreState.running
             self._unreported_maintain = {
@@ -857,12 +857,12 @@ class VirtualCombinedOccupancySensor(
             dropout = datetime.now(UTC)
             self._gone.run_unless_entity_id_changed(
                 entity_id,
-                lambda: self._reevaluate_on_dropout(event, dropout, showed=was_showing),
+                lambda: self._recheck_on_dropout(event, dropout, showed=was_showing),
             )
             return
         if not _real_state_change(event):
             self._hold_through_reload(event)
-            self._reevaluate_on_dropout(
+            self._recheck_on_dropout(
                 event,
                 datetime.now(UTC),
                 showed=was_showing and entity_id not in self._reloading,
@@ -975,13 +975,13 @@ class VirtualCombinedOccupancySensor(
         @callback
         def _finished(_now: datetime) -> None:
             del self._reloading[entity_id]
-            self._reevaluate_on_dropout(event, dropout, showed=True)
+            self._recheck_on_dropout(event, dropout, showed=True)
 
         self._reloading[entity_id] = async_call_later(
             self.hass, RELOAD_GRACE, _finished
         )
 
-    def _reevaluate_on_dropout(
+    def _recheck_on_dropout(
         self, event: Event[EventStateChangedData], dropout: datetime, *, showed: bool
     ) -> None:
         """Clear occupancy when the last constituent still on drops out.

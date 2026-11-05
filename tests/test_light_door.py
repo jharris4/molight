@@ -400,10 +400,11 @@ async def test_open_close_dark_arrival_lights_open_door(
 
 
 @pytest.mark.asyncio
-async def test_open_close_dark_return_re_holds_open_door(
+async def test_open_close_dark_return_open_door_retriggers(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Bright forces off; dark returning turns on again AND re-holds the open door."""
+    """Bright forces off; dark returning turns on again AND the open door
+    re-triggers."""
     entry = make_light_entry(
         door=DOOR, door_mode=DOOR_MODE_OPEN_CLOSE, illuminance=ILLUM
     )
@@ -439,7 +440,7 @@ async def test_open_close_dark_return_re_holds_open_door(
         pytest.param(DOOR_MODE_OPEN, False, id="open-stays-off"),
     ],
 )
-async def test_gate_window_start_reevaluates_open_door(
+async def test_gate_window_start_rechecks_open_door(
     hass: HomeAssistant, door_mode: str, expect_on: bool
 ) -> None:
     """A standing-open Open & close door lights the room when the window starts.
@@ -686,7 +687,7 @@ async def test_door_first_seen_open_per_door_mode(
 async def test_dead_door_does_not_light_the_room_when_it_gets_dark(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A door counted closed is no standing-open door for a gate to re-evaluate."""
+    """A door counted closed is no standing-open door for a gate to re-check."""
     hass.states.async_set(ILLUM, "on")  # bright
     entry = make_light_entry(
         door=DOOR,

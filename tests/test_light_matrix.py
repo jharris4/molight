@@ -1238,7 +1238,7 @@ async def test_follow_attribute_change_without_new_marker_keeps_manual_off(
 async def test_gate_marker_change_keeps_manual_off(
     hass: HomeAssistant, mode: str
 ) -> None:
-    """A gate window's marker moving is no window start to re-evaluate."""
+    """A gate window's marker moving is no window start to re-check."""
     entry = make_light_entry(occupancy=OCC, schedule=SCHED, schedule_mode=mode)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await setup_entries(hass, entry)
@@ -1451,7 +1451,8 @@ async def test_state_preserving_gate_keeps_sensor_hold_outside_window(
     assert _state(hass).state == "on"
     assert _state(hass).attributes["molight_state"] == STATE_OCCUPIED
 
-    # Occupancy returning mid-countdown re-holds the preserved on-period.
+    # Occupancy returning mid-countdown is a re-trigger that holds the
+    # preserved on-period.
     hass.states.async_set(OCC, "off")
     await settle(hass)
     assert _state(hass).attributes["molight_state"] == STATE_COUNTDOWN
@@ -1548,7 +1549,7 @@ async def test_gate_and_turn_off_light_on_outside_its_window_ignores_an_open_doo
     hass: HomeAssistant, freezer, how: str
 ) -> None:
     """Under gate, a light on outside the window is not held by a door that
-    is already open, however it came to be on or to be re-evaluated."""
+    is already open, however it came to be on or to be re-checked."""
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(DOOR, "on")  # standing open
     hass.states.async_set(MAINT, "on" if how == "maintain_clear" else "off")
@@ -1611,7 +1612,7 @@ async def test_gate_window_start_respects_illuminance(hass: HomeAssistant) -> No
 async def test_gate_window_start_turns_on_at_auto_on_brightness(
     hass: HomeAssistant,
 ) -> None:
-    """A gate-mode window start re-evaluating standing occupancy is an
+    """A gate-mode window start re-checking standing occupancy is an
     automatic turn-on: the configured auto-on brightness applies."""
     entry = make_light_entry(
         occupancy=OCC,

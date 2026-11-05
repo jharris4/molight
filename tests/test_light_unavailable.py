@@ -1325,7 +1325,7 @@ async def test_combined_occupancy_constituent_reload_changes_nothing(
 async def test_occupancy_outage_across_a_settings_switch(
     hass: HomeAssistant, same_sensor: bool
 ) -> None:
-    """Switching settings re-evaluates standing occupancy, so a sensor unreadable
+    """Switching settings re-checks standing occupancy, so a sensor unreadable
     at the switch lights the room on its return: a shared sensor's return is a
     replay that applies the switch it missed, and the other settings' sensor is
     seen for the first time."""
@@ -1423,7 +1423,7 @@ async def test_schedule_briefly_unavailable_respects_manual_off(
 ) -> None:
     """A schedule briefly unavailable mid-window must not undo a manual off.
 
-    The window was already applied; recovering to 'on' with the same
+    The window was already applied; coming back to 'on' with the same
     current_window_start is not a new window start, so a manual off in
     between stands (mirroring the restart-seed behavior).
     """
@@ -2059,7 +2059,8 @@ async def test_deleted_member_light_counts_as_off(hass: HomeAssistant) -> None:
 async def test_schedule_recovery_readopts_light_physically_turned_on_again(
     hass: HomeAssistant, freezer
 ) -> None:
-    """Recovering mid-window re-adopts a light that was cycled during the outage.
+    """Coming back from unavailable mid-window re-adopts a light that was cycled
+    during the outage.
 
     While the schedule was unavailable the real light was switched off and
     back on, leaving the machine ACTIVE with a timer. Recovery to the same
@@ -2104,7 +2105,7 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
     """A bright sensor briefly unavailable must not replay the bright edge.
 
     A virtual turn-on while steadily bright stands (control mode only forces
-    off on the bright edge); the sensor recovering to the same value is not
+    off on the bright edge); the sensor coming back to the same value is not
     that edge. The sensor holds through its source's outages, so it is only
     briefly unavailable here as a placeholder while its entry reloads.
     """
@@ -2127,7 +2128,7 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
 
 
 # ---------------------------------------------------------------------------
-# Follow mode: a member back from unavailable is reconciled with the schedule
+# Follow mode: a member back from unavailable is matched to the schedule
 # ---------------------------------------------------------------------------
 
 
@@ -2137,7 +2138,8 @@ async def test_illuminance_recovery_to_same_bright_keeps_manual_light(
 async def test_follow_member_recovery_mid_window_reasserts_window(
     hass: HomeAssistant, booted: str
 ) -> None:
-    """A member rebooting mid-window is turned on again with the scheduled settings.
+    """A member back from unavailable mid-window is turned on again with the
+    scheduled settings.
 
     Whatever it boots into (off, or lit at its own defaults) is not a
     person's change: the window still owns the lights, so the auto-on brightness
@@ -2233,9 +2235,10 @@ async def test_follow_member_comes_back_off_outside_window_sends_nothing(
 async def test_follow_virtual_on_outside_window_is_lost_on_a_member_reboot(
     hass: HomeAssistant,
 ) -> None:
-    """A virtual turn-on outside the window does not survive a member reboot.
+    """A virtual turn-on outside the window does not survive a member coming
+    back from unavailable.
 
-    The member reboot cannot be told apart from a boot-lit strip, so the
+    A member back from unavailable cannot be told apart from a boot-lit strip, so the
     schedule wins; a virtual turn-on while the member stays connected is an
     ordinary off → on edge and is untouched.
     """
@@ -2265,7 +2268,8 @@ async def test_follow_virtual_on_outside_window_is_lost_on_a_member_reboot(
 async def test_follow_manual_off_mid_window_is_lost_on_a_member_reboot(
     hass: HomeAssistant,
 ) -> None:
-    """A manual off mid-window does not survive a member reboot either.
+    """A manual off mid-window does not survive a member coming back from
+    unavailable either.
 
     Contrast test_schedule_briefly_unavailable_respects_manual_off: there the *schedule*
     was briefly unavailable and the member's off was observed directly, so it stands.
@@ -2320,8 +2324,9 @@ async def _start_with_unreadable_member(
 async def test_follow_unreadable_member_at_startup_keeps_manual_off(
     hass: HomeAssistant, boot: str
 ) -> None:
-    """An unreadable member at startup is not a member reboot: the manual off that the
-    seed respected survives the member's first real state."""
+    """An unreadable member at startup is not a member back from unavailable:
+    the manual off that the seed respected survives the member's first real
+    state."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     await _start_with_unreadable_member(
@@ -2362,12 +2367,12 @@ async def test_follow_unreadable_member_at_startup_is_adopted_outside_window(
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
 @pytest.mark.parametrize("back", ["on", "off"])
-async def test_follow_member_reboot_after_startup_is_reconciled(
+async def test_follow_member_back_from_unavailable_after_startup_is_matched(
     hass: HomeAssistant, back: str
 ) -> None:
     """A member's integration reloading writes the same restored placeholder
-    as startup does, but after the member was seen it is a member reboot: the
-    window is re-asserted whatever the member comes back as."""
+    as startup does, but after the member was seen it is a member back from
+    unavailable: the window is re-asserted whatever the member comes back as."""
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "off")
     await setup_entries(
@@ -2392,9 +2397,9 @@ async def test_follow_member_reboot_after_startup_is_reconciled(
 
 @pytest.mark.asyncio
 @pytest.mark.regular_virtual_light_only
-async def test_follow_member_entry_reload_is_reconciled(hass: HomeAssistant) -> None:
+async def test_follow_member_entry_reload_is_matched(hass: HomeAssistant) -> None:
     """Reloading the config entry of a member that is itself a virtual light
-    goes through HA's placeholder and is reconciled to the window."""
+    goes through HA's placeholder and is matched to the window."""
     inner_entry = make_light_entry(name="Inner", lights=[REAL])
     hass.states.async_set(SCHED, "on", {"current_window_start": MARKER})
     hass.states.async_set(REAL, "off")
@@ -2497,7 +2502,8 @@ async def test_follow_member_recovery_with_schedule_unavailable_falls_through(
 async def test_follow_member_recovery_outside_window_respects_hold(
     hass: HomeAssistant,
 ) -> None:
-    """A held light is not turned off by a member reboot outside the window."""
+    """A held light is not turned off by a member back from unavailable outside
+    the window."""
     calls = _record_calls(hass)
     hass.states.async_set(SCHED, "off")
     hass.states.async_set(KEEP_ON, "on")

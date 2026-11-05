@@ -300,7 +300,7 @@ async def test_physical_turn_on_does_not_apply_selection(hass: HomeAssistant) ->
 async def test_follow_member_reboot_reapplies_selection(
     hass: HomeAssistant, freezer, delay: int
 ) -> None:
-    """A member rebooting lit mid-window gets the selection applied again.
+    """A member back from unavailable lit mid-window gets the selection applied again.
 
     The strip booted into its own default preset; re-sending the window's
     settings includes the selection even though the member is already on,

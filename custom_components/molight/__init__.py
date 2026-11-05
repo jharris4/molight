@@ -368,7 +368,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a MoLight virtual entity from a config entry."""
     platforms = PLATFORMS_BY_ENTITY_TYPE.get(entry.data[CONF_ENTITY_TYPE], PLATFORMS)
     # Seeded before the platforms load so the light can always read the
-    # auto-off flag; the companion switch overwrites it when it restores. A
+    # auto-off flag; the Auto-off switch overwrites it when it restores. A
     # switch disabled in the registry is not added and could never release
     # the hold, so its kept state is dropped, as a restart would drop it.
     auto_off_kept = hass.data.get(DATA_AUTO_OFF_KEPT, {}).pop(entry.entry_id, True)

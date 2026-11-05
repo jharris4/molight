@@ -1492,7 +1492,10 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
 
     summary = assign(
         "assign_occupancy",
-        {"assign_sensor": "binary_sensor.e2e_slow_occupancy", "assign_role": "regular"},
+        {
+            "assign_sensor": "binary_sensor.e2e_slow_occupancy",
+            "assign_role": "occupancy",
+        },
         ["light.e2e_assign_a", "light.e2e_assign_b"],
     )
     if summary.get("assigned") != "1" or "E2E Assign B" not in summary.get(
@@ -1511,7 +1514,10 @@ def run_assign_scenarios(client: HomeAssistantClient) -> None:
     )
     summary = assign(
         "assign_occupancy",
-        {"assign_sensor": "binary_sensor.e2e_slow_occupancy", "assign_role": "regular"},
+        {
+            "assign_sensor": "binary_sensor.e2e_slow_occupancy",
+            "assign_role": "occupancy",
+        },
         [],
     )
     if summary.get("removed") != "1" or summary.get("assigned") != "0":
@@ -1614,7 +1620,7 @@ def set_hold(client: HomeAssistantClient, on: bool) -> None:
 
 
 def run_keep_on_entity_scenarios(client: HomeAssistantClient) -> None:
-    """A keep-on entity suspends automatic turn-offs; release re-evaluates the rules."""
+    """A keep-on entity suspends automatic turn-offs; release re-checks the rules."""
     entry_id = create_entry(
         client,
         "light",
@@ -1721,7 +1727,7 @@ def run_keep_on_entity_scenarios(client: HomeAssistantClient) -> None:
     remove_entry_and_entity(client, entry_id, HOLD_LIGHT)
     print(
         "PASS: keep-on entity holds auto-off, also while briefly unavailable, "
-        "and release re-evaluates"
+        "and release re-checks"
     )
 
 
@@ -2564,7 +2570,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         )
         client.call_service("light", "turn_off", {"entity_id": GATE_MODE_LIGHT})
     else:
-        # gate_switch recomputes the finish time from when occupancy last saw
+        # gate_switch recalculates the finish time from when occupancy last saw
         # someone, which is already nearly due, not from the virtual turn-on.
         assert_state_stays(
             client,
@@ -2576,7 +2582,7 @@ def run_gate_mode_scenario(client: HomeAssistantClient, schedule_mode: str) -> N
         client.wait_state(
             RAW_MULTI_RGB,
             lambda state: state["state"] == "off",
-            "off soon: gate_switch recomputed the finish time from "
+            "off soon: gate_switch recalculated the finish time from "
             "latest_occupied_time",
             timeout=max(1, restarted_timer - time.monotonic()),
         )
@@ -2972,7 +2978,7 @@ def wait_remote_action(
     event_type: str,
     sensor: str = REMOTE_LAST_ACTION,
 ) -> dict[str, Any]:
-    """Wait for the remote's diagnostic sensor to record one binding."""
+    """Wait for the remote's Last Action sensor to record one binding."""
     return client.wait_state(
         sensor,
         lambda state: (
@@ -7359,7 +7365,7 @@ def run_door_gate_scenarios(client: HomeAssistantClient) -> None:
     client.wait_state(
         RAW_TIMER_LIGHT,
         lambda state: state["state"] == "on",
-        "on: an Open & close door standing open re-evaluates at the gate lift",
+        "on: an Open & close door standing open is re-checked at the gate lift",
     )
     wait_machine_state(client, "occupied", DOOR_GATE_LIGHT)
     client.set_state(RAW_DOOR, "off")
@@ -8523,7 +8529,7 @@ def run_combined_schedule_restart_prepare() -> None:
     # The mirrored source arrives only after startup, so the combination depends
     # on an input that hasn't reported while it restores. The member light
     # arrives later still, once the window is back on: its first state must
-    # read as startup adoption, not as a member reboot to reconcile.
+    # read as startup adoption, not as a member back from unavailable to match.
     client.set_startup_delay(RAW_REMOVAL_MOTION, 6)
     client.set_startup_delay(RAW_TIMER_LIGHT, 8)
     COMBINED_SCHEDULE_RESTART_SNAPSHOT.write_text(
@@ -8893,7 +8899,7 @@ def run_remote_event_types_scenarios(client: HomeAssistantClient) -> None:
     wait_event_types_action(client, "turn_on", "single", EVENT_HUE, "initial_press")
     client.wait_state(RAW_TIMER_LIGHT, lambda state: state["state"] == "on", "on")
 
-    # A button recovering from unavailable carries its last event, which must
+    # A button back from unavailable carries its last event, which must
     # not replay: the Caseta button last fired turn_off, the light stays on.
     client.set_available(EVENT_CASETA, False)
     client.wait_state(

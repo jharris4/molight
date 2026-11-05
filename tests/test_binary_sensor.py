@@ -215,7 +215,7 @@ async def test_occupancy_clears_after_unavailable_timeout(
 async def test_occupancy_dropout_recovery_to_on_cancels_clear(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A source recovering to 'on' before the timeout continues the visit."""
+    """A source coming back to 'on' before the timeout continues the visit."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
@@ -243,7 +243,7 @@ async def test_occupancy_dropout_recovery_to_on_cancels_clear(
 async def test_occupancy_dropout_recovery_to_off_is_real_clear(
     hass: HomeAssistant, occupancy_entry: MockConfigEntry, freezer
 ) -> None:
-    """A source recovering straight to 'off' clears immediately and normally."""
+    """A source coming back straight to 'off' clears immediately and normally."""
     occupancy_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(occupancy_entry.entry_id)
     await hass.async_block_till_done()
@@ -813,7 +813,7 @@ async def test_occupancy_edit_after_source_removal_keeps_the_finish_time(
 async def test_occupancy_recovery_after_a_dropout_edit_continues(
     hass: HomeAssistant, freezer
 ) -> None:
-    """A source recovering to on after the edit cancels the resumed clear."""
+    """A source coming back to on after the edit cancels the resumed clear."""
     entry = _dropout_entry()
     await _occupied_then_dropped(hass, entry)
     freezer.tick(timedelta(seconds=10))
@@ -2491,7 +2491,7 @@ async def test_combined_keeps_newest_lot_over_older_clear(
 async def test_combined_retriggers_on_constituent_recovery(
     hass: HomeAssistant,
 ) -> None:
-    """A constituent recovering straight to on is a real trigger event."""
+    """A constituent coming back straight to on is a real trigger event."""
     entry = _raw_combined_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)

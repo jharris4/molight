@@ -3,7 +3,7 @@
 Auto-off is held while the companion "<name> Auto-off" switch is off or any
 configured keep-on entity is on. While held every automatic turn-off is
 suspended; turn-ons and manual control are unaffected. Releasing the hold
-re-evaluates the configured rules and otherwise starts a fresh timer.
+re-checks the configured rules and otherwise starts a fresh timer.
 """
 
 from __future__ import annotations
@@ -81,12 +81,12 @@ async def _tick(hass: HomeAssistant, freezer, seconds: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Companion switch
+# Auto-off switch
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_companion_switch_created_default_on(hass: HomeAssistant) -> None:
+async def test_auto_off_switch_created_default_on(hass: HomeAssistant) -> None:
     """Every virtual light entry gets an Auto-off switch, on by default."""
     await setup_entries(hass, make_light_entry())
 

@@ -1161,7 +1161,7 @@ async def test_removing_light_removes_target_light(
 async def test_last_action_sensor(
     hass: HomeAssistant, light_entry: MockConfigEntry
 ) -> None:
-    """The diagnostic sensor records each executed binding, and starts
+    """The Last Action sensor records each executed binding, and starts
     unknown, since a pre-restart action shown as current would mislead."""
     remote = _remote_entry(
         **{

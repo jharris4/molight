@@ -86,7 +86,7 @@ def suggested_entity_id(
     Honored only at first registration: HA uniquifies with _2 on a clash and
     the registry pins the entity ID thereafter. The object_id is read straight from
     entry.data (the entity ID is immutable and absent from entry_settings once
-    options exist). `suffix` lets the companion switch parallel its light, e.g.
+    options exist). `suffix` lets the Auto-off switch parallel its light, e.g.
     light.kitchen -> switch.kitchen_auto_off.
     """
     obj = entry.data.get(CONF_ENTITY_ID)

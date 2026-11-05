@@ -898,7 +898,7 @@ async def test_schedule_end_switch_into_bright_control_respects_a_hold(
 
 
 @pytest.mark.asyncio
-async def test_schedule_end_switch_reconciles_while_outside_auto_off_is_held(
+async def test_schedule_end_switch_recalculates_while_outside_auto_off_is_held(
     hass: HomeAssistant, freezer
 ) -> None:
     """An incoming hold suppresses the recalculated off until it is released."""
@@ -1112,7 +1112,7 @@ async def test_returning_inside_cancels_pending_schedule_end_off(
 async def test_auto_off_switch_keeps_schedule_end_off_pending_until_reenabled(
     hass: HomeAssistant,
 ) -> None:
-    """The shared companion switch holds and later applies a schedule end off."""
+    """The shared Auto-off switch holds and later applies a schedule end off."""
     switch = "switch.scheduled_light_auto_off"
     hass.states.async_set(REAL, "off")
     hass.states.async_set(SCHEDULE, "on")
@@ -2209,7 +2209,7 @@ async def test_binary_sensor_schedule_drives_scheduled_light_end_to_end(
 async def test_schedule_briefly_unavailable_does_not_restart_running_timer(
     hass: HomeAssistant, freezer, bad_state: str
 ) -> None:
-    """Going unavailable and recovering in the same state leaves its timer alone."""
+    """Going unavailable and coming back in the same state leaves its timer alone."""
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
     entry = make_scheduled_light_entry(
@@ -2436,7 +2436,8 @@ async def test_options_reload_swapping_schedule_does_not_turn_light_off(
 async def test_options_reload_to_unavailable_schedule_does_not_invent_boundary(
     hass: HomeAssistant,
 ) -> None:
-    """A different schedule recovering as off was never observed to end."""
+    """A different schedule coming back from unavailable as off was never
+    observed to end."""
     other = "binary_sensor.other_schedule"
     hass.states.async_set(REAL, "on")
     hass.states.async_set(SCHEDULE, "on")
@@ -3192,7 +3193,7 @@ async def test_settings_switch_keeps_the_last_known_illuminance_through_outage(
 ) -> None:
     """A boundary crossed during an illuminance outage keeps the last known value.
 
-    The boundary is judged against it, as with a readable sensor. Recomputing
+    The boundary is judged against it, as with a readable sensor. Recalculating
     from the unavailable sensor would forget "bright", and its recovery to
     the same reading would then replay as a fresh bright edge, forcing an on
     light off in control mode.

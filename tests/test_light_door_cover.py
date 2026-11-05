@@ -116,7 +116,7 @@ async def test_open_close_holds_until_the_cover_is_closed(
 
 
 @pytest.mark.asyncio
-async def test_on_open_recovering_in_another_open_state_is_no_opening(
+async def test_on_open_back_from_unavailable_in_another_open_state_is_no_opening(
     hass: HomeAssistant, freezer
 ) -> None:
     """A cover briefly unavailable, back closing, not open, replays no opening."""
@@ -133,7 +133,7 @@ async def test_on_open_recovering_in_another_open_state_is_no_opening(
 
 
 @pytest.mark.asyncio
-async def test_open_close_recovering_in_another_open_state_keeps_holding(
+async def test_open_close_back_from_unavailable_in_another_open_state_keeps_holding(
     hass: HomeAssistant, freezer
 ) -> None:
     """A held-open cover briefly unavailable, back closing, still holds the light."""
